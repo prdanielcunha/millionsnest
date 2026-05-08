@@ -34,6 +34,12 @@ export function Login() {
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    
+    if (!auth) {
+      setError("Firebase não está configurado. Verifique as variáveis de ambiente.");
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -50,6 +56,12 @@ export function Login() {
 
   const handleGoogleAuth = async () => {
     setError("");
+    
+    if (!auth) {
+      setError("Firebase não está configurado. Verifique as variáveis de ambiente.");
+      return;
+    }
+
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
