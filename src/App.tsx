@@ -3,28 +3,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Navbar } from "./components/Navbar";
-import { Hero } from "./components/Hero";
-import { SocialProof } from "./components/SocialProof";
-import { Problem } from "./components/Problem";
-import { Ecosystem } from "./components/Ecosystem";
-import { Flagship } from "./components/Flagship";
-import { Pricing } from "./components/Pricing";
-import { FAQ } from "./components/FAQ";
-import { Footer } from "./components/Footer";
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Home } from './pages/Home';
+import { Terms } from './pages/Terms';
+import { Privacy } from './pages/Privacy';
+import { Refunds } from './pages/Refunds';
+import { Cancellation } from './pages/Cancellation';
 
 export default function App() {
   return (
-    <div className="min-h-screen font-sans overflow-x-hidden">
-      <Navbar />
-      <Hero />
-      <SocialProof />
-      <Problem />
-      <Flagship />
-      <Ecosystem />
-      <Pricing />
-      <FAQ />
-      <Footer />
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/termos-de-uso" element={<Terms />} />
+        <Route path="/politica-de-privacidade" element={<Privacy />} />
+        <Route path="/politicas-de-reembolso" element={<Refunds />} />
+        <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
