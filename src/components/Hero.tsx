@@ -58,7 +58,7 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.5 }}
           className="mt-20 w-full relative max-w-5xl mx-auto"
         >
-          <div className="absolute inset-0 bg-gradient-to-t from-[#fbfbfc] via-[#fbfbfc]/20 to-transparent z-20 pointer-events-none translate-y-10" />
+          <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#fbfbfc]/80 to-transparent z-20 pointer-events-none translate-y-10" />
           
           <div className="relative z-10 mx-auto rounded-xl md:rounded-2xl border border-brand-primary/10 bg-white/50 backdrop-blur-sm p-1.5 md:p-2 shadow-2xl shadow-brand-primary/10 overflow-hidden flex justify-center">
              <div className="w-full max-w-[1000px] h-[400px] sm:h-[500px] md:h-[600px] relative rounded-lg md:rounded-xl overflow-hidden bg-[#0a0a0a]">
