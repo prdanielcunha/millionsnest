@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Check } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export function Pricing() {
   const [isAnnual, setIsAnnual] = useState(true);
@@ -78,12 +79,12 @@ export function Pricing() {
               <div className="h-6 mb-6" />
             )}
             
-            <a 
-              href="#" 
-              className="w-full py-4 px-6 rounded-xl bg-brand-primary text-white text-center font-semibold hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/20 hover:shadow-xl hover:shadow-brand-primary/30 mt-2 mb-8"
+            <Link 
+              to="/login" 
+              className="w-full py-4 px-6 rounded-xl bg-brand-primary text-white text-center font-semibold hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/20 hover:shadow-xl hover:shadow-brand-primary/30 mt-2 mb-8 block"
             >
               Começar 7 dias grátis
-            </a>
+            </Link>
             
             <ul className="space-y-4 flex-1">
               {[

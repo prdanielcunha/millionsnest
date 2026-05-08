@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Music, LayoutGrid, Smartphone, Database, ArrowUpRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import { EscalasMockup } from "./EscalasMockup";
 
 export function Flagship() {
@@ -40,15 +41,18 @@ export function Flagship() {
             </motion.p>
           </div>
           
-          <motion.a 
+          <motion.div 
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            href="#precos" 
-            className="px-8 py-4 rounded-full bg-brand-secondary text-[#0a0a0a] font-bold hover:bg-brand-secondary/90 transition-colors flex items-center gap-2 shadow-[0_0_20px_rgba(41,190,201,0.3)]"
           >
-            Quero ter no meu Ministério
-          </motion.a>
+            <Link 
+              to="/login" 
+              className="px-8 py-4 rounded-full bg-brand-secondary text-[#0a0a0a] font-bold hover:bg-brand-secondary/90 transition-colors flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(41,190,201,0.3)] w-full sm:w-auto"
+            >
+              Quero ter no meu Ministério
+            </Link>
+          </motion.div>
         </div>
 
         {/* Bento Grid */}

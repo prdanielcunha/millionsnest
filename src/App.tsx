@@ -9,17 +9,22 @@ import { Terms } from './pages/Terms';
 import { Privacy } from './pages/Privacy';
 import { Refunds } from './pages/Refunds';
 import { Cancellation } from './pages/Cancellation';
+import { AuthProvider } from './contexts/AuthContext';
+import { Login } from './pages/Login';
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/termos-de-uso" element={<Terms />} />
-        <Route path="/politica-de-privacidade" element={<Privacy />} />
-        <Route path="/politicas-de-reembolso" element={<Refunds />} />
-        <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/termos-de-uso" element={<Terms />} />
+          <Route path="/politica-de-privacidade" element={<Privacy />} />
+          <Route path="/politicas-de-reembolso" element={<Refunds />} />
+          <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

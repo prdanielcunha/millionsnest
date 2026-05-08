@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { ArrowRight, Play, CheckCircle2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { DashboardMockup } from "./DashboardMockup";
 
 export function Hero() {
@@ -41,10 +42,10 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.3 }}
           className="mt-10 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto"
         >
-          <a href="#precos" className="w-full sm:w-auto px-8 py-4 rounded-full bg-brand-primary text-white font-medium hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/20 hover:shadow-xl hover:shadow-brand-primary/30 flex items-center justify-center gap-2 group">
+          <Link to="/login" className="w-full sm:w-auto px-8 py-4 rounded-full bg-brand-primary text-white font-medium hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/20 hover:shadow-xl hover:shadow-brand-primary/30 flex items-center justify-center gap-2 group">
             Começar Teste Grátis de 7 Dias
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </a>
+          </Link>
           <a href="#funcionalidades" className="w-full sm:w-auto px-8 py-4 rounded-full bg-white text-brand-primary font-medium border border-brand-primary/10 hover:bg-brand-primary/5 transition-all flex items-center justify-center gap-2">
             <Play className="w-4 h-4 fill-brand-primary" />
             Ver Demonstração
