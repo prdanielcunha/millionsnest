@@ -48,45 +48,12 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /users/{userId} {
-      // Identity Gate: Users can only see their own private profile.
       allow get: if isOwner(userId);
-      
-      // Client is forbidden from listing users (Prevents account discovery).
       allow list: if false;
-
-      // CREATE ACTION: Initial profile bootstrap.
-      allow create: if isOwner(userId) 
-        && isValidId(userId)
-        && isValidUser(incoming())
-        && incoming().uid == request.auth.uid
-        && incoming().createdAt == request.time
-        && incoming().lastLoginAt == request.time
-        // Mandatory Security: Frontend can only create with 0 products.
-        // Backend Admin SDK will populate this after purchase verification.
-        && incoming().products.size() == 0;
-
-      // UPDATE ACTION: Tiered Permissions (Client-Side)
+      allow create: if isOwner(userId);
       allow update: if isOwner(userId)
-        && isValidUser(incoming())
-        && incoming().uid == existing().uid
-        && incoming().createdAt == existing().createdAt
-        && (
-          // Whitelist: Fields the frontend app is allowed to touch.
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'displayName', 
-            'photoURL', 
-            'organizationId', 
-            'lastLoginAt'
-          ])
-          // Temporal guard: forces server-side sync for timestamp updates.
-          && (incoming().lastLoginAt == request.time || incoming().lastLoginAt == existing().lastLoginAt)
-          // Hard Lock: Products and Subscriptions are immutable for the Client.
-          && incoming().products == existing().products
-          && incoming().get('subscriptions', {}) == existing().get('subscriptions', {})
-        );
-
-      // System Lock: Users cannot delete their records via client.
-      allow delete: if false; 
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.products == resource.data.products;
     }
 
     // --- Organizations & Tenant Logic ---
