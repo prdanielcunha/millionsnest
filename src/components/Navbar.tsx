@@ -25,34 +25,29 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-primary to-brand-secondary flex items-center justify-center">
-            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-white" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-            </svg>
-          </div>
+          <img src="/logo.png" alt="MillionsNest Logo" className="h-8 md:h-10 w-auto" />
           <span className="font-bold text-xl tracking-tight text-brand-primary">MillionsNest</span>
         </div>
 
         {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-8">
-          <a href="#solucoes" className="text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors">Soluções</a>
-          <a href="#plataforma" className="text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors">Plataforma</a>
+        <nav className="hidden lg:flex items-center gap-8">
+          <a href="#musicscale" className="text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors">MusicScale</a>
+          <a href="#funcionalidades" className="text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors">Funcionalidades</a>
+          <a href="#ecossistema" className="text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors">Ecossistema</a>
           <a href="#precos" className="text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors">Preços</a>
-          <a href="#roadmap" className="text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors">Roadmap</a>
-          <a href="#faq" className="text-sm font-medium text-brand-primary/80 hover:text-brand-primary transition-colors">FAQ</a>
         </nav>
 
         {/* Actions */}
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden lg:flex items-center gap-4">
           <a href="#" className="text-sm font-medium text-brand-primary hover:text-brand-primary/80 transition-colors">Entrar</a>
-          <a href="#" className="text-sm font-medium px-4 py-2 rounded-full bg-brand-primary text-white hover:bg-brand-primary/90 transition-all shadow-sm hover:shadow active:scale-95">
-            Começar Grátis
+          <a href="#precos" className="text-sm font-medium px-5 py-2.5 rounded-full bg-brand-primary text-white hover:bg-brand-primary/90 transition-all shadow-sm hover:shadow active:scale-95">
+            Teste Grátis de 7 Dias
           </a>
         </div>
 
         {/* Mobile Toggle */}
         <button 
-          className="md:hidden text-brand-primary"
+          className="lg:hidden text-brand-primary"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
           {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -66,15 +61,15 @@ export function Navbar() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute top-full left-0 right-0 bg-white border-b border-brand-primary/10 shadow-lg p-6 flex flex-col gap-4 md:hidden"
+            className="absolute top-full left-0 right-0 bg-white border-b border-brand-primary/10 shadow-lg p-6 flex flex-col gap-4 lg:hidden"
           >
-            <a href="#solucoes" className="text-lg font-medium text-brand-primary" onClick={() => setMobileMenuOpen(false)}>Soluções</a>
-            <a href="#plataforma" className="text-lg font-medium text-brand-primary" onClick={() => setMobileMenuOpen(false)}>Plataforma</a>
+            <a href="#musicscale" className="text-lg font-medium text-brand-primary" onClick={() => setMobileMenuOpen(false)}>MusicScale</a>
+            <a href="#funcionalidades" className="text-lg font-medium text-brand-primary" onClick={() => setMobileMenuOpen(false)}>Funcionalidades</a>
+            <a href="#ecossistema" className="text-lg font-medium text-brand-primary" onClick={() => setMobileMenuOpen(false)}>Ecossistema</a>
             <a href="#precos" className="text-lg font-medium text-brand-primary" onClick={() => setMobileMenuOpen(false)}>Preços</a>
-            <a href="#roadmap" className="text-lg font-medium text-brand-primary" onClick={() => setMobileMenuOpen(false)}>Roadmap</a>
             <hr className="border-brand-primary/10" />
             <a href="#" className="text-lg font-medium text-brand-primary/80">Entrar</a>
-            <a href="#" className="text-lg font-medium bg-brand-primary text-white text-center py-3 rounded-xl">Começar Grátis</a>
+            <a href="#precos" className="text-lg font-medium bg-brand-primary text-white text-center py-3 rounded-xl" onClick={() => setMobileMenuOpen(false)}>Teste Grátis de 7 Dias</a>
           </motion.div>
         )}
       </AnimatePresence>

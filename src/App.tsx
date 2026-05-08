@@ -10,21 +10,19 @@ import { Problem } from "./components/Problem";
 import { Ecosystem } from "./components/Ecosystem";
 import { Flagship } from "./components/Flagship";
 import { Pricing } from "./components/Pricing";
-import { Roadmap } from "./components/Roadmap";
 import { FAQ } from "./components/FAQ";
 import { Footer } from "./components/Footer";
 
 export default function App() {
   return (
-    <div className="min-h-screen font-sans">
+    <div className="min-h-screen font-sans overflow-x-hidden">
       <Navbar />
       <Hero />
-      <Problem />
       <SocialProof />
-      <Ecosystem />
+      <Problem />
       <Flagship />
+      <Ecosystem />
       <Pricing />
-      <Roadmap />
       <FAQ />
       <Footer />
     </div>

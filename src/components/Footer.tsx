@@ -5,11 +5,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-brand-primary to-brand-secondary flex items-center justify-center">
-                <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3 text-white" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                </svg>
-              </div>
+              <img src="/logo.png" alt="MillionsNest Logo" className="h-6 md:h-8 w-auto" />
               <span className="font-bold text-lg tracking-tight text-brand-primary">MillionsNest</span>
             </div>
             <p className="text-sm font-medium text-brand-primary/50 max-w-sm">

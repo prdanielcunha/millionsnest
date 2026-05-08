@@ -64,10 +64,19 @@ export function Pricing() {
             )}
             
             <h3 className="text-xl font-semibold text-brand-primary/60 mb-2">Plano Music Scale</h3>
-            <div className="flex items-baseline gap-1 mb-6">
-              <span className="text-5xl font-bold text-brand-primary tracking-tight">R$ {isAnnual ? "169" : "19,90"}</span>
-              <span className="text-brand-primary/50 font-medium">/{isAnnual ? "ano" : "mês"}</span>
+            <div className="flex items-baseline gap-1 mb-1">
+              <span className="text-5xl font-bold text-brand-primary tracking-tight">R$ {isAnnual ? "14,08" : "19,90"}</span>
+              <span className="text-brand-primary/50 font-medium">/mês</span>
             </div>
+            
+            {isAnnual ? (
+              <div className="flex items-center gap-2 mb-6 text-sm font-medium">
+                <span className="text-brand-primary/40 line-through decoration-brand-primary/30">R$ 238,80</span>
+                <span className="text-brand-primary/80 font-semibold bg-brand-primary/5 px-2 py-0.5 rounded text-xs">R$ 169,00 /ano</span>
+              </div>
+            ) : (
+              <div className="h-6 mb-6" />
+            )}
             
             <a 
               href="#" 

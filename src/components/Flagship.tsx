@@ -1,9 +1,10 @@
 import { motion } from "framer-motion";
 import { Music, LayoutGrid, Smartphone, Database, ArrowUpRight } from "lucide-react";
+import { EscalasMockup } from "./EscalasMockup";
 
 export function Flagship() {
   return (
-    <section id="musicscale" className="py-24 md:py-32 bg-[#05050A] text-white relative overflow-hidden">
+    <section id="funcionalidades" className="py-24 md:py-32 bg-[#05050A] text-white relative overflow-hidden">
       {/* Dark mode glow */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-brand-secondary/20 blur-[120px] rounded-full pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-brand-primary/40 blur-[140px] rounded-full pointer-events-none" />
@@ -16,7 +17,7 @@ export function Flagship() {
               initial={{ opacity: 0, y: 10 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-brand-secondary text-sm font-semibold mb-6 uppercase tracking-wider border border-white/10"
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-secondary/10 text-brand-secondary text-sm font-semibold mb-6 uppercase tracking-wider border border-brand-secondary/20"
             >
               <Music className="w-4 h-4" />
               MusicScale
@@ -27,7 +28,7 @@ export function Flagship() {
               viewport={{ once: true }}
               className="text-4xl md:text-6xl font-bold tracking-tight mb-6"
             >
-              O primeiro aplicativo <br /> da plataforma.
+              Tudo o que seu ministério <br /> realmente precisa.
             </motion.h2>
             <motion.p 
               initial={{ opacity: 0, y: 20 }}
@@ -35,7 +36,7 @@ export function Flagship() {
               viewport={{ once: true }}
               className="text-xl text-white/50 font-light"
             >
-              Resolve uma das maiores dores dos ministérios de louvor: a organização impecável e acesso unificado.
+              O MusicScale centraliza suas músicas, escalas e arquivos em uma experiência de software premium, rápida e desenhada especificamente para músicos.
             </motion.p>
           </div>
           
@@ -44,9 +45,9 @@ export function Flagship() {
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
             href="#precos" 
-            className="px-6 py-3 rounded-full bg-white text-black font-semibold hover:bg-white/90 transition-colors flex items-center gap-2"
+            className="px-8 py-4 rounded-full bg-brand-secondary text-[#0a0a0a] font-bold hover:bg-brand-secondary/90 transition-colors flex items-center gap-2 shadow-[0_0_20px_rgba(41,190,201,0.3)]"
           >
-            Start App <ArrowUpRight className="w-4 h-4" />
+            Quero ter no meu Ministério
           </motion.a>
         </div>
 
@@ -58,20 +59,18 @@ export function Flagship() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="md:col-span-2 rounded-[2rem] bg-white/5 border border-white/10 p-8 flex flex-col relative overflow-hidden group hover:border-white/20 transition-colors"
+            className="md:col-span-2 rounded-[2rem] bg-white/5 border border-white/10 p-0 flex flex-col relative overflow-hidden group hover:border-white/20 transition-colors h-full"
           >
-            <div className="flex-1">
+            <div className="p-8 pb-4">
               <h3 className="text-2xl font-bold mb-2">Gestão de Escalas</h3>
               <p className="text-white/50 font-medium">Cronogramas limpos, sem confusão.</p>
             </div>
             
             {/* Visual element */}
-            <div className="h-32 w-[120%] -ml-[10%] bg-white/5 border-t border-white/10 rounded-t-3xl mt-auto relative overflow-hidden">
-               <div className="absolute inset-0 bg-[linear-gradient(to_right,transparent_1px,_rgba(255,255,255,0.05)_1px),_linear-gradient(to_bottom,transparent_1px,_rgba(255,255,255,0.05)_1px)] bg-[size:20px_20px]" />
-               <div className="absolute top-4 left-1/2 -translate-x-1/2 flex gap-3">
-                  <div className="w-32 h-16 bg-white/10 rounded-lg border border-white/20" />
-                  <div className="w-32 h-16 bg-brand-secondary/20 rounded-lg border border-brand-secondary/40" />
-                  <div className="w-32 h-16 bg-white/10 rounded-lg border border-white/20" />
+            <div className="w-full mt-2 flex-1 relative overflow-hidden flex justify-center items-start pt-2">
+               <div className="absolute inset-0 z-10 pointer-events-none shadow-[inset_0_-20px_20px_-20px_rgba(0,0,0,0.5)]" />
+               <div className="w-[600px] md:w-[850px] origin-top scale-[0.55] md:scale-[0.65] lg:scale-[0.7] transition-transform duration-500 group-hover:-translate-y-2 group-hover:scale-[0.57] md:group-hover:scale-[0.67] lg:group-hover:scale-[0.72]">
+                 <EscalasMockup />
                </div>
             </div>
           </motion.div>
