@@ -27,11 +27,31 @@
         "createdAt": { "type": "string", "format": "date-time" }
       }
     }
+    "organization_members": {
+      "title": "Organization Membership",
+      "description": "Global link between users and organizations with roles.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "admin", "member"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "organizationId", "role"]
+    }
   },
   "firestore": {
     "users/{userId}": {
       "schema": "User",
       "description": "Primary user documents."
+    },
+    "organizations/{orgId}": {
+      "schema": "Organization",
+      "description": "Organization details."
+    },
+    "organization_members/{memberId}": {
+      "schema": "organization_members",
+      "description": "Global membership records."
     }
   }
 }

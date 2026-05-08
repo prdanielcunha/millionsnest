@@ -92,21 +92,34 @@ service cloud.firestore {
     // --- Organizations & Tenant Logic ---
     
     match /organizations/{orgId} {
-      // Organization access is derived from ownership or membership.
+      // Organization access is derived from ownership OR existence in global organization_members.
       allow read: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
-        exists(/databases/$(database)/documents/organizations/$(orgId)/memberships/$(request.auth.uid))
+        // Lookup in global organization_members collection. 
+        // Assumes document ID follows the pattern "userId_organizationId" for efficiency.
+        exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + "_" + orgId))
       );
       
-      // Critical configurations managed by Backend Sync only.
+      // Critical configurations managed by Backend Admin Sync only.
       allow write: if false;
+    }
 
-      match /memberships/{memberId} {
-        allow read: if isSignedIn() && (
-          isOwner(memberId) || 
-          isOwner(get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerId)
-        );
-      }
+    match /organization_members/{memberId} {
+      // Users can only see their own memberships, or owners can see their org members.
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        get(/databases/$(database)/documents/organizations/$(resource.data.organizationId)).data.ownerId == request.auth.uid
+      );
+      
+      // Membership creation/removal is a privileged backend action (onboarding/billing flow).
+      allow write: if false;
+    }
+
+    match /subscriptions/{subId} {
+      // Users can only read their own subscription status.
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Modified ONLY via Stripe Webhook + Firebase Admin SDK.
+      allow write: if false;
     }
   }
 }
