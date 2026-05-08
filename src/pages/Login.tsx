@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, googleProvider, db } from "../lib/firebase";
+import { auth, googleProvider } from "../lib/firebase";
 import { useAuth } from "../contexts/AuthContext";
-import { collection, addDoc, onSnapshot } from "firebase/firestore";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 
@@ -16,7 +15,6 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   // Redirecionamento e lógica pós-login
   useEffect(() => {
@@ -27,41 +25,11 @@ export function Login() {
         // Já possui o produto, redireciona para o app MusicScale
         window.location.href = "https://musicscale.millionsnest.com";
       } else {
-        // Iniciar fluxo de checkout
-        initiateCheckout(user.uid);
+        // Redireciona para o fluxo de onboarding no MusicScale que lidará com a criação da org e checkout
+        window.location.href = "https://musicscale.millionsnest.com/start";
       }
     }
   }, [user, profile, authLoading]);
-
-  const initiateCheckout = async (uid: string) => {
-    setCheckoutLoading(true);
-    try {
-      // Cria a sessão de checkout na subcoleção do usuário.
-      // Isso assume o uso da Firebase Extension "Run Payments with Stripe"
-      const checkoutSessionRef = collection(db, "users", uid, "checkout_sessions");
-      
-      const docRef = await addDoc(checkoutSessionRef, {
-        price: "price_1XXXXXXXXXXXXXXX", // Substituir pelo ID correto do Price no Stripe
-        success_url: "https://musicscale.millionsnest.com",
-        cancel_url: window.location.origin,
-      });
-
-      // Escuta o documento para quando a URL de checkout for gerada pela extensão
-      onSnapshot(docRef, (snap) => {
-        const { error, url } = snap.data() || {};
-        if (error) {
-          setError(`Erro no checkout: ${error.message}`);
-          setCheckoutLoading(false);
-        }
-        if (url) {
-          window.location.assign(url);
-        }
-      });
-    } catch (err: any) {
-      setError("Erro ao iniciar checkout.");
-      setCheckoutLoading(false);
-    }
-  };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,13 +59,13 @@ export function Login() {
     }
   };
 
-  if (authLoading || checkoutLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#fbfbfc]">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 text-brand-primary animate-spin" />
           <p className="text-brand-primary font-medium">
-            {checkoutLoading ? "Preparando checkout..." : "Carregando..."}
+            Carregando...
           </p>
         </div>
       </div>
