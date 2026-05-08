@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Global Safety Net
+    // Deny all by default to ensure no accidental leaks.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Validates document ID safety to prevent resource poisoning.
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+
+    // Strict schema check for the User entity.
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() <= 128
+          && data.email is string && data.email.size() <= 256
+          // Optional fields must be string or null
+          && (data.get('displayName', '') == null || (data.displayName is string && data.displayName.size() <= 100))
+          && (data.get('photoURL', '') == null || (data.photoURL is string && data.photoURL.size() <= 1000))
+          && (data.get('organizationId', '') == null || (data.organizationId is string && data.organizationId.size() <= 100))
+          && data.products is list
+          && data.products.size() <= 20;
+    }
+
+    // --- Collection Rules ---
+
+    match /users/{userId} {
+      // Identity Gate: Users can only see their own private profile.
+      allow get: if isOwner(userId);
+      
+      // Client is forbidden from listing users (Prevents account discovery).
+      allow list: if false;
+
+      // CREATE ACTION: Initial profile bootstrap.
+      allow create: if isOwner(userId) 
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().lastLoginAt == request.time
+        // Mandatory Security: Frontend can only create with 0 products.
+        // Backend Admin SDK will populate this after purchase verification.
+        && incoming().products.size() == 0;
+
+      // UPDATE ACTION: Tiered Permissions (Client-Side)
+      allow update: if isOwner(userId)
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && (
+          // Whitelist: Fields the frontend app is allowed to touch.
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 
+            'photoURL', 
+            'organizationId', 
+            'lastLoginAt'
+          ])
+          // Temporal guard: forces server-side sync for timestamp updates.
+          && (incoming().lastLoginAt == request.time || incoming().lastLoginAt == existing().lastLoginAt)
+          // Hard Lock: Products and Subscriptions are immutable for the Client.
+          && incoming().products == existing().products
+          && incoming().get('subscriptions', {}) == existing().get('subscriptions', {})
+        );
+
+      // System Lock: Users cannot delete their records via client.
+      allow delete: if false; 
+    }
+
+    // --- Organizations & Tenant Logic ---
+    
+    match /organizations/{orgId} {
+      // Organization access is derived from ownership or membership.
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        exists(/databases/$(database)/documents/organizations/$(orgId)/memberships/$(request.auth.uid))
+      );
+      
+      // Critical configurations managed by Backend Sync only.
+      allow write: if false;
+
+      match /memberships/{memberId} {
+        allow read: if isSignedIn() && (
+          isOwner(memberId) || 
+          isOwner(get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerId)
+        );
+      }
+    }
+  }
+}
