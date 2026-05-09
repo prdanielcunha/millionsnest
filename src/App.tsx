@@ -12,6 +12,8 @@ import { Cancellation } from './pages/Cancellation';
 import { AuthProvider } from './contexts/AuthContext';
 import { Login } from './pages/Login';
 
+import { Dashboard } from './pages/Dashboard';
+
 export default function App() {
   return (
     <AuthProvider>
@@ -19,6 +21,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/termos-de-uso" element={<Terms />} />
           <Route path="/politica-de-privacidade" element={<Privacy />} />
           <Route path="/politicas-de-reembolso" element={<Refunds />} />

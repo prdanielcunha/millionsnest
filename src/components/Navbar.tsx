@@ -45,7 +45,7 @@ export function Navbar() {
           {user ? (
             <div className="flex items-center gap-4">
                <span className="text-sm font-medium text-brand-primary/70">{profile?.displayName || user.email}</span>
-               <Link to="/login" className="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-full bg-[#fbfbfc] text-brand-primary border border-brand-primary/10 hover:bg-gray-100 transition-colors">
+               <Link to="/dashboard" className="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-full bg-[#fbfbfc] text-brand-primary border border-brand-primary/10 hover:bg-gray-100 transition-colors">
                   <LayoutDashboard className="w-4 h-4" />
                   Painel
                </Link>
@@ -92,7 +92,7 @@ export function Navbar() {
                    <span className="truncate">{profile?.displayName || user.email}</span>
                    <button onClick={() => { logout(); setMobileMenuOpen(false); }} className="p-2"><LogOut className="w-5 h-5"/></button>
                  </div>
-                 <Link to="/login" className="text-lg font-medium bg-brand-primary text-white text-center py-3 rounded-xl flex items-center justify-center gap-2" onClick={() => setMobileMenuOpen(false)}>
+                 <Link to="/dashboard" className="text-lg font-medium bg-brand-primary text-white text-center py-3 rounded-xl flex items-center justify-center gap-2" onClick={() => setMobileMenuOpen(false)}>
                    <LayoutDashboard className="w-5 h-5" /> Painel Central
                  </Link>
                </>

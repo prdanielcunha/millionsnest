@@ -21,15 +21,9 @@ export function Login() {
     if (authLoading) return;
     
     if (user && profile) {
-      if (profile.products?.includes("musicscale")) {
-        // Já possui o produto, redireciona para o app MusicScale
-        window.location.href = "https://musicscale.millionsnest.com";
-      } else {
-        // Redireciona para o fluxo de onboarding no MusicScale que lidará com a criação da org e checkout
-        window.location.href = "https://musicscale.millionsnest.com/start";
-      }
+      navigate('/dashboard');
     }
-  }, [user, profile, authLoading]);
+  }, [user, profile, authLoading, navigate]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
