@@ -170,19 +170,25 @@ async function startServer() {
 
   app.post('/api/stripe/create-checkout-session', async (req, res) => {
     try {
-      const { userId, email } = req.body;
+      const { userId, email, plan = 'monthly' } = req.body;
 
       if (!userId || !email) {
         res.status(400).json({ error: 'Missing userId or email' });
         return;
       }
 
-      console.log(`[Checkout] Creating checkout session for user ${userId}`);
+      console.log(`[Checkout] Creating checkout session for user ${userId} with plan ${plan}`);
 
-      const priceId = process.env.STRIPE_PRICE_ID; 
+      if (stripeKey === 'sk_test_mock') {
+         console.error('[Checkout] STRIPE_SECRET_KEY env variable is missing');
+         res.status(400).json({ error: 'A Chave do Stripe (STRIPE_SECRET_KEY) não está configurada no Vercel.' });
+         return;
+      }
+
+      const priceId = plan === 'annual' ? process.env.STRIPE_PRICE_ID_ANNUAL : process.env.STRIPE_PRICE_ID_MONTHLY; 
       if (!priceId) {
-         console.error('[Checkout] STRIPE_PRICE_ID env variable is missing');
-         res.status(400).json({ error: 'Server configuration error' });
+         console.error(`[Checkout] STRIPE_PRICE_ID_${plan.toUpperCase()} env variable is missing`);
+         res.status(400).json({ error: `A variável STRIPE_PRICE_ID_${plan.toUpperCase()} não está configurada no Vercel.` });
          return;
       }
 
@@ -231,6 +237,11 @@ async function startServer() {
       const customerId = subDoc.data()?.stripeCustomerId;
       if (!customerId) {
          return res.status(404).json({ error: "ID de cliente Stripe não encontrado." });
+      }
+
+      if (stripeKey === 'sk_test_mock') {
+         console.error('[Portal] STRIPE_SECRET_KEY env variable is missing');
+         return res.status(400).json({ error: 'A variável STRIPE_SECRET_KEY não está configurada no Vercel.' });
       }
 
       console.log(`[Portal] Creating billing portal for user ${userId}`);
