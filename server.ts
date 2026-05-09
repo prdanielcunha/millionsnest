@@ -9,17 +9,33 @@ import path from 'path';
 dotenv.config();
 
 // Configurar Firebase Admin
-if (process.env.FIREBASE_PROJECT_ID && !admin.apps.length) {
-  try {
+let db: admin.firestore.Firestore | null = null;
+try {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+    const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'));
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+      console.log('[Firebase Admin] Initialize via FIREBASE_SERVICE_ACCOUNT_BASE64: SUCCESS');
+    }
+  } else if (process.env.FIREBASE_PROJECT_ID && !admin.apps.length) {
+    console.log('[Firebase Admin] Trying ADC with Project ID:', process.env.FIREBASE_PROJECT_ID);
     admin.initializeApp({
       projectId: process.env.FIREBASE_PROJECT_ID,
     });
-  } catch (error) {
-    console.error('Firebase Admin init error', error);
+    console.log('[Firebase Admin] Initialize via FIREBASE_PROJECT_ID: SUCCESS');
+  } else if (!admin.apps.length) {
+    console.warn('[Firebase Admin] Nenhum FIREBASE_SERVICE_ACCOUNT_BASE64 ou FIREBASE_PROJECT_ID encontrado no ambiente.');
   }
-}
 
-const db = admin.apps.length ? admin.firestore() : null;
+  if (admin.apps.length > 0) {
+    db = admin.firestore();
+    console.log('[Firebase Admin] Firestore provider initialized successfully.');
+  }
+} catch (error) {
+  console.error('[Firebase Admin] Init Error:', error);
+}
 
 const stripeKey = process.env.STRIPE_SECRET_KEY || 'sk_test_mock';
 const stripe = new Stripe(stripeKey, { apiVersion: '2024-06-20' } as any);
@@ -253,6 +269,14 @@ async function startServer() {
       });
     }
   }
+
+  // Global error handler to prevent HTML responses
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('[Express Error]', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || 'Internal Server Error' });
+    }
+  });
 
   return app;
 }
