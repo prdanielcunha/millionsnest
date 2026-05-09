@@ -1,5 +1,4 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import Stripe from 'stripe';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -250,11 +249,17 @@ async function startServer() {
   // Vite middleware for development (Só roda localmente)
   if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
     if (process.env.NODE_ENV !== "production") {
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-      });
-      app.use(vite.middlewares);
+      try {
+        const vitePath = 'vite'; // Trick Vercel's NFT static analyzer
+        const viteModule = await import(vitePath);
+        const vite = await viteModule.createServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+      } catch (err: any) {
+        console.warn('[Server] Vite middleware bypassed:', err.message);
+      }
     } else {
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
