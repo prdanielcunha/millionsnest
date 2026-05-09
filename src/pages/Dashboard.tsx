@@ -17,6 +17,7 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [subscription, setSubscription] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const fetchSubscription = async () => {
     if (!user) return;
@@ -80,6 +81,29 @@ export function Dashboard() {
   const formattedRenewal = subscription?.currentPeriodEnd 
     ? new Date(subscription.currentPeriodEnd.seconds * 1000).toLocaleDateString('pt-BR') 
     : null;
+
+  const handleSubscribe = async (plan: 'monthly' | 'annual') => {
+    if (!user || checkoutLoading) return;
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.uid, email: user.email, plan })
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || 'Erro ao iniciar checkout');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Erro de comunicação com o servidor de pagamento');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#fbfbfc]">
@@ -218,32 +242,31 @@ export function Dashboard() {
                         </a>
                       </>
                     ) : (
-                      <>
+                      <div className="flex flex-col gap-2 relative">
                         <button 
-                          onClick={async () => {
-                            try {
-                              const res = await fetch('/api/stripe/create-checkout-session', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ userId: user.uid, email: user.email })
-                              });
-                              const data = await res.json();
-                              if (data.url) {
-                                window.location.href = data.url;
-                              } else {
-                                alert(data.error || 'Erro ao iniciar checkout');
-                              }
-                            } catch (e) {
-                              console.error(e);
-                              alert('Erro de comunicação com o servidor de pagamento');
-                            }
-                          }}
-                          className="w-full py-3.5 px-4 bg-brand-primary text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-brand-primary/95 transition-all shadow-md shadow-brand-primary/10 active:scale-[0.98]"
+                          onClick={() => handleSubscribe('annual')}
+                          disabled={checkoutLoading}
+                          className="w-full py-3.5 px-4 bg-brand-primary text-white rounded-xl font-medium flex-col flex items-center justify-center gap-0.5 hover:bg-brand-primary/95 transition-all shadow-md shadow-brand-primary/10 active:scale-[0.98] relative overflow-hidden disabled:opacity-70"
                         >
-                          Começar Trial de 7 Dias
-                          <ArrowRight className="w-4 h-4" />
+                          <span className="absolute top-0 right-0 bg-brand-secondary text-brand-primary text-[10px] font-bold px-2 py-0.5 rounded-bl-lg shadow-sm">30% OFF</span>
+                          <span className="flex items-center gap-2">
+                            Assinatura Anual <ArrowRight className="w-4 h-4" />
+                          </span>
+                          <span className="text-xs text-brand-secondary mt-0.5 font-semibold">Tão barato quanto R$ 14,08/mês</span>
+                          <span className="text-[10px] text-white/70 font-normal">7 dias grátis, depois R$ 169,00/ano</span>
                         </button>
-                      </>
+
+                        <button 
+                          onClick={() => handleSubscribe('monthly')}
+                          disabled={checkoutLoading}
+                          className="w-full py-3 px-4 bg-white text-brand-primary border-2 border-brand-primary/10 rounded-xl font-medium flex flex-col items-center justify-center hover:border-brand-primary/30 hover:bg-gray-50 transition-all active:scale-[0.98] disabled:opacity-70"
+                        >
+                          <span className="flex items-center gap-2 text-sm">
+                            Assinatura Mensal
+                          </span>
+                          <span className="text-[10px] text-brand-primary/60 font-normal">7 dias grátis, depois R$ 19,90/mês</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
