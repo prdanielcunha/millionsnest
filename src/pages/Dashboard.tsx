@@ -7,7 +7,7 @@ import {
   CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight 
 } from "lucide-react";
 import { Navbar } from "../components/Navbar";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
 type Tab = "overview" | "account" | "billing";
@@ -18,29 +18,40 @@ export function Dashboard() {
   const [subscription, setSubscription] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
 
-  useEffect(() => {
-    async function fetchSubscription() {
-      if (!user) return;
-      try {
-        const q = query(collection(db, "subscriptions"), where("userId", "==", user.uid));
-        const querySnapshot = await getDocs(q);
-        
-        let activeSub = null;
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.status === "active" || data.status === "trialing") {
-             activeSub = data;
-          } else if (!activeSub) {
-             activeSub = data; // fallback to canceled/past_due if no active
-          }
-        });
-        setSubscription(activeSub);
-      } catch (error) {
-        console.error("Error fetching subscription:", error);
-      } finally {
-        setLoadingSub(false);
+  const fetchSubscription = async () => {
+    if (!user) return;
+    try {
+      const docRef = doc(db, "subscriptions", user.uid);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+         setSubscription(docSnap.data());
+      } else {
+         setSubscription(null);
       }
+    } catch (error) {
+      console.error("Error fetching subscription:", error);
+    } finally {
+      setLoadingSub(false);
     }
+  };
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
+
+    if (sessionId) {
+      // Clear the URL to avoid refetching or confusing the user later
+      window.history.replaceState({}, document.title, window.location.pathname);
+      // Podesexibir um alerta de sucesso
+      console.log('Returned from Stripe session:', sessionId);
+      // Forçamos a refetch
+      setLoadingSub(true);
+      fetchSubscription();
+    }
+  }, [user]);
+
+  useEffect(() => {
     fetchSubscription();
   }, [user]);
 
@@ -208,13 +219,30 @@ export function Dashboard() {
                       </>
                     ) : (
                       <>
-                        <a 
-                          href="https://musicscale.millionsnest.com/start" 
+                        <button 
+                          onClick={async () => {
+                            try {
+                              const res = await fetch('/api/stripe/create-checkout-session', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ userId: user.uid, email: user.email })
+                              });
+                              const data = await res.json();
+                              if (data.url) {
+                                window.location.href = data.url;
+                              } else {
+                                alert(data.error || 'Erro ao iniciar checkout');
+                              }
+                            } catch (e) {
+                              console.error(e);
+                              alert('Erro de comunicação com o servidor de pagamento');
+                            }
+                          }}
                           className="w-full py-3.5 px-4 bg-brand-primary text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-brand-primary/95 transition-all shadow-md shadow-brand-primary/10 active:scale-[0.98]"
                         >
                           Começar Trial de 7 Dias
                           <ArrowRight className="w-4 h-4" />
-                        </a>
+                        </button>
                       </>
                     )}
                   </div>
@@ -300,16 +328,39 @@ export function Dashboard() {
                 </div>
                 <h2 className="text-2xl font-bold text-brand-primary mb-3">Gerenciar Assinaturas</h2>
                 <p className="text-brand-primary/60 text-base mb-8 max-w-md mx-auto">
-                  A gestão financeira e de assinaturas é realizada diretamente na plataforma MusicScale no momento.
+                  Toda a sua gestão financeira, faturamento e alteração de planos é feita de forma totalmente segura pelo Stripe.
                 </p>
-                <a 
-                  href="https://musicscale.millionsnest.com" 
-                  target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-brand-primary text-white rounded-xl font-medium hover:bg-brand-primary/95 transition-all shadow-sm active:scale-[0.98]"
-                >
-                  Acessar Painel de Pagamento
-                  <ExternalLink className="w-4 h-4 ml-1" />
-                </a>
+                
+                {hasMusicScale && (isActive || isTrialing) ? (
+                  <button 
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/stripe/create-portal-session', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ userId: user.uid })
+                        });
+                        const data = await res.json();
+                        if (data.url) {
+                          window.location.href = data.url;
+                        } else {
+                          alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
+                        }
+                      } catch (e) {
+                        console.error(e);
+                        alert('Erro de comunicação.');
+                      }
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-brand-primary text-white rounded-xl font-medium hover:bg-brand-primary/95 transition-all shadow-sm active:scale-[0.98]"
+                  >
+                    Acessar Portal do Stripe
+                    <ExternalLink className="w-4 h-4 ml-1" />
+                  </button>
+                ) : (
+                  <p className="text-sm font-medium text-brand-primary/80 bg-gray-50 max-w-sm mx-auto p-4 rounded-xl border border-gray-100">
+                    Você ainda não possui ferramentas ativas. Volte para a Visão Geral para iniciar seu Trial.
+                  </p>
+                )}
               </div>
             </motion.section>
           )}

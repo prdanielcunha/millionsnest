@@ -7,6 +7,7 @@
       "properties": {
         "uid": { "type": "string" },
         "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
         "products": { "type": "array", "description": "Managed by backend. e.g. ['musicscale']" },
@@ -22,22 +23,38 @@
       "type": "object",
       "properties": {
         "name": { "type": "string" },
-        "ownerId": { "type": "string" },
-        "subscriptionStatus": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "plan": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
-    }
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "Stripe managed subscription status linked to a user.",
+      "type": "object",
+      "properties": {
+        "product": { "type": "string" },
+        "status": { "type": "string" },
+        "stripeCustomerId": { "type": "string" },
+        "stripeSubscriptionId": { "type": "string" },
+        "plan": { "type": "string" },
+        "currentPeriodEnd": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["status", "stripeSubscriptionId"]
+    },
     "organization_members": {
       "title": "Organization Membership",
       "description": "Global link between users and organizations with roles.",
       "type": "object",
       "properties": {
-        "userId": { "type": "string" },
+        "uid": { "type": "string" },
         "organizationId": { "type": "string" },
         "role": { "type": "string", "enum": ["owner", "admin", "member"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "organizationId", "role"]
+      "required": ["uid", "organizationId", "role"]
     }
   },
   "firestore": {
@@ -52,6 +69,10 @@
     "organization_members/{memberId}": {
       "schema": "organization_members",
       "description": "Global membership records."
+    },
+    "subscriptions/{uid}": {
+      "schema": "Subscription",
+      "description": "Global subscriptions map linked to users."
     }
   }
 }
