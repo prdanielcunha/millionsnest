@@ -78,54 +78,66 @@ async function startServer() {
         case 'checkout.session.completed': {
           console.log('[Webhook] Received checkout.session.completed');
           const session = event.data.object as Stripe.Checkout.Session;
-          const userId = session.client_reference_id;
+          const userId = session.metadata?.uid || session.client_reference_id;
+          const plan = session.metadata?.plan || 'monthly';
           const subscriptionId = session.subscription as string;
           const customerId = session.customer as string;
 
           if (!userId || !subscriptionId) {
-             console.log('[Webhook] Missing userId or subscriptionId in session', { userId, subscriptionId });
+             console.log('[Webhook] Missing userId or subscriptionId in session', { 
+               userId, 
+               subscriptionId, 
+               metadata: session.metadata,
+               client_reference_id: session.client_reference_id
+             });
              break;
           }
 
-          console.log(`[Webhook] Processing subscription for user: ${userId}`);
+          console.log(`[Webhook] Processing subscription for user: ${userId} with plan: ${plan}`);
           const subscription = await stripe.subscriptions.retrieve(subscriptionId);
           
           const orgId = userId; // Create a 1:1 org organization for this SaaS user
 
-          // 1. Create Organization
-          await db.collection('organizations').doc(orgId).set({
-            name: `Organização de ${session.customer_email || userId}`,
-            ownerUid: userId,
-            plan: 'musicscale',
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
+          console.log(`[Webhook] Writing data to Firestore for user: ${userId}`);
 
-          // 2. Create Membership (Global Source of Truth)
-          await db.collection('organization_members').doc(`${userId}_${orgId}`).set({
-             uid: userId,
-             organizationId: orgId,
-             role: 'owner'
-          }, { merge: true });
+          try {
+            // 1. Create Organization
+            await db.collection('organizations').doc(orgId).set({
+              name: `Organização de ${session.customer_email || userId}`,
+              ownerUid: userId,
+              plan: plan,
+              createdAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
 
-          // 3. Create/Update Subscription (Official Struct: subscriptions/{uid})
-          await db.collection('subscriptions').doc(userId).set({
-            product: 'musicscale',
-            status: subscription.status,
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: subscriptionId,
-            plan: 'monthly',
-            currentPeriodEnd: admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000),
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
+            // 2. Create Membership (Global Source of Truth)
+            await db.collection('organization_members').doc(`${userId}_${orgId}`).set({
+               uid: userId,
+               organizationId: orgId,
+               role: 'owner'
+            }, { merge: true });
 
-          // 4. Update User Profile
-          await db.collection('users').doc(userId).update({
-            organizationId: orgId,
-            products: admin.firestore.FieldValue.arrayUnion('musicscale'),
-            name: session.customer_email ? session.customer_email.split('@')[0] : 'Usuário'
-          });
+            // 3. Create/Update Subscription (Official Struct: subscriptions/{uid})
+            await db.collection('subscriptions').doc(userId).set({
+              product: 'musicscale',
+              status: subscription.status,
+              stripeCustomerId: customerId,
+              stripeSubscriptionId: subscriptionId,
+              plan: plan,
+              currentPeriodEnd: admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000),
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
 
-          console.log(`[Webhook] Successfully provisioned complete SaaS architecture for user: ${userId}`);
+            // 4. Update User Profile
+            await db.collection('users').doc(userId).update({
+              organizationId: orgId,
+              products: admin.firestore.FieldValue.arrayUnion('musicscale'),
+              name: session.customer_email ? session.customer_email.split('@')[0] : 'Usuário'
+            });
+
+            console.log(`[Webhook] Successfully provisioned complete SaaS architecture for user: ${userId}`);
+          } catch (firestoreErr: any) {
+            console.error(`[Webhook] Firestore write failed for user: ${userId}:`, firestoreErr);
+          }
           break;
         }
 
@@ -206,6 +218,11 @@ async function startServer() {
         },
         client_reference_id: userId,
         customer_email: email,
+        metadata: {
+          uid: userId,
+          plan: plan,
+          product: 'musicscale'
+        },
         success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
       });
