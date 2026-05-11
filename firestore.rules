@@ -123,7 +123,7 @@ service cloud.firestore {
 
     // 4. ASSINATURAS E CONVITES
     match /subscriptions/{subId} {
-      allow get: if isAuthenticated() && subId == request.auth.uid || (checkMemberExists(resource.data.organizationId) && isOrgOwner(resource.data.organizationId));
+      allow get: if isAuthenticated() && (subId == request.auth.uid || ('organizationId' in resource.data && checkMemberExists(resource.data.organizationId) && isOrgOwner(resource.data.organizationId)));
       allow list: if false;
       allow write: if false; 
     }

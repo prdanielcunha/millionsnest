@@ -36,6 +36,8 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error("[Dashboard] Error fetching subscription:", error);
+      // fallback so we handle auth/permissions gracefully 
+      setSubscription(null);
     } finally {
       setLoadingSub(false);
     }
@@ -75,13 +77,17 @@ export function Dashboard() {
     return <Navigate to="/login" replace />;
   }
 
-  const hasMusicScale = profile?.products?.includes("musicscale") || false;
+  const hasMusicScaleAccess = profile?.products?.includes("musicscale") || false;
   
   // Handlers for subscription display
   const isTrialing = subscription?.status === "trialing";
   const isActive = subscription?.status === "active";
   const isCanceled = subscription?.status === "canceled";
+  const hasValidSubscription = isActive || isTrialing;
   
+  // Se tem no perfil ou tem a assinatura criada
+  const showMusicScaleCard = hasMusicScaleAccess || subscription != null;
+
   const formattedRenewal = subscription?.currentPeriodEnd 
     ? new Date(subscription.currentPeriodEnd.seconds * 1000).toLocaleDateString('pt-BR') 
     : null;
@@ -191,17 +197,21 @@ export function Dashboard() {
                     
                     {loadingSub ? (
                       <div className="h-6 w-20 bg-gray-100 rounded-full animate-pulse" />
-                    ) : hasMusicScale && isTrialing ? (
+                    ) : isTrialing ? (
                       <span className="px-3 py-1 bg-amber-50 text-amber-700 text-xs font-bold rounded-full border border-amber-200 flex items-center gap-1.5 uppercase tracking-wide">
                         <Clock className="w-3.5 h-3.5" /> Trial
                       </span>
-                    ) : hasMusicScale && isActive ? (
+                    ) : isActive ? (
                       <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200 flex items-center gap-1.5 uppercase tracking-wide">
                         <ShieldCheck className="w-3.5 h-3.5" /> Ativo
                       </span>
-                    ) : hasMusicScale && isCanceled ? (
+                    ) : isCanceled ? (
                       <span className="px-3 py-1 bg-red-50 text-red-700 text-xs font-bold rounded-full border border-red-200 flex items-center gap-1.5 uppercase tracking-wide">
                         <AlertCircle className="w-3.5 h-3.5" /> Cancelado
+                      </span>
+                    ) : subscription != null ? (
+                      <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-full border border-blue-200 flex items-center gap-1.5 uppercase tracking-wide">
+                        {subscription.status}
                       </span>
                     ) : (
                       <span className="px-3 py-1 bg-gray-50 text-gray-500 text-xs font-bold rounded-full border border-gray-200 uppercase tracking-wide">
@@ -269,7 +279,7 @@ export function Dashboard() {
                   )}
 
                   <div className="flex flex-col gap-3 mt-auto">
-                    {hasMusicScale ? (
+                    {hasValidSubscription ? (
                       <>
                         <a 
                           href="https://musicscale.millionsnest.com" 
@@ -393,7 +403,7 @@ export function Dashboard() {
                   Toda a sua gestão financeira, faturamento e alteração de planos é feita de forma totalmente segura pelo Stripe.
                 </p>
                 
-                {hasMusicScale && (isActive || isTrialing) ? (
+                {hasValidSubscription ? (
                   <button 
                     onClick={async () => {
                       try {
