@@ -106,6 +106,7 @@ async function startServer() {
               name: `Organização de ${session.customer_email || userId}`,
               ownerUid: userId,
               plan: plan,
+              subscriptionStatus: subscription.status,
               createdAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
 
@@ -155,10 +156,17 @@ async function startServer() {
           if (!subsQuery.empty) {
              const batch = db.batch();
              subsQuery.forEach(doc => {
+                 // Update subscription
                  batch.update(doc.ref, {
                     status: subscription.status,
                     currentPeriodEnd: admin.firestore.Timestamp.fromMillis(subscription.current_period_end * 1000),
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                 });
+                 
+                 // Also update the related organization status! (Assuming orgId == userId because we set orgId = userId in checkout)
+                 const orgRef = db!.collection('organizations').doc(doc.id);
+                 batch.update(orgRef, {
+                    subscriptionStatus: subscription.status,
                  });
              });
              await batch.commit();

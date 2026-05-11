@@ -1,92 +1,170 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // 0. Global Safety Net
-    // Deny all by default to ensure no accidental leaks.
+    // 0. Regra global de segurança (bloqueia tudo que não for explicitamente permitido abaixo)
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // --- Global Helpers ---
+    // --- Helpers Globais ---
+    function isAuthenticated() { return request.auth != null; }
     
-    function isSignedIn() {
-      return request.auth != null;
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    // --- Helpers Relacionais Multi-Tenant ---
+    function checkMemberExists(orgId) {
+      return (orgId is string) && exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId));
+    }
+    
+    function checkOrgAccess(orgId) {
+      return checkMemberExists(orgId) && (
+        get(/databases/$(database)/documents/organizations/$(orgId)).data.subscription_status == 'active' ||
+        get(/databases/$(database)/documents/organizations/$(orgId)).data.subscription_status == 'trialing' ||
+        get(/databases/$(database)/documents/organizations/$(orgId)).data.subscriptionStatus == 'active' ||
+        get(/databases/$(database)/documents/organizations/$(orgId)).data.subscriptionStatus == 'trialing'
+      );
+    }
+    
+    function getUserRoleRef(orgId) {
+      return get(/databases/$(database)/documents/roles/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roleId));
+    }
+    
+    function getMemberRole(orgId) {
+       return get(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)).data.role; 
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function isOrgAdmin(orgId) {
+      let role = getMemberRole(orgId);
+      return role == 'admin' || role == 'owner' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Administrador';
     }
 
-    // Validates document ID safety to prevent resource poisoning.
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    function isOrgOwner(orgId) {
+      return getMemberRole(orgId) == 'owner';
     }
 
-    function incoming() {
-      return request.resource.data;
+    function hasPermission(orgId, permission) {
+      let role = getMemberRole(orgId);
+      return role == 'owner' || role == 'admin' || role == 'member';
     }
 
-    function existing() {
-      return resource.data;
+    // --- Entity Validation Helpers ---
+    function isValidCreatedBy(obj) {
+      return obj is map && obj.keys().hasAll(['uid', 'displayName', 'photoURL']) && obj.uid == request.auth.uid && obj.uid.size() <= 128;
     }
 
-    // --- Validation Blueprints ---
+    function isStringSafe(val, maxL) { return val is string && val.size() <= maxL; }
 
-    // Strict schema check for the User entity.
-    function isValidUser(data) {
-      return data.uid is string && data.uid.size() <= 128
-          && data.email is string && data.email.size() <= 256
-          && (data.get('displayName', '') == null || (data.displayName is string && data.displayName.size() <= 100))
-          && (data.get('name', '') == null || (data.name is string && data.name.size() <= 100))
-          && (data.get('photoURL', '') == null || (data.photoURL is string && data.photoURL.size() <= 1000))
-          && (data.get('organizationId', '') == null || (data.organizationId is string && data.organizationId.size() <= 100))
-          && data.products is list
-          && data.products.size() <= 20;
+    function isValidRole(data) {
+      return data.keys().hasAll(['name', 'description', 'permissions']) 
+        && data.name is string && data.name.size() <= 100
+        && data.description is string && data.description.size() <= 500
+        && data.permissions is map;
     }
 
-    // --- Collection Rules ---
+    function isValidCategory(data) {
+      return data.keys().hasAll(['name', 'color'])
+        && data.name is string && data.name.size() <= 100
+        && data.color is string && data.color.size() <= 30;
+    }
 
+    function isValidSong(data) {
+      return data.keys().hasAll(['title', 'categories', 'status'])
+        && data.title is string && data.title.size() <= 200
+        && data.status is string && data.status.matches('^(draft|published)$');
+    }
+
+    function isValidScale(data) {
+      return data.keys().hasAll(['title', 'date', 'status'])
+        && data.title is string && data.title.size() <= 200
+        && data.date is string && data.date.size() <= 50
+        && data.status is string && data.status.matches('^(draft|published)$');
+    }
+
+    // --- RULES POR COLEÇÃO ---
+    
+    // 1. USUÁRIOS
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId)
-        && incoming().uid == existing().uid
-        && incoming().products == existing().products; // Users cannot modify their own products list
+      allow read: if isAuthenticated() && userId == request.auth.uid;
+      allow read: if isAuthenticated() && 'organizationId' in resource.data && checkMemberExists(resource.data.organizationId);
+      allow create: if isAuthenticated() && userId == request.auth.uid;
+      allow update: if isAuthenticated() && isValidId(userId) && (
+        (userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastModifiedAt', 'lastLoginAt', 'chordViewerSettings', 'lyricsViewerSettings', 'organizationId', 'role', 'roleId', 'uid', 'email', 'createdAt', 'products', 'name'])) ||
+        (checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId) && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'roleId', 'lastModifiedAt']))
+      );
+      allow delete: if isAuthenticated() && userId == request.auth.uid;
     }
 
-    // --- Organizations & Tenant Logic ---
-    
+    // 2. ORGANIZAÇÕES
     match /organizations/{orgId} {
-      // Organization access is derived from ownership OR existence in global organization_members.
-      allow read: if isSignedIn() && (
+      // Backend (Webhook do Stripe) é o único autorizado a criar/modificar
+      allow read: if isAuthenticated() && (
         resource.data.ownerUid == request.auth.uid ||
-        // Lookup in global organization_members collection. 
-        exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + "_" + orgId))
+        resource.data.owner_user_id == request.auth.uid ||
+        checkMemberExists(orgId)
       );
-      
-      // Critical configurations managed by Backend Admin Sync only.
-      allow write: if false;
+      allow write: if false; 
     }
 
-    match /organization_members/{memberId} {
-      // Users can only see their own memberships, or owners can see their org members.
-      allow read: if isSignedIn() && (
-        resource.data.uid == request.auth.uid ||
-        get(/databases/$(database)/documents/organizations/$(resource.data.organizationId)).data.ownerUid == request.auth.uid
+    // 3. MEMBROS DA ORGANIZAÇÃO
+    match /organization_members/{id} {
+      // Must be formatted as userId_orgId
+      allow read: if isAuthenticated() && (
+        id.split('_')[0] == request.auth.uid || 
+        checkOrgAccess(resource.data.organizationId) || 
+        checkOrgAccess(id.split('_')[1])
       );
-      
-      // Membership creation/removal is a privileged backend action (onboarding/billing flow).
-      allow write: if false;
+      allow list: if isAuthenticated() && (resource.data.uid == request.auth.uid || checkOrgAccess(resource.data.organizationId));
+      allow write: if false; 
     }
 
+    // 4. ASSINATURAS E CONVITES
     match /subscriptions/{subId} {
-      // Document ID is strictly the UID representing the user's subscription state.
-      allow get: if isOwner(subId);
+      allow get: if isAuthenticated() && subId == request.auth.uid || (checkMemberExists(resource.data.organizationId) && isOrgOwner(resource.data.organizationId));
       allow list: if false;
-      // Modified ONLY via Stripe Webhook + Firebase Admin SDK.
-      allow write: if false;
+      allow write: if false; 
     }
+
+    match /invites/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organization_id);
+      allow write: if false; 
+    }
+
+    // --- REGRAS ESPECÍFICAS DO MUSIC SCALE ---
+    match /roles/{roleId} {
+      allow read: if isAuthenticated() && 'organizationId' in resource.data && checkMemberExists(resource.data.organizationId);
+      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId) && isValidRole(incoming());
+      allow update: if isAuthenticated() && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId) && isValidRole(incoming());
+      allow delete: if isAuthenticated() && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId);
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId) && isValidCategory(incoming());
+      allow update: if isAuthenticated() && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId) && isValidCategory(incoming());
+      allow delete: if isAuthenticated() && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId);
+    }
+
+    match /songs/{songId} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && (isOrgAdmin(incoming().organizationId) || getUserRoleRef(incoming().organizationId).data.permissions.canManageRepertoire == true) && isValidSong(incoming());
+      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef(resource.data.organizationId).data.permissions.canManageRepertoire == true) && isValidSong(incoming());
+      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef(resource.data.organizationId).data.permissions.canManageRepertoire == true);
+    }
+
+    match /scales/{scaleId} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && (isOrgAdmin(incoming().organizationId) || getUserRoleRef(incoming().organizationId).data.permissions.canManageScales == true) && isValidScale(incoming());
+      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef(resource.data.organizationId).data.permissions.canManageScales == true) && isValidScale(incoming());
+      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef(resource.data.organizationId).data.permissions.canManageScales == true);
+    }
+    
+    // Regras Extras Antigas do MillionsNest se necessário na sua stack
+    match /locations/{id} { allow read, write: if isAuthenticated() && checkOrgAccess(resource.data.organizationId); }
+    match /eventTypes/{id} { allow read, write: if isAuthenticated() && checkOrgAccess(resource.data.organizationId); }
+    match /tags/{id} { allow read, write: if isAuthenticated() && checkOrgAccess(resource.data.organizationId); }
   }
 }
