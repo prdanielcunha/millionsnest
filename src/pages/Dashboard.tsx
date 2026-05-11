@@ -22,16 +22,20 @@ export function Dashboard() {
   const fetchSubscription = async () => {
     if (!user) return;
     try {
+      console.log("[Dashboard] Fetching subscription for:", user.uid);
       const docRef = doc(db, "subscriptions", user.uid);
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
-         setSubscription(docSnap.data());
+         const data = docSnap.data();
+         console.log("[Dashboard] Subscription found:", data);
+         setSubscription(data);
       } else {
+         console.log("[Dashboard] No subscription found in Firestore");
          setSubscription(null);
       }
     } catch (error) {
-      console.error("Error fetching subscription:", error);
+      console.error("[Dashboard] Error fetching subscription:", error);
     } finally {
       setLoadingSub(false);
     }
@@ -212,20 +216,55 @@ export function Dashboard() {
                   </p>
 
                   {/* Plan Details Context */}
-                  {hasMusicScale && !loadingSub && (
-                    <div className="mb-6 bg-gray-50 rounded-xl p-4 border border-gray-100">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs text-brand-primary/50 font-medium uppercase tracking-wider">Plano Atual</span>
-                        <span className="text-sm font-semibold text-brand-primary capitalize">
-                          {subscription?.planName || "Pro"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-brand-primary/50 font-medium uppercase tracking-wider">Próxima Cobrança</span>
-                        <span className="text-sm font-medium text-brand-primary/80">
-                          {formattedRenewal || "Não disponível"}
-                        </span>
-                      </div>
+                  {(subscription || loadingSub) && (
+                    <div className="mb-6 bg-gray-50 rounded-2xl p-5 border border-gray-100 relative overflow-hidden group">
+                      {loadingSub ? (
+                        <div className="flex flex-col gap-2 py-2 animate-pulse">
+                          <div className="h-3 w-20 bg-gray-200 rounded"></div>
+                          <div className="h-4 w-32 bg-gray-200 rounded"></div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <p className="text-[10px] text-brand-primary/40 font-bold uppercase tracking-widest mb-1">Status da Assinatura</p>
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                                  subscription.status === 'active' ? 'bg-green-100 text-green-700' :
+                                  subscription.status === 'trialing' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {subscription.status === 'trialing' ? 'Trial Ativo' : subscription.status === 'active' ? 'Ativo' : subscription.status}
+                                </span>
+                                <span className="text-sm font-bold text-brand-primary">
+                                  {subscription?.plan === 'annual' ? 'Plano Anual' : 'Plano Mensal'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="w-8 h-8 bg-white rounded-lg border border-gray-100 flex items-center justify-center shadow-sm">
+                              <ShieldCheck className="w-4 h-4 text-brand-primary/40" />
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-brand-primary/50">Próximo Faturamento</span>
+                              <span className="font-semibold text-brand-primary">
+                                {formattedRenewal || "Sincronizando..."}
+                              </span>
+                            </div>
+                            
+                            {subscription?.status === 'trialing' && (
+                              <div className="flex items-start gap-2 p-2.5 bg-blue-50/50 rounded-lg border border-blue-100/50">
+                                <Clock className="w-3.5 h-3.5 text-blue-600 mt-0.5" />
+                                <p className="text-[11px] text-blue-800 leading-tight">
+                                  Seu período de teste gratuito termina em <strong>{formattedRenewal}</strong>. Nenhuma cobrança será feita até lá.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
