@@ -29,7 +29,7 @@ export function Flagship() {
               viewport={{ once: true }}
               className="text-4xl md:text-6xl font-semibold tracking-tight mb-6"
             >
-              Tudo o que seu ministério <br className="hidden md:block" /> realmente precisa.
+              Excelência e fluidez <br className="hidden md:block" /> para o louvor.
             </motion.h2>
             <motion.p 
               initial={{ opacity: 0, y: 20 }}
@@ -37,7 +37,7 @@ export function Flagship() {
               viewport={{ once: true }}
               className="text-lg md:text-xl text-[#A0A7B5] font-normal leading-relaxed"
             >
-              O MusicScale centraliza suas músicas, escalas e arquivos em uma experiência de software premium, rápida e desenhada especificamente para músicos.
+              Esqueça as planilhas e mensagens perdidas. Uma plataforma construída para organizar repertórios, gerenciar equipes e preparar seu ministério com excelência real.
             </motion.p>
           </div>
           
@@ -50,7 +50,7 @@ export function Flagship() {
               to="/login" 
               className="px-8 py-4 rounded-xl bg-[#F5F7FA] text-[#050505] font-semibold hover:bg-white transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto"
             >
-              Quero no meu Ministério
+              Explorar MusicScale
             </Link>
           </motion.div>
         </div>
@@ -67,8 +67,8 @@ export function Flagship() {
           >
             <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
             <div className="p-8 pb-4 relative z-10">
-              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Gestão de Escalas</h3>
-              <p className="text-[#A0A7B5] font-normal">Cronogramas limpos, sem confusão.</p>
+              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Organização Absoluta</h3>
+              <p className="text-[#A0A7B5] font-normal">Cronogramas claros, limpos e sem confusão.</p>
             </div>
             
             {/* Visual element */}
@@ -91,8 +91,8 @@ export function Flagship() {
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,_rgba(43,133,235,0.1),_transparent_80%)] opacity-50" />
             <Smartphone className="w-8 h-8 text-[#2B85EB] relative z-10" />
             <div className="relative z-10">
-              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Mobile-First</h3>
-              <p className="text-[#A0A7B5] font-normal">Perfeito para visualizar na hora do culto.</p>
+              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Experiência Fluida</h3>
+              <p className="text-[#A0A7B5] font-normal">Perfeito para o altar. Suas cifras onde você estiver.</p>
             </div>
           </motion.div>
 
@@ -106,8 +106,8 @@ export function Flagship() {
           >
             <Database className="w-8 h-8 text-[#F5F7FA]/70 relative z-10" />
             <div className="relative z-10">
-              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Banco Oficial</h3>
-              <p className="text-[#A0A7B5] font-normal">Repertório oficial sempre atualizado.</p>
+              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Repertório Central</h3>
+              <p className="text-[#A0A7B5] font-normal">Músicas centralizadas e sempre na versão correta.</p>
             </div>
           </motion.div>
 
@@ -120,8 +120,8 @@ export function Flagship() {
             className="md:col-span-2 rounded-[2rem] bg-[#0B0F19] border border-white/5 p-8 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden group hover:border-white/10 transition-colors"
           >
              <div className="flex-1 w-full relative z-10">
-               <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Transposição em 1 clique</h3>
-               <p className="text-[#A0A7B5] font-normal mb-8">Mude o tom da cifra instantaneamente. Crie playlists para cada culto com as cifras exatas.</p>
+               <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Preparação Completa</h3>
+               <p className="text-[#A0A7B5] font-normal mb-8">Mude o tom da cifra instantaneamente. Centralize sua liturgia e alinhe toda a equipe antes do culto começar.</p>
                <div className="flex gap-3">
                  <div className="w-12 h-12 flex items-center justify-center bg-white/5 rounded-xl border border-white/10 text-sm font-semibold font-mono text-[#F5F7FA] shadow-sm">C</div>
                  <div className="w-12 h-12 flex items-center justify-center bg-transparent text-sm font-semibold font-mono text-[#A0A7B5]">→</div>

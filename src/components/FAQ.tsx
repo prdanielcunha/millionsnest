@@ -22,7 +22,7 @@ const faqs = [
   },
   {
     q: "Os próximos aplicativos estarão inclusos?",
-    a: "Os próximos apps do ecossistema (como CultoFlow e CellHub) terão planos próprios, mas assinantes pioneiros do MusicScale terão descontos exclusivos para assinar os novos módulos."
+    a: "Os próximos aplicativos do ecossistema de gestão ministerial terão planos próprios, mas assinantes pioneiros do MusicScale terão descontos exclusivos para assinar os novos módulos."
   },
   {
     q: "Posso usar em múltiplos ministérios?",

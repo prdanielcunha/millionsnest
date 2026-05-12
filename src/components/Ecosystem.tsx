@@ -4,22 +4,22 @@ import { CalendarDays, Users, QrCode } from "lucide-react";
 export function Ecosystem() {
   const futureApps = [
     {
-      title: "CultoFlow",
+      title: "Organização de Cultos",
       icon: <CalendarDays className="w-5 h-5" />,
-      desc: "Planejamento e organização completa da liturgia e direção do culto.",
+      desc: "Planejamento e coordenação completa da liturgia, direção e equipes do culto.",
       features: ["Ordem do culto", "Cronograma", "Equipes", "Fluxo ao vivo"]
     },
     {
-      title: "CellHub",
+      title: "Gestão Ministerial",
       icon: <Users className="w-5 h-5" />,
-      desc: "Gestão inteligente e acompanhamento de células e pequenos grupos.",
-      features: ["Presença", "Líderes", "Acompanhamento", "Relatórios"]
+      desc: "Gestão inteligente, centralizada e acompanhamento de equipes e coordenações.",
+      features: ["Integração", "Líderes", "Membros", "Relatórios"]
     },
     {
-      title: "VisitTrack",
+      title: "Comunicação e Analytics",
       icon: <QrCode className="w-5 h-5" />,
-      desc: "Gestão moderna de visitantes com check-in inteligente e integração.",
-      features: ["QR Code", "Formulários", "Follow-up automático"]
+      desc: "Plataforma de avisos e tomadas de decisão embasadas com detalhados.",
+      features: ["Avisos", "Dashboards integrados", "Otimização"]
     }
   ];
 
@@ -44,7 +44,7 @@ export function Ecosystem() {
             viewport={{ once: true }}
             className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight mb-6"
           >
-            O MusicScale é apenas o começo.<br />
+            Expandindo o ecossistema.<br />
           </motion.h2>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
@@ -52,7 +52,7 @@ export function Ecosystem() {
             viewport={{ once: true }}
             className="text-lg text-[#A0A7B5] font-normal leading-relaxed"
           >
-            A MillionsNest está construindo um ecossistema completo de gestão para igrejas. Ao entrar no MusicScale hoje, você garante seu passaporte para a próxima geração da organização ministerial.
+            Estamos desenvolvendo a mais sofisticada infraestrutura digital para igrejas. Não apenas aplicativos isolados, mas um ecossistema nativo e integrado para as áreas vitais da gestão executiva do seu ministério.
           </motion.p>
         </div>
 

@@ -317,9 +317,9 @@ export function Dashboard() {
                   <div className="w-16 h-16 bg-[#050505] rounded-2xl flex items-center justify-center mb-6 text-[#A0A7B5] shadow-inner border border-white/5 transition-transform group-hover:scale-105">
                      <LayoutGrid className="w-6 h-6" />
                   </div>
-                  <h3 className="text-lg font-semibold text-[#A0A7B5] tracking-tight mb-2">Novo App</h3>
+                  <h3 className="text-lg font-semibold text-[#A0A7B5] tracking-tight mb-2">Comunicação e Analytics</h3>
                   <p className="text-[#A0A7B5]/60 text-sm font-normal px-4">
-                    Estamos construindo novas integrações para sua igreja.
+                    Estamos construindo novas integrações de gestão e relatórios para o ecossistema.
                   </p>
                 </div>
               </div>

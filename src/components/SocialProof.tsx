@@ -11,7 +11,7 @@ export function SocialProof() {
           viewport={{ once: true, margin: "-100px" }}
           className="text-[#A0A7B5] font-normal text-sm md:text-base max-w-2xl mx-auto"
         >
-          Líderes e equipes estão abandonando planilhas, PDFs e grupos confusos para centralizar tudo em um só lugar.
+          Líderes de excelência estão abandonando planilhas e grupos confusos para elevar o nível da sua gestão.
         </motion.p>
         
         <motion.div 

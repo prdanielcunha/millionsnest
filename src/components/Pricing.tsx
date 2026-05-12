@@ -19,7 +19,7 @@ export function Pricing() {
             viewport={{ once: true }}
             className="text-3xl md:text-5xl font-semibold tracking-tight text-[#F5F7FA] mb-6"
           >
-            Simples, acessível e <br />pensado para igrejas.
+            Acessível. Escalável. Premium.
           </motion.h2>
           
           <motion.div 

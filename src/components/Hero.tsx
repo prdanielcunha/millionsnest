@@ -19,39 +19,39 @@ export function Hero() {
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-[#A0A7B5] uppercase tracking-widest mb-8 hover:bg-white/10 transition-colors cursor-pointer"
         >
           <span className="flex h-1.5 w-1.5 rounded-full bg-[#2B85EB] opacity-100 shadow-[0_0_8px_rgba(43,133,235,0.8)]"></span>
-          Conheça a Plataforma MillionsNest
+          A nova geração da gestão ministerial
         </motion.div>
 
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="text-5xl md:text-7xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-[#F5F7FA] to-[#A0A7B5] max-w-5xl leading-[1.1] pb-2"
+          className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-[#F5F7FA] to-[#A0A7B5] max-w-5xl leading-[1.05] pb-2"
         >
-          Tecnologia para <br className="hidden md:block" />ministérios modernos.
+          Tecnologia para<br className="hidden md:block" /> fortalecer igrejas.
         </motion.h1>
 
         <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="mt-6 text-lg md:text-xl text-[#A0A7B5] max-w-3xl font-normal leading-relaxed"
+          className="mt-8 text-lg md:text-xl text-[#A0A7B5] max-w-2xl font-normal leading-relaxed"
         >
-          Ferramentas inteligentes para igrejas organizarem louvor, equipes, células e ministérios com excelência.
+          Menos caos. Mais ministério. A central operacional moderna projetada para devolver o seu foco ao que realmente importa, com excelência e clareza.
         </motion.p>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="mt-10 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto"
+          className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto"
         >
-          <Link to="/login" className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#F5F7FA] text-[#050505] font-semibold hover:bg-white transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 group">
-            Começar teste grátis
+          <Link to="/login" className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#F5F7FA] text-[#050505] font-semibold hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 flex items-center justify-center gap-2 group">
+            Começar agora
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
           <a href="#musicscale" className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#0B0F19] text-[#F5F7FA] font-medium border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2 group shadow-sm">
-            Conhecer plataformas
+            Explorar ecossistema
             <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors" />
           </a>
         </motion.div>
