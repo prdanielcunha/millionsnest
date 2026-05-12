@@ -5,34 +5,36 @@ export function Ecosystem() {
   const futureApps = [
     {
       title: "CultoFlow",
-      icon: <CalendarDays className="w-6 h-6" />,
+      icon: <CalendarDays className="w-5 h-5" />,
       desc: "Planejamento e organização completa da liturgia e direção do culto.",
       features: ["Ordem do culto", "Cronograma", "Equipes", "Fluxo ao vivo"]
     },
     {
       title: "CellHub",
-      icon: <Users className="w-6 h-6" />,
+      icon: <Users className="w-5 h-5" />,
       desc: "Gestão inteligente e acompanhamento de células e pequenos grupos.",
       features: ["Presença", "Líderes", "Acompanhamento", "Relatórios"]
     },
     {
       title: "VisitTrack",
-      icon: <QrCode className="w-6 h-6" />,
+      icon: <QrCode className="w-5 h-5" />,
       desc: "Gestão moderna de visitantes com check-in inteligente e integração.",
       features: ["QR Code", "Formulários", "Follow-up automático"]
     }
   ];
 
   return (
-    <section id="ecossistema" className="py-24 md:py-32 bg-white">
-      <div className="max-w-7xl mx-auto px-6">
+    <section id="ecossistema" className="py-24 md:py-32 bg-[#050505] border-b border-white/5 relative overflow-hidden">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl h-[400px] bg-white/5 rounded-[100%] blur-[120px] pointer-events-none" />
+
+      <div className="max-w-7xl mx-auto px-6 relative z-10">
         
         <div className="text-center max-w-3xl mx-auto mb-16 md:mb-24">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="inline-block px-3 py-1 rounded-full bg-brand-primary/5 text-sm font-semibold text-brand-primary mb-6"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-medium text-[#A0A7B5] uppercase tracking-widest mb-6"
           >
             A Visão MillionsNest
           </motion.div>
@@ -40,7 +42,7 @@ export function Ecosystem() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-4xl md:text-5xl font-bold text-brand-primary tracking-tight mb-6"
+            className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight mb-6"
           >
             O MusicScale é apenas o começo.<br />
           </motion.h2>
@@ -48,7 +50,7 @@ export function Ecosystem() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-xl text-brand-primary/60 font-light"
+            className="text-lg text-[#A0A7B5] font-normal leading-relaxed"
           >
             A MillionsNest está construindo um ecossistema completo de gestão para igrejas. Ao entrar no MusicScale hoje, você garante seu passaporte para a próxima geração da organização ministerial.
           </motion.p>
@@ -62,23 +64,25 @@ export function Ecosystem() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: idx * 0.1 }}
-              className="bg-[#fbfbfc] rounded-3xl p-8 border border-brand-primary/10 relative overflow-hidden flex flex-col h-full group"
+              className="bg-[#0B0F19] rounded-2xl p-8 border border-white/5 relative overflow-hidden flex flex-col h-full group hover:border-[#2B85EB]/20 hover:shadow-[0_0_30px_rgba(43,133,235,0.05)] transition-all"
             >
-              <div className="absolute top-8 right-8 text-[10px] font-bold px-3 py-1 rounded-full bg-brand-secondary/10 text-brand-secondary uppercase tracking-wider">
-                Em Desenvolvimento
+              <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
+
+              <div className="absolute top-8 right-8 text-[9px] font-bold px-2.5 py-1 rounded-md bg-white/5 text-[#A0A7B5] uppercase tracking-widest border border-white/5">
+                Em Breve
               </div>
               
-              <div className="w-14 h-14 rounded-2xl bg-white border border-brand-primary/10 flex items-center justify-center text-brand-primary shadow-sm mb-6 group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-[#F5F7FA] mb-6 group-hover:scale-110 group-hover:bg-[#2B85EB]/10 group-hover:text-[#2B85EB] group-hover:border-[#2B85EB]/20 transition-all duration-500">
                 {app.icon}
               </div>
               
-              <h3 className="text-2xl font-bold text-brand-primary mb-3">{app.title}</h3>
-              <p className="text-brand-primary/60 mb-8 flex-1">{app.desc}</p>
+              <h3 className="text-xl font-semibold text-[#F5F7FA] mb-3 relative z-10">{app.title}</h3>
+              <p className="text-[#A0A7B5] mb-8 flex-1 text-sm leading-relaxed relative z-10">{app.desc}</p>
               
-              <ul className="space-y-3">
+              <ul className="space-y-4 relative z-10 border-t border-white/5 pt-6 mt-4">
                 {app.features.map(f => (
-                  <li key={f} className="text-sm font-medium text-brand-primary flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-brand-primary/20" />
+                  <li key={f} className="text-sm text-[#A0A7B5] flex items-center gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#2B85EB]/40 flex-shrink-0" />
                     {f}
                   </li>
                 ))}

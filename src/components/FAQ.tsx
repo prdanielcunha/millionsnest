@@ -34,11 +34,13 @@ export function FAQ() {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
 
   return (
-    <section id="faq" className="py-24 md:py-32 bg-white">
-      <div className="max-w-4xl mx-auto px-6">
+    <section id="faq" className="py-24 md:py-32 bg-[#050505] border-b border-white/5 relative">
+      <div className="absolute top-0 right-1/4 w-[300px] h-[300px] bg-[#2B85EB]/5 blur-[120px] rounded-full pointer-events-none" />
+
+      <div className="max-w-4xl mx-auto px-6 relative z-10">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-brand-primary mb-4">Dúvidas Frequentes</h2>
-          <p className="text-brand-primary/60">Tudo o que você precisa saber sobre a MillionsNest.</p>
+          <h2 className="text-3xl md:text-5xl font-semibold tracking-tight text-[#F5F7FA] mb-4">Dúvidas Frequentes</h2>
+          <p className="text-[#A0A7B5]">Tudo o que você precisa saber sobre a Plataforma MillionsNest.</p>
         </div>
 
         <div className="space-y-4">
@@ -51,18 +53,18 @@ export function FAQ() {
               transition={{ delay: idx * 0.05 }}
               className={clsx(
                 "border rounded-2xl overflow-hidden transition-colors duration-300",
-                openIdx === idx ? "bg-brand-primary/5 border-brand-primary/20" : "bg-white border-brand-primary/10 hover:border-brand-primary/20"
+                openIdx === idx ? "bg-[#0B0F19] border-[#2B85EB]/20" : "bg-[#0B0F19]/50 border-white/5 hover:border-white/10"
               )}
             >
               <button 
                 onClick={() => setOpenIdx(openIdx === idx ? null : idx)}
                 className="w-full px-6 py-6 flex items-center justify-between text-left"
               >
-                <span className="font-semibold text-brand-primary text-lg">{faq.q}</span>
+                <span className={clsx("font-medium text-base transition-colors", openIdx === idx ? "text-[#F5F7FA]" : "text-[#A0A7B5]")}>{faq.q}</span>
                 <motion.div 
                   animate={{ rotate: openIdx === idx ? 180 : 0 }}
                   transition={{ duration: 0.2 }}
-                  className="w-8 h-8 rounded-full bg-brand-primary/5 flex items-center justify-center flex-shrink-0 ml-4 text-brand-primary"
+                  className={clsx("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ml-4 transition-colors", openIdx === idx ? "bg-[#2B85EB]/10 text-[#2B85EB]" : "bg-white/5 text-[#A0A7B5]")}
                 >
                   <ChevronDown className="w-4 h-4" />
                 </motion.div>
@@ -76,7 +78,7 @@ export function FAQ() {
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <div className="px-6 pb-6 text-brand-primary/70 leading-relaxed font-medium">
+                    <div className="px-6 pb-6 text-[#A0A7B5] leading-relaxed font-normal text-sm">
                       {faq.a}
                     </div>
                   </motion.div>

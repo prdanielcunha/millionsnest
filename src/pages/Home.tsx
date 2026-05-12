@@ -27,7 +27,7 @@ export function Home() {
   }, [hash]);
 
   return (
-    <div className="min-h-screen font-sans overflow-x-hidden">
+    <div className="min-h-screen font-sans overflow-x-hidden bg-[#050505] text-[#F5F7FA]">
       <Navbar />
       <Hero />
       <SocialProof />

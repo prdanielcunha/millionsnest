@@ -67,12 +67,9 @@ export function Login() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#fbfbfc]">
+      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-brand-primary animate-spin" />
-          <p className="text-brand-primary font-medium">
-            Carregando...
-          </p>
+          <Loader2 className="w-8 h-8 text-[#F5F7FA] animate-spin" />
         </div>
       </div>
     );
@@ -84,25 +81,29 @@ export function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fbfbfc] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6 relative overflow-hidden">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl h-[400px] bg-[#2B85EB]/10 rounded-[100%] blur-[120px] pointer-events-none" />
+      
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white rounded-2xl shadow-xl shadow-brand-primary/5 p-8 border border-brand-primary/10"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-md bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] shadow-2xl p-8 md:p-10 border border-white/5 relative z-10"
       >
+        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none rounded-[2rem]" />
+        
         <div className="flex justify-center mb-8">
-          <img src="/logo.png" alt="MillionsNest Logo" className="h-10 w-auto" />
+          <img src="/logo_oficial.png" alt="MillionsNest Logo" className="h-10 w-auto opacity-90" />
         </div>
         
-        <h2 className="text-2xl font-bold text-brand-primary text-center tracking-tight mb-2">
+        <h2 className="text-2xl font-semibold text-[#F5F7FA] text-center tracking-tight mb-2">
           {isLogin ? "Bem-vindo de volta" : "Crie sua conta"}
         </h2>
-        <p className="text-center text-brand-primary/60 text-sm mb-8">
+        <p className="text-center text-[#A0A7B5] text-sm font-normal mb-8">
           Acesse a central MillionsNest
         </p>
 
         {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-6">
+          <div className="bg-[#EF4444]/10 border border-[#EF4444]/20 text-[#EF4444] p-3 rounded-xl text-sm mb-6 text-center">
             {error}
           </div>
         )}
@@ -110,7 +111,7 @@ export function Login() {
         <button
           onClick={handleGoogleAuth}
           disabled={loading}
-          className="w-full relative flex flex-row items-center justify-center gap-2 px-4 py-2.5 mb-6 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+          className="w-full relative flex flex-row items-center justify-center gap-3 px-4 py-3 mb-6 text-sm font-semibold border border-white/10 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-[#F5F7FA] disabled:opacity-50"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -121,47 +122,47 @@ export function Login() {
           Continuar com Google
         </button>
 
-        <div className="relative flex items-center justify-center mb-6">
-          <hr className="w-full border-gray-200" />
-          <span className="absolute bg-white px-2 text-xs text-brand-primary/40 uppercase font-medium">Ou</span>
+        <div className="relative flex items-center justify-center mb-8">
+          <hr className="w-full border-white/10" />
+          <span className="absolute bg-[#0B0F19] px-3 text-[10px] text-[#A0A7B5] uppercase font-bold tracking-widest">Ou</span>
         </div>
 
         <form onSubmit={handleEmailAuth} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-brand-primary mb-1">Email</label>
+            <label className="block text-xs font-medium text-[#A0A7B5] mb-2 uppercase tracking-wide">Email</label>
             <input 
               type="email" 
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary/50 transition-all text-sm"
+              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:outline-none focus:ring-1 focus:ring-[#2B85EB] focus:border-[#2B85EB] transition-all text-sm text-[#F5F7FA] placeholder-white/20 shadow-inner"
               placeholder="seu@ministerio.com"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-brand-primary mb-1">Senha</label>
+            <label className="block text-xs font-medium text-[#A0A7B5] mb-2 uppercase tracking-wide">Senha</label>
             <input 
               type="password" 
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary/50 transition-all text-sm"
+              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:outline-none focus:ring-1 focus:ring-[#2B85EB] focus:border-[#2B85EB] transition-all text-sm text-[#F5F7FA] placeholder-white/20 shadow-inner"
               placeholder="••••••••"
             />
           </div>
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full py-2.5 bg-brand-primary text-white rounded-xl font-medium text-sm hover:bg-brand-primary/90 transition-colors disabled:opacity-50 mt-2 flex items-center justify-center h-[44px]"
+            className="w-full py-3 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold text-sm hover:bg-white transition-all disabled:opacity-50 mt-4 flex items-center justify-center shadow-sm active:scale-95"
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isLogin ? "Entrar" : "Criar conta")}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin text-[#050505]" /> : (isLogin ? "Entrar" : "Criar conta")}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm">
+        <div className="mt-8 text-center text-sm">
           <button 
             onClick={() => setIsLogin(!isLogin)}
-            className="text-brand-primary/60 hover:text-brand-primary font-medium transition-colors"
+            className="text-[#A0A7B5] hover:text-[#F5F7FA] font-medium transition-colors"
           >
             {isLogin ? "Não tem uma conta? Cadastre-se" : "Já possui conta? Entre"}
           </button>

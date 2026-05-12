@@ -9,7 +9,7 @@ export function Terms() {
   }, []);
 
   return (
-    <div className="min-h-screen font-sans bg-white flex flex-col">
+    <div className="min-h-screen font-sans bg-[#050505] text-[#F5F7FA] flex flex-col">
       <Navbar />
       
       <main className="flex-grow pt-32 pb-24">
@@ -19,13 +19,13 @@ export function Terms() {
             animate={{ opacity: 1, y: 0 }}
             className="mb-12"
           >
-            <div className="inline-block px-3 py-1 rounded-full bg-brand-primary/5 text-sm font-semibold text-brand-primary mb-6">
+            <div className="inline-block px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-[#A0A7B5] uppercase tracking-widest mb-6">
               Legal
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold text-brand-primary tracking-tight mb-4">
+            <h1 className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight mb-4">
               Termos de Uso
             </h1>
-            <p className="text-lg text-brand-primary/60">
+            <p className="text-lg text-[#A0A7B5]">
               Última atualização: {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
             </p>
           </motion.div>
@@ -34,7 +34,7 @@ export function Terms() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
-            className="prose prose-lg prose-headings:text-brand-primary prose-a:text-brand-secondary hover:prose-a:text-brand-primary prose-p:text-brand-primary/70 max-w-none"
+            className="prose prose-lg prose-invert prose-headings:text-[#F5F7FA] prose-a:text-[#2B85EB] hover:prose-a:text-[#2B85EB]/80 prose-p:text-[#A0A7B5] prose-strong:text-[#F5F7FA] max-w-none"
           >
             <h2>1. Aceitação dos Termos</h2>
             <p>
