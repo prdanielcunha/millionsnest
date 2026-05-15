@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 
 export function Pricing() {
   const [isAnnual, setIsAnnual] = useState(true);
-  const [prices, setPrices] = useState({ monthly: 19.90, annual: 189.90 });
+  const [prices, setPrices] = useState({ monthly: 19.90, annual: 191.04 });
 
   useEffect(() => {
     fetch('/api/stripe/prices')
@@ -79,7 +79,7 @@ export function Pricing() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="bg-[#0B0F19] rounded-[2rem] p-8 md:p-10 border border-white/5 relative z-10 flex flex-col h-full hover:border-white/10 transition-colors"
+            className="bg-[#0B0F19] rounded-[2rem] p-6 md:p-10 border border-white/5 relative z-10 flex flex-col h-full hover:border-white/10 transition-colors"
           >
             <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">Starter</h3>
             <p className="text-[#A0A7B5] text-sm mb-6 min-h-[60px]">
@@ -87,19 +87,19 @@ export function Pricing() {
             </p>
             
             <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-5xl font-semibold text-[#F5F7FA] tracking-tight">
+              <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
                 R$ {isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
-              <span className="text-[#A0A7B5] font-normal">/mês</span>
+              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/mês</span>
             </div>
             
             {isAnnual ? (
-              <div className="flex items-center gap-3 mb-6 text-sm font-medium">
+              <div className="flex items-center gap-2 md:gap-3 mb-6 text-xs md:text-sm font-medium">
                 <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-xs">20% OFF</span>
+                <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">20% OFF</span>
               </div>
             ) : (
-              <div className="h-6 mb-6" />
+              <div className="h-5 md:h-6 mb-6" />
             )}
             
             <Link 
@@ -113,7 +113,7 @@ export function Pricing() {
               {[
                 "Músicas ilimitadas",
                 "Escalas ilimitadas",
-                "Equipe de ministério",
+                "Equipe de ministério (até 10 pessoas)",
                 "Compartilhamento de escalas",
                 "Organização por cultos e eventos",
                 "Personalização básica",
@@ -135,40 +135,44 @@ export function Pricing() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="bg-[#050505] rounded-[2rem] p-8 md:p-10 border border-[#2B85EB]/30 relative z-10 flex flex-col h-full premium-shadow overflow-hidden"
+            className="bg-[#050505] rounded-[2rem] p-6 md:p-10 border border-[#2B85EB]/30 relative z-10 flex flex-col h-full premium-shadow overflow-hidden"
           >
             <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/5 to-transparent pointer-events-none" />
             
-            <div className="absolute top-0 right-8 -translate-y-1/2">
+            <div className="absolute top-4 right-4 md:top-0 md:right-8 md:-translate-y-1/2">
                <div className="bg-[#2B85EB] text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-widest flex items-center gap-1">
                  <Star className="w-3 h-3" /> Mais Popular
                </div>
             </div>
 
-            <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10">Pro</h3>
-            <p className="text-[#A0A7B5] text-sm mb-6 min-h-[60px] relative z-10">
-              Para ministérios que desejam automação, organização avançada e máxima produtividade.
+            <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-4 md:mt-0">Pro</h3>
+            <p className="text-[#A0A7B5] text-sm mb-4 min-h-[60px] relative z-10">
+              Para ministérios que desejam organização avançada e máxima produtividade.
             </p>
+            <div className="bg-[#2B85EB]/10 border border-[#2B85EB]/20 rounded-xl p-4 mb-6 relative z-10">
+              <h4 className="text-[#2B85EB] font-bold text-[11px] md:text-xs mb-1.5 uppercase tracking-widest break-words leading-tight">Biblioteca Viva MusicScale</h4>
+              <p className="text-[#A0A7B5] text-[11px] md:text-xs leading-relaxed">Acesso contínuo ao acervo atualizado do MusicScale, com novas músicas adicionadas regularmente para sua equipe ter o melhor repertório.</p>
+            </div>
             
             <div className="flex items-baseline gap-1 mb-1 relative z-10">
-              <span className="text-5xl font-semibold text-[#F5F7FA] tracking-tight">
-                R$ {isAnnual ? "23,90" : "29,90"}
+              <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
+                R$ {isAnnual ? "23,92" : "29,90"}
               </span>
-              <span className="text-[#A0A7B5] font-normal">/mês</span>
+              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/mês</span>
             </div>
             
             {isAnnual ? (
-              <div className="flex items-center gap-3 mb-6 text-sm font-medium relative z-10">
+              <div className="flex items-center gap-2 md:gap-3 mb-6 text-xs md:text-sm font-medium relative z-10">
                 <span className="text-[#A0A7B5]/50 line-through">R$ {(29.90 * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-xs">Cobrado R$ 286,90 /ano</span>
+                <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">20% OFF</span>
               </div>
             ) : (
-              <div className="h-6 mb-6 relative z-10" />
+              <div className="h-5 md:h-6 mb-6 relative z-10" />
             )}
             
             <Link 
               to="/login" 
-              className="w-full py-4 px-6 rounded-xl bg-[#F5F7FA] text-[#050505] text-center font-semibold hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 mt-2 mb-8 block relative z-10"
+              className="w-full py-4 px-3 md:px-6 rounded-xl bg-[#F5F7FA] text-[#050505] text-center font-semibold text-sm md:text-base hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 mt-2 mb-8 block relative z-10"
             >
               Desbloquear Pro
             </Link>
@@ -176,15 +180,11 @@ export function Pricing() {
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5 relative z-10">
               {[
                 "Tudo do plano Starter",
-                "Automações avançadas",
-                "Templates inteligentes",
+                "Equipe ilimitada",
+                "Acesso à Biblioteca Viva MusicScale",
+                "Novas músicas adicionadas continuamente",
+                "Atualização constante do acervo",
                 "Histórico completo",
-                "Analytics e insights",
-                "Permissões avançadas",
-                "Colaboração otimizada",
-                "Organização avançada",
-                "Experiência premium",
-                "Futuras funções inteligentes",
                 "Prioridade em novos recursos"
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#F5F7FA]">
@@ -232,7 +232,7 @@ export function Pricing() {
                 <Settings className="w-5 h-5 text-[#A0A7B5]" />
               </div>
               <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Setup Premium</h4>
-              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 97 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 74,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
                 Configuração inicial assistida para estruturar rapidamente sua equipe no MusicScale.
               </p>
@@ -284,7 +284,7 @@ export function Pricing() {
                 <Headphones className="w-5 h-5 text-[#A0A7B5]" />
               </div>
               <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Music Assist 10</h4>
-              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 29,90 <span className="text-[#A0A7B5] text-xs font-sans">/mês</span></div>
+              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 24,90 <span className="text-[#A0A7B5] text-xs font-sans">/mês</span></div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
                 Assistência operacional leve para auxiliar sua equipe no dia a dia.
               </p>

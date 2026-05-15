@@ -195,7 +195,7 @@ async function startServer() {
   app.get('/api/stripe/prices', async (req, res) => {
     try {
       if (stripeKey === 'sk_test_mock') {
-        return res.json({ monthly: { price: 19.90, currency: 'brl' }, annual: { price: 169.00, currency: 'brl' } });
+        return res.json({ monthly: { price: 19.90, currency: 'brl' }, annual: { price: 191.04, currency: 'brl' } });
       }
 
       const now = Date.now();
@@ -209,7 +209,7 @@ async function startServer() {
       const annualId = process.env.STRIPE_PRICE_ID_ANNUAL;
       
       let monthlyPriceInfo = { price: 19.90, currency: 'brl' }; // Default fallbacks
-      let annualPriceInfo = { price: 169.00, currency: 'brl' }; // Default fallbacks
+      let annualPriceInfo = { price: 191.04, currency: 'brl' }; // Default fallbacks
 
       try {
         if (monthlyId) {

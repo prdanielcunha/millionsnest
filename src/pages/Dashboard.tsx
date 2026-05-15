@@ -19,7 +19,7 @@ export function Dashboard() {
   const [organization, setOrganization] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [prices, setPrices] = useState({ monthly: 19.90, annual: 169.00 });
+  const [prices, setPrices] = useState({ monthly: 19.90, annual: 191.04 });
 
   const fetchSubscriptionAndOrg = async () => {
     if (!user) return;
