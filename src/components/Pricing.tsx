@@ -83,7 +83,7 @@ export function Pricing() {
           >
             <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">Starter</h3>
             <p className="text-[#A0A7B5] text-sm mb-6 min-h-[60px]">
-              Ideal para igrejas e equipes que desejam organizar o ministério de louvor com simplicidade, velocidade e excelência.
+              Ideal para equipes e igrejas que desejam organizar o ministério de louvor com simplicidade e excelência.
             </p>
             
             <div className="flex items-baseline gap-1 mb-1">
@@ -113,7 +113,7 @@ export function Pricing() {
               {[
                 "Músicas ilimitadas",
                 "Escalas ilimitadas",
-                "Equipe de ministério (até 10 pessoas)",
+                "Até 10 pessoas por organização",
                 "Compartilhamento de escalas",
                 "Organização por cultos e eventos",
                 "Personalização básica",
@@ -147,7 +147,7 @@ export function Pricing() {
 
             <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-4 md:mt-0">Pro</h3>
             <p className="text-[#A0A7B5] text-sm mb-4 min-h-[60px] relative z-10">
-              Para ministérios que desejam organização avançada e máxima produtividade.
+              Para ministérios que desejam mais liberdade, crescimento e acesso contínuo aos recursos premium do MusicScale.
             </p>
             <div className="bg-[#2B85EB]/10 border border-[#2B85EB]/20 rounded-xl p-4 mb-6 relative z-10">
               <h4 className="text-[#2B85EB] font-bold text-[11px] md:text-xs mb-1.5 uppercase tracking-widest break-words leading-tight">Biblioteca Viva MusicScale</h4>
@@ -179,12 +179,12 @@ export function Pricing() {
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5 relative z-10">
               {[
-                "Tudo do plano Starter",
-                "Equipe ilimitada",
+                "Tudo do Starter",
+                "Pessoas ilimitadas por organização",
                 "Acesso à Biblioteca Viva MusicScale",
                 "Novas músicas adicionadas continuamente",
                 "Atualização constante do acervo",
-                "Histórico completo",
+                "Experiência premium",
                 "Prioridade em novos recursos"
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#F5F7FA]">
@@ -283,18 +283,19 @@ export function Pricing() {
               <div className="w-10 h-10 bg-[#050505] rounded-xl border border-white/5 flex items-center justify-center mb-6">
                 <Headphones className="w-5 h-5 text-[#A0A7B5]" />
               </div>
-              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Music Assist 10</h4>
-              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 24,90 <span className="text-[#A0A7B5] text-xs font-sans">/mês</span></div>
+              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Music Pack 10</h4>
+              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 24,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
-                Assistência operacional leve para auxiliar sua equipe no dia a dia.
+                Pacote avulso para adicionar até 10 novas músicas ao acervo da sua organização.
               </p>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Até 10 assistências mensais</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Suporte rápido</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Canal prioritário</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Até 10 novas músicas</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Organização no acervo</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Com letra e cifra</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Atualização rápida</li>
               </ul>
               <Link to="/login" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors">
-                Assinar Assistência
+                Comprar Pacote
               </Link>
             </motion.div>
 
