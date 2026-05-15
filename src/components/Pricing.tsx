@@ -1,10 +1,25 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export function Pricing() {
   const [isAnnual, setIsAnnual] = useState(true);
+  const [prices, setPrices] = useState({ monthly: 19.90, annual: 169.00 });
+
+  useEffect(() => {
+    fetch('/api/stripe/prices')
+      .then(res => res.json())
+      .then(data => {
+        if (data.monthly && data.annual && data.monthly.price > 0) {
+           setPrices({
+             monthly: data.monthly.price,
+             annual: data.annual.price,
+           });
+         }
+      })
+      .catch(err => console.error(err));
+  }, []);
 
   return (
     <section id="precos" className="py-24 md:py-32 bg-[#0B0F19] border-b border-white/5 relative overflow-hidden">
@@ -68,14 +83,16 @@ export function Pricing() {
             
             <h3 className="text-sm font-medium text-[#A0A7B5] mb-2 uppercase tracking-widest">Plano Music Scale</h3>
             <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-5xl font-semibold text-[#F5F7FA] tracking-tight">R$ {isAnnual ? "14,08" : "19,90"}</span>
+              <span className="text-5xl font-semibold text-[#F5F7FA] tracking-tight">
+                R$ {isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
               <span className="text-[#A0A7B5] font-normal">/mês</span>
             </div>
             
             {isAnnual ? (
               <div className="flex items-center gap-3 mb-6 text-sm font-medium">
-                <span className="text-[#A0A7B5]/50 line-through">R$ 238,80</span>
-                <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-xs">R$ 169,00 /ano</span>
+                <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-xs">R$ {prices.annual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /ano</span>
               </div>
             ) : (
               <div className="h-6 mb-6" />

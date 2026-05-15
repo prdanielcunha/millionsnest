@@ -188,6 +188,35 @@ async function startServer() {
   // Outras rotas da API usam JSON
   app.use(express.json());
 
+  app.get('/api/stripe/prices', async (req, res) => {
+    try {
+      if (stripeKey === 'sk_test_mock') {
+        return res.json({ monthly: { price: 19.90, currency: 'brl' }, annual: { price: 169.00, currency: 'brl' } });
+      }
+
+      const monthlyId = process.env.STRIPE_PRICE_ID_MONTHLY;
+      const annualId = process.env.STRIPE_PRICE_ID_ANNUAL;
+      
+      let monthlyPriceInfo = { price: 0, currency: 'brl' };
+      let annualPriceInfo = { price: 0, currency: 'brl' };
+
+      if (monthlyId) {
+        const p = await stripe.prices.retrieve(monthlyId);
+        monthlyPriceInfo = { price: (p.unit_amount || 0) / 100, currency: p.currency };
+      }
+      
+      if (annualId) {
+        const p = await stripe.prices.retrieve(annualId);
+        annualPriceInfo = { price: (p.unit_amount || 0) / 100, currency: p.currency };
+      }
+      
+      res.json({ monthly: monthlyPriceInfo, annual: annualPriceInfo });
+    } catch (e: any) {
+      console.error('[Prices] Error fetching prices:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post('/api/stripe/create-checkout-session', async (req, res) => {
     try {
       const { userId, email, plan = 'monthly' } = req.body;

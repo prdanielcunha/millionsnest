@@ -4,39 +4,50 @@ import { useAuth } from "../contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 import { 
   Music, ArrowRight, Settings, ExternalLink, ShieldCheck, 
-  CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight 
+  CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight, Building2
 } from "lucide-react";
 import { Navbar } from "../components/Navbar";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
-type Tab = "overview" | "account" | "billing";
+type Tab = "overview" | "organization" | "account" | "billing";
 
 export function Dashboard() {
   const { user, profile, loading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [subscription, setSubscription] = useState<any>(null);
+  const [organization, setOrganization] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [prices, setPrices] = useState({ monthly: 19.90, annual: 169.00 });
 
-  const fetchSubscription = async () => {
+  const fetchSubscriptionAndOrg = async () => {
     if (!user) return;
     try {
-      console.log("[Dashboard] Fetching subscription for:", user.uid);
-      const docRef = doc(db, "subscriptions", user.uid);
-      const docSnap = await getDoc(docRef);
+      console.log("[Dashboard] Fetching subscription and org for:", user.uid);
+      const subRef = doc(db, "subscriptions", user.uid);
+      const subSnap = await getDoc(subRef);
       
-      if (docSnap.exists()) {
-         const data = docSnap.data();
-         console.log("[Dashboard] Subscription found:", data);
-         setSubscription(data);
+      if (subSnap.exists()) {
+         setSubscription(subSnap.data());
       } else {
-         console.log("[Dashboard] No subscription found in Firestore");
          setSubscription(null);
       }
+
+      // Org is usually 1:1 right now (orgId === user.uid)
+      const orgId = profile?.organizationId || user.uid;
+      const orgRef = doc(db, "organizations", orgId);
+      const orgSnap = await getDoc(orgRef);
+      if (orgSnap.exists()) {
+        setOrganization(orgSnap.data());
+      } else {
+        setOrganization(null);
+      }
+
     } catch (error) {
-      console.error("[Dashboard] Error fetching subscription:", error);
+      console.error("[Dashboard] Error fetching data:", error);
       setSubscription(null);
+      setOrganization(null);
     } finally {
       setLoadingSub(false);
     }
@@ -50,13 +61,24 @@ export function Dashboard() {
       window.history.replaceState({}, document.title, window.location.pathname);
       console.log('Returned from Stripe session:', sessionId);
       setLoadingSub(true);
-      fetchSubscription();
+      fetchSubscriptionAndOrg();
     }
   }, [user]);
 
   useEffect(() => {
-    fetchSubscription();
-  }, [user]);
+    fetchSubscriptionAndOrg();
+    fetch('/api/stripe/prices')
+      .then(res => res.json())
+      .then(data => {
+        if (data.monthly && data.annual && data.monthly.price > 0) {
+           setPrices({
+             monthly: data.monthly.price,
+             annual: data.annual.price,
+           });
+         }
+      })
+      .catch(err => console.error(err));
+  }, [user, profile]);
 
   if (loading) {
     return (
@@ -121,16 +143,22 @@ export function Dashboard() {
             Visão Geral
           </button>
           <button 
-            onClick={() => setActiveTab("account")}
-            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "account" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
+            onClick={() => setActiveTab("organization")}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "organization" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
           >
-            Minha Conta
+            Organização
           </button>
           <button 
             onClick={() => setActiveTab("billing")}
             className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
           >
-            Assinatura e Faturamento
+            Plano e Assinatura
+          </button>
+          <button 
+            onClick={() => setActiveTab("account")}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "account" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
+          >
+            Minha Conta
           </button>
         </div>
       </div>
@@ -293,8 +321,8 @@ export function Dashboard() {
                           <span className="flex items-center gap-2">
                             Assinatura Anual <ArrowRight className="w-4 h-4" />
                           </span>
-                          <span className="text-xs text-[#2B85EB] mt-1 font-bold">R$ 14,08/mês</span>
-                          <span className="text-[10px] text-[#050505]/60 font-medium">7 dias grátis, depois R$ 169,00/ano</span>
+                          <span className="text-xs text-[#2B85EB] mt-1 font-bold">R$ {(prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
+                          <span className="text-[10px] text-[#050505]/60 font-medium">7 dias grátis, depois R$ {prices.annual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/ano</span>
                         </button>
 
                         <button 
@@ -305,7 +333,7 @@ export function Dashboard() {
                           <span className="flex items-center gap-2 text-sm">
                             Assinatura Mensal
                           </span>
-                          <span className="text-[10px] text-[#A0A7B5] font-medium mt-1">7 dias grátis, depois R$ 19,90/mês</span>
+                          <span className="text-[10px] text-[#A0A7B5] font-medium mt-1">7 dias grátis, depois R$ {prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
                         </button>
                       </div>
                     )}
@@ -322,6 +350,64 @@ export function Dashboard() {
                     Estamos construindo novas integrações de gestão e relatórios para o ecossistema.
                   </p>
                 </div>
+              </div>
+            </motion.section>
+          )}
+
+          {activeTab === "organization" && (
+            <motion.section
+              key="organization"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+              className="max-w-2xl"
+            >
+              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-8 border border-white/5 shadow-2xl">
+                <h2 className="text-xl font-semibold text-[#F5F7FA] flex items-center gap-3 mb-8 border-b border-white/5 pb-6">
+                   <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
+                    <Building2 className="w-4 h-4 text-[#A0A7B5]" />
+                  </span>
+                  Organização Central
+                </h2>
+
+                {organization ? (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between pb-6 border-b border-white/5">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Nome da Organização</p>
+                        <p className="text-base font-semibold text-[#F5F7FA]">{organization.name}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pb-6 border-b border-white/5">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Status do Tenant</p>
+                        <p className="text-base font-semibold text-[#F5F7FA]">
+                          <span className={`inline-flex px-2 py-0.5 mt-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-md border border-white/10 uppercase tracking-widest shadow-sm ${organization?.subscriptionStatus === 'active' || organization?.subscriptionStatus === 'trialing' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' : ''}`}>
+                            {organization?.subscriptionStatus || 'Inativo'}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">ID da Organização</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-2 py-1 rounded-md border border-white/5">{profile?.organizationId || user.uid}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-[#050505] border border-white/5 p-6 rounded-2xl">
+                    <p className="text-sm font-medium text-[#A0A7B5] mb-4">
+                      Você ainda não está vinculado a uma organização ou igreja ativa.
+                      Sua organização será criada automaticamente ao iniciar uma assinatura.
+                    </p>
+                  </div>
+                )}
               </div>
             </motion.section>
           )}
@@ -389,44 +475,74 @@ export function Dashboard() {
               transition={{ duration: 0.2 }}
               className="max-w-2xl"
             >
-              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-10 border border-white/5 shadow-2xl text-center">
-                <div className="w-20 h-20 bg-[#050505] rounded-2xl flex items-center justify-center mx-auto mb-8 border border-white/10 shadow-inner">
-                  <CreditCard className="w-8 h-8 text-[#2B85EB]" />
+              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-10 border border-white/5 shadow-2xl">
+                <div className="flex items-center gap-4 mb-8 border-b border-white/5 pb-6">
+                  <div className="w-12 h-12 bg-[#050505] rounded-xl flex items-center justify-center border border-white/10 shadow-inner">
+                    <CreditCard className="w-6 h-6 text-[#2B85EB]" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-semibold text-[#F5F7FA]">Plano e Assinatura</h2>
+                    <p className="text-[#A0A7B5] text-sm font-normal">Gerencie seu faturamento centralizado.</p>
+                  </div>
                 </div>
-                <h2 className="text-2xl font-semibold text-[#F5F7FA] mb-4">Gerenciar Assinaturas</h2>
-                <p className="text-[#A0A7B5] text-sm font-normal mb-10 max-w-sm mx-auto leading-relaxed">
-                  Toda a sua gestão financeira, faturamento e alteração de planos é feita de forma totalmente segura pelo portal do Stripe.
-                </p>
                 
                 {hasValidSubscription ? (
-                  <button 
-                    onClick={async () => {
-                      try {
-                        const res = await fetch('/api/stripe/create-portal-session', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ userId: user.uid })
-                        });
-                        const data = await res.json();
-                        if (data.url) {
-                          window.location.href = data.url;
-                        } else {
-                          alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
+                  <div className="space-y-6">
+                    <div className="bg-[#050505] rounded-2xl p-6 border border-white/5 shadow-inner">
+                      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
+                        <div>
+                           <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Plano Atual</p>
+                           <h3 className="text-xl font-semibold text-[#F5F7FA]">{subscription?.plan === 'annual' ? 'Anual' : 'Mensal'} - MusicScale</h3>
+                        </div>
+                        <div className="text-left md:text-right">
+                           <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Status</p>
+                           <span className={`inline-flex px-3 py-1 bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold rounded-full border border-[#10B981]/20 uppercase tracking-widest shadow-sm ${subscription?.status === 'trialing' ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : ''}`}>
+                             {subscription?.status === 'trialing' ? 'Trial Ativo' : subscription?.status === 'active' ? 'Ativo' : subscription?.status}
+                           </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-6 border-t border-white/5">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-1">Próxima Renovação / Fim do Trial</p>
+                          <p className="text-sm font-semibold text-[#F5F7FA]">{formattedRenewal}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-[#A0A7B5] text-sm font-normal text-center pt-4">
+                      Upgrades, downgrades, cancelamentos e alterações de cartão são geridos com segurança pelo portal oficial Stripe.
+                    </p>
+
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const res = await fetch('/api/stripe/create-portal-session', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: user.uid })
+                          });
+                          const data = await res.json();
+                          if (data.url) {
+                            window.location.href = data.url;
+                          } else {
+                            alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
+                          }
+                        } catch (e) {
+                          console.error(e);
+                          alert('Erro de comunicação.');
                         }
-                      } catch (e) {
-                        console.error(e);
-                        alert('Erro de comunicação.');
-                      }
-                    }}
-                    className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold hover:bg-white transition-all shadow-sm active:scale-95"
-                  >
-                    Acessar Portal do Stripe
-                    <ExternalLink className="w-4 h-4 ml-1" />
-                  </button>
+                      }}
+                      className="w-full flex items-center justify-center gap-2 px-8 py-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold hover:bg-white transition-all shadow-sm active:scale-95 mt-4"
+                    >
+                      Acessar Portal do Stripe
+                      <ExternalLink className="w-4 h-4 ml-1" />
+                    </button>
+                  </div>
                 ) : (
-                  <div className="bg-[#050505] border border-white/5 p-6 rounded-2xl max-w-sm mx-auto">
+                  <div className="bg-[#050505] border border-white/5 p-6 rounded-2xl text-center">
                     <p className="text-sm font-medium text-[#A0A7B5]">
-                      Você ainda não possui ferramentas ativas. Volte para a Visão Geral para assinar e iniciar seu período de teste.
+                      Você ainda não possui assinaturas ativas. Volte para a Visão Geral para iniciar seu período de teste.
                     </p>
                   </div>
                 )}
