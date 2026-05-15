@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Check, Star, Zap, Headphones, Settings, Video } from "lucide-react";
+import { Check, Star, Zap, Headphones, Settings, Video, ListMusic } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export function Pricing() {
@@ -218,7 +218,7 @@ export function Pricing() {
             </motion.p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             
             {/* SERVIÇO 1 */}
             <motion.div
@@ -278,6 +278,35 @@ export function Pricing() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: 0.3 }}
+              className="bg-[#0B0F19] rounded-2xl p-6 border border-white/5 hover:border-white/10 transition-colors flex flex-col"
+            >
+              <div className="w-10 h-10 bg-[#050505] rounded-xl border border-white/5 flex items-center justify-center mb-6">
+                <ListMusic className="w-5 h-5 text-[#A0A7B5]" />
+              </div>
+              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Acervo Inicial Worship</h4>
+              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 39,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+              <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
+                Comece mais rápido com um acervo pronto de 100 músicas já organizadas no MusicScale, incluindo cifra e letra integradas.
+              </p>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> 100 músicas já cadastradas</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Cifra integrada</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Letras organizadas</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Estrutura pronta no MusicScale</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Implantação imediata</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Economia de tempo para sua equipe</li>
+              </ul>
+              <Link to="/login" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors">
+                Comprar Acervo
+              </Link>
+            </motion.div>
+
+            {/* SERVIÇO 4 */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.4 }}
               className="bg-[#0B0F19] rounded-2xl p-6 border border-white/5 hover:border-white/10 transition-colors flex flex-col"
             >
               <div className="w-10 h-10 bg-[#050505] rounded-xl border border-white/5 flex items-center justify-center mb-6">
