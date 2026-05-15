@@ -1,0 +1,189 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "songs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "songs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "songs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "songs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "songs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "subscriptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "subscriptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "subscriptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "subscriptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "organization_members",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "organization_members",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "organization_members",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "usage",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "usage",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "usage",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "addons",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "addons",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "addons",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

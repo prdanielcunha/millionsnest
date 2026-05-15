@@ -39,6 +39,10 @@ try {
 const stripeKey = process.env.STRIPE_SECRET_KEY || 'sk_test_mock';
 const stripe = new Stripe(stripeKey, { apiVersion: '2024-06-20' } as any);
 
+// Cache inteligente para preços do Stripe
+let cachedPrices: { monthly: any, annual: any, timestamp: number } | null = null;
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora de TTL
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -194,25 +198,57 @@ async function startServer() {
         return res.json({ monthly: { price: 19.90, currency: 'brl' }, annual: { price: 169.00, currency: 'brl' } });
       }
 
+      const now = Date.now();
+      // Verificar se o cache é válido
+      if (cachedPrices && (now - cachedPrices.timestamp) < CACHE_TTL_MS) {
+        console.log('[Prices] Serving from local cache');
+        return res.json({ monthly: cachedPrices.monthly, annual: cachedPrices.annual });
+      }
+
       const monthlyId = process.env.STRIPE_PRICE_ID_MONTHLY;
       const annualId = process.env.STRIPE_PRICE_ID_ANNUAL;
       
-      let monthlyPriceInfo = { price: 0, currency: 'brl' };
-      let annualPriceInfo = { price: 0, currency: 'brl' };
+      let monthlyPriceInfo = { price: 19.90, currency: 'brl' }; // Default fallbacks
+      let annualPriceInfo = { price: 169.00, currency: 'brl' }; // Default fallbacks
 
-      if (monthlyId) {
-        const p = await stripe.prices.retrieve(monthlyId);
-        monthlyPriceInfo = { price: (p.unit_amount || 0) / 100, currency: p.currency };
+      try {
+        if (monthlyId) {
+          const p = await stripe.prices.retrieve(monthlyId);
+          monthlyPriceInfo = { price: (p.unit_amount || 0) / 100, currency: p.currency };
+        }
+        
+        if (annualId) {
+          const p = await stripe.prices.retrieve(annualId);
+          annualPriceInfo = { price: (p.unit_amount || 0) / 100, currency: p.currency };
+        }
+        
+        // Atualizar cache com dados frescos
+        cachedPrices = {
+          monthly: monthlyPriceInfo,
+          annual: annualPriceInfo,
+          timestamp: now
+        };
+        console.log('[Prices] Cache updated from Stripe');
+        
+        return res.json({ monthly: monthlyPriceInfo, annual: annualPriceInfo });
+        
+      } catch (stripeErr: any) {
+        console.error('[Prices] Error retrieving from Stripe, attempting fallback:', stripeErr.message);
+        
+        // Estratégia de Fallback Seguro
+        if (cachedPrices) {
+           console.log('[Prices] Fallback: Serving stale cache due to Stripe error');
+           return res.json({ monthly: cachedPrices.monthly, annual: cachedPrices.annual });
+        } else {
+           console.log('[Prices] Fallback: Serving default values due to Stripe error');
+           return res.json({ monthly: monthlyPriceInfo, annual: annualPriceInfo }); // Uses the constants defined above
+        }
       }
-      
-      if (annualId) {
-        const p = await stripe.prices.retrieve(annualId);
-        annualPriceInfo = { price: (p.unit_amount || 0) / 100, currency: p.currency };
-      }
-      
-      res.json({ monthly: monthlyPriceInfo, annual: annualPriceInfo });
     } catch (e: any) {
-      console.error('[Prices] Error fetching prices:', e);
+      console.error('[Prices] Fatal error fetching prices:', e);
+      if (cachedPrices) {
+        return res.json({ monthly: cachedPrices.monthly, annual: cachedPrices.annual });
+      }
       res.status(500).json({ error: e.message });
     }
   });

@@ -22,4 +22,6 @@
 | P09 | Update | `users/me` | User sending 1MB string to `displayName`. | DENIED |
 | P10 | Delete | `users/me` | User trying to delete account via frontend. | DENIED |
 | P11 | Read | `organization_members/other_user_org` | User trying to read memberships they don't belong to. | DENIED |
-| P12 | Create | `users/me` | User creating profile with `request.time` mismatch. | DENIED |
+| P13 | Read | `addons/org1_addon_1` | User without membership trying to read addons. | DENIED |
+| P14 | Read | `songs/org1_song_1` | User trying to read songs from another organization. | DENIED |
+| P15 | Read | `usage/org1_usage` | User without membership trying to read usage stats. | DENIED |

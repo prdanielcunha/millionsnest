@@ -162,6 +162,29 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef(resource.data.organizationId).data.permissions.canManageScales == true);
     }
     
+    match /addons/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId);
+      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId);
+    }
+
+    match /permissions/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId);
+      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId);
+    }
+
+    match /usage/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow write: if false; // Only backend can write usage metrics
+    }
+
+    match /dashboards/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId);
+      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId);
+    }
+    
     // Regras Extras Antigas do MillionsNest se necessário na sua stack
     match /locations/{id} { allow read, write: if isAuthenticated() && checkOrgAccess(resource.data.organizationId); }
     match /eventTypes/{id} { allow read, write: if isAuthenticated() && checkOrgAccess(resource.data.organizationId); }
