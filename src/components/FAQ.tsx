@@ -5,28 +5,48 @@ import { clsx } from "clsx";
 
 const faqs = [
   {
-    q: "Preciso cadastrar cartão agora?",
-    a: "Não. Você pode testar todas as funcionalidades do MusicScale gratuitamente por 7 dias sem inserir nenhum dado de pagamento. Só pedimos o cartão se você decidir assinar."
+    q: "Preciso cadastrar cartão para testar?",
+    a: "Sim. Para liberar seu período de 7 dias grátis, pedimos os dados do seu cartão. Mas fique tranquilo: nenhuma cobrança será feita caso você cancele antes do final do teste de 7 dias."
   },
   {
-    q: "Funciona no celular na hora do culto?",
-    a: "Sim, o aplicativo foi desenhado com o conceito 'Mobile-first'. Ele fica perfeito na tela do celular, com visualização limpa de cifras e letras, mesmo em ambientes com pouca luz."
+    q: "Qual a diferença entre os planos Starter e Pro?",
+    a: "O Starter atende equipes de até 10 pessoas e conta com todas as funções de gestão. O Pro remove as barreiras numéricas, permitindo equipe ilimitada, e dá acesso ininterrupto à Biblioteca Viva MusicScale com atualizações constantes."
   },
   {
-    q: "Posso cancelar quando quiser?",
-    a: "Absolutamente. Nossa assinatura não tem fidelidade ou multas escondidas. Você pode cancelar a qualquer momento direto pelo painel de configurações."
+    q: "O plano Starter tem limite de músicas que eu mesmo posso adicionar?",
+    a: "Não! O cadastro manual de músicas, letras e cifras é 100% ilimitado em todos os planos do MusicScale. A diferença é que no plano Pro você não gasta todo esse tempo, pois ele já te dá acesso contínuo ao nosso acervo alimentado pela nossa equipe."
   },
   {
-    q: "Os membros da equipe também precisam pagar?",
-    a: "Não. A assinatura é cobrada apenas por ministério. Todos os membros do seu ministério de louvor podem baixar o app e acessar as escalas gratuitamente."
+    q: "O que acontece se eu ultrapassar os 10 membros no plano Starter?",
+    a: "O sistema impedirá novos convites quando você atingir as 10 vagas do seu plano. Para adicionar a 11ª pessoa da sua equipe de louvor e técnica, você precisará fazer o upgrade para o plano Pro, e então terá membros ilimitados."
   },
   {
-    q: "Os próximos aplicativos estarão inclusos?",
-    a: "Os próximos aplicativos do ecossistema de gestão ministerial terão planos próprios, mas assinantes pioneiros do MusicScale terão descontos exclusivos para assinar os novos módulos."
+    q: "O que é a Biblioteca Viva MusicScale que vem no plano Pro?",
+    a: "É o nosso vasto acervo premium de cifras e letras, focado para equipes de louvor e atualizado frequentemente. Você terá as músicas (como baterias, hits e lançamentos que as igrejas cantam) já formatadas, cadastradas e prontas para você apenas arrastar para sua escala."
   },
   {
-    q: "Posso usar em múltiplos ministérios?",
-    a: "Cada assinatura é correspondente a um Espaço de Trabalho (Workspace) que atende a uma igreja ou campus."
+    q: "O que são esses Serviços Premium (Setup, Treinamento e Acervo Inicial)?",
+    a: "São serviços pagos à parte para acelerar processos do seu ministério. Eles englobam o 'Setup Premium' e o 'Treinamento Express' nos quais nós ou um de nossos especialistas treinamos você. Também possuímos atalhos como o 'Acervo Inicial Worship' que já cadastra logo de cara 100 músicas populares e o 'Music Pack 10'."
+  },
+  {
+    q: "Posso comprar os Serviços Premium mais de uma vez?",
+    a: "Com certeza! Enquanto o 'Acervo Inicial Worship' costuma ser comprado apenas na largada, pacotes auxiliares como o 'Music Pack 10' podem (e costumam) ser comprados toda vez que sua igreja decide colocar um lote de músicas novas e prefere terceirizar a formatação conosco."
+  },
+  {
+    q: "Os membros da minha equipe (baterista, cantores) precisam pagar?",
+    a: "Não, eles acessam tudo de graça! A assinatura do plano (Starter ou Pro) é paga pela Igreja/Organização. Os membros convidados baixam o app, leem suas cifras e confirmam escalações sem custo nenhum, limitados apenas por qual plano a igreja tem ativado."
+  },
+  {
+    q: "Como funciona o contato com o Suporte?",
+    a: "Ambos os planos (Starter e Pro) contam com suporte padrão ágil com a nossa equipe via sistema de chamados (tickets) para esclarecimentos de dúvidas e resolução de qualquer obstáculo."
+  },
+  {
+    q: "Posso alterar meu plano para anual ou cancelar no meio?",
+    a: "Sim. A sua conta tem controle total. Você pode entrar e fazer o upgrade de Starter para Pro, mudar o pagamento de Mensal para Anual, e também cancelar sua assinatura a qualquer momento que desejar, sem medo de tarifas extras ou contratos predatórios que o obriguem a ficar."
+  },
+  {
+    q: "O leitor de cifras e letras funciona bem no culto? É fácil ver no celular?",
+    a: "Sim! Pensamos nossa aplicação inteira numa filosofia 'Mobile-first', ou seja, o ponto principal foi construir uma visualização limpa e focada no celular em cima do palco. O resultado é ótimo para leitura durante a execução, mesmo perante luzes fortes do altar."
   }
 ];
 
@@ -40,7 +60,7 @@ export function FAQ() {
       <div className="max-w-4xl mx-auto px-6 relative z-10">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-5xl font-semibold tracking-tight text-[#F5F7FA] mb-4">Dúvidas Frequentes</h2>
-          <p className="text-[#A0A7B5]">Tudo o que você precisa saber sobre a Plataforma MillionsNest.</p>
+          <p className="text-[#A0A7B5]">Tudo o que você precisa saber sobre o MusicScale.</p>
         </div>
 
         <div className="space-y-4">
