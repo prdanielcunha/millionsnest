@@ -105,6 +105,9 @@ async function startServer() {
           console.log(`[Webhook] Writing data to Firestore for user: ${userId}`);
 
           try {
+            const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000);
+            const trialEnd = (subscription as any).trial_end ? admin.firestore.Timestamp.fromMillis((subscription as any).trial_end * 1000) : null;
+
             // 1. Create Organization
             await db.collection('organizations').doc(orgId).set({
               name: `Organização de ${session.customer_email || userId}`,
@@ -128,15 +131,30 @@ async function startServer() {
               stripeCustomerId: customerId,
               stripeSubscriptionId: subscriptionId,
               plan: plan,
-              currentPeriodEnd: admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000),
+              currentPeriodEnd: currentPeriodEnd,
+              trialEndsAt: trialEnd,
+              appsAccess: {
+                musicscale: ['active', 'trialing'].includes(subscription.status)
+              },
               createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
 
             // 4. Update User Profile
             await db.collection('users').doc(userId).update({
               organizationId: orgId,
               products: admin.firestore.FieldValue.arrayUnion('musicscale'),
-              name: session.customer_email ? session.customer_email.split('@')[0] : 'Usuário'
+              name: session.customer_email ? session.customer_email.split('@')[0] : 'Usuário',
+              subscriptionStatus: subscription.status,
+              trialEndsAt: trialEnd,
+              currentPeriodEnd: currentPeriodEnd,
+              stripeCustomerId: customerId,
+              stripeSubscriptionId: subscriptionId,
+              plan: plan,
+              appsAccess: {
+                musicscale: ['active', 'trialing'].includes(subscription.status)
+              },
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
 
             console.log(`[Webhook] Successfully provisioned complete SaaS architecture for user: ${userId}`);
@@ -160,17 +178,38 @@ async function startServer() {
           if (!subsQuery.empty) {
              const batch = db.batch();
              subsQuery.forEach(doc => {
+                 const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(subscription.current_period_end * 1000);
+                 const trialEnd = subscription.trial_end ? admin.firestore.Timestamp.fromMillis(subscription.trial_end * 1000) : null;
+                 const userId = doc.id;
+                 const hasAccess = ['active', 'trialing'].includes(subscription.status);
+
                  // Update subscription
                  batch.update(doc.ref, {
                     status: subscription.status,
-                    currentPeriodEnd: admin.firestore.Timestamp.fromMillis(subscription.current_period_end * 1000),
+                    currentPeriodEnd: currentPeriodEnd,
+                    trialEndsAt: trialEnd,
+                    appsAccess: {
+                      musicscale: hasAccess
+                    },
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                  });
                  
                  // Also update the related organization status! (Assuming orgId == userId because we set orgId = userId in checkout)
-                 const orgRef = db!.collection('organizations').doc(doc.id);
+                 const orgRef = db!.collection('organizations').doc(userId);
                  batch.update(orgRef, {
                     subscriptionStatus: subscription.status,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                 });
+
+                 const userRef = db!.collection('users').doc(userId);
+                 batch.update(userRef, {
+                    subscriptionStatus: subscription.status,
+                    trialEndsAt: trialEnd,
+                    currentPeriodEnd: currentPeriodEnd,
+                    appsAccess: {
+                      musicscale: hasAccess
+                    },
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
                  });
              });
              await batch.commit();
@@ -191,6 +230,53 @@ async function startServer() {
 
   // Outras rotas da API usam JSON
   app.use(express.json());
+
+  // Novo endpoint de acesso
+  app.get('/api/access', async (req, res) => {
+    try {
+      if (!db) {
+        return res.status(500).json({ error: 'Database not initialized' });
+      }
+
+      const uid = req.query.uid as string;
+      if (!uid) {
+        return res.status(400).json({ error: 'uid parameter is required' });
+      }
+
+      const subDoc = await db.collection('subscriptions').doc(uid).get();
+      if (!subDoc.exists) {
+        return res.json({
+          apps: {
+            musicscale: {
+              access: false,
+              status: "none"
+            }
+          }
+        });
+      }
+
+      const subData = subDoc.data()!;
+      const isTrialing = subData.status === 'trialing';
+      const isActive = subData.status === 'active';
+      const access = isTrialing || isActive;
+
+      return res.json({
+        apps: {
+          musicscale: {
+            access,
+            status: subData.status,
+            plan: subData.plan,
+            trialEndsAt: subData.trialEndsAt ? new Date(subData.trialEndsAt.seconds * 1000).toISOString() : null,
+            currentPeriodEnd: subData.currentPeriodEnd ? new Date(subData.currentPeriodEnd.seconds * 1000).toISOString() : null,
+          }
+        }
+      });
+
+    } catch (err: any) {
+      console.error('[API Access]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
 
   app.get('/api/stripe/prices', async (req, res) => {
     try {

@@ -335,6 +335,29 @@ export function Dashboard() {
                           </span>
                           <span className="text-[10px] text-[#A0A7B5] font-medium mt-1">7 dias grátis, depois R$ {prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
                         </button>
+                        
+                        {subscription?.stripeCustomerId && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch('/api/stripe/create-portal-session', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ userId: user.uid })
+                                });
+                                const data = await res.json();
+                                if (data.url) window.location.href = data.url;
+                                else alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
+                              } catch (e) {
+                                console.error(e);
+                                alert('Erro de comunicação.');
+                              }
+                            }}
+                            className="w-full py-3 px-4 mt-2 bg-white/5 text-[#A0A7B5] border border-white/5 rounded-xl font-semibold flex items-center justify-center hover:bg-white/10 hover:text-[#F5F7FA] transition-all active:scale-95"
+                          >
+                            <Settings className="w-4 h-4 mr-2" /> Gerenciar Assinatura
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -486,7 +509,7 @@ export function Dashboard() {
                   </div>
                 </div>
                 
-                {hasValidSubscription ? (
+                {subscription ? (
                   <div className="space-y-6">
                     <div className="bg-[#050505] rounded-2xl p-6 border border-white/5 shadow-inner">
                       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
@@ -496,48 +519,108 @@ export function Dashboard() {
                         </div>
                         <div className="text-left md:text-right">
                            <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Status</p>
-                           <span className={`inline-flex px-3 py-1 bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold rounded-full border border-[#10B981]/20 uppercase tracking-widest shadow-sm ${subscription?.status === 'trialing' ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : ''}`}>
-                             {subscription?.status === 'trialing' ? 'Trial Ativo' : subscription?.status === 'active' ? 'Ativo' : subscription?.status}
+                           <span className={`inline-flex px-3 py-1 text-[10px] font-bold rounded-full border uppercase tracking-widest shadow-sm ${
+                             subscription.status === 'active' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' : 
+                             subscription.status === 'trialing' ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 
+                             subscription.status === 'canceled' ? 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20' : 
+                             'bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/20'
+                           }`}>
+                             {subscription.status === 'trialing' ? 'Trial Ativo' : subscription.status === 'active' ? 'Ativo' : subscription.status === 'canceled' ? 'Cancelado' : subscription.status === 'past_due' ? 'Pagamento Atrasado' : subscription.status}
                            </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between pt-6 border-t border-white/5">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center pt-6 border-t border-white/5 gap-4">
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-1">Próxima Renovação / Fim do Trial</p>
+                          <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-1">
+                            {subscription.status === 'trialing' ? 'Fim do Trial' : subscription.status === 'canceled' ? 'Acesso até' : 'Próxima Cobrança'}
+                          </p>
                           <p className="text-sm font-semibold text-[#F5F7FA]">{formattedRenewal}</p>
                         </div>
+                        {subscription.status === 'trialing' && subscription.trialEndsAt && (
+                          <div className="text-left md:text-right">
+                            <p className="text-[11px] font-medium text-[#2B85EB] flex items-center gap-1.5 bg-[#2B85EB]/10 px-3 py-1.5 rounded-lg border border-[#2B85EB]/20">
+                              <Clock className="w-3.5 h-3.5" />
+                              Faltam {Math.max(0, Math.ceil((new Date(subscription.trialEndsAt.seconds * 1000).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} dias
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <p className="text-[#A0A7B5] text-sm font-normal text-center pt-4">
-                      Upgrades, downgrades, cancelamentos e alterações de cartão são geridos com segurança pelo portal oficial Stripe.
+                    <p className="text-[#A0A7B5] text-sm font-normal text-center pt-2">
+                      Faturamento e ciclo de vida gerenciados de forma segura pelo Stripe.
                     </p>
 
-                    <button 
-                      onClick={async () => {
-                        try {
-                          const res = await fetch('/api/stripe/create-portal-session', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ userId: user.uid })
-                          });
-                          const data = await res.json();
-                          if (data.url) {
-                            window.location.href = data.url;
-                          } else {
-                            alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <button 
+                        onClick={async () => {
+                          try {
+                            const res = await fetch('/api/stripe/create-portal-session', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ userId: user.uid })
+                            });
+                            const data = await res.json();
+                            if (data.url) {
+                              window.location.href = data.url;
+                            } else {
+                              alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
+                            }
+                          } catch (e) {
+                            console.error(e);
+                            alert('Erro de comunicação.');
                           }
-                        } catch (e) {
-                          console.error(e);
-                          alert('Erro de comunicação.');
-                        }
-                      }}
-                      className="w-full flex items-center justify-center gap-2 px-8 py-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold hover:bg-white transition-all shadow-sm active:scale-95 mt-4"
-                    >
-                      Acessar Portal do Stripe
-                      <ExternalLink className="w-4 h-4 ml-1" />
-                    </button>
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold hover:bg-white transition-all shadow-sm active:scale-95"
+                      >
+                        <Settings className="w-4 h-4 ml-1" /> Gerenciar Assinatura
+                      </button>
+                      
+                      {subscription.status === 'canceled' || subscription.status === 'past_due' ? (
+                        <button 
+                          onClick={async () => {
+                            try {
+                              const res = await fetch('/api/stripe/create-portal-session', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ userId: user.uid })
+                              });
+                              const data = await res.json();
+                              if (data.url) {
+                                window.location.href = data.url;
+                              }
+                            } catch (e) {
+                              console.error(e);
+                            }
+                          }}
+                          className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#2B85EB] text-white rounded-xl font-semibold hover:bg-[#2B85EB]/90 transition-all shadow-sm active:scale-95"
+                        >
+                          Reativar Assinatura
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={async () => {
+                            try {
+                              const res = await fetch('/api/stripe/create-portal-session', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ userId: user.uid })
+                              });
+                              const data = await res.json();
+                              if (data.url) {
+                                window.location.href = data.url;
+                              }
+                            } catch (e) {
+                              console.error(e);
+                            }
+                          }}
+                          className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-white/5 text-[#F5F7FA] border border-white/10 rounded-xl font-semibold hover:bg-white/10 transition-all shadow-sm active:scale-95"
+                        >
+                          Fazer Upgrade / Downgrade
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="bg-[#050505] border border-white/5 p-6 rounded-2xl text-center">
