@@ -36,8 +36,22 @@ try {
   console.error('[Firebase Admin] Init Error:', error);
 }
 
-const stripeKey = process.env.STRIPE_SECRET_KEY || 'sk_test_mock';
-const stripe = new Stripe(stripeKey, { apiVersion: '2024-06-20' } as any);
+// Centralizer for Stripe access to avoid environment mismatch and provide better logging
+let stripeInstance: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!stripeInstance) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) {
+      console.warn('[STRIPE_ENV] WARNING: STRIPE_SECRET_KEY is missing. Using mock key.');
+      stripeInstance = new Stripe('sk_test_mock', { apiVersion: '2024-06-20' } as any);
+    } else {
+      const isLive = key.startsWith('sk_live');
+      console.log(`[STRIPE_ENV] Initialized in ${isLive ? 'LIVE' : 'TEST'} mode.`);
+      stripeInstance = new Stripe(key, { apiVersion: '2024-06-20' } as any);
+    }
+  }
+  return stripeInstance;
+}
 
 // Cache inteligente para preços do Stripe
 let cachedPrices: { monthly: any, annual: any, timestamp: number } | null = null;
@@ -63,6 +77,7 @@ async function startServer() {
     let event;
 
     try {
+      const stripe = getStripe();
       event = stripe.webhooks.constructEvent(req.body, sig as string, endpointSecret);
       console.log(`[STRIPE_WEBHOOK] Signature Verified: ${event.id} (${event.type})`);
     } catch (err: any) {
@@ -112,8 +127,26 @@ async function startServer() {
              break;
           }
 
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          const stripe = getStripe();
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+            expand: ['discount', 'discount.promotion_code', 'discount.coupon']
+          });
           const orgId = userId; 
+
+          if (subscription.discount) {
+             const discount = subscription.discount as any;
+             console.log('[STRIPE_WEBHOOK] 🏷️ Coupon applied in Checkout!', {
+               coupon: discount.coupon?.id,
+               promotion_code: discount.promotion_code?.code || 'N/A',
+               discount_amount_off: discount.coupon?.amount_off,
+               discount_percent_off: discount.coupon?.percent_off
+             });
+             await auditRef.update({ 
+               discountApplied: true,
+               couponId: discount.coupon?.id,
+               promotionCode: discount.promotion_code?.code || null
+             });
+          }
 
           const batch = db.batch();
           const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000);
@@ -187,15 +220,29 @@ async function startServer() {
           let currentPeriodEndTs: number;
           let trialEndTs: number | null;
 
+          let discountApplied = false;
+          let couponId = null;
+          let promotionCode = null;
+
           if (event.type.startsWith('invoice.')) {
             const invoice = event.data.object as Stripe.Invoice;
             if (!invoice.subscription) break;
             subscriptionId = invoice.subscription as string;
-            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            const stripe = getStripe();
+            const sub = await stripe.subscriptions.retrieve(subscriptionId, {
+              expand: ['discount', 'discount.promotion_code', 'discount.coupon']
+            });
             status = sub.status;
             customerId = sub.customer as string;
             currentPeriodEndTs = sub.current_period_end;
             trialEndTs = sub.trial_end;
+
+            if (sub.discount) {
+               const discount = sub.discount as any;
+               discountApplied = true;
+               couponId = discount.coupon?.id;
+               promotionCode = discount.promotion_code?.code || null;
+            }
           } else {
             const sub = event.data.object as Stripe.Subscription;
             subscriptionId = sub.id;
@@ -203,6 +250,23 @@ async function startServer() {
             customerId = sub.customer as string;
             currentPeriodEndTs = sub.current_period_end;
             trialEndTs = sub.trial_end;
+
+            if (sub.discount) {
+               const discount = sub.discount as any;
+               discountApplied = true;
+               couponId = discount.coupon?.id;
+               // Object is not expanded here, but we can log the coupon
+               console.log('[STRIPE_WEBHOOK] 🏷️ Discount detected in event:', discount.coupon?.id);
+            }
+          }
+
+          if (discountApplied) {
+            console.log(`[STRIPE_WEBHOOK] 🏷️ Coupon applied/updated! Coupon: ${couponId}, PromoCode: ${promotionCode || 'N/A'}`);
+            await auditRef.update({ 
+               discountApplied: true,
+               couponId: couponId,
+               promotionCode: promotionCode
+            });
           }
           
           let subsQuery = await db.collection('subscriptions').where('stripeSubscriptionId', '==', subscriptionId).get();
@@ -352,21 +416,104 @@ async function startServer() {
       if (!userId || !db) return res.status(400).json({ error: 'Missing uid or db' });
 
       console.log(`[Sync] Request for user: ${userId}`);
-      const subDoc = await db.collection('subscriptions').doc(userId).get();
-      if (!subDoc.exists) return res.status(404).json({ error: 'No local subscription found' });
+      const stripe = getStripe();
+      const isLiveKey = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live');
 
-      const customerId = subDoc.data()?.stripeCustomerId;
-      if (!customerId) return res.status(404).json({ error: 'Stripe customer ID not found in profile' });
+      const userDoc = await db.collection('users').doc(userId).get();
+      if (!userDoc.exists) return res.status(404).json({ error: 'User not found' });
+      
+      const userData = userDoc.data()!;
+      const userEmail = userData.email;
+      let customerId = userData.stripeCustomerId;
 
-      // Search active subscriptions for this customer
-      const subscriptions = await stripe.subscriptions.list({
-        customer: customerId,
-        limit: 1,
-        status: 'all'
-      });
+      const subDocBase = await db.collection('subscriptions').doc(userId).get();
+      if (!customerId && subDocBase.exists) {
+        customerId = subDocBase.data()?.stripeCustomerId;
+      }
 
-      if (subscriptions.data.length === 0) {
-        return res.json({ status: 'no_stripe_subscription', message: 'Nenhuma assinatura encontrada no Stripe.' });
+      let subscriptions: Stripe.ApiList<Stripe.Subscription> | null = null;
+
+      try {
+        if (customerId) {
+          // Detect mismatch before calling Stripe if possible
+          if (isLiveKey && customerId.includes('test')) {
+             console.warn(`[Sync] Local ID ${customerId} is from TEST mode, but currently using LIVE key. Triggering self-healing...`);
+             customerId = null; 
+          } else {
+            // Attempt to list by ID
+            subscriptions = await stripe.subscriptions.list({
+              customer: customerId,
+              limit: 1,
+              status: 'all'
+            });
+          }
+        }
+      } catch (stripeErr: any) {
+        // Handle Environment Mismatch at runtime
+        if (stripeErr.type === 'StripeInvalidRequestError' && (stripeErr.message.includes('No such customer') || stripeErr.message.includes('test mode') || stripeErr.message.includes('live mode'))) {
+          console.warn(`[Sync] Environment mismatch error for ${userId} (ID: ${customerId}). Attempting healing via email: ${userEmail}`);
+          customerId = null; 
+        } else {
+          throw stripeErr;
+        }
+      }
+
+      // Self-Healing Logic: Use Email to find the correct customer ID in the CURRENT environment
+      if (!customerId || (subscriptions && subscriptions.data.length === 0)) {
+        if (userEmail) {
+          console.log(`[Sync] Searching for customer by email ${userEmail} in the current environment...`);
+          const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+          if (customers.data.length > 0) {
+            const newCustomer = customers.data[0];
+            customerId = newCustomer.id;
+            console.log(`[Sync] Healing successful! Found valid customer ID: ${customerId}`);
+            subscriptions = await stripe.subscriptions.list({ customer: customerId, limit: 1, status: 'all' });
+          } else {
+            console.log(`[Sync] No customer found in current environment for email ${userEmail}.`);
+          }
+        }
+      }
+
+      if (!subscriptions || subscriptions.data.length === 0) {
+        console.warn(`[Sync] No subscription found in current environment for user ${userId}. Resetting local status to avoid stale trial state.`);
+        
+        const batch = db.batch();
+        batch.set(db.collection('subscriptions').doc(userId), {
+          status: 'none',
+          stripeCustomerId: null,
+          stripeSubscriptionId: null,
+          trialEndsAt: null,
+          currentPeriodEnd: null,
+          appsAccess: { musicscale: false },
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        batch.set(db.collection('organizations').doc(userId), {
+          subscriptionStatus: 'none',
+          stripeCustomerId: null,
+          stripeSubscriptionId: null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        batch.set(db.collection('users').doc(userId), {
+          subscriptionStatus: 'none',
+          stripeCustomerId: null,
+          stripeSubscriptionId: null,
+          trialEndsAt: null,
+          currentPeriodEnd: null,
+          appsAccess: { musicscale: false },
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        await batch.commit();
+
+        const envName = isLiveKey ? 'LIVE (Produção)' : 'TEST (Testes)';
+        return res.status(200).json({ 
+          status: 'reset',
+          message: 'Local state reset because no subscription was found in Stripe.',
+          details: `Você está no modo ${envName}. Como não encontramos assinatura neste modo, resetamos seu status para você poder assinar novamente.`,
+          currentMode: isLiveKey ? 'live' : 'test'
+        });
       }
 
       const sub = subscriptions.data[0];
@@ -374,45 +521,53 @@ async function startServer() {
       const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(sub.current_period_end * 1000);
       const trialEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
 
-      console.log(`[Sync] Updated from Stripe: ${sub.status}`);
+      console.log(`[Sync] Update successful. User: ${userId}, New Status: ${sub.status}`);
 
       const batch = db.batch();
-      batch.update(db.collection('subscriptions').doc(userId), {
+      batch.set(db.collection('subscriptions').doc(userId), {
         status: sub.status,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: sub.id,
         currentPeriodEnd: currentPeriodEnd,
         trialEndsAt: trialEnd,
         appsAccess: { musicscale: hasAccess },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
 
-      batch.update(db.collection('organizations').doc(userId), {
+      batch.set(db.collection('organizations').doc(userId), {
         subscriptionStatus: sub.status,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: sub.id,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
 
-      batch.update(db.collection('users').doc(userId), {
+      batch.set(db.collection('users').doc(userId), {
         subscriptionStatus: sub.status,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: sub.id,
         trialEndsAt: trialEnd,
         currentPeriodEnd: currentPeriodEnd,
         appsAccess: { musicscale: hasAccess },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
 
       await batch.commit();
 
-      // Additional logic: Selection of active org
       if (hasAccess) {
         await db.collection('users').doc(userId).update({
-          organizationId: userId, // Assuming default org is userId for single-user SaaS
+          organizationId: userId,
           activeOrganizationId: userId
         });
       }
 
-      return res.json({ status: 'synced', stripeStatus: sub.status, hasAccess });
+      return res.json({ status: 'synced', stripeStatus: sub.status, hasAccess, customerId, environment: isLiveKey ? 'live' : 'test' });
 
     } catch (err: any) {
       console.error('[Sync Error]', err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ 
+        error: 'Erro na sincronização com Stripe.',
+        details: err.message 
+      });
     }
   });
 
@@ -423,6 +578,7 @@ async function startServer() {
       if (!db || !email) return res.status(400).send('Missing params');
 
       console.log(`[REPAIR] Locating user for email: ${email}`);
+      const stripe = getStripe();
       const customers = await stripe.customers.list({ email, limit: 1 });
       if (customers.data.length === 0) return res.status(404).send('Customer not found in Stripe');
 
@@ -505,6 +661,7 @@ async function startServer() {
 
       console.log(`[DEBUG] Investigating status for ${email}`);
       
+      const stripe = getStripe();
       const customers = await stripe.customers.list({ email, limit: 1 });
       if (customers.data.length === 0) return res.json({ error: 'Customer not found in Stripe' });
 
@@ -548,7 +705,10 @@ async function startServer() {
 
   app.get('/api/stripe/prices', async (req, res) => {
     try {
-      if (stripeKey === 'sk_test_mock') {
+      const stripe = getStripe();
+      const isMock = process.env.STRIPE_SECRET_KEY === undefined;
+      
+      if (isMock) {
         return res.json({ monthly: { price: 19.90, currency: 'brl' }, annual: { price: 191.04, currency: 'brl' } });
       }
 
@@ -618,7 +778,10 @@ async function startServer() {
 
       console.log(`[Checkout] Creating checkout session for user ${userId} with plan ${plan}`);
 
-      if (stripeKey === 'sk_test_mock') {
+      const stripe = getStripe();
+      const isMock = process.env.STRIPE_SECRET_KEY === undefined;
+
+      if (isMock) {
          console.error('[Checkout] STRIPE_SECRET_KEY env variable is missing');
          res.status(400).json({ error: 'A Chave do Stripe (STRIPE_SECRET_KEY) não está configurada no Vercel.' });
          return;
@@ -640,6 +803,7 @@ async function startServer() {
           },
         ],
         mode: 'subscription',
+        allow_promotion_codes: true,
         subscription_data: {
           trial_period_days: 7, // 7 days trial mandatory by requirements
         },
@@ -683,7 +847,10 @@ async function startServer() {
          return res.status(404).json({ error: "ID de cliente Stripe não encontrado." });
       }
 
-      if (stripeKey === 'sk_test_mock') {
+      const stripe = getStripe();
+      const isMock = process.env.STRIPE_SECRET_KEY === undefined;
+
+      if (isMock) {
          console.error('[Portal] STRIPE_SECRET_KEY env variable is missing');
          return res.status(400).json({ error: 'A variável STRIPE_SECRET_KEY não está configurada no Vercel.' });
       }

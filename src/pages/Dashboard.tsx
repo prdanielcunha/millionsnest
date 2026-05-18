@@ -4,7 +4,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 import { 
   Music, ArrowRight, Settings, ExternalLink, ShieldCheck, 
-  CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight, Building2
+  CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight, Building2,
+  Star, Zap, Headphones, Video, ListMusic, Check
 } from "lucide-react";
 import { Navbar } from "../components/Navbar";
 import { doc, getDoc } from "firebase/firestore";
@@ -20,6 +21,7 @@ export function Dashboard() {
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [prices, setPrices] = useState({ monthly: 19.90, annual: 191.04 });
+  const [isAnnual, setIsAnnual] = useState(true);
 
   const fetchSubscriptionAndOrg = async (forceSync = false) => {
     if (!user) return;
@@ -28,12 +30,21 @@ export function Dashboard() {
       
       if (forceSync) {
         setLoadingSub(true);
-        console.log("[Dashboard] Initializing force-sync with Stripe...");
-        await fetch('/api/stripe/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.uid })
-        });
+        console.log("[Dashboard] Automatic silent sync with Stripe...");
+        try {
+          const syncRes = await fetch('/api/stripe/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.uid })
+          });
+          
+          if (syncRes.ok) {
+             const syncData = await syncRes.json();
+             console.log("[Dashboard] Sync Result:", syncData.status);
+          }
+        } catch (e) {
+          console.error("[Dashboard] Background sync failed silently.");
+        }
       }
 
       const subRef = doc(db, "subscriptions", user.uid);
@@ -42,22 +53,26 @@ export function Dashboard() {
       if (subSnap.exists()) {
          const data = subSnap.data();
          setSubscription(data);
-         // Se estiver trialing, vamos tentar um sync silencioso em background
+         // If trialing, we check Stripe one more time silently to see if it moved to active
          if (data.status === 'trialing' && !forceSync) {
-           console.log("[Dashboard] Status is trialing, checking Stripe status in background...");
            fetch('/api/stripe/sync', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ userId: user.uid })
            }).then(r => r.json()).then(res => {
               if (res.stripeStatus === 'active') {
-                console.log("[Dashboard] Stripe confirmed ACTIVE status. Refreshing data.");
+                console.log("[Dashboard] Stripe confirmed active status via background sync.");
                 fetchSubscriptionAndOrg(false);
               }
-           }).catch(err => console.error("[Dashboard] Background sync error:", err));
+           }).catch(err => console.debug("[Dashboard] Background check ignored."));
          }
       } else {
          setSubscription(null);
+         // If user is logged in but has no sub doc, maybe try one sync if we don't have sub state
+         if (!forceSync) {
+           console.log("[Dashboard] No sub doc found, attempt one sync...");
+           // fetchSubscriptionAndOrg(true); // Don't loop infinitely
+         }
       }
 
       // Org is usually 1:1 right now (orgId === user.uid)
@@ -86,6 +101,8 @@ export function Dashboard() {
     if (sessionId) {
       window.history.replaceState({}, document.title, window.location.pathname);
       console.log('Returned from Stripe session:', sessionId);
+      // TODO: Criar suporte visual futuro no MillionsNest: "Cupom aplicado com sucesso"
+      // Aqui podemos checar se houve desconto na session e exibir uma notificação.
       setLoadingSub(true);
       fetchSubscriptionAndOrg(true); // Forçar sync total ao voltar do Stripe
     }
@@ -522,17 +539,25 @@ export function Dashboard() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
-              className="max-w-2xl"
+              className="max-w-4xl"
             >
               <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-10 border border-white/5 shadow-2xl">
-                <div className="flex items-center gap-4 mb-8 border-b border-white/5 pb-6">
-                  <div className="w-12 h-12 bg-[#050505] rounded-xl flex items-center justify-center border border-white/10 shadow-inner">
-                    <CreditCard className="w-6 h-6 text-[#2B85EB]" />
+                <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-[#050505] rounded-xl flex items-center justify-center border border-white/10 shadow-inner">
+                      <CreditCard className="w-6 h-6 text-[#2B85EB]" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-semibold text-[#F5F7FA]">Plano e Assinatura</h2>
+                      <p className="text-[#A0A7B5] text-sm font-normal">Gerencie seu faturamento centralizado.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-2xl font-semibold text-[#F5F7FA]">Plano e Assinatura</h2>
-                    <p className="text-[#A0A7B5] text-sm font-normal">Gerencie seu faturamento centralizado.</p>
-                  </div>
+                  {loadingSub && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/10 animate-pulse">
+                       <div className="w-2.5 h-2.5 border-2 border-white/20 border-t-[#2B85EB] rounded-full animate-spin"></div>
+                       <span className="text-[10px] font-medium text-[#A0A7B5] uppercase tracking-widest">Sincronizando...</span>
+                    </div>
+                  )}
                 </div>
                 
                 {subscription ? (
@@ -578,22 +603,7 @@ export function Dashboard() {
                       Faturamento e ciclo de vida gerenciados de forma segura pelo Stripe.
                     </p>
 
-                    <div className="flex justify-center mt-2">
-                       <button 
-                         onClick={() => fetchSubscriptionAndOrg(true)}
-                         disabled={loadingSub}
-                         className="text-[10px] text-[#A0A7B5] hover:text-[#F5F7FA] transition-colors flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10"
-                       >
-                         {loadingSub ? (
-                           <div className="w-3 h-3 border-2 border-white/20 border-t-[#2B85EB] rounded-full animate-spin" />
-                         ) : (
-                           <Clock className="w-3 h-3" />
-                         )}
-                         Sincronizar com Stripe Agora
-                       </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
                       <button 
                         onClick={async () => {
                           try {
@@ -664,12 +674,243 @@ export function Dashboard() {
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-[#050505] border border-white/5 p-6 rounded-2xl text-center">
-                    <p className="text-sm font-medium text-[#A0A7B5]">
-                      Você ainda não possui assinaturas ativas. Volte para a Visão Geral para iniciar seu período de teste.
-                    </p>
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-8">
+                       <div>
+                         <h3 className="text-xl font-semibold text-[#F5F7FA]">Escolha seu Plano</h3>
+                         <p className="text-[#A0A7B5] text-sm">Assinatura unificada para todo o ministério.</p>
+                       </div>
+                       <div className="bg-[#0B0F19] p-1.5 rounded-xl border border-white/10 flex relative shadow-sm">
+                         <button 
+                           onClick={() => setIsAnnual(false)}
+                           className={`relative z-10 px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${!isAnnual ? 'text-[#050505]' : 'text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
+                         >
+                           Mensal
+                         </button>
+                         <button 
+                           onClick={() => setIsAnnual(true)}
+                           className={`relative z-10 px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${isAnnual ? 'text-[#050505]' : 'text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
+                         >
+                           Anual
+                         </button>
+                         <div 
+                           className="absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-[#F5F7FA] rounded-lg transition-transform duration-300 ease-in-out"
+                           style={{ transform: isAnnual ? 'translateX(calc(100% + 6px))' : 'translateX(6px)' }}
+                         />
+                       </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {/* PRO */}
+                      <div className="bg-[#050505] rounded-[2rem] p-6 border border-[#2B85EB]/30 relative flex flex-col premium-shadow overflow-hidden group">
+                        <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/5 to-transparent pointer-events-none" />
+                        <div className="absolute top-4 right-4 md:right-6">
+                           <div className="bg-[#2B85EB] text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-widest flex items-center gap-1">
+                             <Star className="w-3 h-3" /> Popular
+                           </div>
+                        </div>
+
+                        <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-4 md:mt-0">Pro</h3>
+                        <p className="text-[#A0A7B5] text-[11px] md:text-xs mb-4 min-h-[40px] relative z-10">
+                          Para ministérios que desejam crescimento e acesso contínuo aos recursos premium do MusicScale.
+                        </p>
+                        
+                        <div className="flex items-baseline gap-1 mb-1 relative z-10">
+                          <span className="text-3xl md:text-4xl font-semibold text-[#F5F7FA] tracking-tight">
+                            R$ {isAnnual ? "23,92" : "29,90"}
+                          </span>
+                          <span className="text-[#A0A7B5] font-normal text-xs md:text-sm">/mês</span>
+                        </div>
+                        
+                        {isAnnual ? (
+                          <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
+                            <span className="text-[#A0A7B5]/50 line-through">R$ {(29.90 * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">20% OFF</span>
+                          </div>
+                        ) : (
+                          <div className="h-5 md:h-6 mb-6 relative z-10" />
+                        )}
+                        
+                        <button 
+                          onClick={() => handleSubscribe(isAnnual ? 'annual' : 'monthly')}
+                          disabled={checkoutLoading}
+                          className="w-full py-3.5 px-4 rounded-xl bg-[#F5F7FA] text-[#050505] text-center font-semibold text-sm hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 mb-6 block relative z-10"
+                        >
+                          {checkoutLoading ? "Processando..." : "Assinar MusicScale Pro"}
+                        </button>
+                        
+                        <ul className="space-y-3 flex-1 pt-4 border-t border-white/5 relative z-10">
+                          {[
+                            "Pessoas ilimitadas",
+                            "Músicas e escalas ilimitadas",
+                            "Acesso à Biblioteca Viva",
+                            "Novas músicas continuamente"
+                          ].map((item, i) => (
+                            <li key={i} className="flex items-start gap-2 text-[#F5F7FA]">
+                              <Zap className="w-3.5 h-3.5 text-[#2B85EB] flex-shrink-0 mt-0.5" />
+                              <span className="font-normal text-xs opacity-90">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* STARTER */}
+                      <div className="bg-[#0B0F19] rounded-[2rem] p-6 border border-white/5 relative flex flex-col hover:border-white/10 transition-colors">
+                        <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">Starter</h3>
+                        <p className="text-[#A0A7B5] text-[11px] md:text-xs mb-4 min-h-[40px]">
+                          Ideal para equipes que desejam organizar o ministério com excelência, sem recursos pro.
+                        </p>
+                        
+                        <div className="flex items-baseline gap-1 mb-1">
+                          <span className="text-3xl md:text-4xl font-semibold text-[#F5F7FA] tracking-tight">
+                            R$ {isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-[#A0A7B5] font-normal text-xs md:text-sm">/mês</span>
+                        </div>
+                        
+                        {isAnnual ? (
+                          <div className="flex items-center gap-2 mb-6 text-xs font-medium">
+                            <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">20% OFF</span>
+                          </div>
+                        ) : (
+                          <div className="h-5 md:h-6 mb-6" />
+                        )}
+                        
+                        {/* Como não há um link "Assinar Starter" atualmente (só criamos o session padrão que é Pro ou Starter no caso do app), mas se os preços estiverem carregados... Na verdade o app só vende MusicScale. Starter PODE ser o plano "monthly" ou "annual" que já estavam lá e "Pro" não.
+                            Para este setup, o Checkout envia a "plan" key. Vou chamar `handleSubscribe` nos dois cards. Dependendo de como o stripe backend tá, 'monthly' e 'annual' se aplicam lá.  */}
+                        <button 
+                          onClick={() => handleSubscribe(isAnnual ? 'annual' : 'monthly')}
+                          disabled={checkoutLoading}
+                          className="w-full py-3.5 px-4 rounded-xl bg-white/5 border border-white/10 text-[#F5F7FA] text-center font-semibold text-sm hover:bg-white/10 transition-all shadow-sm active:scale-95 mb-6 block"
+                        >
+                          {checkoutLoading ? "Processando..." : "Assinar MusicScale Starter"}
+                        </button>
+                        
+                        <ul className="space-y-3 flex-1 pt-4 border-t border-white/5">
+                          {[
+                            "Músicas e escalas ilimitadas",
+                            "Até 10 pessoas por organização",
+                            "Sincronização em nuvem",
+                            "Suporte padrão"
+                          ].map((item, i) => (
+                            <li key={i} className="flex items-start gap-2 text-[#A0A7B5]">
+                              <Check className="w-3.5 h-3.5 text-[#2B85EB] flex-shrink-0 mt-0.5" />
+                              <span className="font-normal text-xs">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
                   </div>
                 )}
+
+                {/* --- MARKETPLACE / SERVIÇOS PREMIUM --- */}
+                <div className="mt-16 pt-12 border-t border-white/5">
+                  <div className="mb-10 text-center md:text-left">
+                     <h3 className="text-xl font-semibold text-[#F5F7FA] mb-2">Serviços e Adicionais</h3>
+                     <p className="text-[#A0A7B5] text-sm">Complemente sua assinatura com ferramentas e serviços premium estruturados para o seu ministério.</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+                    {/* Setup Premium */}
+                    <div className="bg-[#050505] rounded-2xl p-6 border border-white/5 hover:border-white/10 transition-colors flex flex-col group">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-10 h-10 bg-[#0B0F19] rounded-xl border border-white/5 flex items-center justify-center group-hover:scale-105 transition-transform">
+                          <Settings className="w-5 h-5 text-[#2B85EB]" />
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[#F5F7FA] font-mono text-sm">R$ 74,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+                        </div>
+                      </div>
+                      <h4 className="text-[#F5F7FA] font-semibold text-base mb-1">Setup Premium</h4>
+                      <p className="text-[#A0A7B5] text-xs mb-6 flex-1">
+                        Configuração inicial assistida para estruturar rapidamente sua equipe no MusicScale.
+                      </p>
+                      <ul className="space-y-3 mb-6">
+                        <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Onboarding assistido</li>
+                        <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Organização de equipe estruturada</li>
+                      </ul>
+                      <a href="mailto:suporte@millionsnest.com?subject=Solicitar%20Setup%20Premium" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-[#2B85EB]/10 hover:text-[#2B85EB] transition-colors">
+                        Solicitar Setup
+                      </a>
+                    </div>
+
+                    {/* Treinamento Express */}
+                    <div className="bg-[#050505] rounded-2xl p-6 border border-white/5 hover:border-white/10 transition-colors flex flex-col group">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-10 h-10 bg-[#0B0F19] rounded-xl border border-white/5 flex items-center justify-center group-hover:scale-105 transition-transform">
+                          <Video className="w-5 h-5 text-[#2B85EB]" />
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[#F5F7FA] font-mono text-sm">R$ 29,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+                        </div>
+                      </div>
+                      <h4 className="text-[#F5F7FA] font-semibold text-base mb-1">Treinamento Express</h4>
+                      <p className="text-[#A0A7B5] text-xs mb-6 flex-1">
+                        Treinamento online prático para aprender rapidamente o fluxo do MusicScale.
+                      </p>
+                      <ul className="space-y-3 mb-6">
+                        <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Sessão de grupo online</li>
+                        <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Gravação completa disponível</li>
+                      </ul>
+                      <a href="mailto:suporte@millionsnest.com?subject=Participar%20Treinamento" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-[#2B85EB]/10 hover:text-[#2B85EB] transition-colors">
+                        Quero Participar
+                      </a>
+                    </div>
+
+                    {/* Acervo Inicial */}
+                    <div className="bg-[#050505] rounded-2xl p-6 border border-[#2B85EB]/20 hover:border-[#2B85EB]/40 transition-colors flex flex-col group relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-3">
+                         <div className="bg-[#2B85EB]/10 text-[#2B85EB] text-[9px] font-bold px-2 py-0.5 rounded-md border border-[#2B85EB]/20 uppercase tracking-widest flex items-center gap-1">
+                           <Star className="w-2.5 h-2.5" /> Popular
+                         </div>
+                      </div>
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-10 h-10 bg-[#2B85EB]/10 rounded-xl border border-[#2B85EB]/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+                          <ListMusic className="w-5 h-5 text-[#2B85EB]" />
+                        </div>
+                        <div className="text-right pt-6 mt-1">
+                          <div className="text-[#F5F7FA] font-mono text-sm">R$ 39,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+                        </div>
+                      </div>
+                      <h4 className="text-[#F5F7FA] font-semibold text-base mb-1">Acervo Inicial Worship</h4>
+                      <p className="text-[#A0A7B5] text-xs mb-6 flex-1">
+                        Comece com 100 músicas cadastradas, incluindo cifra e letra.
+                      </p>
+                      <ul className="space-y-3 mb-6">
+                        <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> 100 músicas formatadas</li>
+                        <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Implantação imediata</li>
+                      </ul>
+                      <a href="mailto:suporte@millionsnest.com?subject=Comprar%20Acervo" className="w-full py-2.5 px-4 rounded-lg bg-[#2B85EB] text-white text-xs text-center font-semibold hover:bg-[#2B85EB]/90 transition-colors shadow-sm active:scale-95">
+                        Comprar Acervo
+                      </a>
+                    </div>
+
+                    {/* Music Pack 10 */}
+                    <div className="bg-[#050505] rounded-2xl p-6 border border-white/5 hover:border-white/10 transition-colors flex flex-col group">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-10 h-10 bg-[#0B0F19] rounded-xl border border-white/5 flex items-center justify-center group-hover:scale-105 transition-transform">
+                          <Headphones className="w-5 h-5 text-[#2B85EB]" />
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[#F5F7FA] font-mono text-sm">R$ 24,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+                        </div>
+                      </div>
+                      <h4 className="text-[#F5F7FA] font-semibold text-base mb-1">Music Pack +10</h4>
+                      <p className="text-[#A0A7B5] text-xs mb-6 flex-1">
+                        Pacote avulso para adicionar até 10 novas músicas ao seu acervo.
+                      </p>
+                      <ul className="space-y-3 mb-6">
+                        <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Até 10 novas adições</li>
+                        <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Cifras e letras nativas</li>
+                      </ul>
+                      <a href="mailto:suporte@millionsnest.com?subject=Comprar%20Music%20Pack" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-[#2B85EB]/10 hover:text-[#2B85EB] transition-colors">
+                        Comprar Pacote
+                      </a>
+                    </div>
+                  </div>
+                </div>
               </div>
             </motion.section>
           )}
