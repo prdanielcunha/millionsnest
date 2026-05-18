@@ -62,12 +62,15 @@ export class BillingService {
       });
 
       const envIdToLookupKey: Record<string, string> = {};
-      if (process.env.STRIPE_PRICE_ID_MONTHLY) envIdToLookupKey[process.env.STRIPE_PRICE_ID_MONTHLY] = 'musicscale_pro_monthly';
-      if (process.env.STRIPE_PRICE_ID_ANNUAL) envIdToLookupKey[process.env.STRIPE_PRICE_ID_ANNUAL] = 'musicscale_pro_yearly';
-      if (process.env.STRIPE_PRICE_ID_SETUP_PREMIUM) envIdToLookupKey[process.env.STRIPE_PRICE_ID_SETUP_PREMIUM] = 'musicscale_setup_premium';
-      if (process.env.STRIPE_PRICE_ID_TRAINING_EXPRESS) envIdToLookupKey[process.env.STRIPE_PRICE_ID_TRAINING_EXPRESS] = 'musicscale_training_express';
-      if (process.env.STRIPE_PRICE_ID_WORSHIP_100) envIdToLookupKey[process.env.STRIPE_PRICE_ID_WORSHIP_100] = 'musicscale_worship_100';
-      if (process.env.STRIPE_PRICE_ID_MUSIC_PACK_10) envIdToLookupKey[process.env.STRIPE_PRICE_ID_MUSIC_PACK_10] = 'musicscale_music_pack_10';
+      const envMonthly = process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
+      const envAnnual = process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
+      
+      if (envMonthly) envIdToLookupKey[envMonthly] = 'musicscale_pro_monthly';
+      if (envAnnual) envIdToLookupKey[envAnnual] = 'musicscale_pro_yearly';
+      if (process.env.STRIPE_PRICE_SETUP_PREMIUM) envIdToLookupKey[process.env.STRIPE_PRICE_SETUP_PREMIUM] = 'musicscale_setup_premium';
+      if (process.env.STRIPE_PRICE_TRAINING_EXPRESS) envIdToLookupKey[process.env.STRIPE_PRICE_TRAINING_EXPRESS] = 'musicscale_training_express';
+      if (process.env.STRIPE_PRICE_ACERVO_WORSHIP_100) envIdToLookupKey[process.env.STRIPE_PRICE_ACERVO_WORSHIP_100] = 'musicscale_worship_100';
+      if (process.env.STRIPE_PRICE_MUSIC_PACK_10) envIdToLookupKey[process.env.STRIPE_PRICE_MUSIC_PACK_10] = 'musicscale_music_pack_10';
 
       pricesResponse.data.forEach(price => {
         const product = price.product as Stripe.Product;
@@ -78,11 +81,32 @@ export class BillingService {
         const type = metadata.type || (price.type === 'recurring' ? 'plan' : 'addon');
         const app = metadata.app || 'musicscale';
         // Assign lookup key from Stripe or fallback to environment variable mapping
-        const lookupKey = price.lookup_key || envIdToLookupKey[price.id] || null;
-        const feature = metadata.feature || (lookupKey ? lookupKey.replace('musicscale_', '') : product.name.toLowerCase().replace(/ /g, '_'));
+        const originalLookupKey = price.lookup_key || envIdToLookupKey[price.id] || null;
+        let feature = metadata.feature;
+        
+        if (!feature) {
+           if (originalLookupKey) {
+             const keyLower = originalLookupKey.toLowerCase();
+             if (keyLower.includes('setup')) feature = 'setup_premium';
+             else if (keyLower.includes('treinamento')) feature = 'training_express';
+             else if (keyLower.includes('acervo') || keyLower.includes('worship')) feature = 'worship_100';
+             else if (keyLower.includes('musicpack') || keyLower.includes('music_pack')) feature = 'music_pack_10';
+             else if (keyLower.includes('anual')) feature = 'pro_yearly';
+             else if (keyLower.includes('mensal')) feature = 'pro_monthly';
+             else feature = originalLookupKey.replace(/^(musicscale_|MS_)/i, '').toLowerCase();
+           } else {
+             feature = product.name.toLowerCase().replace(/ /g, '_');
+           }
+        }
+        
+        // Ensure consistent app-prefixed lookups if they don't already have one
+        const lookupKey = originalLookupKey ? 
+          (originalLookupKey.toLowerCase().startsWith('musicscale_') ? originalLookupKey : `musicscale_${feature}`) 
+          : null;
+
         const tier = metadata.tier;
-        const featured = metadata.featured === 'true' || (lookupKey?.includes('yearly') || lookupKey?.includes('worship'));
-        const recommended = metadata.recommended === 'true' || lookupKey?.includes('yearly');
+        const featured = metadata.featured === 'true' || (lookupKey?.includes('yearly') || lookupKey?.includes('worship') || originalLookupKey?.toLowerCase().includes('anual'));
+        const recommended = metadata.recommended === 'true' || lookupKey?.includes('yearly') || originalLookupKey?.toLowerCase().includes('anual');
         
         const item: NormalizedProduct = {
           id: price.id,
