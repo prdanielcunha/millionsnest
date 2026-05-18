@@ -4,6 +4,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import path from 'path';
+import { BillingService } from './src/server/services/BillingService';
 
 dotenv.config();
 
@@ -53,9 +54,15 @@ function getStripe(): Stripe {
   return stripeInstance;
 }
 
-// Cache inteligente para preços do Stripe
-let cachedPrices: { monthly: any, annual: any, timestamp: number } | null = null;
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora de TTL
+// Billing Service Instance
+let billingService: BillingService | null = null;
+function getBillingService(): BillingService {
+  if (!billingService) {
+    const isMock = process.env.STRIPE_SECRET_KEY === undefined;
+    billingService = new BillingService(getStripe(), isMock);
+  }
+  return billingService;
+}
 
 async function startServer() {
   const app = express();
@@ -113,17 +120,78 @@ async function startServer() {
           const session = event.data.object as Stripe.Checkout.Session;
           console.log('[STRIPE_WEBHOOK] Processing checkout.session.completed', {
             id: session.id,
+            mode: session.mode,
             customer: session.customer,
             subscription: session.subscription
           });
+          
           const userId = session.metadata?.uid || session.client_reference_id;
-          const plan = session.metadata?.plan || 'monthly';
-          const subscriptionId = session.subscription as string;
           const customerId = session.customer as string;
 
-          if (!userId || !subscriptionId) {
-             console.error('[STRIPE_WEBHOOK] Missing identification mapping', { userId, subscriptionId });
-             await auditRef.update({ status: 'error', error: 'Missing userId or subscriptionId' });
+          if (!userId) {
+             console.error('[STRIPE_WEBHOOK] Missing identification mapping', { userId });
+             await auditRef.update({ status: 'error', error: 'Missing userId' });
+             break;
+          }
+
+          if (session.mode === 'payment') {
+            const feature = session.metadata?.feature;
+            if (!feature) {
+              console.error('[STRIPE_WEBHOOK] Payment mode completed but missing feature metadata');
+              await auditRef.update({ status: 'error', error: 'Missing feature metadata' });
+              break;
+            }
+
+            console.log(`[STRIPE_WEBHOOK] Processing payment for feature: ${feature} / user: ${userId}`);
+            const batch = db.batch();
+
+            // Store purchase history
+            const purchaseRef = db.collection('purchases').doc(session.id);
+            batch.set(purchaseRef, {
+              uid: userId,
+              stripeCustomerId: customerId,
+              stripeSessionId: session.id,
+              feature: feature,
+              amountTotal: session.amount_total,
+              currency: session.currency,
+              status: session.payment_status,
+              createdAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            // Update user features access
+            const userRef = db.collection('users').doc(userId);
+            const updateData: any = {
+               updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            };
+
+            // Music pack increments counter, others flip to true
+            if (feature === 'music_pack_10') {
+               updateData['musicCredits'] = admin.firestore.FieldValue.increment(10);
+            } else {
+               updateData[`appsAccess.${feature}`] = true;
+               updateData[`permissions.${feature}`] = true;
+               updateData[`addons.${feature}`] = true;
+            }
+
+            batch.set(userRef, updateData, { merge: true });
+
+            // Apply to org as well to keep in sync if needed
+            const orgRef = db.collection('organizations').doc(userId);
+            batch.set(orgRef, updateData, { merge: true });
+
+            await batch.commit();
+            console.log(`[STRIPE_WEBHOOK] Successfully provisioned addon ${feature} for user: ${userId}`);
+            await auditRef.update({ status: 'success', processedUserId: userId, feature: feature });
+            break;
+          }
+
+          // Handle 'subscription' mode
+          const plan = session.metadata?.plan || 'monthly';
+          const subscriptionId = session.subscription as string;
+
+          if (!subscriptionId) {
+             console.error('[STRIPE_WEBHOOK] Missing subscriptionId in subscription mode', { userId, subscriptionId });
+             await auditRef.update({ status: 'error', error: 'Missing subscriptionId' });
              break;
           }
 
@@ -198,6 +266,18 @@ async function startServer() {
             plan: plan,
             lastStripeEventTs: eventCreatedTs,
             appsAccess: { musicscale: hasAccess },
+            subscription: {
+              status: subscription.status,
+              plan: plan,
+              stripeCustomerId: customerId,
+              stripeSubscriptionId: subscriptionId,
+              trialEndsAt: trialEnd,
+              currentPeriodEnd: currentPeriodEnd,
+              lastStripeEventTs: eventCreatedTs,
+            },
+            permissions: {
+              musicscale: hasAccess
+            },
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
 
@@ -313,6 +393,15 @@ async function startServer() {
                     currentPeriodEnd: currentPeriodEnd,
                     lastStripeEventTs: eventCreatedTs,
                     appsAccess: { musicscale: hasAccess },
+                    subscription: {
+                      status: status,
+                      trialEndsAt: trialEnd,
+                      currentPeriodEnd: currentPeriodEnd,
+                      lastStripeEventTs: eventCreatedTs,
+                    },
+                    permissions: {
+                      musicscale: hasAccess
+                    },
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                  }, { merge: true });
                  
@@ -392,6 +481,17 @@ async function startServer() {
         }
       }
 
+      // Fetch user specific data for addons
+      const userDoc = await db.collection('users').doc(uid).get();
+      let appsAccess: any = {};
+      let musicCredits = 0;
+      
+      if (userDoc.exists) {
+        const userData = userDoc.data()!;
+        appsAccess = userData.appsAccess || {};
+        musicCredits = userData.musicCredits || 0;
+      }
+
       return res.json({
         apps: {
           musicscale: {
@@ -401,6 +501,14 @@ async function startServer() {
             trialEndsAt: trialEndsAt,
             currentPeriodEnd: currentPeriodEnd,
           }
+        },
+        addons: {
+          setup_premium: appsAccess.setup_premium || false,
+          training_express: appsAccess.training_express || false,
+          worship_100: appsAccess.worship_100 || false
+        },
+        credits: {
+          music: musicCredits
         }
       });
     } catch (err: any) {
@@ -410,7 +518,7 @@ async function startServer() {
   });
 
   // Forçar sincronização com Stripe
-  app.post('/api/stripe/sync', async (req, res) => {
+  app.post('/api/v1/billing/sync', async (req, res) => {
     try {
       const { userId } = req.body;
       if (!userId || !db) return res.status(400).json({ error: 'Missing uid or db' });
@@ -502,6 +610,14 @@ async function startServer() {
           trialEndsAt: null,
           currentPeriodEnd: null,
           appsAccess: { musicscale: false },
+          subscription: {
+             status: 'none',
+             stripeCustomerId: null,
+             stripeSubscriptionId: null,
+             trialEndsAt: null,
+             currentPeriodEnd: null,
+          },
+          permissions: { musicscale: false },
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
@@ -548,6 +664,14 @@ async function startServer() {
         trialEndsAt: trialEnd,
         currentPeriodEnd: currentPeriodEnd,
         appsAccess: { musicscale: hasAccess },
+        subscription: {
+          status: sub.status,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: sub.id,
+          trialEndsAt: trialEnd,
+          currentPeriodEnd: currentPeriodEnd,
+        },
+        permissions: { musicscale: hasAccess },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
@@ -631,6 +755,14 @@ async function startServer() {
             trialEndsAt: tEnd,
             currentPeriodEnd: cpEnd,
             appsAccess: { musicscale: hasAccess },
+            subscription: {
+              status: s.status,
+              stripeCustomerId: customer.id,
+              stripeSubscriptionId: s.id,
+              trialEndsAt: tEnd,
+              currentPeriodEnd: cpEnd,
+            },
+            permissions: { musicscale: hasAccess },
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
@@ -703,96 +835,50 @@ async function startServer() {
     }
   });
 
-  app.get('/api/stripe/prices', async (req, res) => {
+  app.get('/api/v1/billing/products', async (req, res) => {
     try {
-      const stripe = getStripe();
-      const isMock = process.env.STRIPE_SECRET_KEY === undefined;
-      
-      if (isMock) {
-        return res.json({ monthly: { price: 19.90, currency: 'brl' }, annual: { price: 191.04, currency: 'brl' } });
-      }
-
-      const now = Date.now();
-      // Verificar se o cache é válido
-      if (cachedPrices && (now - cachedPrices.timestamp) < CACHE_TTL_MS) {
-        console.log('[Prices] Serving from local cache');
-        return res.json({ monthly: cachedPrices.monthly, annual: cachedPrices.annual });
-      }
-
-      const monthlyId = process.env.STRIPE_PRICE_ID_MONTHLY;
-      const annualId = process.env.STRIPE_PRICE_ID_ANNUAL;
-      
-      let monthlyPriceInfo = { price: 19.90, currency: 'brl' }; // Default fallbacks
-      let annualPriceInfo = { price: 191.04, currency: 'brl' }; // Default fallbacks
-
-      try {
-        if (monthlyId) {
-          const p = await stripe.prices.retrieve(monthlyId);
-          monthlyPriceInfo = { price: (p.unit_amount || 0) / 100, currency: p.currency };
-        }
-        
-        if (annualId) {
-          const p = await stripe.prices.retrieve(annualId);
-          annualPriceInfo = { price: (p.unit_amount || 0) / 100, currency: p.currency };
-        }
-        
-        // Atualizar cache com dados frescos
-        cachedPrices = {
-          monthly: monthlyPriceInfo,
-          annual: annualPriceInfo,
-          timestamp: now
-        };
-        console.log('[Prices] Cache updated from Stripe');
-        
-        return res.json({ monthly: monthlyPriceInfo, annual: annualPriceInfo });
-        
-      } catch (stripeErr: any) {
-        console.error('[Prices] Error retrieving from Stripe, attempting fallback:', stripeErr.message);
-        
-        // Estratégia de Fallback Seguro
-        if (cachedPrices) {
-           console.log('[Prices] Fallback: Serving stale cache due to Stripe error');
-           return res.json({ monthly: cachedPrices.monthly, annual: cachedPrices.annual });
-        } else {
-           console.log('[Prices] Fallback: Serving default values due to Stripe error');
-           return res.json({ monthly: monthlyPriceInfo, annual: annualPriceInfo }); // Uses the constants defined above
-        }
-      }
+      const service = getBillingService();
+      const result = await service.getProducts();
+      return res.json(result);
     } catch (e: any) {
-      console.error('[Prices] Fatal error fetching prices:', e);
-      if (cachedPrices) {
-        return res.json({ monthly: cachedPrices.monthly, annual: cachedPrices.annual });
-      }
+      console.error('[Billing Products] Fatal error:', e);
       res.status(500).json({ error: e.message });
     }
   });
 
-  app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  app.post('/api/v1/billing/checkout', async (req, res) => {
     try {
-      const { userId, email, plan = 'monthly' } = req.body;
+      const { userId, email, lookupKey } = req.body;
 
-      if (!userId || !email) {
-        res.status(400).json({ error: 'Missing userId or email' });
+      if (!userId || !email || !lookupKey) {
+        res.status(400).json({ error: 'Missing userId, email, or lookupKey' });
         return;
       }
 
-      console.log(`[Checkout] Creating checkout session for user ${userId} with plan ${plan}`);
+      console.log(`[Checkout] Creating checkout session for user ${userId} with lookupKey ${lookupKey}`);
 
-      const stripe = getStripe();
+      const service = getBillingService();
       const isMock = process.env.STRIPE_SECRET_KEY === undefined;
 
       if (isMock) {
          console.error('[Checkout] STRIPE_SECRET_KEY env variable is missing');
-         res.status(400).json({ error: 'A Chave do Stripe (STRIPE_SECRET_KEY) não está configurada no Vercel.' });
+         res.status(400).json({ error: 'A Chave do Stripe não está configurada no Vercel (Modo Mock).' });
          return;
       }
 
-      const priceId = plan === 'annual' ? process.env.STRIPE_PRICE_ID_ANNUAL : process.env.STRIPE_PRICE_ID_MONTHLY; 
+      const priceId = await service.getPriceByLookupKey(lookupKey);
+      
       if (!priceId) {
-         console.error(`[Checkout] STRIPE_PRICE_ID_${plan.toUpperCase()} env variable is missing`);
-         res.status(400).json({ error: `A variável STRIPE_PRICE_ID_${plan.toUpperCase()} não está configurada no Vercel.` });
+         console.error(`[Checkout] Preço com lookup_key ${lookupKey} não encontrado no Stripe.`);
+         res.status(400).json({ error: `Plano não encontrado no sistema.` });
          return;
       }
+
+      const stripe = getStripe();
+
+      // Buscamos qual app ou plano é pelo cache pra mandar no metadata
+      const products = await service.getProducts();
+      const planItem = products.plans.find(p => p.lookupKey === lookupKey);
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
@@ -811,8 +897,8 @@ async function startServer() {
         customer_email: email,
         metadata: {
           uid: userId,
-          plan: plan,
-          product: 'musicscale'
+          plan: planItem ? planItem.tier || planItem.feature : 'unknown',
+          product: planItem ? planItem.app : 'musicscale'
         },
         success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
@@ -826,7 +912,87 @@ async function startServer() {
     }
   });
 
-  app.post('/api/stripe/create-portal-session', async (req, res) => {
+  app.post('/api/v1/billing/addons', async (req, res) => {
+    try {
+      const { userId, email, lookupKey } = req.body;
+
+      if (!userId || !email || !lookupKey) {
+        res.status(400).json({ error: 'Missing userId, email or lookupKey' });
+        return;
+      }
+
+      console.log(`[Checkout Addon] Creating checkout session for user ${userId} with lookupKey ${lookupKey}`);
+
+      const service = getBillingService();
+      const isMock = process.env.STRIPE_SECRET_KEY === undefined;
+
+      if (isMock) {
+         console.error('[Checkout Addon] STRIPE_SECRET_KEY env variable is missing');
+         res.status(400).json({ error: 'A Chave do Stripe não está configurada (Modo Mock).' });
+         return;
+      }
+
+      const priceId = await service.getPriceByLookupKey(lookupKey);
+      
+      if (!priceId) {
+         console.error(`[Checkout Addon] Preço com lookup_key ${lookupKey} não encontrado no Stripe.`);
+         res.status(400).json({ error: `Addon não encontrado no sistema.` });
+         return;
+      }
+
+      // Check if user has a customer ID in firestore to link it to the same customer
+      let customerId: string | undefined;
+      if (db) {
+         const subDoc = await db.collection('subscriptions').doc(userId).get();
+         if (subDoc.exists) {
+            customerId = subDoc.data()?.stripeCustomerId;
+         }
+      }
+
+      const stripe = getStripe();
+      
+      const products = await service.getProducts();
+      const addonItem = products.addons.find(p => p.lookupKey === lookupKey);
+      const feature = addonItem ? addonItem.feature : 'unknown';
+
+      const sessionArgs: Stripe.Checkout.SessionCreateParams = {
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        mode: 'payment',
+        allow_promotion_codes: true,
+        client_reference_id: userId,
+        metadata: {
+          uid: userId,
+          feature: feature,
+          type: addonItem ? addonItem.type : 'addon',
+          app: addonItem ? addonItem.app : 'musicscale'
+        },
+        success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard?addon_success=${feature}`,
+        cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
+      };
+
+      if (customerId) {
+        sessionArgs.customer = customerId;
+      } else {
+        sessionArgs.customer_email = email;
+      }
+
+      const session = await stripe.checkout.sessions.create(sessionArgs);
+
+      console.log(`[Checkout Addon] Session created successfully for user ${userId}`);
+      res.json({ url: session.url });
+    } catch (e: any) {
+      console.error('[Checkout Addon] Error creating checkout session:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/v1/billing/portal', async (req, res) => {
     try {
       const { userId } = req.body;
       if (!userId) {

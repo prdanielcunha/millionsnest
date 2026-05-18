@@ -5,18 +5,44 @@ import { Link } from "react-router-dom";
 
 export function Pricing() {
   const [isAnnual, setIsAnnual] = useState(true);
-  const [prices, setPrices] = useState({ monthly: 19.90, annual: 191.04 });
+  
+  // Dynamic prices state
+  const [plansData, setPlansData] = useState<any[]>([]);
+  const [addonsData, setAddonsData] = useState<any[]>([]);
+  
+  const [prices, setPrices] = useState({
+    monthly: 0,
+    annual: 0,
+    setup_premium: 0,
+    training_express: 0,
+    worship_100: 0,
+    music_pack_10: 0
+  });
 
   useEffect(() => {
-    fetch('/api/stripe/prices')
+    fetch('/api/v1/billing/products')
       .then(res => res.json())
       .then(data => {
-        if (data.monthly && data.annual && data.monthly.price > 0) {
-           setPrices({
-             monthly: data.monthly.price,
-             annual: data.annual.price,
-           });
-         }
+         if (data.plans) setPlansData(data.plans);
+         if (data.addons) setAddonsData(data.addons);
+         
+         const newPrices = { ...prices };
+         
+         // Extract plans
+         const monthlyPlan = data.plans?.find((p: any) => p.interval === 'month');
+         const annualPlan = data.plans?.find((p: any) => p.interval === 'year');
+         if (monthlyPlan) newPrices.monthly = monthlyPlan.price;
+         if (annualPlan) newPrices.annual = annualPlan.price;
+         
+         // Extract addons
+         data.addons?.forEach((addon: any) => {
+           if (addon.feature === 'setup_premium') newPrices.setup_premium = addon.price;
+           if (addon.feature === 'training_express') newPrices.training_express = addon.price;
+           if (addon.feature === 'worship_100') newPrices.worship_100 = addon.price;
+           if (addon.feature === 'music_pack_10') newPrices.music_pack_10 = addon.price;
+         });
+         
+         setPrices(newPrices);
       })
       .catch(err => console.error(err));
   }, []);
@@ -88,15 +114,15 @@ export function Pricing() {
             
             <div className="flex items-baseline gap-1 mb-1">
               <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
-                R$ {isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                 R$ {prices.monthly > 0 ? (isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/mês</span>
             </div>
             
             {isAnnual ? (
               <div className="flex items-center gap-2 md:gap-3 mb-6 text-xs md:text-sm font-medium">
-                <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">20% OFF</span>
+                 {prices.monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                 {prices.monthly > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">{(100 - (prices.annual / (prices.monthly * 12)) * 100).toFixed(0)}% OFF</span>}
               </div>
             ) : (
               <div className="h-5 md:h-6 mb-6" />
@@ -135,15 +161,17 @@ export function Pricing() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="bg-[#050505] rounded-[2rem] p-6 md:p-10 border border-[#2B85EB]/30 relative z-10 flex flex-col h-full premium-shadow overflow-hidden"
+            className="bg-[#050505] rounded-[2rem] p-6 md:p-10 border border-[#2B85EB]/30 relative z-10 flex flex-col h-full premium-shadow"
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/5 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/5 to-transparent pointer-events-none rounded-[2rem]" />
             
-            <div className="absolute top-4 right-4 md:top-0 md:right-8 md:-translate-y-1/2">
-               <div className="bg-[#2B85EB] text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-widest flex items-center gap-1">
-                 <Star className="w-3 h-3" /> Mais Popular
-               </div>
-            </div>
+            {plansData?.find(p => p.lookupKey === 'musicscale_pro_monthly')?.featured && (
+              <div className="absolute top-4 right-4 md:top-6 md:right-8">
+                <div className="bg-[#2B85EB] text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-widest flex items-center gap-1">
+                  <Star className="w-3 h-3" /> Mais Popular
+                </div>
+              </div>
+            )}
 
             <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-4 md:mt-0">Pro</h3>
             <p className="text-[#A0A7B5] text-sm mb-4 min-h-[60px] relative z-10">
@@ -156,15 +184,15 @@ export function Pricing() {
             
             <div className="flex items-baseline gap-1 mb-1 relative z-10">
               <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
-                R$ {isAnnual ? "23,92" : "29,90"}
+                 R$ {prices.monthly > 0 ? (isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/mês</span>
             </div>
             
             {isAnnual ? (
               <div className="flex items-center gap-2 md:gap-3 mb-6 text-xs md:text-sm font-medium relative z-10">
-                <span className="text-[#A0A7B5]/50 line-through">R$ {(29.90 * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">20% OFF</span>
+                 {prices.monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                 {prices.monthly > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">{(100 - (prices.annual / (prices.monthly * 12)) * 100).toFixed(0)}% OFF</span>}
               </div>
             ) : (
               <div className="h-5 md:h-6 mb-6 relative z-10" />
@@ -232,7 +260,9 @@ export function Pricing() {
                 <Settings className="w-5 h-5 text-[#A0A7B5]" />
               </div>
               <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Setup Premium</h4>
-              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 74,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+              <div className="text-[#2B85EB] font-mono text-sm mb-4">
+                 R$ {prices.setup_premium > 0 ? prices.setup_premium.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+              </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
                 Configuração inicial assistida para estruturar rapidamente sua equipe no MusicScale.
               </p>
@@ -258,7 +288,9 @@ export function Pricing() {
                 <Video className="w-5 h-5 text-[#A0A7B5]" />
               </div>
               <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Treinamento Express</h4>
-              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 29,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+              <div className="text-[#2B85EB] font-mono text-sm mb-4">
+                 R$ {prices.training_express > 0 ? prices.training_express.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+              </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
                 Treinamento online prático para aprender rapidamente o fluxo do MusicScale.
               </p>
@@ -284,7 +316,9 @@ export function Pricing() {
                 <ListMusic className="w-5 h-5 text-[#A0A7B5]" />
               </div>
               <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Acervo Inicial Worship</h4>
-              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 39,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+              <div className="text-[#2B85EB] font-mono text-sm mb-4">
+                 R$ {prices.worship_100 > 0 ? prices.worship_100.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+              </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
                 Comece mais rápido com um acervo pronto de 100 músicas já organizadas no MusicScale, incluindo cifra e letra integradas.
               </p>
@@ -312,8 +346,10 @@ export function Pricing() {
               <div className="w-10 h-10 bg-[#050505] rounded-xl border border-white/5 flex items-center justify-center mb-6">
                 <Headphones className="w-5 h-5 text-[#A0A7B5]" />
               </div>
-              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Music Pack 10</h4>
-              <div className="text-[#2B85EB] font-mono text-sm mb-4">R$ 24,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Music Pack +10</h4>
+              <div className="text-[#2B85EB] font-mono text-sm mb-4">
+                 R$ {prices.music_pack_10 > 0 ? prices.music_pack_10.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+              </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
                 Pacote avulso para adicionar até 10 novas músicas ao acervo da sua organização.
               </p>

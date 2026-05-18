@@ -20,7 +20,16 @@ export function Dashboard() {
   const [organization, setOrganization] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [prices, setPrices] = useState({ monthly: 19.90, annual: 191.04 });
+  const [prices, setPrices] = useState({ 
+    monthly: 0, 
+    annual: 0,
+    setup_premium: 0,
+    training_express: 0,
+    worship_100: 0,
+    music_pack_10: 0
+  });
+  const [plansData, setPlansData] = useState<any[]>([]);
+  const [addonsData, setAddonsData] = useState<any[]>([]);
   const [isAnnual, setIsAnnual] = useState(true);
 
   const fetchSubscriptionAndOrg = async (forceSync = false) => {
@@ -32,7 +41,7 @@ export function Dashboard() {
         setLoadingSub(true);
         console.log("[Dashboard] Automatic silent sync with Stripe...");
         try {
-          const syncRes = await fetch('/api/stripe/sync', {
+          const syncRes = await fetch('/api/v1/billing/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: user.uid })
@@ -55,7 +64,7 @@ export function Dashboard() {
          setSubscription(data);
          // If trialing, we check Stripe one more time silently to see if it moved to active
          if (data.status === 'trialing' && !forceSync) {
-           fetch('/api/stripe/sync', {
+           fetch('/api/v1/billing/sync', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ userId: user.uid })
@@ -97,6 +106,16 @@ export function Dashboard() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get('session_id');
+    const addonSuccess = urlParams.get('addon_success');
+
+    if (addonSuccess) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      console.log('Returned from Addon checkout:', addonSuccess);
+      alert(`Compra de ${addonSuccess.replace(/_/g, ' ')} concluída com sucesso! Obrigado!`);
+      setLoadingSub(true);
+      fetchSubscriptionAndOrg(true);
+      return;
+    }
 
     if (sessionId) {
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -110,15 +129,29 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchSubscriptionAndOrg();
-    fetch('/api/stripe/prices')
+    fetch('/api/v1/billing/products')
       .then(res => res.json())
       .then(data => {
-        if (data.monthly && data.annual && data.monthly.price > 0) {
-           setPrices({
-             monthly: data.monthly.price,
-             annual: data.annual.price,
-           });
-         }
+         if (data.plans) setPlansData(data.plans);
+         if (data.addons) setAddonsData(data.addons);
+         
+         const newPrices = { ...prices };
+         
+         // Extract plans
+         const monthlyPlan = data.plans?.find((p: any) => p.interval === 'month');
+         const annualPlan = data.plans?.find((p: any) => p.interval === 'year');
+         if (monthlyPlan) newPrices.monthly = monthlyPlan.price;
+         if (annualPlan) newPrices.annual = annualPlan.price;
+         
+         // Extract addons
+         data.addons?.forEach((addon: any) => {
+           if (addon.feature === 'setup_premium') newPrices.setup_premium = addon.price;
+           if (addon.feature === 'training_express') newPrices.training_express = addon.price;
+           if (addon.feature === 'worship_100') newPrices.worship_100 = addon.price;
+           if (addon.feature === 'music_pack_10') newPrices.music_pack_10 = addon.price;
+         });
+         
+         setPrices(newPrices);
       })
       .catch(err => console.error(err));
   }, [user, profile]);
@@ -148,14 +181,37 @@ export function Dashboard() {
     ? new Date(subscription.currentPeriodEnd.seconds * 1000).toLocaleDateString('pt-BR') 
     : null;
 
-  const handleSubscribe = async (plan: 'monthly' | 'annual') => {
+  const handleAddonCheckout = async (lookupKey: string) => {
     if (!user || checkoutLoading) return;
     setCheckoutLoading(true);
     try {
-      const res = await fetch('/api/stripe/create-checkout-session', {
+      const res = await fetch('/api/v1/billing/addons', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid, email: user.email, plan })
+        body: JSON.stringify({ userId: user.uid, email: user.email, lookupKey })
+      });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        window.location.href = data.url;
+      } else {
+        alert("Erro ao iniciar checkout: " + data.error);
+        setCheckoutLoading(false);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao conectar com o servidor.");
+      setCheckoutLoading(false);
+    }
+  };
+
+  const handleSubscribe = async (lookupKey: string) => {
+    if (!user || checkoutLoading) return;
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch('/api/v1/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.uid, email: user.email, lookupKey })
       });
       const data = await res.json();
       if (data.url) {
@@ -356,7 +412,7 @@ export function Dashboard() {
                     ) : (
                       <div className="flex flex-col gap-3 relative">
                         <button 
-                          onClick={() => handleSubscribe('annual')}
+                          onClick={() => handleSubscribe('musicscale_pro_yearly')}
                           disabled={checkoutLoading}
                           className="w-full py-4 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex-col flex items-center justify-center hover:bg-white transition-all shadow-sm active:scale-95 relative overflow-hidden disabled:opacity-70"
                         >
@@ -369,7 +425,7 @@ export function Dashboard() {
                         </button>
 
                         <button 
-                          onClick={() => handleSubscribe('monthly')}
+                          onClick={() => handleSubscribe('musicscale_pro_monthly')}
                           disabled={checkoutLoading}
                           className="w-full py-3 px-4 bg-transparent text-[#F5F7FA] border border-white/10 rounded-xl font-semibold flex flex-col items-center justify-center hover:bg-white/5 transition-all active:scale-95 disabled:opacity-70"
                         >
@@ -383,7 +439,7 @@ export function Dashboard() {
                           <button
                             onClick={async () => {
                               try {
-                                const res = await fetch('/api/stripe/create-portal-session', {
+                                const res = await fetch('/api/v1/billing/portal', {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ userId: user.uid })
@@ -607,7 +663,7 @@ export function Dashboard() {
                       <button 
                         onClick={async () => {
                           try {
-                            const res = await fetch('/api/stripe/create-portal-session', {
+                            const res = await fetch('/api/v1/billing/portal', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ userId: user.uid })
@@ -632,7 +688,7 @@ export function Dashboard() {
                         <button 
                           onClick={async () => {
                             try {
-                              const res = await fetch('/api/stripe/create-portal-session', {
+                              const res = await fetch('/api/v1/billing/portal', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ userId: user.uid })
@@ -653,7 +709,7 @@ export function Dashboard() {
                         <button 
                           onClick={async () => {
                             try {
-                              const res = await fetch('/api/stripe/create-portal-session', {
+                              const res = await fetch('/api/v1/billing/portal', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ userId: user.uid })
@@ -702,13 +758,15 @@ export function Dashboard() {
 
                     <div className="grid md:grid-cols-2 gap-6">
                       {/* PRO */}
-                      <div className="bg-[#050505] rounded-[2rem] p-6 border border-[#2B85EB]/30 relative flex flex-col premium-shadow overflow-hidden group">
-                        <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/5 to-transparent pointer-events-none" />
-                        <div className="absolute top-4 right-4 md:right-6">
-                           <div className="bg-[#2B85EB] text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-widest flex items-center gap-1">
-                             <Star className="w-3 h-3" /> Popular
-                           </div>
-                        </div>
+                      <div className="bg-[#050505] rounded-[2rem] p-6 border border-[#2B85EB]/30 relative flex flex-col premium-shadow group">
+                        <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/5 to-transparent pointer-events-none rounded-[2rem]" />
+                        {plansData?.find(p => p.lookupKey === 'musicscale_pro_monthly')?.featured && (
+                          <div className="absolute top-4 right-4 md:right-6">
+                            <div className="bg-[#2B85EB] text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-widest flex items-center gap-1">
+                              <Star className="w-3 h-3" /> Popular
+                            </div>
+                          </div>
+                        )}
 
                         <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-4 md:mt-0">Pro</h3>
                         <p className="text-[#A0A7B5] text-[11px] md:text-xs mb-4 min-h-[40px] relative z-10">
@@ -717,22 +775,22 @@ export function Dashboard() {
                         
                         <div className="flex items-baseline gap-1 mb-1 relative z-10">
                           <span className="text-3xl md:text-4xl font-semibold text-[#F5F7FA] tracking-tight">
-                            R$ {isAnnual ? "23,92" : "29,90"}
+                            R$ {prices.monthly > 0 ? (isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
                           </span>
                           <span className="text-[#A0A7B5] font-normal text-xs md:text-sm">/mês</span>
                         </div>
                         
                         {isAnnual ? (
                           <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
-                            <span className="text-[#A0A7B5]/50 line-through">R$ {(29.90 * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">20% OFF</span>
+                             {prices.monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                             {prices.monthly > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.annual / (prices.monthly * 12)) * 100).toFixed(0)}% OFF</span>}
                           </div>
                         ) : (
                           <div className="h-5 md:h-6 mb-6 relative z-10" />
                         )}
                         
                         <button 
-                          onClick={() => handleSubscribe(isAnnual ? 'annual' : 'monthly')}
+                          onClick={() => handleSubscribe(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
                           disabled={checkoutLoading}
                           className="w-full py-3.5 px-4 rounded-xl bg-[#F5F7FA] text-[#050505] text-center font-semibold text-sm hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 mb-6 block relative z-10"
                         >
@@ -780,7 +838,7 @@ export function Dashboard() {
                         {/* Como não há um link "Assinar Starter" atualmente (só criamos o session padrão que é Pro ou Starter no caso do app), mas se os preços estiverem carregados... Na verdade o app só vende MusicScale. Starter PODE ser o plano "monthly" ou "annual" que já estavam lá e "Pro" não.
                             Para este setup, o Checkout envia a "plan" key. Vou chamar `handleSubscribe` nos dois cards. Dependendo de como o stripe backend tá, 'monthly' e 'annual' se aplicam lá.  */}
                         <button 
-                          onClick={() => handleSubscribe(isAnnual ? 'annual' : 'monthly')}
+                          onClick={() => handleSubscribe(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
                           disabled={checkoutLoading}
                           className="w-full py-3.5 px-4 rounded-xl bg-white/5 border border-white/10 text-[#F5F7FA] text-center font-semibold text-sm hover:bg-white/10 transition-all shadow-sm active:scale-95 mb-6 block"
                         >
@@ -820,7 +878,9 @@ export function Dashboard() {
                           <Settings className="w-5 h-5 text-[#2B85EB]" />
                         </div>
                         <div className="text-right">
-                          <div className="text-[#F5F7FA] font-mono text-sm">R$ 74,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+                          <div className="text-[#F5F7FA] font-mono text-sm">
+                             R$ {prices.setup_premium > 0 ? prices.setup_premium.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+                          </div>
                         </div>
                       </div>
                       <h4 className="text-[#F5F7FA] font-semibold text-base mb-1">Setup Premium</h4>
@@ -831,9 +891,13 @@ export function Dashboard() {
                         <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Onboarding assistido</li>
                         <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Organização de equipe estruturada</li>
                       </ul>
-                      <a href="mailto:suporte@millionsnest.com?subject=Solicitar%20Setup%20Premium" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-[#2B85EB]/10 hover:text-[#2B85EB] transition-colors">
-                        Solicitar Setup
-                      </a>
+                      <button 
+                        onClick={() => handleAddonCheckout('musicscale_setup_premium')}
+                        disabled={checkoutLoading}
+                        className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-[#2B85EB]/10 hover:text-[#2B85EB] transition-colors disabled:opacity-50"
+                      >
+                        {checkoutLoading ? "Processando..." : "Solicitar Setup"}
+                      </button>
                     </div>
 
                     {/* Treinamento Express */}
@@ -843,7 +907,9 @@ export function Dashboard() {
                           <Video className="w-5 h-5 text-[#2B85EB]" />
                         </div>
                         <div className="text-right">
-                          <div className="text-[#F5F7FA] font-mono text-sm">R$ 29,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+                          <div className="text-[#F5F7FA] font-mono text-sm">
+                             R$ {prices.training_express > 0 ? prices.training_express.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+                          </div>
                         </div>
                       </div>
                       <h4 className="text-[#F5F7FA] font-semibold text-base mb-1">Treinamento Express</h4>
@@ -854,24 +920,32 @@ export function Dashboard() {
                         <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Sessão de grupo online</li>
                         <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Gravação completa disponível</li>
                       </ul>
-                      <a href="mailto:suporte@millionsnest.com?subject=Participar%20Treinamento" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-[#2B85EB]/10 hover:text-[#2B85EB] transition-colors">
-                        Quero Participar
-                      </a>
+                      <button 
+                        onClick={() => handleAddonCheckout('musicscale_training_express')}
+                        disabled={checkoutLoading}
+                        className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-[#2B85EB]/10 hover:text-[#2B85EB] transition-colors disabled:opacity-50"
+                      >
+                        {checkoutLoading ? "Processando..." : "Quero Participar"}
+                      </button>
                     </div>
 
                     {/* Acervo Inicial */}
                     <div className="bg-[#050505] rounded-2xl p-6 border border-[#2B85EB]/20 hover:border-[#2B85EB]/40 transition-colors flex flex-col group relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-3">
-                         <div className="bg-[#2B85EB]/10 text-[#2B85EB] text-[9px] font-bold px-2 py-0.5 rounded-md border border-[#2B85EB]/20 uppercase tracking-widest flex items-center gap-1">
-                           <Star className="w-2.5 h-2.5" /> Popular
-                         </div>
-                      </div>
+                      {addonsData?.find(a => a.lookupKey === 'musicscale_worship_100')?.featured && (
+                        <div className="absolute top-0 right-0 p-3">
+                          <div className="bg-[#2B85EB]/10 text-[#2B85EB] text-[9px] font-bold px-2 py-0.5 rounded-md border border-[#2B85EB]/20 uppercase tracking-widest flex items-center gap-1">
+                            <Star className="w-2.5 h-2.5" /> Popular
+                          </div>
+                        </div>
+                      )}
                       <div className="flex items-start justify-between mb-4">
                         <div className="w-10 h-10 bg-[#2B85EB]/10 rounded-xl border border-[#2B85EB]/20 flex items-center justify-center group-hover:scale-105 transition-transform">
                           <ListMusic className="w-5 h-5 text-[#2B85EB]" />
                         </div>
                         <div className="text-right pt-6 mt-1">
-                          <div className="text-[#F5F7FA] font-mono text-sm">R$ 39,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+                          <div className="text-[#F5F7FA] font-mono text-sm">
+                             R$ {prices.worship_100 > 0 ? prices.worship_100.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+                          </div>
                         </div>
                       </div>
                       <h4 className="text-[#F5F7FA] font-semibold text-base mb-1">Acervo Inicial Worship</h4>
@@ -882,9 +956,13 @@ export function Dashboard() {
                         <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> 100 músicas formatadas</li>
                         <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Implantação imediata</li>
                       </ul>
-                      <a href="mailto:suporte@millionsnest.com?subject=Comprar%20Acervo" className="w-full py-2.5 px-4 rounded-lg bg-[#2B85EB] text-white text-xs text-center font-semibold hover:bg-[#2B85EB]/90 transition-colors shadow-sm active:scale-95">
-                        Comprar Acervo
-                      </a>
+                      <button 
+                        onClick={() => handleAddonCheckout('musicscale_worship_100')}
+                        disabled={checkoutLoading}
+                        className="w-full py-2.5 px-4 rounded-lg bg-[#2B85EB] text-white text-xs text-center font-semibold hover:bg-[#2B85EB]/90 transition-colors shadow-sm active:scale-95 disabled:opacity-50"
+                      >
+                        {checkoutLoading ? "Processando..." : "Comprar Acervo"}
+                      </button>
                     </div>
 
                     {/* Music Pack 10 */}
@@ -894,7 +972,9 @@ export function Dashboard() {
                           <Headphones className="w-5 h-5 text-[#2B85EB]" />
                         </div>
                         <div className="text-right">
-                          <div className="text-[#F5F7FA] font-mono text-sm">R$ 24,90 <span className="text-[#A0A7B5] text-xs font-sans">/único</span></div>
+                          <div className="text-[#F5F7FA] font-mono text-sm">
+                             R$ {prices.music_pack_10 > 0 ? prices.music_pack_10.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+                          </div>
                         </div>
                       </div>
                       <h4 className="text-[#F5F7FA] font-semibold text-base mb-1">Music Pack +10</h4>
@@ -905,9 +985,13 @@ export function Dashboard() {
                         <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Até 10 novas adições</li>
                         <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Cifras e letras nativas</li>
                       </ul>
-                      <a href="mailto:suporte@millionsnest.com?subject=Comprar%20Music%20Pack" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-[#2B85EB]/10 hover:text-[#2B85EB] transition-colors">
-                        Comprar Pacote
-                      </a>
+                      <button 
+                        onClick={() => handleAddonCheckout('musicscale_music_pack_10')}
+                        disabled={checkoutLoading}
+                        className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-[#2B85EB]/10 hover:text-[#2B85EB] transition-colors disabled:opacity-50"
+                      >
+                        {checkoutLoading ? "Processando..." : "Comprar Pacote"}
+                      </button>
                     </div>
                   </div>
                 </div>
