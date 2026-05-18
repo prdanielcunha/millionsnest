@@ -59,7 +59,7 @@ let billingService: BillingService | null = null;
 function getBillingService(): BillingService {
   if (!billingService) {
     const isMock = process.env.STRIPE_SECRET_KEY === undefined;
-    billingService = new BillingService(getStripe(), isMock);
+    billingService = new BillingService(getStripe(), db, isMock);
   }
   return billingService;
 }
@@ -835,16 +835,35 @@ async function startServer() {
     }
   });
 
+  app.post('/api/internal/sync-stripe-products', async (req, res) => {
+    try {
+      const service = getBillingService();
+      const result = await service.syncStripeToFirestore();
+      res.json(result);
+    } catch (e: any) {
+      console.error('[Billing Sync] Fatal error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get('/api/v1/billing/products', async (req, res) => {
     try {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
+      res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
       const service = getBillingService();
       const result = await service.getProducts();
       return res.json(result);
     } catch (e: any) {
       console.error('[Billing Products] Fatal error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/v1/billing/debug', async (req, res) => {
+    try {
+      const service = getBillingService();
+      const result = await service.getDebugInfo();
+      res.json(result);
+    } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
   });

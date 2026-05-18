@@ -15,26 +15,23 @@ export interface NormalizedProduct {
   featured: boolean;
   recommended: boolean;
   metadata: Record<string, string>;
+  invalidConfiguration?: boolean;
 }
 
 export class BillingService {
   private stripe: Stripe;
+  private db: any;
   private cachedProducts: { plans: NormalizedProduct[], addons: NormalizedProduct[], timestamp: number } | null = null;
   private readonly CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
   private isMock: boolean;
 
-  constructor(stripeInstance: Stripe, isMock: boolean = false) {
+  constructor(stripeInstance: Stripe, db: any, isMock: boolean = false) {
     this.stripe = stripeInstance;
+    this.db = db;
     this.isMock = isMock;
   }
 
   async getProducts(): Promise<{ plans: NormalizedProduct[], addons: NormalizedProduct[] }> {
-    const now = Date.now();
-    if (this.cachedProducts && (now - this.cachedProducts.timestamp) < this.CACHE_TTL_MS) {
-      console.log('[BillingService] Serving products from local memory cache');
-      return { plans: this.cachedProducts.plans, addons: this.cachedProducts.addons };
-    }
-
     const plans: NormalizedProduct[] = [];
     const addons: NormalizedProduct[] = [];
 
@@ -49,9 +46,45 @@ export class BillingService {
       addons.push(this.createMockProduct('price_worship_mock', 'musicscale_worship_100', 'Acervo Inicial Worship', 39.90, 'one_time', 'content_pack', 'worship_100', 'musicscale'));
       addons.push(this.createMockProduct('price_music_mock', 'musicscale_music_pack_10', 'Music Pack +10', 14.90, 'one_time', 'addon', 'music_pack_10', 'musicscale'));
       
-      this.cachedProducts = { plans, addons, timestamp: now };
+      this.cachedProducts = { plans, addons, timestamp: Date.now() };
       return { plans, addons };
     }
+
+    try {
+      if (this.db) {
+        console.log('[BillingService] Fetching from Firestore catalogue...');
+        const snapshot = await this.db.collection('billing_products').where('active', '==', true).get();
+        if (!snapshot.empty) {
+          snapshot.forEach((doc: any) => {
+            const data = doc.data() as NormalizedProduct;
+            if (data.type === 'plan') plans.push(data);
+            else addons.push(data);
+          });
+          this.cachedProducts = { plans, addons, timestamp: Date.now() };
+          return { plans, addons };
+        } else {
+          console.log('[BillingService] Firestore empty. Using memory cache fallback if available.');
+        }
+      }
+    } catch (err: any) {
+      console.error('[BillingService] Firestore error:', err.message);
+    }
+
+    if (this.cachedProducts) {
+      console.log('[BillingService] Graceful degradation: serving stale memory cache');
+      return { plans: this.cachedProducts.plans, addons: this.cachedProducts.addons };
+    }
+
+    return { plans, addons };
+  }
+
+  async syncStripeToFirestore(): Promise<any> {
+    if (this.isMock) return { error: 'mock mode' };
+    if (!this.db) return { error: 'No db instance' };
+    
+    // Arrays required!
+    const plans: NormalizedProduct[] = [];
+    const addons: NormalizedProduct[] = [];
 
     try {
       console.log('[BillingService] Fetching prices from Stripe...');
@@ -76,72 +109,201 @@ export class BillingService {
         const product = price.product as Stripe.Product;
         if (!product || !product.active) return;
         
-        const metadata = product.metadata || {};
+        // Combine metadata from Product and Price (Price overrides Product)
+        const metadata = { ...product.metadata, ...price.metadata };
         
-        const type = metadata.type || (price.type === 'recurring' ? 'plan' : 'addon');
-        const app = metadata.app || 'musicscale';
-        // Assign lookup key from Stripe or fallback to environment variable mapping
-        const originalLookupKey = price.lookup_key || envIdToLookupKey[price.id] || null;
-        let feature = metadata.feature;
-        
-        if (!feature) {
-           if (originalLookupKey) {
-             const keyLower = originalLookupKey.toLowerCase();
-             if (keyLower.includes('setup')) feature = 'setup_premium';
-             else if (keyLower.includes('treinamento')) feature = 'training_express';
-             else if (keyLower.includes('acervo') || keyLower.includes('worship')) feature = 'worship_100';
-             else if (keyLower.includes('musicpack') || keyLower.includes('music_pack')) feature = 'music_pack_10';
-             else if (keyLower.includes('anual')) feature = 'pro_yearly';
-             else if (keyLower.includes('mensal')) feature = 'pro_monthly';
-             else feature = originalLookupKey.replace(/^(musicscale_|MS_)/i, '').toLowerCase();
-           } else {
-             feature = product.name.toLowerCase().replace(/ /g, '_');
-           }
+        const STRICT_MODE = process.env.BILLING_STRICT_MODE === 'true';
+        let invalidReason: string | null = null;
+        let invalidConfiguration = false;
+
+        // 1. Mandatory lookup_key check
+        const lookupKey = price.lookup_key || envIdToLookupKey[price.id] || null;
+        if (!lookupKey) {
+          invalidReason = 'Missing lookup_key';
+          invalidConfiguration = true;
+          if (STRICT_MODE) {
+            console.log(`[BillingService] Ignoring price ${price.id} - ${invalidReason}`);
+            return;
+          }
+        }
+
+        // 2. Mandatory metadata check
+        if (!metadata || !metadata.app || !metadata.type) {
+          if (!invalidReason) invalidReason = 'Missing required metadata (app, type)';
+          invalidConfiguration = true;
+          if (STRICT_MODE) {
+            console.log(`[BillingService] Ignoring price ${price.id} - ${invalidReason}`);
+            return;
+          }
         }
         
-        // Ensure consistent app-prefixed lookups if they don't already have one
-        const lookupKey = originalLookupKey ? 
-          (originalLookupKey.toLowerCase().startsWith('musicscale_') ? originalLookupKey : `musicscale_${feature}`) 
-          : null;
+        // If we are in transitional mode (STRICT_MODE=false) and reached here with invalidConfiguration:
+        // We log a warning but continue with a fallback configuration
+        if (invalidConfiguration) {
+          console.warn(`[BillingService] TRANSTIONAL FALLBACK for ${product.name} (Price: ${price.id}): ${invalidReason}`);
+        }
 
-        const tier = metadata.tier;
-        const featured = metadata.featured === 'true' || (lookupKey?.includes('yearly') || lookupKey?.includes('worship') || originalLookupKey?.toLowerCase().includes('anual'));
-        const recommended = metadata.recommended === 'true' || lookupKey?.includes('yearly') || originalLookupKey?.toLowerCase().includes('anual');
+        // Safe feature fallback based on known ENV Price IDs to strictly avoid name heuristics
+        let featureFallback = lookupKey || `fallback_feature_${price.id}`;
+        let finalLookupKey = lookupKey || `fallback_${price.id}`;
+        
+        if (invalidConfiguration) {
+           const envMonthly = process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
+           const envAnnual = process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
+           if (price.id === envMonthly) featureFallback = 'pro_monthly';
+           if (price.id === envAnnual) featureFallback = 'pro_yearly';
+           if (price.id === process.env.STRIPE_PRICE_SETUP_PREMIUM) featureFallback = 'setup_premium';
+           if (price.id === process.env.STRIPE_PRICE_TRAINING_EXPRESS) featureFallback = 'training_express';
+           if (price.id === process.env.STRIPE_PRICE_ACERVO_WORSHIP_100) featureFallback = 'worship_100';
+           if (price.id === process.env.STRIPE_PRICE_MUSIC_PACK_10) featureFallback = 'music_pack_10';
+           
+           // Ensure lookup key matches standard format so frontend doesn't break
+           if (featureFallback !== lookupKey && !featureFallback.startsWith('fallback')) {
+             finalLookupKey = `musicscale_${featureFallback}`;
+           }
+        }
+
+        const tier = metadata.tier || null;
+        const featured = metadata.featured === 'true';
+        const recommended = metadata.recommended === 'true';
         
         const item: NormalizedProduct = {
           id: price.id,
-          lookupKey: lookupKey,
-          app,
-          type,
+          lookupKey: finalLookupKey,
+          app: metadata.app || 'musicscale',
+          type: metadata.type || (price.type === 'recurring' ? 'plan' : 'addon'),
           tier,
-          name: product.name,
-          description: product.description,
+          name: product.name || 'Sem Nome',
+          description: product.description || null,
           price: (price.unit_amount || 0) / 100,
           currency: price.currency,
           interval: price.type === 'recurring' ? (price.recurring?.interval || 'month') : 'one_time',
-          feature,
+          feature: metadata.feature || featureFallback,
           featured,
           recommended,
-          metadata
+          metadata,
+          invalidConfiguration
         };
 
-        if (type === 'plan' || price.type === 'recurring') {
+        if (item.type === 'plan' || price.type === 'recurring') {
           plans.push(item);
         } else {
           addons.push(item);
         }
       });
       
-      this.cachedProducts = { plans, addons, timestamp: now };
-      console.log('[BillingService] Cache updated from Stripe');
-      return { plans, addons };
-    } catch (err: any) {
-      console.error('[BillingService] Error fetching from Stripe', err.message);
-      if (this.cachedProducts) {
-        console.log('[BillingService] Graceful degradation: serving stale cache due to Stripe error');
-        return { plans: this.cachedProducts.plans, addons: this.cachedProducts.addons };
+      const batch = this.db.batch();
+      const allItems = [...plans, ...addons];
+      const syncedIds: string[] = [];
+      const timestamp = Date.now();
+      
+      // Update or Set products
+      for (const item of allItems) {
+        const docRef = this.db.collection('billing_products').doc(item.lookupKey);
+        batch.set(docRef, {
+          ...item,
+          active: true,
+          visible: true,
+          lastStripeSync: timestamp,
+          stripePriceId: item.id, // For architectural mapping
+          stripeProductId: item.metadata?.product_id || '' 
+        });
+        syncedIds.push(item.lookupKey);
       }
-      throw err;
+      
+      // Optionally deactivate old elements could be done here (omitted for safety right now, or we can fetch existing and set active: false to non-synced)
+      const existingSnapshot = await this.db.collection('billing_products').get();
+      existingSnapshot.forEach((doc: any) => {
+         if (!syncedIds.includes(doc.id)) {
+           batch.update(doc.ref, { active: false });
+         }
+      });
+      
+      await batch.commit();
+      
+      this.cachedProducts = { plans, addons, timestamp: timestamp }; 
+      console.log(`[BillingService] Sync completed. Synced ${syncedIds.length} products to Firestore.`);
+      return { success: true, count: syncedIds.length, syncedIds };
+    } catch (err: any) {
+      console.error('[BillingService] Error syncing from Stripe:', err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async getDebugInfo(): Promise<any> {
+    if (this.isMock) {
+      return { environment: 'mock', message: 'No debug info for mock mode' };
+    }
+    
+    try {
+      const pricesResponse = await this.stripe.prices.list({
+        active: true,
+        expand: ['data.product'],
+        limit: 100
+      });
+
+      const envIdToLookupKey: Record<string, string> = {};
+      const envMonthly = process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
+      const envAnnual = process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
+      
+      if (envMonthly) envIdToLookupKey[envMonthly] = 'musicscale_pro_monthly';
+      if (envAnnual) envIdToLookupKey[envAnnual] = 'musicscale_pro_yearly';
+      if (process.env.STRIPE_PRICE_SETUP_PREMIUM) envIdToLookupKey[process.env.STRIPE_PRICE_SETUP_PREMIUM] = 'musicscale_setup_premium';
+      if (process.env.STRIPE_PRICE_TRAINING_EXPRESS) envIdToLookupKey[process.env.STRIPE_PRICE_TRAINING_EXPRESS] = 'musicscale_training_express';
+      if (process.env.STRIPE_PRICE_ACERVO_WORSHIP_100) envIdToLookupKey[process.env.STRIPE_PRICE_ACERVO_WORSHIP_100] = 'musicscale_worship_100';
+      if (process.env.STRIPE_PRICE_MUSIC_PACK_10) envIdToLookupKey[process.env.STRIPE_PRICE_MUSIC_PACK_10] = 'musicscale_music_pack_10';
+
+      const STRICT_MODE = process.env.BILLING_STRICT_MODE === 'true';
+
+      const log: any[] = [];
+      pricesResponse.data.forEach(price => {
+        const product = price.product as Stripe.Product;
+        if (!product || !product.active) return;
+        
+        const metadata = { ...product.metadata, ...price.metadata };
+        const explicitLookupKey = price.lookup_key;
+        const envLookupKey = envIdToLookupKey[price.id] || null;
+        const lookupKey = explicitLookupKey || envLookupKey;
+        
+        let status = 'Valid';
+        let ignored = false;
+        
+        if (!lookupKey) {
+           status = 'Missing lookup_key';
+           if (STRICT_MODE) ignored = true;
+        } else if (!metadata.app || !metadata.type) {
+           status = 'Missing required metadata (app, type)';
+           if (STRICT_MODE) ignored = true;
+        }
+
+        log.push({
+           priceId: price.id,
+           productId: product.id,
+           productName: product.name,
+           explicitLookupKey,
+           envLookupKey,
+           finalLookupKey: lookupKey,
+           productMetadata: product.metadata,
+           priceMetadata: price.metadata,
+           ignored,
+           status
+        });
+      });
+      
+      let firestoreItems: any[] = [];
+      if (this.db) {
+         try {
+            const snap = await this.db.collection('billing_products').get();
+            snap.forEach((doc: any) => firestoreItems.push(doc.data()));
+         } catch (e: any) {
+             console.error('[BillingService] Failed to read from firestore for DB debug info', e);
+         }
+      }
+      
+      return { STRICT_MODE, firestore_status: this.db ? 'connected' : 'not_configured', stripeItems: log, firestoreItems };
+
+    } catch (e: any) {
+       return { error: e.message };
     }
   }
 

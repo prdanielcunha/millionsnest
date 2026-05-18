@@ -20,7 +20,7 @@ export function Pricing() {
   });
 
   useEffect(() => {
-    fetch('/api/v1/billing/products?t=' + Date.now())
+    fetch('/api/v1/billing/products')
       .then(res => res.json())
       .then(data => {
          if (data.plans) setPlansData(data.plans);
@@ -29,18 +29,19 @@ export function Pricing() {
          setPrices(prev => {
            const newPrices = { ...prev };
            
-           // Extract plans
-           const monthlyPlan = data.plans?.find((p: any) => p.interval === 'month' && !p.lookupKey.toLowerCase().includes('teste'));
-           const annualPlan = data.plans?.find((p: any) => p.interval === 'year' && !p.lookupKey.toLowerCase().includes('teste'));
+           // Extract plans (strictly by lookupKey)
+           const monthlyPlan = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_monthly');
+           const annualPlan = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_yearly');
+           
            if (monthlyPlan) newPrices.monthly = monthlyPlan.price;
            if (annualPlan) newPrices.annual = annualPlan.price;
            
-           // Extract addons
+           // Extract addons (strictly by lookupKey)
            data.addons?.forEach((addon: any) => {
-             if (addon.feature === 'setup_premium') newPrices.setup_premium = addon.price;
-             if (addon.feature === 'training_express') newPrices.training_express = addon.price;
-             if (addon.feature === 'worship_100') newPrices.worship_100 = addon.price;
-             if (addon.feature === 'music_pack_10') newPrices.music_pack_10 = addon.price;
+             if (addon.lookupKey === 'musicscale_setup_premium') newPrices.setup_premium = addon.price;
+             if (addon.lookupKey === 'musicscale_training_express') newPrices.training_express = addon.price;
+             if (addon.lookupKey === 'musicscale_worship_100') newPrices.worship_100 = addon.price;
+             if (addon.lookupKey === 'musicscale_music_pack_10') newPrices.music_pack_10 = addon.price;
            });
            
            return newPrices;
