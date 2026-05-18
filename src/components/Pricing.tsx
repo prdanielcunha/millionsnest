@@ -26,23 +26,25 @@ export function Pricing() {
          if (data.plans) setPlansData(data.plans);
          if (data.addons) setAddonsData(data.addons);
          
-         const newPrices = { ...prices };
-         
-         // Extract plans
-         const monthlyPlan = data.plans?.find((p: any) => p.interval === 'month');
-         const annualPlan = data.plans?.find((p: any) => p.interval === 'year');
-         if (monthlyPlan) newPrices.monthly = monthlyPlan.price;
-         if (annualPlan) newPrices.annual = annualPlan.price;
-         
-         // Extract addons
-         data.addons?.forEach((addon: any) => {
-           if (addon.feature === 'setup_premium') newPrices.setup_premium = addon.price;
-           if (addon.feature === 'training_express') newPrices.training_express = addon.price;
-           if (addon.feature === 'worship_100') newPrices.worship_100 = addon.price;
-           if (addon.feature === 'music_pack_10') newPrices.music_pack_10 = addon.price;
+         setPrices(prev => {
+           const newPrices = { ...prev };
+           
+           // Extract plans
+           const monthlyPlan = data.plans?.find((p: any) => p.interval === 'month');
+           const annualPlan = data.plans?.find((p: any) => p.interval === 'year');
+           if (monthlyPlan) newPrices.monthly = monthlyPlan.price;
+           if (annualPlan) newPrices.annual = annualPlan.price;
+           
+           // Extract addons
+           data.addons?.forEach((addon: any) => {
+             if (addon.feature === 'setup_premium') newPrices.setup_premium = addon.price;
+             if (addon.feature === 'training_express') newPrices.training_express = addon.price;
+             if (addon.feature === 'worship_100') newPrices.worship_100 = addon.price;
+             if (addon.feature === 'music_pack_10') newPrices.music_pack_10 = addon.price;
+           });
+           
+           return newPrices;
          });
-         
-         setPrices(newPrices);
       })
       .catch(err => console.error(err));
   }, []);
