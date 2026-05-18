@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, LogOut, LayoutDashboard } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { cn } from '@/src/lib/utils';
-import { useAuth } from '@/src/contexts/AuthContext';
+import { cn } from '../lib/utils.js';
+import { useAuth } from '../contexts/AuthContext.js';
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);

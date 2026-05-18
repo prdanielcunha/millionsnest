@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { Music, LayoutGrid, Smartphone, Database } from "lucide-react";
 import { Link } from "react-router-dom";
-import { EscalasMockup } from "./EscalasMockup";
+import { EscalasMockup } from "./EscalasMockup.js";
 
 export function Flagship() {
   return (

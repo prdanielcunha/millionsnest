@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../contexts/AuthContext.js";
 import { Navigate } from "react-router-dom";
 import { 
   Music, ArrowRight, Settings, ExternalLink, ShieldCheck, 
   CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight, Building2,
   Star, Zap, Headphones, Video, ListMusic, Check
 } from "lucide-react";
-import { Navbar } from "../components/Navbar";
+import { Navbar } from "../components/Navbar.js";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db } from "../lib/firebase.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 

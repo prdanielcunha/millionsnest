@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { ArrowRight, ChevronRight, Play } from "lucide-react";
 import { Link } from "react-router-dom";
-import { DashboardMockup } from "./DashboardMockup";
+import { DashboardMockup } from "./DashboardMockup.js";
 
 export function Hero() {
   return (

@@ -4,15 +4,15 @@
  */
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Home } from './pages/Home';
-import { Terms } from './pages/Terms';
-import { Privacy } from './pages/Privacy';
-import { Refunds } from './pages/Refunds';
-import { Cancellation } from './pages/Cancellation';
-import { AuthProvider } from './contexts/AuthContext';
-import { Login } from './pages/Login';
+import { Home } from './pages/Home.js';
+import { Terms } from './pages/Terms.js';
+import { Privacy } from './pages/Privacy.js';
+import { Refunds } from './pages/Refunds.js';
+import { Cancellation } from './pages/Cancellation.js';
+import { AuthProvider } from './contexts/AuthContext.js';
+import { Login } from './pages/Login.js';
 
-import { Dashboard } from './pages/Dashboard';
+import { Dashboard } from './pages/Dashboard.js';
 
 export default function App() {
   return (

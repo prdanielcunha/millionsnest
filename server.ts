@@ -4,7 +4,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import path from 'path';
-import { BillingService } from './src/server/services/BillingService';
+import { BillingService } from './src/server/services/BillingService.js';
 
 dotenv.config();
 

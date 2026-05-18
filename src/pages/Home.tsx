@@ -1,14 +1,14 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Navbar } from "../components/Navbar";
-import { Hero } from "../components/Hero";
-import { SocialProof } from "../components/SocialProof";
-import { Problem } from "../components/Problem";
-import { Ecosystem } from "../components/Ecosystem";
-import { Flagship } from "../components/Flagship";
-import { Pricing } from "../components/Pricing";
-import { FAQ } from "../components/FAQ";
-import { Footer } from "../components/Footer";
+import { Navbar } from "../components/Navbar.js";
+import { Hero } from "../components/Hero.js";
+import { SocialProof } from "../components/SocialProof.js";
+import { Problem } from "../components/Problem.js";
+import { Ecosystem } from "../components/Ecosystem.js";
+import { Flagship } from "../components/Flagship.js";
+import { Pricing } from "../components/Pricing.js";
+import { FAQ } from "../components/FAQ.js";
+import { Footer } from "../components/Footer.js";
 
 export function Home() {
   const { hash } = useLocation();
