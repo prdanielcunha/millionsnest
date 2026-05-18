@@ -846,23 +846,67 @@ async function startServer() {
     }
   });
 
-  app.get('/api/v1/billing/products', async (req, res) => {
+  app.get('/api/v1/billing/products', async (req, res, next) => {
     try {
+      console.log(`[Billing API] Hit endpoint: ${req.url}`);
       res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      res.setHeader('Content-Type', 'application/json');
+      
+      console.log(`[Billing API] Getting BillingService...`);
       const service = getBillingService();
+      
+      console.log(`[Billing API] Calling getProducts()...`);
       const result = await service.getProducts();
-      return res.json(result);
+      
+      console.log(`[Billing API] Serialization and sending response...`);
+      const serialized = JSON.stringify(result);
+      return res.status(200).send(serialized);
     } catch (e: any) {
-      console.error('[Billing Products] Fatal error:', e);
-      res.status(500).json({ error: e.message });
+      console.error('[Billing API] CRASH:', e.message);
+      console.error(e.stack);
+      try {
+        const errPayload = JSON.stringify({
+          success: false,
+          error: e.message || 'Unknown error',
+          details: e.stack ? String(e.stack) : ''
+        });
+        return res.status(500).type('application/json').send(errPayload);
+      } catch (innerErr) {
+        return res.status(500).type('application/json').send('{"success":false,"error":"Fatal JSON JSON Error"}');
+      }
     }
   });
 
   app.get('/api/v1/billing/debug', async (req, res) => {
     try {
       const service = getBillingService();
+      
+      // Try a direct firestore read to validate connection
+      let firestoreStatus = 'unknown';
+      let docCount = 0;
+      if (db) {
+        try {
+          const testSnap = await db.collection('billing_products').limit(1).get();
+          firestoreStatus = 'connected - query successful';
+          const fullSnap = await db.collection('billing_products').get();
+          docCount = fullSnap.size;
+        } catch(fsError: any) {
+          firestoreStatus = `error: ${fsError.message}`;
+        }
+      } else {
+        firestoreStatus = 'No db instance initialized';
+      }
+
       const result = await service.getDebugInfo();
-      res.json(result);
+      res.json({
+         ...result,
+         firestore_diagnostic: {
+           status: firestoreStatus,
+           docCount,
+           projectId: process.env.FIREBASE_PROJECT_ID || 'not_set',
+           hasServiceAccount: !!process.env.FIREBASE_SERVICE_ACCOUNT_BASE64
+         }
+      });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
