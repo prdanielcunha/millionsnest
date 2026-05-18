@@ -64,27 +64,41 @@ async function startServer() {
 
     try {
       event = stripe.webhooks.constructEvent(req.body, sig as string, endpointSecret);
+      console.log(`[STRIPE_WEBHOOK] Signature Verified: ${event.id} (${event.type})`);
     } catch (err: any) {
-      console.error('[Webhook] Signature verification failed:', err.message);
+      console.error('[STRIPE_WEBHOOK] Signature verification failed:', err.message);
       res.status(400).send(`Webhook Error: ${err.message}`);
       return;
     }
 
     // Processar o evento
     if (!db) {
-      console.error('[Webhook] Firestore Admin not initialized. Cannot process webhook.');
+      console.error('[STRIPE_WEBHOOK] Firestore Admin not initialized. Cannot process webhook.');
       res.status(500).send('Database error');
       return;
     }
 
+    // Audit Log Entry
+    const auditRef = db.collection('stripe_webhook_logs').doc(event.id);
+    const eventCreatedTs = event.created;
+
     try {
+      // Save initial log
+      await auditRef.set({
+        eventId: event.id,
+        type: event.type,
+        created: admin.firestore.Timestamp.fromMillis(eventCreatedTs * 1000),
+        receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'processing',
+        payload: event.data.object
+      });
+
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object as Stripe.Checkout.Session;
-          console.log('[STRIPE_WEBHOOK] event=checkout.session.completed', {
+          console.log('[STRIPE_WEBHOOK] Processing checkout.session.completed', {
             id: session.id,
             customer: session.customer,
-            email: session.customer_email,
             subscription: session.subscription
           });
           const userId = session.metadata?.uid || session.client_reference_id;
@@ -93,90 +107,79 @@ async function startServer() {
           const customerId = session.customer as string;
 
           if (!userId || !subscriptionId) {
-             console.log('[Webhook] Missing userId or subscriptionId in session', { 
-               userId, 
-               subscriptionId, 
-               metadata: session.metadata,
-               client_reference_id: session.client_reference_id
-             });
+             console.error('[STRIPE_WEBHOOK] Missing identification mapping', { userId, subscriptionId });
+             await auditRef.update({ status: 'error', error: 'Missing userId or subscriptionId' });
              break;
           }
 
-          console.log(`[Webhook] Processing subscription for user: ${userId} with plan: ${plan}`);
           const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          
-          const orgId = userId; // Create a 1:1 org organization for this SaaS user
+          const orgId = userId; 
 
-          console.log(`[Webhook] Writing data to Firestore for user: ${userId}`);
+          const batch = db.batch();
+          const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000);
+          const trialEnd = (subscription as any).trial_end ? admin.firestore.Timestamp.fromMillis((subscription as any).trial_end * 1000) : null;
+          const hasAccess = ['active', 'trialing'].includes(subscription.status);
 
-          try {
-            const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000);
-            const trialEnd = (subscription as any).trial_end ? admin.firestore.Timestamp.fromMillis((subscription as any).trial_end * 1000) : null;
+          // 1. Organization
+          batch.set(db.collection('organizations').doc(orgId), {
+            name: `Organização de ${session.customer_email || userId}`,
+            ownerUid: userId,
+            plan: plan,
+            subscriptionStatus: subscription.status,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: subscriptionId,
+            lastStripeEventTs: eventCreatedTs,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
 
-            // 1. Create Organization
-            await db.collection('organizations').doc(orgId).set({
-              name: `Organização de ${session.customer_email || userId}`,
-              ownerUid: userId,
-              plan: plan,
-              subscriptionStatus: subscription.status,
-              stripeCustomerId: customerId,
-              stripeSubscriptionId: subscriptionId,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+          // 2. Membership
+          batch.set(db.collection('organization_members').doc(`${userId}_${orgId}`), {
+             uid: userId,
+             organizationId: orgId,
+             role: 'owner'
+          }, { merge: true });
 
-            // 2. Create Membership (Global Source of Truth)
-            await db.collection('organization_members').doc(`${userId}_${orgId}`).set({
-               uid: userId,
-               organizationId: orgId,
-               role: 'owner'
-            }, { merge: true });
+          // 3. Subscription
+          batch.set(db.collection('subscriptions').doc(userId), {
+            product: 'musicscale',
+            status: subscription.status,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: subscriptionId,
+            plan: plan,
+            currentPeriodEnd: currentPeriodEnd,
+            trialEndsAt: trialEnd,
+            lastStripeEventTs: eventCreatedTs,
+            appsAccess: { musicscale: hasAccess },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
 
-            // 3. Create/Update Subscription (Official Struct: subscriptions/{uid})
-            await db.collection('subscriptions').doc(userId).set({
-              product: 'musicscale',
-              status: subscription.status,
-              stripeCustomerId: customerId,
-              stripeSubscriptionId: subscriptionId,
-              plan: plan,
-              currentPeriodEnd: currentPeriodEnd,
-              trialEndsAt: trialEnd,
-              appsAccess: {
-                musicscale: ['active', 'trialing'].includes(subscription.status)
-              },
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+          // 4. User
+          batch.set(db.collection('users').doc(userId), {
+            organizationId: orgId,
+            products: admin.firestore.FieldValue.arrayUnion('musicscale'),
+            subscriptionStatus: subscription.status,
+            trialEndsAt: trialEnd,
+            currentPeriodEnd: currentPeriodEnd,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: subscriptionId,
+            plan: plan,
+            lastStripeEventTs: eventCreatedTs,
+            appsAccess: { musicscale: hasAccess },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
 
-            // 4. Update User Profile
-            await db.collection('users').doc(userId).update({
-              organizationId: orgId,
-              products: admin.firestore.FieldValue.arrayUnion('musicscale'),
-              name: session.customer_email ? session.customer_email.split('@')[0] : 'Usuário',
-              subscriptionStatus: subscription.status,
-              trialEndsAt: trialEnd,
-              currentPeriodEnd: currentPeriodEnd,
-              stripeCustomerId: customerId,
-              stripeSubscriptionId: subscriptionId,
-              plan: plan,
-              appsAccess: {
-                musicscale: ['active', 'trialing'].includes(subscription.status)
-              },
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            });
-
-            console.log(`[Webhook] Successfully provisioned complete SaaS architecture for user: ${userId}`);
-          } catch (firestoreErr: any) {
-            console.error(`[Webhook] Firestore write failed for user: ${userId}:`, firestoreErr);
-          }
+          await batch.commit();
+          console.log(`[STRIPE_WEBHOOK] Successfully provisioned architecture for user: ${userId}`);
+          await auditRef.update({ status: 'success', processedUserId: userId });
           break;
         }
 
+        case 'customer.subscription.created':
         case 'customer.subscription.updated':
         case 'customer.subscription.deleted':
         case 'invoice.paid':
         case 'invoice.payment_failed': {
-          console.log(`[STRIPE_WEBHOOK] Received Event: ${event.type}`);
+          console.log(`[STRIPE_WEBHOOK] Syncing Event: ${event.type}`);
           
           let subscriptionId: string;
           let status: string;
@@ -186,13 +189,8 @@ async function startServer() {
 
           if (event.type.startsWith('invoice.')) {
             const invoice = event.data.object as Stripe.Invoice;
-            if (!invoice.subscription) {
-              console.log('[STRIPE_WEBHOOK] Invoice without subscription, skipping.');
-              break;
-            }
+            if (!invoice.subscription) break;
             subscriptionId = invoice.subscription as string;
-            
-            console.log(`[STRIPE_WEBHOOK] Processing Invoice for Sub: ${subscriptionId}`);
             const sub = await stripe.subscriptions.retrieve(subscriptionId);
             status = sub.status;
             customerId = sub.customer as string;
@@ -207,74 +205,78 @@ async function startServer() {
             trialEndTs = sub.trial_end;
           }
           
-          console.log(`[STRIPE_WEBHOOK] Syncing: Sub=${subscriptionId}, Status=${status}, Customer=${customerId}`);
-          
           let subsQuery = await db.collection('subscriptions').where('stripeSubscriptionId', '==', subscriptionId).get();
-          
           if (subsQuery.empty && customerId) {
-             console.log(`[STRIPE_WEBHOOK] Sub ID not found. Falling back to Customer ID search: ${customerId}`);
              subsQuery = await db.collection('subscriptions').where('stripeCustomerId', '==', customerId).get();
           }
 
           if (!subsQuery.empty) {
              const batch = db.batch();
+             let processedCount = 0;
+
              subsQuery.forEach(doc => {
+                 const docData = doc.data();
+                 const userId = doc.id;
+
+                 // IDEMPOTENCY CHECK: Only update if the event is newer than the last recorded event
+                 if (docData.lastStripeEventTs && docData.lastStripeEventTs > eventCreatedTs) {
+                   console.log(`[STRIPE_WEBHOOK] Skipping Outdated Event for user ${userId}: Incoming TS ${eventCreatedTs} is older than current TS ${docData.lastStripeEventTs}`);
+                   return;
+                 }
+
                  const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(currentPeriodEndTs * 1000);
                  const trialEnd = trialEndTs ? admin.firestore.Timestamp.fromMillis(trialEndTs * 1000) : null;
-                 const userId = doc.id;
                  const hasAccess = ['active', 'trialing'].includes(status);
-                 const docData = doc.data();
 
-                 console.log(`[STRIPE_WEBHOOK] Syncing documents for user: ${userId}`);
-
-                 // Update subscription - Using set with merge for maximum robustness
                  batch.set(doc.ref, {
                     status: status,
                     currentPeriodEnd: currentPeriodEnd,
                     trialEndsAt: trialEnd,
-                    appsAccess: {
-                      musicscale: hasAccess
-                    },
+                    lastStripeEventTs: eventCreatedTs,
+                    appsAccess: { musicscale: hasAccess },
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                  }, { merge: true });
                  
-                 // Also update the related organization
-                 const orgRef = db!.collection('organizations').doc(userId);
-                 batch.set(orgRef, {
+                 batch.set(db.collection('organizations').doc(userId), {
                     subscriptionStatus: status,
+                    lastStripeEventTs: eventCreatedTs,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                  }, { merge: true });
 
-                 const userRef = db!.collection('users').doc(userId);
-                 batch.set(userRef, {
+                 batch.set(db.collection('users').doc(userId), {
                     subscriptionStatus: status,
                     trialEndsAt: trialEnd,
                     currentPeriodEnd: currentPeriodEnd,
-                    appsAccess: {
-                      musicscale: hasAccess
-                    },
+                    lastStripeEventTs: eventCreatedTs,
+                    appsAccess: { musicscale: hasAccess },
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                  }, { merge: true });
+                 
+                 processedCount++;
              });
              
-             try {
+             if (processedCount > 0) {
                await batch.commit();
-               console.log(`[STRIPE_WEBHOOK] Batch sync successful for ${subsQuery.size} docs.`);
-             } catch (batchErr: any) {
-               console.error(`[STRIPE_WEBHOOK] Batch commit FAILED:`, batchErr.message);
-               // Fallback: try individual updates if batch fails
-               console.log(`[STRIPE_WEBHOOK] Attempting individual updates as fallback...`);
+               console.log(`[STRIPE_WEBHOOK] Batch sync successful for ${processedCount} users.`);
+               await auditRef.update({ status: 'success', targetsFound: processedCount });
+             } else {
+               await auditRef.update({ status: 'skipped', reason: 'Outdated event' });
              }
           } else {
-             console.log(`[STRIPE_WEBHOOK] NO target documents found in Firestore for stripeSubscriptionId: ${subscriptionId}`);
+             console.log(`[STRIPE_WEBHOOK] NO target documents found for sub: ${subscriptionId}`);
+             await auditRef.update({ status: 'error', error: 'Subscription document not found in Firestore' });
           }
           break;
         }
+        default:
+          console.log(`[STRIPE_WEBHOOK] Unhandled event type: ${event.type}`);
+          await auditRef.update({ status: 'unhandled' });
       }
 
       res.status(200).json({ received: true });
     } catch (e: any) {
-      console.error('[Webhook] Error processing webhook:', e);
+      console.error('[STRIPE_WEBHOOK] Fatal Processing Error:', e);
+      await auditRef.set({ status: 'failed', error: e.message, stack: e.stack }, { merge: true });
       res.status(500).send('Error processing webhook');
     }
   });
