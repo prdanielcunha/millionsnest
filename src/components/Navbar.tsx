@@ -37,7 +37,7 @@ export function Navbar() {
           <a href="/#musicscale" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">MusicScale</a>
           <a href="/#funcionalidades" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">Funcionalidades</a>
           <a href="/#ecossistema" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">Ecossistema</a>
-          <a href="/#precos" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">Preços</a>
+          <a href="/#precos" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">Valores</a>
         </nav>
 
         {/* Actions */}

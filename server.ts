@@ -80,8 +80,13 @@ async function startServer() {
     try {
       switch (event.type) {
         case 'checkout.session.completed': {
-          console.log('[Webhook] Received checkout.session.completed');
           const session = event.data.object as Stripe.Checkout.Session;
+          console.log('[STRIPE_WEBHOOK] event=checkout.session.completed', {
+            id: session.id,
+            customer: session.customer,
+            email: session.customer_email,
+            subscription: session.subscription
+          });
           const userId = session.metadata?.uid || session.client_reference_id;
           const plan = session.metadata?.plan || 'monthly';
           const subscriptionId = session.subscription as string;
@@ -114,7 +119,10 @@ async function startServer() {
               ownerUid: userId,
               plan: plan,
               subscriptionStatus: subscription.status,
-              createdAt: admin.firestore.FieldValue.serverTimestamp()
+              stripeCustomerId: customerId,
+              stripeSubscriptionId: subscriptionId,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
 
             // 2. Create Membership (Global Source of Truth)
@@ -165,57 +173,100 @@ async function startServer() {
         }
 
         case 'customer.subscription.updated':
-        case 'customer.subscription.deleted': {
-          console.log(`[Webhook] Received ${event.type}`);
-          const subscription = event.data.object as any;
-          const subscriptionId = subscription.id;
+        case 'customer.subscription.deleted':
+        case 'invoice.paid':
+        case 'invoice.payment_failed': {
+          console.log(`[STRIPE_WEBHOOK] Received Event: ${event.type}`);
           
-          console.log(`[Webhook] Updating subscription status for Stripe sub: ${subscriptionId} to ${subscription.status}`);
+          let subscriptionId: string;
+          let status: string;
+          let customerId: string;
+          let currentPeriodEndTs: number;
+          let trialEndTs: number | null;
+
+          if (event.type.startsWith('invoice.')) {
+            const invoice = event.data.object as Stripe.Invoice;
+            if (!invoice.subscription) {
+              console.log('[STRIPE_WEBHOOK] Invoice without subscription, skipping.');
+              break;
+            }
+            subscriptionId = invoice.subscription as string;
+            
+            console.log(`[STRIPE_WEBHOOK] Processing Invoice for Sub: ${subscriptionId}`);
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            status = sub.status;
+            customerId = sub.customer as string;
+            currentPeriodEndTs = sub.current_period_end;
+            trialEndTs = sub.trial_end;
+          } else {
+            const sub = event.data.object as Stripe.Subscription;
+            subscriptionId = sub.id;
+            status = sub.status;
+            customerId = sub.customer as string;
+            currentPeriodEndTs = sub.current_period_end;
+            trialEndTs = sub.trial_end;
+          }
           
-          // Query to find the matching subscription document by stripe ID
-          const subsQuery = await db.collection('subscriptions').where('stripeSubscriptionId', '==', subscriptionId).get();
+          console.log(`[STRIPE_WEBHOOK] Syncing: Sub=${subscriptionId}, Status=${status}, Customer=${customerId}`);
           
+          let subsQuery = await db.collection('subscriptions').where('stripeSubscriptionId', '==', subscriptionId).get();
+          
+          if (subsQuery.empty && customerId) {
+             console.log(`[STRIPE_WEBHOOK] Sub ID not found. Falling back to Customer ID search: ${customerId}`);
+             subsQuery = await db.collection('subscriptions').where('stripeCustomerId', '==', customerId).get();
+          }
+
           if (!subsQuery.empty) {
              const batch = db.batch();
              subsQuery.forEach(doc => {
-                 const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(subscription.current_period_end * 1000);
-                 const trialEnd = subscription.trial_end ? admin.firestore.Timestamp.fromMillis(subscription.trial_end * 1000) : null;
+                 const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(currentPeriodEndTs * 1000);
+                 const trialEnd = trialEndTs ? admin.firestore.Timestamp.fromMillis(trialEndTs * 1000) : null;
                  const userId = doc.id;
-                 const hasAccess = ['active', 'trialing'].includes(subscription.status);
+                 const hasAccess = ['active', 'trialing'].includes(status);
+                 const docData = doc.data();
 
-                 // Update subscription
-                 batch.update(doc.ref, {
-                    status: subscription.status,
+                 console.log(`[STRIPE_WEBHOOK] Syncing documents for user: ${userId}`);
+
+                 // Update subscription - Using set with merge for maximum robustness
+                 batch.set(doc.ref, {
+                    status: status,
                     currentPeriodEnd: currentPeriodEnd,
                     trialEndsAt: trialEnd,
                     appsAccess: {
                       musicscale: hasAccess
                     },
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                 });
+                 }, { merge: true });
                  
-                 // Also update the related organization status! (Assuming orgId == userId because we set orgId = userId in checkout)
+                 // Also update the related organization
                  const orgRef = db!.collection('organizations').doc(userId);
-                 batch.update(orgRef, {
-                    subscriptionStatus: subscription.status,
+                 batch.set(orgRef, {
+                    subscriptionStatus: status,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                 });
+                 }, { merge: true });
 
                  const userRef = db!.collection('users').doc(userId);
-                 batch.update(userRef, {
-                    subscriptionStatus: subscription.status,
+                 batch.set(userRef, {
+                    subscriptionStatus: status,
                     trialEndsAt: trialEnd,
                     currentPeriodEnd: currentPeriodEnd,
                     appsAccess: {
                       musicscale: hasAccess
                     },
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                 });
+                 }, { merge: true });
              });
-             await batch.commit();
-             console.log(`[Webhook] Successfully updated ${subsQuery.size} subscription document(s).`);
+             
+             try {
+               await batch.commit();
+               console.log(`[STRIPE_WEBHOOK] Batch sync successful for ${subsQuery.size} docs.`);
+             } catch (batchErr: any) {
+               console.error(`[STRIPE_WEBHOOK] Batch commit FAILED:`, batchErr.message);
+               // Fallback: try individual updates if batch fails
+               console.log(`[STRIPE_WEBHOOK] Attempting individual updates as fallback...`);
+             }
           } else {
-             console.log(`[Webhook] No subscription found in Firestore for stripeSubscriptionId: ${subscriptionId}`);
+             console.log(`[STRIPE_WEBHOOK] NO target documents found in Firestore for stripeSubscriptionId: ${subscriptionId}`);
           }
           break;
         }
@@ -231,50 +282,265 @@ async function startServer() {
   // Outras rotas da API usam JSON
   app.use(express.json());
 
-  // Novo endpoint de acesso
+  // Novo endpoint de acesso robusto com suporte a Multi-Org
   app.get('/api/access', async (req, res) => {
     try {
-      if (!db) {
-        return res.status(500).json({ error: 'Database not initialized' });
-      }
+      if (!db) return res.status(500).json({ error: 'Database not initialized' });
 
       const uid = req.query.uid as string;
-      if (!uid) {
-        return res.status(400).json({ error: 'uid parameter is required' });
+      if (!uid) return res.status(400).json({ error: 'uid parameter is required' });
+
+      console.log(`[API Access] Checking access for UID: ${uid}`);
+
+      // 1. Direct subscription check (Personal/Legacy)
+      const subDoc = await db.collection('subscriptions').doc(uid).get();
+      let hasAccess = false;
+      let status = "none";
+      let plan = "none";
+      let trialEndsAt = null;
+      let currentPeriodEnd = null;
+
+      if (subDoc.exists) {
+        const data = subDoc.data()!;
+        status = data.status;
+        plan = data.plan;
+        hasAccess = ['active', 'trialing'].includes(status);
+        trialEndsAt = data.trialEndsAt ? new Date(data.trialEndsAt.seconds * 1000).toISOString() : null;
+        currentPeriodEnd = data.currentPeriodEnd ? new Date(data.currentPeriodEnd.seconds * 1000).toISOString() : null;
       }
 
-      const subDoc = await db.collection('subscriptions').doc(uid).get();
-      if (!subDoc.exists) {
-        return res.json({
-          apps: {
-            musicscale: {
-              access: false,
-              status: "none"
+      // 2. Multi-Org check if not already granted
+      if (!hasAccess) {
+        const memberships = await db.collection('organization_members').where('uid', '==', uid).get();
+        if (!memberships.empty) {
+          for (const memberDoc of memberships.docs) {
+            const orgId = memberDoc.data().organizationId;
+            const orgDoc = await db.collection('organizations').doc(orgId).get();
+            if (orgDoc.exists && ['active', 'trialing'].includes(orgDoc.data()?.subscriptionStatus)) {
+              hasAccess = true;
+              status = orgDoc.data()?.subscriptionStatus;
+              console.log(`[API Access] Access granted via Org: ${orgId}`);
+              break;
             }
           }
-        });
+        }
       }
-
-      const subData = subDoc.data()!;
-      const isTrialing = subData.status === 'trialing';
-      const isActive = subData.status === 'active';
-      const access = isTrialing || isActive;
 
       return res.json({
         apps: {
           musicscale: {
-            access,
-            status: subData.status,
-            plan: subData.plan,
-            trialEndsAt: subData.trialEndsAt ? new Date(subData.trialEndsAt.seconds * 1000).toISOString() : null,
-            currentPeriodEnd: subData.currentPeriodEnd ? new Date(subData.currentPeriodEnd.seconds * 1000).toISOString() : null,
+            access: hasAccess,
+            status: status,
+            plan: plan,
+            trialEndsAt: trialEndsAt,
+            currentPeriodEnd: currentPeriodEnd,
           }
         }
       });
-
     } catch (err: any) {
       console.error('[API Access]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  // Forçar sincronização com Stripe
+  app.post('/api/stripe/sync', async (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId || !db) return res.status(400).json({ error: 'Missing uid or db' });
+
+      console.log(`[Sync] Request for user: ${userId}`);
+      const subDoc = await db.collection('subscriptions').doc(userId).get();
+      if (!subDoc.exists) return res.status(404).json({ error: 'No local subscription found' });
+
+      const customerId = subDoc.data()?.stripeCustomerId;
+      if (!customerId) return res.status(404).json({ error: 'Stripe customer ID not found in profile' });
+
+      // Search active subscriptions for this customer
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        limit: 1,
+        status: 'all'
+      });
+
+      if (subscriptions.data.length === 0) {
+        return res.json({ status: 'no_stripe_subscription', message: 'Nenhuma assinatura encontrada no Stripe.' });
+      }
+
+      const sub = subscriptions.data[0];
+      const hasAccess = ['active', 'trialing'].includes(sub.status);
+      const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(sub.current_period_end * 1000);
+      const trialEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
+
+      console.log(`[Sync] Updated from Stripe: ${sub.status}`);
+
+      const batch = db.batch();
+      batch.update(db.collection('subscriptions').doc(userId), {
+        status: sub.status,
+        currentPeriodEnd: currentPeriodEnd,
+        trialEndsAt: trialEnd,
+        appsAccess: { musicscale: hasAccess },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      batch.update(db.collection('organizations').doc(userId), {
+        subscriptionStatus: sub.status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      batch.update(db.collection('users').doc(userId), {
+        subscriptionStatus: sub.status,
+        trialEndsAt: trialEnd,
+        currentPeriodEnd: currentPeriodEnd,
+        appsAccess: { musicscale: hasAccess },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await batch.commit();
+
+      // Additional logic: Selection of active org
+      if (hasAccess) {
+        await db.collection('users').doc(userId).update({
+          organizationId: userId, // Assuming default org is userId for single-user SaaS
+          activeOrganizationId: userId
+        });
+      }
+
+      return res.json({ status: 'synced', stripeStatus: sub.status, hasAccess });
+
+    } catch (err: any) {
+      console.error('[Sync Error]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin Repair Tool
+  app.get('/api/admin/repair/:email', async (req, res) => {
+    try {
+      const { email } = req.params;
+      if (!db || !email) return res.status(400).send('Missing params');
+
+      console.log(`[REPAIR] Locating user for email: ${email}`);
+      const customers = await stripe.customers.list({ email, limit: 1 });
+      if (customers.data.length === 0) return res.status(404).send('Customer not found in Stripe');
+
+      const customer = customers.data[0];
+      const subs = await stripe.subscriptions.list({ customer: customer.id, limit: 1, status: 'all' });
+      
+      const usersQuery = await db.collection('users').where('email', '==', email).limit(1).get();
+      let userId = usersQuery.empty ? null : usersQuery.docs[0].id;
+
+      if (!userId && subs.data.length > 0 && subs.data[0].metadata?.uid) {
+         userId = subs.data[0].metadata.uid;
+      }
+
+      if (!userId) return res.status(404).send('User ID not found in Firestore or Stripe metadata. Please log in once.');
+
+      let stripeStatus = 'no_subscription';
+      if (subs.data.length > 0) {
+        const s = subs.data[0];
+        stripeStatus = s.status;
+        const hasAccess = ['active', 'trialing'].includes(s.status);
+        const cpEnd = admin.firestore.Timestamp.fromMillis(s.current_period_end * 1000);
+        const tEnd = s.trial_end ? admin.firestore.Timestamp.fromMillis(s.trial_end * 1000) : null;
+
+        const batch = db.batch();
+        const subRef = db.collection('subscriptions').doc(userId);
+        batch.set(subRef, {
+            status: s.status,
+            stripeCustomerId: customer.id,
+            stripeSubscriptionId: s.id,
+            currentPeriodEnd: cpEnd,
+            trialEndsAt: tEnd,
+            plan: s.metadata?.plan || 'monthly',
+            appsAccess: { musicscale: hasAccess },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        // Update organization
+        batch.set(db.collection('organizations').doc(userId), {
+            subscriptionStatus: s.status,
+            stripeCustomerId: customer.id,
+            stripeSubscriptionId: s.id,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        // Update user
+        batch.update(db.collection('users').doc(userId), {
+            subscriptionStatus: s.status,
+            stripeCustomerId: customer.id,
+            stripeSubscriptionId: s.id,
+            trialEndsAt: tEnd,
+            currentPeriodEnd: cpEnd,
+            appsAccess: { musicscale: hasAccess },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        await batch.commit();
+        console.log(`[REPAIR] User ${userId} successfully synchronized with Stripe status: ${s.status}`);
+      }
+
+      return res.json({
+        success: true,
+        email,
+        userId,
+        customerId: customer.id,
+        stripeStatus,
+        repaired: true
+      });
+
+    } catch (err: any) {
+      console.error('[Repair Error]', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Debug Endpoint
+  app.get('/api/debug/subscription-status', async (req, res) => {
+    try {
+      const email = req.query.email as string;
+      if (!db || !email) return res.status(400).json({ error: 'Missing email' });
+
+      console.log(`[DEBUG] Investigating status for ${email}`);
+      
+      const customers = await stripe.customers.list({ email, limit: 1 });
+      if (customers.data.length === 0) return res.json({ error: 'Customer not found in Stripe' });
+
+      const customer = customers.data[0];
+      const subs = await stripe.subscriptions.list({ customer: customer.id, limit: 10, status: 'all' });
+      
+      const userSnap = await db.collection('users').where('email', '==', email).get();
+      const userData = userSnap.empty ? null : { id: userSnap.docs[0].id, ...userSnap.docs[0].data() };
+      
+      let subData = null;
+      let orgData = null;
+      if (userData) {
+        const sDoc = await db.collection('subscriptions').doc(userData.id).get();
+        subData = sDoc.exists ? sDoc.data() : null;
+        
+        const oDoc = await db.collection('organizations').doc(userData.id).get();
+        orgData = oDoc.exists ? oDoc.data() : null;
+      }
+
+      return res.json({
+        stripe: {
+          customerId: customer.id,
+          subscriptions: subs.data.map(s => ({
+            id: s.id,
+            status: s.status,
+            current_period_end: new Date(s.current_period_end * 1000).toISOString(),
+            trial_end: s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null,
+            metadata: s.metadata
+          }))
+        },
+        firestore: {
+          user: userData,
+          subscription: subData,
+          organization: orgData
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

@@ -21,15 +21,41 @@ export function Dashboard() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [prices, setPrices] = useState({ monthly: 19.90, annual: 191.04 });
 
-  const fetchSubscriptionAndOrg = async () => {
+  const fetchSubscriptionAndOrg = async (forceSync = false) => {
     if (!user) return;
     try {
       console.log("[Dashboard] Fetching subscription and org for:", user.uid);
+      
+      if (forceSync) {
+        setLoadingSub(true);
+        console.log("[Dashboard] Initializing force-sync with Stripe...");
+        await fetch('/api/stripe/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.uid })
+        });
+      }
+
       const subRef = doc(db, "subscriptions", user.uid);
       const subSnap = await getDoc(subRef);
       
       if (subSnap.exists()) {
-         setSubscription(subSnap.data());
+         const data = subSnap.data();
+         setSubscription(data);
+         // Se estiver trialing, vamos tentar um sync silencioso em background
+         if (data.status === 'trialing' && !forceSync) {
+           console.log("[Dashboard] Status is trialing, checking Stripe status in background...");
+           fetch('/api/stripe/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: user.uid })
+           }).then(r => r.json()).then(res => {
+              if (res.stripeStatus === 'active') {
+                console.log("[Dashboard] Stripe confirmed ACTIVE status. Refreshing data.");
+                fetchSubscriptionAndOrg(false);
+              }
+           }).catch(err => console.error("[Dashboard] Background sync error:", err));
+         }
       } else {
          setSubscription(null);
       }
@@ -61,7 +87,7 @@ export function Dashboard() {
       window.history.replaceState({}, document.title, window.location.pathname);
       console.log('Returned from Stripe session:', sessionId);
       setLoadingSub(true);
-      fetchSubscriptionAndOrg();
+      fetchSubscriptionAndOrg(true); // Forçar sync total ao voltar do Stripe
     }
   }, [user]);
 
@@ -152,7 +178,7 @@ export function Dashboard() {
             onClick={() => setActiveTab("billing")}
             className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
           >
-            Plano e Assinatura
+            Valores e Assinatura
           </button>
           <button 
             onClick={() => setActiveTab("account")}
@@ -552,7 +578,22 @@ export function Dashboard() {
                       Faturamento e ciclo de vida gerenciados de forma segura pelo Stripe.
                     </p>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex justify-center mt-2">
+                       <button 
+                         onClick={() => fetchSubscriptionAndOrg(true)}
+                         disabled={loadingSub}
+                         className="text-[10px] text-[#A0A7B5] hover:text-[#F5F7FA] transition-colors flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10"
+                       >
+                         {loadingSub ? (
+                           <div className="w-3 h-3 border-2 border-white/20 border-t-[#2B85EB] rounded-full animate-spin" />
+                         ) : (
+                           <Clock className="w-3 h-3" />
+                         )}
+                         Sincronizar com Stripe Agora
+                       </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                       <button 
                         onClick={async () => {
                           try {
