@@ -10,31 +10,54 @@ dotenv.config();
 
 // Configurar Firebase Admin
 let db: admin.firestore.Firestore | null = null;
-try {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
-    const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'));
-    if (!admin.apps.length) {
+function getDb() {
+  if (db) return db;
+  try {
+    console.log('[BOOTSTRAP] Checking Firebase environment variables...');
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    const saBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+    
+    console.log(`[BOOTSTRAP] FIREBASE_PROJECT_ID exists: ${!!projectId}`);
+    console.log(`[BOOTSTRAP] FIREBASE_CLIENT_EMAIL exists: ${!!clientEmail}`);
+    console.log(`[BOOTSTRAP] FIREBASE_PRIVATE_KEY exists: ${!!privateKey}`);
+    console.log(`[BOOTSTRAP] FIREBASE_SERVICE_ACCOUNT_BASE64 exists: ${!!saBase64}`);
+
+    if (saBase64 && !admin.apps.length) {
+      const serviceAccount = JSON.parse(Buffer.from(saBase64, 'base64').toString('utf8'));
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
       });
-      console.log('[Firebase Admin] Initialize via FIREBASE_SERVICE_ACCOUNT_BASE64: SUCCESS');
+      console.log('[Firebase Admin] Initialize via base64: SUCCESS');
+    } else if (projectId && clientEmail && privateKey && !admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: projectId,
+          clientEmail: clientEmail,
+          privateKey: privateKey.replace(/\\n/g, '\n'),
+        })
+      });
+      console.log('[Firebase Admin] Initialize via explicit cert config: SUCCESS');
+    } else if (projectId && !admin.apps.length) {
+      console.log('[Firebase Admin] Trying ADC with Project ID:', projectId);
+      admin.initializeApp({
+        projectId: projectId,
+      });
+      console.log('[Firebase Admin] Initialize via FIREBASE_PROJECT_ID: SUCCESS');
+    } else if (!admin.apps.length) {
+      console.warn('[Firebase Admin] No valid Firebase credentials found in environment.');
     }
-  } else if (process.env.FIREBASE_PROJECT_ID && !admin.apps.length) {
-    console.log('[Firebase Admin] Trying ADC with Project ID:', process.env.FIREBASE_PROJECT_ID);
-    admin.initializeApp({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-    });
-    console.log('[Firebase Admin] Initialize via FIREBASE_PROJECT_ID: SUCCESS');
-  } else if (!admin.apps.length) {
-    console.warn('[Firebase Admin] Nenhum FIREBASE_SERVICE_ACCOUNT_BASE64 ou FIREBASE_PROJECT_ID encontrado no ambiente.');
-  }
 
-  if (admin.apps.length > 0) {
-    db = admin.firestore();
-    console.log('[Firebase Admin] Firestore provider initialized successfully.');
+    if (admin.apps.length > 0) {
+      db = admin.firestore();
+      console.log('[Firebase Admin] Firestore provider initialized successfully.');
+    }
+  } catch (error: any) {
+    console.error('[Firebase Admin] Init CRASH:', error.message);
+    if (error.stack) console.error(error.stack);
   }
-} catch (error) {
-  console.error('[Firebase Admin] Init Error:', error);
+  return db;
 }
 
 // Centralizer for Stripe access to avoid environment mismatch and provide better logging
@@ -59,16 +82,21 @@ let billingService: BillingService | null = null;
 function getBillingService(): BillingService {
   if (!billingService) {
     const isMock = process.env.STRIPE_SECRET_KEY === undefined;
-    billingService = new BillingService(getStripe(), db, isMock);
+    billingService = new BillingService(getStripe(), getDb(), isMock);
   }
   return billingService;
 }
 
 async function startServer() {
-  const app = express();
-  const PORT = 3000;
+  try {
+    console.log('[SERVER] Bootstrapping...');
+    // Initialize DB to ensure we print the logs and catch errors early
+    getDb();
+    
+    const app = express();
+    const PORT = 3000;
 
-  app.use(cors());
+    app.use(cors());
 
   // Webhook Stripe tem que usar express.raw
   app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -201,8 +229,8 @@ async function startServer() {
           });
           const orgId = userId; 
 
-          if (subscription.discount) {
-             const discount = subscription.discount as any;
+          if (subscription.discounts && subscription.discounts.length > 0) {
+             const discount = subscription.discounts[0] as any;
              console.log('[STRIPE_WEBHOOK] 🏷️ Coupon applied in Checkout!', {
                coupon: discount.coupon?.id,
                promotion_code: discount.promotion_code?.code || 'N/A',
@@ -305,7 +333,7 @@ async function startServer() {
           let promotionCode = null;
 
           if (event.type.startsWith('invoice.')) {
-            const invoice = event.data.object as Stripe.Invoice;
+            const invoice = event.data.object as any;
             if (!invoice.subscription) break;
             subscriptionId = invoice.subscription as string;
             const stripe = getStripe();
@@ -314,11 +342,11 @@ async function startServer() {
             });
             status = sub.status;
             customerId = sub.customer as string;
-            currentPeriodEndTs = sub.current_period_end;
+            currentPeriodEndTs = (sub as any).current_period_end;
             trialEndTs = sub.trial_end;
 
-            if (sub.discount) {
-               const discount = sub.discount as any;
+            if ((sub as any).discounts && (sub as any).discounts.length > 0) {
+               const discount = (sub as any).discounts[0] as any;
                discountApplied = true;
                couponId = discount.coupon?.id;
                promotionCode = discount.promotion_code?.code || null;
@@ -328,11 +356,11 @@ async function startServer() {
             subscriptionId = sub.id;
             status = sub.status;
             customerId = sub.customer as string;
-            currentPeriodEndTs = sub.current_period_end;
+            currentPeriodEndTs = (sub as any).current_period_end;
             trialEndTs = sub.trial_end;
 
-            if (sub.discount) {
-               const discount = sub.discount as any;
+            if ((sub as any).discounts && (sub as any).discounts.length > 0) {
+               const discount = (sub as any).discounts[0] as any;
                discountApplied = true;
                couponId = discount.coupon?.id;
                // Object is not expanded here, but we can log the coupon
@@ -634,7 +662,7 @@ async function startServer() {
 
       const sub = subscriptions.data[0];
       const hasAccess = ['active', 'trialing'].includes(sub.status);
-      const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(sub.current_period_end * 1000);
+      const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000);
       const trialEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
 
       console.log(`[Sync] Update successful. User: ${userId}, New Status: ${sub.status}`);
@@ -723,7 +751,7 @@ async function startServer() {
         const s = subs.data[0];
         stripeStatus = s.status;
         const hasAccess = ['active', 'trialing'].includes(s.status);
-        const cpEnd = admin.firestore.Timestamp.fromMillis(s.current_period_end * 1000);
+        const cpEnd = admin.firestore.Timestamp.fromMillis((s as any).current_period_end * 1000);
         const tEnd = s.trial_end ? admin.firestore.Timestamp.fromMillis(s.trial_end * 1000) : null;
 
         const batch = db.batch();
@@ -819,7 +847,7 @@ async function startServer() {
           subscriptions: subs.data.map(s => ({
             id: s.id,
             status: s.status,
-            current_period_end: new Date(s.current_period_end * 1000).toISOString(),
+            current_period_end: new Date((s as any).current_period_end * 1000).toISOString(),
             trial_end: s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null,
             metadata: s.metadata
           }))
@@ -1138,6 +1166,17 @@ async function startServer() {
   });
 
   return app;
+  } catch (err: any) {
+    console.error('[SERVER BOOTSTRAP FATAL ERROR]', err.message);
+    console.error(err.stack);
+    
+    // Return a dummy express app that always returns 500 JSON to prevent serverless crashes and HTML responses
+    const fallbackApp = express();
+    fallbackApp.all('*', (req, res) => {
+      res.status(500).json({ success: false, error: 'Server unavailable due to initialization crash', details: err.message });
+    });
+    return fallbackApp;
+  }
 }
 
 const appPromise = startServer();
