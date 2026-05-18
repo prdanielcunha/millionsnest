@@ -20,7 +20,7 @@ export function Pricing() {
   });
 
   useEffect(() => {
-    fetch('/api/v1/billing/products')
+    fetch('/api/v1/billing/products?t=' + Date.now())
       .then(res => res.json())
       .then(data => {
          if (data.plans) setPlansData(data.plans);
@@ -30,8 +30,8 @@ export function Pricing() {
            const newPrices = { ...prev };
            
            // Extract plans
-           const monthlyPlan = data.plans?.find((p: any) => p.interval === 'month');
-           const annualPlan = data.plans?.find((p: any) => p.interval === 'year');
+           const monthlyPlan = data.plans?.find((p: any) => p.interval === 'month' && !p.lookupKey.toLowerCase().includes('teste'));
+           const annualPlan = data.plans?.find((p: any) => p.interval === 'year' && !p.lookupKey.toLowerCase().includes('teste'));
            if (monthlyPlan) newPrices.monthly = monthlyPlan.price;
            if (annualPlan) newPrices.annual = annualPlan.price;
            

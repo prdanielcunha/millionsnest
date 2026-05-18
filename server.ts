@@ -837,6 +837,9 @@ async function startServer() {
 
   app.get('/api/v1/billing/products', async (req, res) => {
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       const service = getBillingService();
       const result = await service.getProducts();
       return res.json(result);
