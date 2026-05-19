@@ -126,7 +126,9 @@ export class BillingService {
         let invalidConfiguration = false;
 
         // 1. Mandatory lookup_key check
-        const lookupKey = price.lookup_key || envIdToLookupKey[price.id] || null;
+        let originalLookupKey = price.lookup_key;
+        let lookupKey = envIdToLookupKey[price.id] || price.lookup_key || null;
+        
         if (!lookupKey) {
           invalidReason = 'Missing lookup_key';
           invalidConfiguration = true;
