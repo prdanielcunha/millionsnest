@@ -409,14 +409,37 @@ export function Dashboard() {
                   <div className="flex flex-col gap-3 mt-auto">
                     {hasValidSubscription ? (
                       <>
-                        <a 
-                          href="https://musicscale.millionsnest.com" 
-                          target="_blank" rel="noopener noreferrer"
-                          className="w-full py-3.5 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-white transition-all shadow-sm active:scale-95"
-                        >
-                          Abrir App
-                          <ExternalLink className="w-4 h-4 ml-1" />
-                        </a>
+                        <div className="flex flex-col gap-3">
+                          <a 
+                            href="https://musicscale.millionsnest.com" 
+                            target="_blank" rel="noopener noreferrer"
+                            className="w-full py-3.5 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-white transition-all shadow-sm active:scale-95"
+                          >
+                            Abrir App
+                            <ExternalLink className="w-4 h-4 ml-1" />
+                          </a>
+                          
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch('/api/v1/billing/portal', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ userId: user.uid })
+                                });
+                                const data = await res.json();
+                                if (data.url) window.location.href = data.url;
+                                else alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
+                              } catch (e) {
+                                console.error(e);
+                                alert('Erro de comunicação.');
+                              }
+                            }}
+                            className="w-full py-3.5 px-4 bg-white/5 text-[#F5F7FA] border border-white/10 rounded-xl font-semibold flex items-center justify-center hover:bg-white/10 transition-all shadow-sm active:scale-95"
+                          >
+                            Fazer Upgrade / Downgrade
+                          </button>
+                        </div>
                       </>
                     ) : (
                       <div className="flex flex-col gap-3 relative">
@@ -480,6 +503,88 @@ export function Dashboard() {
                   <p className="text-[#A0A7B5]/60 text-sm font-normal px-4">
                     Estamos construindo novas integrações de gestão e relatórios para o ecossistema.
                   </p>
+                </div>
+              </div>
+
+              {/* Addons Section */}
+              <div className="mt-16">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-xl font-semibold text-[#F5F7FA] flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
+                      <Zap className="w-4 h-4 text-[#F59E0B]" />
+                    </span>
+                    Potencialize seu Ministério
+                  </h2>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Setup Premium */}
+                  <div className="bg-[#0B0F19]/50 rounded-2xl p-6 border border-white/5 flex flex-col transition-all hover:border-white/10 hover:bg-[#0B0F19]/80 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-[#2B85EB]/10 rounded-bl-[80px] -z-10 blur-xl group-hover:scale-125 transition-transform" />
+                    <h4 className="text-[#F5F7FA] font-semibold text-sm mb-2">Setup Premium</h4>
+                    <p className="text-[#A0A7B5] text-xs leading-relaxed flex-1 mb-4">Avaliação completa, relatórios e plano de ação estruturado para sua equipe.</p>
+                    <div className="text-lg font-semibold text-[#F5F7FA] mb-4">
+                      R$ {prices.setup_premium > 0 ? prices.setup_premium.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "..."}
+                    </div>
+                    <button 
+                      onClick={() => handleSubscribe('musicscale_setup_premium')}
+                      disabled={checkoutLoading}
+                      className="w-full py-2.5 px-4 bg-white/5 text-[#F5F7FA] text-xs font-semibold rounded-xl hover:bg-white/10 transition-all active:scale-95 border border-white/5"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+
+                  {/* Treinamento Express */}
+                  <div className="bg-[#0B0F19]/50 rounded-2xl p-6 border border-white/5 flex flex-col transition-all hover:border-white/10 hover:bg-[#0B0F19]/80 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-[#A855F7]/10 rounded-bl-[80px] -z-10 blur-xl group-hover:scale-125 transition-transform" />
+                    <h4 className="text-[#F5F7FA] font-semibold text-sm mb-2">Treinamento Express</h4>
+                    <p className="text-[#A0A7B5] text-xs leading-relaxed flex-1 mb-4">Acesso a workshops rápidos para desenvolver habilidades técnicas e espirituais.</p>
+                    <div className="text-lg font-semibold text-[#F5F7FA] mb-4">
+                      R$ {prices.training_express > 0 ? prices.training_express.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "..."}
+                    </div>
+                    <button 
+                       onClick={() => handleSubscribe('musicscale_training_express')}
+                       disabled={checkoutLoading}
+                       className="w-full py-2.5 px-4 bg-white/5 text-[#F5F7FA] text-xs font-semibold rounded-xl hover:bg-white/10 transition-all active:scale-95 border border-white/5"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+
+                  {/* Worship 100 */}
+                  <div className="bg-[#0B0F19]/50 rounded-2xl p-6 border border-white/5 flex flex-col transition-all hover:border-white/10 hover:bg-[#0B0F19]/80 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-[#10B981]/10 rounded-bl-[80px] -z-10 blur-xl group-hover:scale-125 transition-transform" />
+                    <h4 className="text-[#F5F7FA] font-semibold text-sm mb-2">Acervo Worship 100</h4>
+                    <p className="text-[#A0A7B5] text-xs leading-relaxed flex-1 mb-4">Acesso instantâneo a 100 cifras e recursos exclusivos de worship.</p>
+                    <div className="text-lg font-semibold text-[#F5F7FA] mb-4">
+                      R$ {prices.worship_100 > 0 ? prices.worship_100.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "..."}
+                    </div>
+                    <button 
+                       onClick={() => handleSubscribe('musicscale_worship_100')}
+                       disabled={checkoutLoading}
+                       className="w-full py-2.5 px-4 bg-white/5 text-[#F5F7FA] text-xs font-semibold rounded-xl hover:bg-white/10 transition-all active:scale-95 border border-white/5"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+
+                  {/* Music Pack +10 */}
+                  <div className="bg-[#0B0F19]/50 rounded-2xl p-6 border border-white/5 flex flex-col transition-all hover:border-white/10 hover:bg-[#0B0F19]/80 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-[#F59E0B]/10 rounded-bl-[80px] -z-10 blur-xl group-hover:scale-125 transition-transform" />
+                    <h4 className="text-[#F5F7FA] font-semibold text-sm mb-2">Music Pack +10</h4>
+                    <p className="text-[#A0A7B5] text-xs leading-relaxed flex-1 mb-4">Pacote adicional de 10 músicas premium com todos os recursos.</p>
+                    <div className="text-lg font-semibold text-[#F5F7FA] mb-4">
+                      R$ {prices.music_pack_10 > 0 ? prices.music_pack_10.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "..."}
+                    </div>
+                    <button 
+                       onClick={() => handleSubscribe('musicscale_music_pack_10')}
+                       disabled={checkoutLoading}
+                       className="w-full py-2.5 px-4 bg-white/5 text-[#F5F7FA] text-xs font-semibold rounded-xl hover:bg-white/10 transition-all active:scale-95 border border-white/5"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.section>
@@ -726,9 +831,12 @@ export function Dashboard() {
                               const data = await res.json();
                               if (data.url) {
                                 window.location.href = data.url;
+                              } else {
+                                alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
                               }
                             } catch (e) {
                               console.error(e);
+                              alert('Erro de comunicação.');
                             }
                           }}
                           className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-white/5 text-[#F5F7FA] border border-white/10 rounded-xl font-semibold hover:bg-white/10 transition-all shadow-sm active:scale-95"
