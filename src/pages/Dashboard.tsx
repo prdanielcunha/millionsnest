@@ -21,8 +21,10 @@ export function Dashboard() {
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [prices, setPrices] = useState({ 
-    monthly: 0, 
-    annual: 0,
+    starter_monthly: 0,
+    starter_annual: 0,
+    pro_monthly: 0, 
+    pro_annual: 0,
     setup_premium: 0,
     training_express: 0,
     worship_100: 0,
@@ -139,11 +141,15 @@ export function Dashboard() {
            const newPrices = { ...prev };
            
            // Extract plans (strictly by lookupKey)
-           const monthlyPlan = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_monthly');
-           const annualPlan = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_yearly');
+           const starterMonthly = data.plans?.find((p: any) => p.lookupKey === 'musicscale_starter_monthly');
+           const starterAnnual = data.plans?.find((p: any) => p.lookupKey === 'musicscale_starter_yearly');
+           const proMonthly = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_monthly');
+           const proAnnual = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_yearly');
            
-           if (monthlyPlan) newPrices.monthly = monthlyPlan.price;
-           if (annualPlan) newPrices.annual = annualPlan.price;
+           if (starterMonthly) newPrices.starter_monthly = starterMonthly.price;
+           if (starterAnnual) newPrices.starter_annual = starterAnnual.price;
+           if (proMonthly) newPrices.pro_monthly = proMonthly.price;
+           if (proAnnual) newPrices.pro_annual = proAnnual.price;
            
            // Extract addons (strictly by lookupKey)
            data.addons?.forEach((addon: any) => {
@@ -423,8 +429,8 @@ export function Dashboard() {
                           <span className="flex items-center gap-2">
                             Assinatura Anual <ArrowRight className="w-4 h-4" />
                           </span>
-                          <span className="text-xs text-[#2B85EB] mt-1 font-bold">R$ {(prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
-                          <span className="text-[10px] text-[#050505]/60 font-medium">7 dias grátis, depois R$ {prices.annual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/ano</span>
+                          <span className="text-xs text-[#2B85EB] mt-1 font-bold">R$ {(prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
+                          <span className="text-[10px] text-[#050505]/60 font-medium">7 dias grátis, depois R$ {prices.pro_annual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/ano</span>
                         </button>
 
                         <button 
@@ -435,7 +441,7 @@ export function Dashboard() {
                           <span className="flex items-center gap-2 text-sm">
                             Assinatura Mensal
                           </span>
-                          <span className="text-[10px] text-[#A0A7B5] font-medium mt-1">7 dias grátis, depois R$ {prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
+                          <span className="text-[10px] text-[#A0A7B5] font-medium mt-1">7 dias grátis, depois R$ {prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
                         </button>
                         
                         {subscription?.stripeCustomerId && (
@@ -778,15 +784,15 @@ export function Dashboard() {
                         
                         <div className="flex items-baseline gap-1 mb-1 relative z-10">
                           <span className="text-3xl md:text-4xl font-semibold text-[#F5F7FA] tracking-tight">
-                            R$ {prices.monthly > 0 ? (isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
+                            R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
                           </span>
                           <span className="text-[#A0A7B5] font-normal text-xs md:text-sm">/mês</span>
                         </div>
                         
                         {isAnnual ? (
                           <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
-                             {prices.monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-                             {prices.monthly > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.annual / (prices.monthly * 12)) * 100).toFixed(0)}% OFF</span>}
+                             {prices.pro_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.pro_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                             {prices.pro_monthly > 0 && prices.pro_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.pro_annual / (prices.pro_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
                           </div>
                         ) : (
                           <div className="h-5 md:h-6 mb-6 relative z-10" />
@@ -824,24 +830,22 @@ export function Dashboard() {
                         
                         <div className="flex items-baseline gap-1 mb-1">
                           <span className="text-3xl md:text-4xl font-semibold text-[#F5F7FA] tracking-tight">
-                            R$ {isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
                           </span>
                           <span className="text-[#A0A7B5] font-normal text-xs md:text-sm">/mês</span>
                         </div>
                         
                         {isAnnual ? (
                           <div className="flex items-center gap-2 mb-6 text-xs font-medium">
-                            <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">20% OFF</span>
+                            {prices.starter_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.starter_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                            {prices.starter_monthly > 0 && prices.starter_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.starter_annual / (prices.starter_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
                           </div>
                         ) : (
                           <div className="h-5 md:h-6 mb-6" />
                         )}
                         
-                        {/* Como não há um link "Assinar Starter" atualmente (só criamos o session padrão que é Pro ou Starter no caso do app), mas se os preços estiverem carregados... Na verdade o app só vende MusicScale. Starter PODE ser o plano "monthly" ou "annual" que já estavam lá e "Pro" não.
-                            Para este setup, o Checkout envia a "plan" key. Vou chamar `handleSubscribe` nos dois cards. Dependendo de como o stripe backend tá, 'monthly' e 'annual' se aplicam lá.  */}
                         <button 
-                          onClick={() => handleSubscribe(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
+                          onClick={() => handleSubscribe(isAnnual ? 'musicscale_starter_yearly' : 'musicscale_starter_monthly')}
                           disabled={checkoutLoading}
                           className="w-full py-3.5 px-4 rounded-xl bg-white/5 border border-white/10 text-[#F5F7FA] text-center font-semibold text-sm hover:bg-white/10 transition-all shadow-sm active:scale-95 mb-6 block"
                         >

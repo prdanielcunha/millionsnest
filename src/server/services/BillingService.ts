@@ -95,15 +95,24 @@ export class BillingService {
       });
 
       const envIdToLookupKey: Record<string, string> = {};
-      const envMonthly = process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
-      const envAnnual = process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
+      const envStarterMonthly = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY;
+      const envStarterAnnual = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY;
+      const envProMonthly = process.env.STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
+      const envProAnnual = process.env.STRIPE_PRICE_MUSICSCALE_PRO_YEARLY || process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
       
-      if (envMonthly) envIdToLookupKey[envMonthly] = 'musicscale_pro_monthly';
-      if (envAnnual) envIdToLookupKey[envAnnual] = 'musicscale_pro_yearly';
-      if (process.env.STRIPE_PRICE_SETUP_PREMIUM) envIdToLookupKey[process.env.STRIPE_PRICE_SETUP_PREMIUM] = 'musicscale_setup_premium';
-      if (process.env.STRIPE_PRICE_TRAINING_EXPRESS) envIdToLookupKey[process.env.STRIPE_PRICE_TRAINING_EXPRESS] = 'musicscale_training_express';
-      if (process.env.STRIPE_PRICE_ACERVO_WORSHIP_100) envIdToLookupKey[process.env.STRIPE_PRICE_ACERVO_WORSHIP_100] = 'musicscale_worship_100';
-      if (process.env.STRIPE_PRICE_MUSIC_PACK_10) envIdToLookupKey[process.env.STRIPE_PRICE_MUSIC_PACK_10] = 'musicscale_music_pack_10';
+      const envSetupPremium = process.env.STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM || process.env.STRIPE_PRICE_SETUP_PREMIUM;
+      const envTrainingExpress = process.env.STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS || process.env.STRIPE_PRICE_TRAINING_EXPRESS;
+      const envWorship100 = process.env.STRIPE_PRICE_MUSICSCALE_WORSHIP_100 || process.env.STRIPE_PRICE_ACERVO_WORSHIP_100;
+      const envMusicPack10 = process.env.STRIPE_PRICE_MUSICSCALE_PACK_10 || process.env.STRIPE_PRICE_MUSIC_PACK_10;
+
+      if (envStarterMonthly) envIdToLookupKey[envStarterMonthly] = 'musicscale_starter_monthly';
+      if (envStarterAnnual) envIdToLookupKey[envStarterAnnual] = 'musicscale_starter_yearly';
+      if (envProMonthly) envIdToLookupKey[envProMonthly] = 'musicscale_pro_monthly';
+      if (envProAnnual) envIdToLookupKey[envProAnnual] = 'musicscale_pro_yearly';
+      if (envSetupPremium) envIdToLookupKey[envSetupPremium] = 'musicscale_setup_premium';
+      if (envTrainingExpress) envIdToLookupKey[envTrainingExpress] = 'musicscale_training_express';
+      if (envWorship100) envIdToLookupKey[envWorship100] = 'musicscale_worship_100';
+      if (envMusicPack10) envIdToLookupKey[envMusicPack10] = 'musicscale_music_pack_10';
 
       pricesResponse.data.forEach(price => {
         const product = price.product as Stripe.Product;
@@ -148,14 +157,19 @@ export class BillingService {
         let finalLookupKey = lookupKey || `fallback_${price.id}`;
         
         if (invalidConfiguration) {
-           const envMonthly = process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
-           const envAnnual = process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
-           if (price.id === envMonthly) featureFallback = 'pro_monthly';
-           if (price.id === envAnnual) featureFallback = 'pro_yearly';
-           if (price.id === process.env.STRIPE_PRICE_SETUP_PREMIUM) featureFallback = 'setup_premium';
-           if (price.id === process.env.STRIPE_PRICE_TRAINING_EXPRESS) featureFallback = 'training_express';
-           if (price.id === process.env.STRIPE_PRICE_ACERVO_WORSHIP_100) featureFallback = 'worship_100';
-           if (price.id === process.env.STRIPE_PRICE_MUSIC_PACK_10) featureFallback = 'music_pack_10';
+           const envStarterMonthly = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY;
+           const envStarterAnnual = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY;
+           const envProMonthly = process.env.STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
+           const envProAnnual = process.env.STRIPE_PRICE_MUSICSCALE_PRO_YEARLY || process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
+           
+           if (price.id === envStarterMonthly) featureFallback = 'starter_monthly';
+           if (price.id === envStarterAnnual) featureFallback = 'starter_yearly';
+           if (price.id === envProMonthly) featureFallback = 'pro_monthly';
+           if (price.id === envProAnnual) featureFallback = 'pro_yearly';
+           if (price.id === (process.env.STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM || process.env.STRIPE_PRICE_SETUP_PREMIUM)) featureFallback = 'setup_premium';
+           if (price.id === (process.env.STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS || process.env.STRIPE_PRICE_TRAINING_EXPRESS)) featureFallback = 'training_express';
+           if (price.id === (process.env.STRIPE_PRICE_MUSICSCALE_WORSHIP_100 || process.env.STRIPE_PRICE_ACERVO_WORSHIP_100)) featureFallback = 'worship_100';
+           if (price.id === (process.env.STRIPE_PRICE_MUSICSCALE_PACK_10 || process.env.STRIPE_PRICE_MUSIC_PACK_10)) featureFallback = 'music_pack_10';
            
            // Ensure lookup key matches standard format so frontend doesn't break
            if (featureFallback !== lookupKey && !featureFallback.startsWith('fallback')) {
@@ -243,15 +257,24 @@ export class BillingService {
       });
 
       const envIdToLookupKey: Record<string, string> = {};
-      const envMonthly = process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
-      const envAnnual = process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
+      const envStarterMonthly = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY;
+      const envStarterAnnual = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY;
+      const envProMonthly = process.env.STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
+      const envProAnnual = process.env.STRIPE_PRICE_MUSICSCALE_PRO_YEARLY || process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
       
-      if (envMonthly) envIdToLookupKey[envMonthly] = 'musicscale_pro_monthly';
-      if (envAnnual) envIdToLookupKey[envAnnual] = 'musicscale_pro_yearly';
-      if (process.env.STRIPE_PRICE_SETUP_PREMIUM) envIdToLookupKey[process.env.STRIPE_PRICE_SETUP_PREMIUM] = 'musicscale_setup_premium';
-      if (process.env.STRIPE_PRICE_TRAINING_EXPRESS) envIdToLookupKey[process.env.STRIPE_PRICE_TRAINING_EXPRESS] = 'musicscale_training_express';
-      if (process.env.STRIPE_PRICE_ACERVO_WORSHIP_100) envIdToLookupKey[process.env.STRIPE_PRICE_ACERVO_WORSHIP_100] = 'musicscale_worship_100';
-      if (process.env.STRIPE_PRICE_MUSIC_PACK_10) envIdToLookupKey[process.env.STRIPE_PRICE_MUSIC_PACK_10] = 'musicscale_music_pack_10';
+      const envSetupPremium = process.env.STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM || process.env.STRIPE_PRICE_SETUP_PREMIUM;
+      const envTrainingExpress = process.env.STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS || process.env.STRIPE_PRICE_TRAINING_EXPRESS;
+      const envWorship100 = process.env.STRIPE_PRICE_MUSICSCALE_WORSHIP_100 || process.env.STRIPE_PRICE_ACERVO_WORSHIP_100;
+      const envMusicPack10 = process.env.STRIPE_PRICE_MUSICSCALE_PACK_10 || process.env.STRIPE_PRICE_MUSIC_PACK_10;
+
+      if (envStarterMonthly) envIdToLookupKey[envStarterMonthly] = 'musicscale_starter_monthly';
+      if (envStarterAnnual) envIdToLookupKey[envStarterAnnual] = 'musicscale_starter_yearly';
+      if (envProMonthly) envIdToLookupKey[envProMonthly] = 'musicscale_pro_monthly';
+      if (envProAnnual) envIdToLookupKey[envProAnnual] = 'musicscale_pro_yearly';
+      if (envSetupPremium) envIdToLookupKey[envSetupPremium] = 'musicscale_setup_premium';
+      if (envTrainingExpress) envIdToLookupKey[envTrainingExpress] = 'musicscale_training_express';
+      if (envWorship100) envIdToLookupKey[envWorship100] = 'musicscale_worship_100';
+      if (envMusicPack10) envIdToLookupKey[envMusicPack10] = 'musicscale_music_pack_10';
 
       const STRICT_MODE = process.env.BILLING_STRICT_MODE === 'true';
 

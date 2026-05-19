@@ -11,8 +11,10 @@ export function Pricing() {
   const [addonsData, setAddonsData] = useState<any[]>([]);
   
   const [prices, setPrices] = useState({
-    monthly: 0,
-    annual: 0,
+    starter_monthly: 0,
+    starter_annual: 0,
+    pro_monthly: 0,
+    pro_annual: 0,
     setup_premium: 0,
     training_express: 0,
     worship_100: 0,
@@ -30,11 +32,15 @@ export function Pricing() {
            const newPrices = { ...prev };
            
            // Extract plans (strictly by lookupKey)
-           const monthlyPlan = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_monthly');
-           const annualPlan = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_yearly');
+           const starterMonthly = data.plans?.find((p: any) => p.lookupKey === 'musicscale_starter_monthly');
+           const starterAnnual = data.plans?.find((p: any) => p.lookupKey === 'musicscale_starter_yearly');
+           const proMonthly = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_monthly');
+           const proAnnual = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_yearly');
            
-           if (monthlyPlan) newPrices.monthly = monthlyPlan.price;
-           if (annualPlan) newPrices.annual = annualPlan.price;
+           if (starterMonthly) newPrices.starter_monthly = starterMonthly.price;
+           if (starterAnnual) newPrices.starter_annual = starterAnnual.price;
+           if (proMonthly) newPrices.pro_monthly = proMonthly.price;
+           if (proAnnual) newPrices.pro_annual = proAnnual.price;
            
            // Extract addons (strictly by lookupKey)
            data.addons?.forEach((addon: any) => {
@@ -117,15 +123,15 @@ export function Pricing() {
             
             <div className="flex items-baseline gap-1 mb-1">
               <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
-                 R$ {prices.monthly > 0 ? (isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
+                 R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/mês</span>
             </div>
             
             {isAnnual ? (
               <div className="flex items-center gap-2 md:gap-3 mb-6 text-xs md:text-sm font-medium">
-                 {prices.monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-                 {prices.monthly > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">{(100 - (prices.annual / (prices.monthly * 12)) * 100).toFixed(0)}% OFF</span>}
+                 {prices.starter_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.starter_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                 {prices.starter_monthly > 0 && prices.starter_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">{(100 - (prices.starter_annual / (prices.starter_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
               </div>
             ) : (
               <div className="h-5 md:h-6 mb-6" />
@@ -187,15 +193,15 @@ export function Pricing() {
             
             <div className="flex items-baseline gap-1 mb-1 relative z-10">
               <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
-                 R$ {prices.monthly > 0 ? (isAnnual ? (prices.annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
+                 R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/mês</span>
             </div>
             
             {isAnnual ? (
               <div className="flex items-center gap-2 md:gap-3 mb-6 text-xs md:text-sm font-medium relative z-10">
-                 {prices.monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-                 {prices.monthly > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">{(100 - (prices.annual / (prices.monthly * 12)) * 100).toFixed(0)}% OFF</span>}
+                 {prices.pro_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.pro_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                 {prices.pro_monthly > 0 && prices.pro_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">{(100 - (prices.pro_annual / (prices.pro_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
               </div>
             ) : (
               <div className="h-5 md:h-6 mb-6 relative z-10" />
