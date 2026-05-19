@@ -413,32 +413,11 @@ export function Dashboard() {
                           <a 
                             href="https://musicscale.millionsnest.com" 
                             target="_blank" rel="noopener noreferrer"
-                            className="w-full py-3.5 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-white transition-all shadow-sm active:scale-95"
+                            className="w-full py-3.5 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-white transition-all shadow-sm active:scale-95 mt-auto"
                           >
                             Abrir App
                             <ExternalLink className="w-4 h-4 ml-1" />
                           </a>
-                          
-                          <button
-                            onClick={async () => {
-                              try {
-                                const res = await fetch('/api/v1/billing/portal', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ userId: user.uid })
-                                });
-                                const data = await res.json();
-                                if (data.url) window.location.href = data.url;
-                                else alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
-                              } catch (e) {
-                                console.error(e);
-                                alert('Erro de comunicação.');
-                              }
-                            }}
-                            className="w-full py-3.5 px-4 bg-white/5 text-[#F5F7FA] border border-white/10 rounded-xl font-semibold flex items-center justify-center hover:bg-white/10 transition-all shadow-sm active:scale-95"
-                          >
-                            Fazer Upgrade / Downgrade
-                          </button>
                         </div>
                       </>
                     ) : (
@@ -587,6 +566,45 @@ export function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              {hasValidSubscription && (
+                <div className="mt-16 flex justify-center">
+                  <div className="bg-[#0B0F19]/50 rounded-2xl p-6 md:p-8 border border-white/5 flex flex-col md:flex-row items-center justify-between gap-6 w-full max-w-4xl relative overflow-hidden group hover:border-white/10 transition-all">
+                    <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-br-[100px] -z-10 blur-xl group-hover:scale-110 transition-transform" />
+                    
+                    <div className="flex flex-col gap-3 max-w-xl text-center md:text-left z-10 w-full md:w-auto">
+                      <h3 className="text-[#F5F7FA] font-semibold text-lg flex items-center justify-center md:justify-start gap-2">
+                        <Settings className="w-5 h-5 text-[#A0A7B5]" />
+                        Fazer Upgrade / Downgrade
+                      </h3>
+                      <p className="text-[#A0A7B5] text-sm leading-relaxed">
+                        Gerencie seu plano atual, faça upgrade para adicionar novos recursos ou altere a periodicidade do faturamento.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetch('/api/v1/billing/portal', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: user.uid })
+                          });
+                          const data = await res.json();
+                          if (data.url) window.location.href = data.url;
+                          else alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
+                        } catch (e) {
+                          console.error(e);
+                          alert('Erro de comunicação.');
+                        }
+                      }}
+                      className="whitespace-nowrap px-6 py-4 bg-white/5 text-[#F5F7FA] border border-white/10 rounded-xl font-semibold flex items-center justify-center hover:bg-white/10 transition-all shadow-sm active:scale-95 h-fit w-full md:w-auto z-10"
+                    >
+                      Acessar Portal
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.section>
           )}
 

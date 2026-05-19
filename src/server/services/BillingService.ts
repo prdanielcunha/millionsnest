@@ -57,7 +57,7 @@ export class BillingService {
         if (!snapshot.empty) {
           snapshot.forEach((doc: any) => {
             const data = doc.data() as NormalizedProduct;
-            if (data.type === 'plan') plans.push(data);
+            if (data.type === 'plan' || data.type === 'subscription') plans.push(data);
             else addons.push(data);
           });
           this.cachedProducts = { plans, addons, timestamp: Date.now() };
