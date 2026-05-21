@@ -62,7 +62,7 @@ export function Dashboard() {
     }
   };
 
-  const fetchSubscriptionAndOrg = async (forceSync = false) => {
+  const fetchSubscriptionAndOrg = async (forceSync = false, passedSessionId?: string) => {
     if (!user) return;
     try {
       console.log("[Dashboard] Fetching subscription and org for:", user.uid);
@@ -74,7 +74,7 @@ export function Dashboard() {
           const syncRes = await fetch('/api/v1/billing/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.uid })
+            body: JSON.stringify({ userId: user.uid, sessionId: passedSessionId })
           });
           
           if (syncRes.ok) {
@@ -153,7 +153,7 @@ export function Dashboard() {
       // TODO: Criar suporte visual futuro no MillionsNest: "Cupom aplicado com sucesso"
       // Aqui podemos checar se houve desconto na session e exibir uma notificação.
       setLoadingSub(true);
-      fetchSubscriptionAndOrg(true); // Forçar sync total ao voltar do Stripe
+      fetchSubscriptionAndOrg(true, sessionId); // Forçar sync total ao voltar do Stripe
     }
   }, [user]);
 

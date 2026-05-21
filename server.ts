@@ -153,12 +153,24 @@ async function startServer() {
             subscription: session.subscription
           });
           
-          const userId = session.metadata?.uid || session.client_reference_id;
+          let userId = session.metadata?.uid || session.client_reference_id;
           const customerId = session.customer as string;
 
           if (!userId) {
-             console.error('[STRIPE_WEBHOOK] Missing identification mapping', { userId });
-             await auditRef.update({ status: 'error', error: 'Missing userId' });
+             const customerEmail = session.customer_details?.email || session.customer_email;
+             if (customerEmail) {
+                console.log(`[STRIPE_WEBHOOK] Missing identification mapping, attempting to heal via email: ${customerEmail}`);
+                const usersSnap = await db.collection('users').where('email', '==', customerEmail).get();
+                if (!usersSnap.empty) {
+                   userId = usersSnap.docs[0].id;
+                   console.log(`[STRIPE_WEBHOOK] Successfully resolved userId via email fallback: ${userId}`);
+                }
+             }
+          }
+
+          if (!userId) {
+             console.error('[STRIPE_WEBHOOK] Missing identification mapping and could not resolve via email', { email: session.customer_details?.email || session.customer_email });
+             await auditRef.update({ status: 'error', error: 'Missing userId and email resolution failed' });
              break;
           }
 
@@ -548,7 +560,7 @@ async function startServer() {
   // Forçar sincronização com Stripe
   app.post('/api/v1/billing/sync', async (req, res) => {
     try {
-      const { userId } = req.body;
+      const { userId, sessionId } = req.body;
       if (!userId || !db) return res.status(400).json({ error: 'Missing uid or db' });
 
       console.log(`[Sync] Request for user: ${userId}`);
@@ -568,6 +580,23 @@ async function startServer() {
       }
 
       let subscriptions: Stripe.ApiList<Stripe.Subscription> | null = null;
+      
+      try {
+        if (sessionId) {
+            console.log(`[Sync] Explicit sessionId provided: ${sessionId}. Retrieving session directly...`);
+            const session = await stripe.checkout.sessions.retrieve(sessionId);
+            if (session.customer) {
+                customerId = session.customer as string;
+            }
+            if (session.subscription) {
+                const sessionSub = await stripe.subscriptions.retrieve(session.subscription as string);
+                subscriptions = { data: [sessionSub], has_more: false, object: 'list', url: '' };
+                console.log(`[Sync] Retrieved subscription ${sessionSub.id} directly from session.`);
+            }
+        }
+      } catch (e) {
+          console.error(`[Sync] Failed to retrieve session ${sessionId}:`, e);
+      }
 
       try {
         if (customerId) {
