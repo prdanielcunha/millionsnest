@@ -432,124 +432,146 @@ export function Dashboard() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* MusicScale Card */}
-                <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 md:p-8 border border-white/5 shadow-2xl flex flex-col h-full transform transition-all duration-300 hover:border-white/10 hover:shadow-[0_0_40px_rgba(43,133,235,0.05)] relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#2B85EB]/5 rounded-bl-[100px] -z-10 transition-transform group-hover:scale-110 blur-xl" />
+                {/* MusicScale Card(s) */}
+                {hasValidSubscription ? (
+                  <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 md:p-8 border border-white/5 shadow-2xl flex flex-col h-full transform transition-all duration-300 hover:border-white/10 hover:shadow-[0_0_40px_rgba(43,133,235,0.05)] relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-[#2B85EB]/5 rounded-bl-[100px] -z-10 transition-transform group-hover:scale-110 blur-xl" />
 
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="w-14 h-14 bg-[#050505] rounded-2xl flex items-center justify-center border border-white/5 shadow-inner">
-                      <Music className="w-6 h-6 text-[#2B85EB]" />
-                    </div>
-                    
-                    {loadingSub ? (
-                      <div className="h-6 w-20 bg-white/5 rounded-full animate-pulse" />
-                    ) : isTrialing ? (
-                      <span className="px-3 py-1 bg-[#F59E0B]/10 text-[#F59E0B] text-[10px] font-bold rounded-full border border-[#F59E0B]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
-                        <Clock className="w-3.5 h-3.5" /> Trial
-                      </span>
-                    ) : isActive ? (
-                      <span className="px-3 py-1 bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold rounded-full border border-[#10B981]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
-                        <ShieldCheck className="w-3.5 h-3.5" /> Ativo
-                      </span>
-                    ) : isCanceled ? (
-                      <span className="px-3 py-1 bg-[#EF4444]/10 text-[#EF4444] text-[10px] font-bold rounded-full border border-[#EF4444]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
-                        <AlertCircle className="w-3.5 h-3.5" /> Cancelado
-                      </span>
-                    ) : subscription != null && subscription.status !== 'none' ? (
-                       <span className="px-3 py-1 bg-[#2B85EB]/10 text-[#2B85EB] text-[10px] font-bold rounded-full border border-[#2B85EB]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
-                        {subscription.status}
-                      </span>
-                    ) : (
-                      <span className="px-3 py-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-full border border-white/10 uppercase tracking-widest shadow-sm">
-                         Sem Assinatura
-                      </span>
-                    )}
-                  </div>
-                  
-                  <h3 className="text-2xl font-semibold text-[#F5F7FA] tracking-tight mb-2">MusicScale</h3>
-                  <p className="text-[#A0A7B5] text-sm mb-6 flex-1 font-normal leading-relaxed">
-                    A plataforma completa para gestão e escalas de ministérios de louvor, integrada ao ecossistema central.
-                  </p>
-
-                  {(subscription && subscription.status !== 'none' || loadingSub) && (
-                    <div className="mb-6 bg-[#050505] rounded-2xl p-5 border border-white/5 relative overflow-hidden group shadow-inner">
+                    <div className="flex items-start justify-between mb-6">
+                      <div className="w-14 h-14 bg-[#050505] rounded-2xl flex items-center justify-center border border-white/5 shadow-inner">
+                        <Music className="w-6 h-6 text-[#2B85EB]" />
+                      </div>
+                      
                       {loadingSub ? (
-                        <div className="flex flex-col gap-2 py-2 animate-pulse">
-                          <div className="h-3 w-20 bg-white/5 rounded"></div>
-                          <div className="h-4 w-32 bg-white/5 rounded"></div>
-                        </div>
+                        <div className="h-6 w-20 bg-white/5 rounded-full animate-pulse" />
+                      ) : isTrialing ? (
+                        <span className="px-3 py-1 bg-[#F59E0B]/10 text-[#F59E0B] text-[10px] font-bold rounded-full border border-[#F59E0B]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
+                          <Clock className="w-3.5 h-3.5" /> Trial
+                        </span>
+                      ) : isActive ? (
+                        <span className="px-3 py-1 bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold rounded-full border border-[#10B981]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
+                          <ShieldCheck className="w-3.5 h-3.5" /> Ativo
+                        </span>
                       ) : (
-                        <>
-                          <div className="flex justify-between items-start mb-4">
-                            <div>
-                              <p className="text-[9px] text-[#A0A7B5] font-bold uppercase tracking-widest mb-2">Status da Assinatura</p>
-                              <div className="flex items-center gap-2">
-                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest border ${
-                                  subscription.status === 'active' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' :
-                                  subscription.status === 'trialing' ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' :
-                                  'bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/20'
-                                }`}>
-                                  {subscription.status === 'trialing' ? 'Trial Ativo' : subscription.status === 'active' ? 'Ativo' : subscription.status}
-                                </span>
-                                <span className="text-xs font-semibold text-[#F5F7FA]">
-                                  {subscription?.plan === 'annual' ? 'Plano Anual' : 'Plano Mensal'}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="w-8 h-8 bg-white/5 rounded-lg border border-white/5 flex items-center justify-center">
-                              <ShieldCheck className="w-4 h-4 text-[#A0A7B5]" />
-                            </div>
-                          </div>
-
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-[#A0A7B5]">Próximo Faturamento</span>
-                              <span className="font-semibold text-[#F5F7FA]">
-                                {formattedRenewal || "Sincronizando..."}
-                              </span>
-                            </div>
-                            
-                            {subscription?.status === 'trialing' && (
-                              <div className="flex items-start gap-2 p-3 bg-[#2B85EB]/10 rounded-xl border border-[#2B85EB]/20 mt-3">
-                                <Clock className="w-3.5 h-3.5 text-[#2B85EB] mt-0.5 flex-shrink-0" />
-                                <p className="text-[11px] text-[#2B85EB] font-medium leading-relaxed">
-                                  Seu teste grátis termina em <strong className="font-bold text-[#F5F7FA]">{formattedRenewal}</strong>. Nenhuma cobrança será feita até lá.
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </>
+                        <span className="px-3 py-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-full border border-white/10 uppercase tracking-widest shadow-sm">
+                           Sem Assinatura
+                        </span>
                       )}
                     </div>
-                  )}
+                    
+                    <h3 className="text-2xl font-semibold text-[#F5F7FA] tracking-tight mb-2 flex items-center gap-2">
+                      MusicScale {subscription?.tier && <span className="text-[#2B85EB] uppercase text-sm tracking-wider font-bold bg-[#2B85EB]/10 px-2 py-0.5 rounded-md border border-[#2B85EB]/20">{subscription.tier === 'pro' ? 'Pró' : 'Starter'}</span>}
+                    </h3>
+                    
+                    <p className="text-[#A0A7B5] text-sm mb-6 flex-1 font-normal leading-relaxed">
+                      A plataforma completa para gestão e escalas de ministérios de louvor, integrada ao ecossistema central.
+                    </p>
 
-                  <div className="flex flex-col gap-3 mt-auto">
-                    {hasValidSubscription ? (
-                      <>
-                        <div className="flex flex-col gap-3">
-                          <a 
-                            href="https://musicscale.millionsnest.com" 
-                            target="_blank" rel="noopener noreferrer"
-                            className="w-full py-3.5 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-white transition-all shadow-sm active:scale-95 mt-auto"
-                          >
-                            Abrir App
-                            <ExternalLink className="w-4 h-4 ml-1" />
-                          </a>
+                    {(subscription && subscription.status !== 'none' || loadingSub) && (
+                      <div className="mb-6 bg-[#050505] rounded-2xl p-5 border border-white/5 relative overflow-hidden group shadow-inner">
+                        {loadingSub ? (
+                          <div className="flex flex-col gap-2 py-2 animate-pulse">
+                            <div className="h-3 w-20 bg-white/5 rounded"></div>
+                            <div className="h-4 w-32 bg-white/5 rounded"></div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <p className="text-[9px] text-[#A0A7B5] font-bold uppercase tracking-widest mb-2">Status da Assinatura</p>
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest border ${
+                                    subscription.status === 'active' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' :
+                                    subscription.status === 'trialing' ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' :
+                                    'bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/20'
+                                  }`}>
+                                    {subscription.status === 'trialing' ? 'Trial Ativo' : subscription.status === 'active' ? 'Ativo' : subscription.status}
+                                  </span>
+                                  <span className="text-xs font-semibold text-[#F5F7FA]">
+                                    {subscription?.plan === 'annual' ? 'Plano Anual' : 'Plano Mensal'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="w-8 h-8 bg-white/5 rounded-lg border border-white/5 flex items-center justify-center">
+                                <ShieldCheck className="w-4 h-4 text-[#A0A7B5]" />
+                              </div>
+                            </div>
+
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-[#A0A7B5]">Próximo Faturamento</span>
+                                <span className="font-semibold text-[#F5F7FA]">
+                                  {formattedRenewal || "Sincronizando..."}
+                                </span>
+                              </div>
+                              
+                              {subscription?.status === 'trialing' && (
+                                <div className="flex items-start gap-2 p-3 bg-[#2B85EB]/10 rounded-xl border border-[#2B85EB]/20 mt-3">
+                                  <Clock className="w-3.5 h-3.5 text-[#2B85EB] mt-0.5 flex-shrink-0" />
+                                  <p className="text-[11px] text-[#2B85EB] font-medium leading-relaxed">
+                                    Seu teste grátis termina em <strong className="font-bold text-[#F5F7FA]">{formattedRenewal}</strong>. Nenhuma cobrança será feita até lá.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-3 mt-auto">
+                      <a 
+                        href="https://musicscale.millionsnest.com" 
+                        target="_blank" rel="noopener noreferrer"
+                        className="w-full py-3.5 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-white transition-all shadow-sm active:scale-95 mt-auto"
+                      >
+                        Abrir App
+                        <ExternalLink className="w-4 h-4 ml-1" />
+                      </a>
+                      {subscription?.stripeCustomerId && (
+                        <button
+                          onClick={openBillingPortal}
+                          className="w-full py-3 px-4 mt-2 bg-white/5 text-[#A0A7B5] border border-white/5 rounded-xl font-semibold flex items-center justify-center hover:bg-white/10 hover:text-[#F5F7FA] transition-all active:scale-95"
+                        >
+                          <Settings className="w-4 h-4 mr-2" /> Gerenciar Assinatura
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* MusicScale Pro Card */}
+                    <div className="bg-[#0B0F19]/70 backdrop-blur-xl rounded-[2rem] p-6 md:p-8 border border-[#2B85EB]/40 shadow-2xl flex flex-col h-full transform transition-all duration-300 hover:border-[#2B85EB]/80 relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-[#2B85EB]/10 rounded-bl-[100px] -z-10 transition-transform group-hover:scale-110 blur-xl" />
+
+                      <div className="flex items-start justify-between mb-6">
+                        <div className="w-14 h-14 bg-[#2B85EB]/10 rounded-2xl flex items-center justify-center border border-[#2B85EB]/20 shadow-inner">
+                          <Music className="w-6 h-6 text-[#2B85EB]" />
                         </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col gap-3 relative">
+                        <span className="px-3 py-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-full border border-white/10 uppercase tracking-widest shadow-sm">
+                           Sem Assinatura
+                        </span>
+                      </div>
+                      
+                      <h3 className="text-2xl font-semibold text-[#F5F7FA] tracking-tight mb-2 flex items-center gap-2">
+                        MusicScale <span className="text-[#2B85EB] uppercase text-sm tracking-wider font-bold bg-[#2B85EB]/10 px-2 py-0.5 rounded-md border border-[#2B85EB]/20">Pró</span>
+                      </h3>
+                      <p className="text-[#A0A7B5] text-sm mb-6 flex-1 font-normal leading-relaxed">
+                        Acesso total. Equipes ilimitadas, repertório ilimitado, notificações automatizadas no Whatsapp e métricas de desempenho.
+                      </p>
+
+                      <div className="flex flex-col gap-3 relative mt-auto">
                         <button 
                           onClick={() => handleSubscribe('musicscale_pro_yearly')}
                           disabled={checkoutLoading}
-                          className="w-full py-4 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex-col flex items-center justify-center hover:bg-white transition-all shadow-sm active:scale-95 relative overflow-hidden disabled:opacity-70"
+                          className="w-full py-4 px-4 bg-[#2B85EB] text-[#F5F7FA] rounded-xl font-semibold flex-col flex items-center justify-center hover:bg-[#3B95FB] transition-all shadow-sm active:scale-95 relative overflow-hidden disabled:opacity-70"
                         >
-                          <span className="absolute top-0 right-0 bg-[#2B85EB]/10 text-[#2B85EB] text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-widest border-b border-l border-[#2B85EB]/20">30% OFF</span>
+                          <span className="absolute top-0 right-0 bg-[#050505]/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-widest border-b border-l border-white/10">30% OFF</span>
                           <span className="flex items-center gap-2">
                             Assinatura Anual <ArrowRight className="w-4 h-4" />
                           </span>
-                          <span className="text-xs text-[#2B85EB] mt-1 font-bold">R$ {(prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
-                          <span className="text-[10px] text-[#050505]/60 font-medium">7 dias grátis, depois R$ {prices.pro_annual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/ano</span>
+                          <span className="text-xs text-white/90 mt-1 font-bold">R$ {(prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
+                          <span className="text-[10px] text-white/70 font-medium">7 dias grátis, depois R$ {prices.pro_annual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/ano</span>
                         </button>
 
                         <button 
@@ -562,19 +584,52 @@ export function Dashboard() {
                           </span>
                           <span className="text-[10px] text-[#A0A7B5] font-medium mt-1">7 dias grátis, depois R$ {prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
                         </button>
-                        
-                        {subscription?.stripeCustomerId && (
-                          <button
-                            onClick={openBillingPortal}
-                            className="w-full py-3 px-4 mt-2 bg-white/5 text-[#A0A7B5] border border-white/5 rounded-xl font-semibold flex items-center justify-center hover:bg-white/10 hover:text-[#F5F7FA] transition-all active:scale-95"
-                          >
-                            <Settings className="w-4 h-4 mr-2" /> Gerenciar Assinatura
-                          </button>
-                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
+                    </div>
+
+                    {/* MusicScale Starter Card */}
+                    <div className="bg-[#0B0F19]/30 backdrop-blur-xl rounded-[2rem] p-6 md:p-8 border border-white/5 shadow-2xl flex flex-col h-full transform transition-all duration-300 hover:border-white/10 relative overflow-hidden group">
+                      <div className="flex items-start justify-between mb-6">
+                        <div className="w-14 h-14 bg-[#050505] rounded-2xl flex items-center justify-center border border-white/5 shadow-inner opacity-70">
+                          <Music className="w-6 h-6 text-[#A0A7B5]" />
+                        </div>
+                      </div>
+                      
+                      <h3 className="text-2xl font-semibold text-[#F5F7FA] tracking-tight mb-2 flex items-center gap-2">
+                        MusicScale <span className="text-[#A0A7B5] uppercase text-sm tracking-wider font-bold bg-white/5 px-2 py-0.5 rounded-md border border-white/10">Starter</span>
+                      </h3>
+                      <p className="text-[#A0A7B5] text-sm mb-6 flex-1 font-normal leading-relaxed opacity-80">
+                        O essencial. Gestão básica de equipe, escalas padrão e controle de repertório simplificado sem automações avançadas.
+                      </p>
+
+                      <div className="flex flex-col gap-3 relative mt-auto">
+                        <button 
+                          onClick={() => handleSubscribe('musicscale_starter_yearly')}
+                          disabled={checkoutLoading}
+                          className="w-full py-4 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex-col flex items-center justify-center hover:bg-white transition-all shadow-sm active:scale-95 relative overflow-hidden disabled:opacity-70"
+                        >
+                          <span className="absolute top-0 right-0 bg-black/5 text-[#050505] text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-widest border-b border-l border-black/10">30% OFF</span>
+                          <span className="flex items-center gap-2">
+                            Assinatura Anual <ArrowRight className="w-4 h-4" />
+                          </span>
+                          <span className="text-xs text-[#050505]/70 mt-1 font-bold">R$ {(prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
+                          <span className="text-[10px] text-[#050505]/50 font-medium">7 dias grátis, depois R$ {prices.starter_annual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/ano</span>
+                        </button>
+
+                        <button 
+                          onClick={() => handleSubscribe('musicscale_starter_monthly')}
+                          disabled={checkoutLoading}
+                          className="w-full py-3 px-4 bg-transparent text-[#F5F7FA] border border-white/10 rounded-xl font-semibold flex flex-col items-center justify-center hover:bg-white/5 transition-all active:scale-95 disabled:opacity-70"
+                        >
+                          <span className="flex items-center gap-2 text-sm">
+                            Assinatura Mensal
+                          </span>
+                          <span className="text-[10px] text-[#A0A7B5] font-medium mt-1">7 dias grátis, depois R$ {prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {/* Placeholder */}
                 <div className="bg-[#0B0F19]/30 rounded-[2rem] p-6 md:p-8 border border-white/5 border-dashed flex flex-col justify-center items-center text-center group transition-all hover:bg-[#0B0F19]/50 hover:border-white/10">

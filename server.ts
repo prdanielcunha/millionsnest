@@ -719,19 +719,24 @@ async function startServer() {
       const trialEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
       
       let discoveredPlan = 'monthly';
+      let discoveredTier = 'pro';
       const firstItem = sub.items?.data?.[0];
       if (firstItem && firstItem.price?.lookup_key) {
          if (firstItem.price.lookup_key.includes('year') || firstItem.price.lookup_key.includes('annual')) {
              discoveredPlan = 'annual';
          }
+         if (firstItem.price.lookup_key.includes('starter')) {
+             discoveredTier = 'starter';
+         }
       }
 
-      console.log(`[Sync] Update successful. User: ${userId}, New Status: ${sub.status}, Plan: ${discoveredPlan}`);
+      console.log(`[Sync] Update successful. User: ${userId}, New Status: ${sub.status}, Plan: ${discoveredPlan}, Tier: ${discoveredTier}`);
 
       const batch = db.batch();
       batch.set(db.collection('subscriptions').doc(userId), {
         status: sub.status,
         plan: discoveredPlan,
+        tier: discoveredTier,
         stripeCustomerId: customerId,
         stripeSubscriptionId: sub.id,
         currentPeriodEnd: currentPeriodEnd,

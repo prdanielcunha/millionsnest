@@ -19,8 +19,7 @@ service cloud.firestore {
     function checkMemberExists(orgId) {
       return (orgId is string) && (
         exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)) ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId ||
-        orgId == request.auth.uid
+        exists(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid))
       );
     }
     
@@ -33,12 +32,21 @@ service cloud.firestore {
       );
     }
     
-    function getUserRoleRef(orgId) {
-      return get(/databases/$(database)/documents/roles/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roleId));
+    function getUserRoleRef() {
+      // Adicionado fallback para evitar crash caso user não tenha roleId definida
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return ('roleId' in userDoc.data) 
+        ? get(/databases/$(database)/documents/roles/$(userDoc.data.roleId)) 
+        : null;
     }
     
     function getMemberRole(orgId) {
-       return get(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)).data.role; 
+        // Melhoria para suportar as duas ordens possíveis de salvamento do ID do membro e não travar o app
+        return exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId))
+         ? get(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)).data.role
+         : (exists(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid))
+            ? get(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid)).data.role
+            : null);
     }
 
     function isOrgAdmin(orgId) {
@@ -76,16 +84,16 @@ service cloud.firestore {
     }
 
     function isValidSong(data) {
-      return data.keys().hasAll(['title', 'categories', 'status'])
-        && data.title is string && data.title.size() <= 200
-        && data.status is string && data.status.matches('^(draft|published)$');
+      // Aceita tanto formato de música MillionsNest (categories) quanto MusicScale (artist) pra evitar bloqueios mútuos
+      return (data.keys().hasAll(['title', 'categories', 'status']) || data.keys().hasAll(['title', 'artist']))
+        && data.title is string && data.title.size() <= 200;
     }
 
     function isValidScale(data) {
-      return data.keys().hasAll(['title', 'date', 'status'])
-        && data.title is string && data.title.size() <= 200
-        && data.date is string && data.date.size() <= 50
-        && data.status is string && data.status.matches('^(draft|published)$');
+      // Aceita tanto formato padrão Millions (title, date, status) quanto formato Music Scale (date, songIds)
+      return data.keys().hasAll(['date']) 
+        && (data.keys().hasAll(['title', 'status']) || data.keys().hasAll(['songIds', 'eventTypeId']))
+        && data.date is string && data.date.size() <= 50;
     }
 
     // --- RULES POR COLEÇÃO ---
@@ -104,16 +112,20 @@ service cloud.firestore {
 
     // 2. ORGANIZAÇÕES
     match /organizations/{orgId} {
+      // Permite ler a organização
       allow read: if isAuthenticated() && (
-        resource == null ||
         resource.data.ownerUid == request.auth.uid ||
         resource.data.owner_user_id == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid ||
-        orgId == request.auth.uid ||
-        checkMemberExists(orgId)
+        checkMemberExists(orgId) ||
+        orgId == request.auth.uid
       );
-      allow create: if isAuthenticated() && (orgId == request.auth.uid || incoming().ownerId == request.auth.uid);
-      allow update: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || orgId == request.auth.uid) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt']);
+      allow create: if isAuthenticated() && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.owner_user_id == request.auth.uid || orgId == request.auth.uid);
+      allow update: if isAuthenticated() && (
+        resource.data.ownerUid == request.auth.uid || 
+        resource.data.owner_user_id == request.auth.uid || 
+        orgId == request.auth.uid
+      );
+      allow delete: if false; 
     }
 
     // 3. MEMBROS DA ORGANIZAÇÃO
@@ -140,7 +152,7 @@ service cloud.firestore {
       allow write: if false; 
     }
 
-    // --- REGRAS ESPECÍFICAS DO MUSIC SCALE ---
+    // --- REGRAS ESPECÍFICAS DO MUSIC SCALE E MILLIONS NEST ---
     match /roles/{roleId} {
       allow read: if isAuthenticated() && 'organizationId' in resource.data && checkMemberExists(resource.data.organizationId);
       allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId) && isValidRole(incoming());
@@ -157,44 +169,52 @@ service cloud.firestore {
 
     match /songs/{songId} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && (isOrgAdmin(incoming().organizationId) || getUserRoleRef(incoming().organizationId).data.permissions.canManageRepertoire == true) && isValidSong(incoming());
-      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef(resource.data.organizationId).data.permissions.canManageRepertoire == true) && isValidSong(incoming());
-      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef(resource.data.organizationId).data.permissions.canManageRepertoire == true);
+      allow create: if isAuthenticated() && (isOrgAdmin(incoming().organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true) && isValidSong(incoming());
+      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true);
+      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true);
     }
 
     match /scales/{scaleId} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && (isOrgAdmin(incoming().organizationId) || getUserRoleRef(incoming().organizationId).data.permissions.canManageScales == true) && isValidScale(incoming());
-      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef(resource.data.organizationId).data.permissions.canManageScales == true) && isValidScale(incoming());
-      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef(resource.data.organizationId).data.permissions.canManageScales == true);
+      allow create: if isAuthenticated() && (isOrgAdmin(incoming().organizationId) || getUserRoleRef().data.permissions.canManageScales == true) && isValidScale(incoming());
+      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageScales == true);
+      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageScales == true);
     }
     
-    match /addons/{id} {
+    // --- COLEÇÕES ADICIONAIS MUSIC SCALE QUE ESTAVAM CAUSANDO ERRO DE ACESSO E TELA DE CARREGAMENTO INFINITA ---
+    match /bandScales/{id} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId);
-      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId);
+      allow create, update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageScales == true);
+    }
+    
+    match /fixedBandScales/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create, update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageScales == true);
     }
 
-    match /permissions/{id} {
+    match /suggestions/{id} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId);
-      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId);
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
     }
-
-    match /usage/{id} {
+    
+    match /instruments/{id} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow write: if false; // Only backend can write usage metrics
+      allow create, update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true);
     }
-
-    match /dashboards/{id} {
+    
+    match /eventTypes/{id} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId);
-      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId);
+      allow create, update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true);
+    }
+    
+    match /eventNames/{id} {
+       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+       allow create, update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true);
     }
     
     // Regras Extras Antigas do MillionsNest se necessário na sua stack
     match /locations/{id} { allow read, write: if isAuthenticated() && checkOrgAccess(resource.data.organizationId); }
-    match /eventTypes/{id} { allow read, write: if isAuthenticated() && checkOrgAccess(resource.data.organizationId); }
     match /tags/{id} { allow read, write: if isAuthenticated() && checkOrgAccess(resource.data.organizationId); }
   }
 }

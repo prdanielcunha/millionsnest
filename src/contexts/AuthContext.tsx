@@ -9,6 +9,7 @@ interface UserProfile {
   displayName: string | null;
   photoURL: string | null;
   products: string[];
+  organizationId?: string;
   lastLoginAt: any;
   createdAt: any;
 }
