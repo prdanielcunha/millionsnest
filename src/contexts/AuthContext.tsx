@@ -52,12 +52,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (userSnap.exists()) {
             const userData = userSnap.data() as UserProfile;
             
-            // Atualizar lastLoginAt
-            await setDoc(userRef, { lastLoginAt: serverTimestamp() }, { merge: true });
+            // Check for pending invite logic if needed locally?
+            const inviteOrgId = localStorage.getItem('invite_org_id');
+            let mergeData: any = { lastLoginAt: serverTimestamp() };
+            if (inviteOrgId && !userData.organizationId) {
+              mergeData.organizationId = inviteOrgId;
+              userData.organizationId = inviteOrgId;
+              localStorage.removeItem('invite_org_id');
+            }
+
+            // Atualizar lastLoginAt e possível org
+            await setDoc(userRef, mergeData, { merge: true });
             
             setProfile({ ...userData, lastLoginAt: new Date() });
           } else {
             // Criar novo usuário
+            const inviteOrgId = localStorage.getItem('invite_org_id');
+            const targetOrgId = inviteOrgId || currentUser.uid;
+
             const newProfile: Partial<UserProfile> = {
               uid: currentUser.uid,
               email: currentUser.email,
@@ -66,9 +78,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               products: [],
               lastLoginAt: serverTimestamp(),
               createdAt: serverTimestamp(),
+              organizationId: targetOrgId
             };
             
             await setDoc(userRef, newProfile);
+
+            // Se é o dono dessa nova org (não foi convidado), cria a organization default dele
+            if (!inviteOrgId) {
+               const orgRef = doc(db, 'organizations', targetOrgId);
+               await setDoc(orgRef, {
+                 name: `Organização de ${currentUser.displayName || currentUser.email?.split('@')[0]}`,
+                 ownerId: currentUser.uid,
+                 createdAt: serverTimestamp()
+               }, { merge: true });
+            }
+
+            if (inviteOrgId) {
+               localStorage.removeItem('invite_org_id');
+            }
+
             setProfile(newProfile as UserProfile);
           }
         } catch (error) {

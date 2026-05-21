@@ -16,8 +16,13 @@ export function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Redirecionamento e lógica pós-login
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const org = params.get('org');
+    if (org) {
+      localStorage.setItem('invite_org_id', org);
+    }
+    
     if (authLoading) return;
     
     if (user && profile) {

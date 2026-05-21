@@ -5,10 +5,10 @@ import { Navigate } from "react-router-dom";
 import { 
   Music, ArrowRight, Settings, ExternalLink, ShieldCheck, 
   CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight, Building2,
-  Star, Zap, Headphones, Video, ListMusic, Check
+  Star, Zap, Headphones, Video, ListMusic, Check, Users, Link, Mail, Plus, X, Loader2, Copy
 } from "lucide-react";
 import { Navbar } from "../components/Navbar.js";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
@@ -20,6 +20,21 @@ export function Dashboard() {
   const [organization, setOrganization] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  
+  // Organization Edit States
+  const [isEditingOrg, setIsEditingOrg] = useState(false);
+  const [orgNameInput, setOrgNameInput] = useState("");
+  const [savingOrg, setSavingOrg] = useState(false);
+  
+  // Profile Edit States
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileNameInput, setProfileNameInput] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Invite Link states
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [members, setMembers] = useState<any[]>([]);
+
   const [prices, setPrices] = useState({ 
     starter_monthly: 0,
     starter_annual: 0,
@@ -124,6 +139,17 @@ export function Dashboard() {
         setOrganization(null);
       }
 
+      // Fetch org members
+      try {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("organizationId", "==", orgId));
+        const membersSnap = await getDocs(q);
+        const mems = membersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMembers(mems);
+      } catch (err) {
+        console.error("Erro ao buscar membros", err);
+      }
+
     } catch (error) {
       console.error("[Dashboard] Error fetching data:", error);
       setSubscription(null);
@@ -131,6 +157,65 @@ export function Dashboard() {
     } finally {
       setLoadingSub(false);
     }
+  };
+
+  useEffect(() => {
+    if (organization?.name) {
+      setOrgNameInput(organization.name);
+    }
+  }, [organization]);
+
+  useEffect(() => {
+    if (profile?.displayName) {
+      setProfileNameInput(profile.displayName);
+    }
+  }, [profile]);
+  
+  const handleSaveOrg = async () => {
+    if (!user || !orgNameInput.trim()) return;
+    setSavingOrg(true);
+    try {
+      const orgId = profile?.organizationId || user.uid;
+      const orgRef = doc(db, "organizations", orgId);
+      await setDoc(orgRef, { name: orgNameInput }, { merge: true });
+      setOrganization({ ...organization, name: orgNameInput });
+      setIsEditingOrg(false);
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao salvar organização.");
+    } finally {
+      setSavingOrg(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user || !profileNameInput.trim()) return;
+    setSavingProfile(true);
+    try {
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, { displayName: profileNameInput });
+      setIsEditingProfile(false);
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao salvar perfil.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleInviteWhatsapp = () => {
+    const orgId = profile?.organizationId || user?.uid;
+    const link = `${window.location.origin}/login?org=${orgId}`;
+    const text = encodeURIComponent(`Olá! Quero te convidar para acessar nossa organização no ecossistema MillionsNest.\n\nAcesse: ${link}`);
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  const handleCopyLink = () => {
+    const orgId = profile?.organizationId || user?.uid;
+    const link = `${window.location.origin}/login?org=${orgId}`;
+    navigator.clipboard.writeText(link);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   useEffect(() => {
@@ -628,9 +713,30 @@ export function Dashboard() {
                 {organization ? (
                   <div className="space-y-6">
                     <div className="flex items-center justify-between pb-6 border-b border-white/5">
-                      <div>
+                      <div className="flex-1">
                         <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Nome da Organização</p>
-                        <p className="text-base font-semibold text-[#F5F7FA]">{organization.name}</p>
+                        {isEditingOrg ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <input 
+                              title="Nome da Organização"
+                              type="text" 
+                              value={orgNameInput} 
+                              onChange={(e) => setOrgNameInput(e.target.value)} 
+                              className="bg-[#050505] border border-white/10 rounded-xl px-4 py-2 text-sm text-[#F5F7FA] outline-none focus:border-[#2B85EB] transition-colors w-full max-w-[250px]"
+                            />
+                            <button disabled={savingOrg} onClick={handleSaveOrg} className="p-2 bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl hover:bg-[#2B85EB]/20 transition-colors">
+                              {savingOrg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                            </button>
+                            <button disabled={savingOrg} onClick={() => { setIsEditingOrg(false); setOrgNameInput(organization.name); }} className="p-2 bg-white/5 text-[#A0A7B5] rounded-xl hover:bg-white/10 transition-colors">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <p className="text-base font-semibold text-[#F5F7FA]">{organization.name}</p>
+                            <button onClick={() => setIsEditingOrg(true)} className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB]">Editar</button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -642,6 +748,40 @@ export function Dashboard() {
                             {organization?.subscriptionStatus || 'Inativo'}
                           </span>
                         </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-4 pb-6 border-b border-white/5">
+                      <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5]">Membros & Convites</p>
+                      
+                      {members.length > 0 && (
+                        <div className="flex flex-col gap-2 mb-4">
+                          {members.map(member => (
+                            <div key={member.id} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/5 rounded-xl">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB] font-bold text-xs uppercase">
+                                  {member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-semibold text-[#F5F7FA]">{member.displayName || 'Usuário'} {member.id === user.uid && '(Você)'}</span>
+                                  <span className="text-[10px] text-[#A0A7B5]">{member.email}</span>
+                                </div>
+                              </div>
+                              {member.id !== user.uid && (
+                                <button className="text-xs text-[#EF4444] hover:text-[#FCA5A5] font-medium" onClick={() => alert("Remoção de membros em desenvolvimento.")}>Excluir</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-3">
+                        <button onClick={handleInviteWhatsapp} className="flex items-center gap-2 px-4 py-2 bg-[#10B981]/10 text-[#10B981] rounded-xl hover:bg-[#10B981]/20 transition-colors border border-[#10B981]/20 text-sm font-medium">
+                          <Link className="w-4 h-4" /> Whatsapp
+                        </button>
+                        <button onClick={handleCopyLink} className="flex items-center gap-2 px-4 py-2 bg-white/5 text-[#F5F7FA] rounded-xl hover:bg-white/10 transition-colors border border-white/10 text-sm font-medium">
+                          {copiedLink ? <Check className="w-4 h-4 text-[#10B981]" /> : <Copy className="w-4 h-4" />} Copiar Link
+                        </button>
                       </div>
                     </div>
 
@@ -685,9 +825,30 @@ export function Dashboard() {
                 
                 <div className="space-y-6">
                   <div className="flex items-center justify-between pb-6 border-b border-white/5">
-                    <div>
+                    <div className="flex-1">
                       <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Nome de Exibição</p>
-                      <p className="text-base font-semibold text-[#F5F7FA]">{profile?.displayName || "Não informado"}</p>
+                      {isEditingProfile ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <input 
+                            title="Nome de Exibição"
+                            type="text" 
+                            value={profileNameInput} 
+                            onChange={(e) => setProfileNameInput(e.target.value)} 
+                            className="bg-[#050505] border border-white/10 rounded-xl px-4 py-2 text-sm text-[#F5F7FA] outline-none focus:border-[#2B85EB] transition-colors w-full max-w-[250px]"
+                          />
+                          <button disabled={savingProfile} onClick={handleSaveProfile} className="p-2 bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl hover:bg-[#2B85EB]/20 transition-colors">
+                            {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                          </button>
+                          <button disabled={savingProfile} onClick={() => { setIsEditingProfile(false); setProfileNameInput(profile?.displayName || ""); }} className="p-2 bg-white/5 text-[#A0A7B5] rounded-xl hover:bg-white/10 transition-colors">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <p className="text-base font-semibold text-[#F5F7FA]">{profileNameInput || profile?.displayName || "Não informado"}</p>
+                          <button onClick={() => setIsEditingProfile(true)} className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB]">Editar</button>
+                        </div>
+                      )}
                     </div>
                   </div>
                   

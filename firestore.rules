@@ -17,7 +17,11 @@ service cloud.firestore {
     
     // --- Helpers Relacionais Multi-Tenant ---
     function checkMemberExists(orgId) {
-      return (orgId is string) && exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId));
+      return (orgId is string) && (
+        exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId ||
+        orgId == request.auth.uid
+      );
     }
     
     function checkOrgAccess(orgId) {
@@ -100,13 +104,16 @@ service cloud.firestore {
 
     // 2. ORGANIZAÇÕES
     match /organizations/{orgId} {
-      // Backend (Webhook do Stripe) é o único autorizado a criar/modificar
       allow read: if isAuthenticated() && (
+        resource == null ||
         resource.data.ownerUid == request.auth.uid ||
         resource.data.owner_user_id == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        orgId == request.auth.uid ||
         checkMemberExists(orgId)
       );
-      allow write: if false; 
+      allow create: if isAuthenticated() && (orgId == request.auth.uid || incoming().ownerId == request.auth.uid);
+      allow update: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || orgId == request.auth.uid) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt']);
     }
 
     // 3. MEMBROS DA ORGANIZAÇÃO
