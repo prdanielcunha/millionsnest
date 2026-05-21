@@ -37,7 +37,7 @@ export function Flagship() {
               viewport={{ once: true }}
               className="text-lg md:text-xl text-[#A0A7B5] font-normal leading-relaxed"
             >
-              Esqueça as planilhas e mensagens perdidas. Uma plataforma construída para organizar repertórios, gerenciar equipes e preparar seu ministério com excelência real.
+              Esqueça as planilhas e mensagens perdidas. Uma plataforma construída para organizar repertórios, gerenciar escalas e preparar seu ministério com excelência real.
             </motion.p>
           </div>
           
@@ -45,6 +45,7 @@ export function Flagship() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
+            className="flex flex-col gap-4 w-full md:w-auto"
           >
             <Link 
               to="/login" 
@@ -54,6 +55,25 @@ export function Flagship() {
             </Link>
           </motion.div>
         </div>
+
+        {/* Video Placeholder Area */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="w-full h-[250px] sm:h-[400px] md:h-[500px] bg-[#0B0F19] rounded-[2rem] border border-white/5 mb-24 relative overflow-hidden flex items-center justify-center group cursor-pointer hover:border-white/10 transition-colors"
+          onClick={() => alert('Vídeo prático demonstrando o uso do app na igreja será adicionado aqui em breve!')}
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent pointer-events-none" />
+          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/5 border border-white/10 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:bg-white/10 transition-all backdrop-blur-sm z-10 shadow-lg">
+            <svg className="w-6 h-6 sm:w-8 sm:h-8 text-[#F5F7FA]" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+          <p className="absolute bottom-6 text-[#A0A7B5] text-sm font-medium z-10 flex items-center gap-2">
+            Ver aplicativo em ação <span className="text-xs px-2 py-0.5 rounded-md bg-white/5 border border-white/10">Em breve</span>
+          </p>
+        </motion.div>
 
         {/* Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[300px]">

@@ -30,7 +30,7 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-[#F5F7FA] to-[#A0A7B5] max-w-5xl leading-[1.05] pb-2"
         >
-          Tecnologia para<br className="hidden md:block" /> fortalecer igrejas.
+          O fim do caos.<br className="hidden md:block" /> O início da precisão.
         </motion.h1>
 
         <motion.p
@@ -39,7 +39,7 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="mt-8 text-lg md:text-xl text-[#A0A7B5] max-w-2xl font-normal leading-relaxed"
         >
-          Menos caos. Mais ministério. A central operacional moderna projetada para devolver o seu foco ao que realmente importa, com excelência e clareza.
+          Adeus WhatsApp desorganizado, PDF perdido e cifras no tom errado. O ecossistema definitivo desenhado com a elegância que seu ministério merece para escalar, conectar e elevar a sua equipe.
         </motion.p>
 
         <motion.div
@@ -52,10 +52,10 @@ export function Hero() {
             Começar agora
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
-          <a href="#musicscale" className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#0B0F19] text-[#F5F7FA] font-medium border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2 group shadow-sm">
-            Explorar ecossistema
-            <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors" />
-          </a>
+          <button onClick={() => alert('Vídeo de demonstração em breve!')} className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#0B0F19] text-[#F5F7FA] font-medium border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2 group shadow-sm">
+            <Play className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors" />
+            Ver demonstração
+          </button>
         </motion.div>
 
         {/* Dashboard Mockup Container */}
