@@ -34,6 +34,39 @@ export function Dashboard() {
   const [addonsData, setAddonsData] = useState<any[]>([]);
   const [isAnnual, setIsAnnual] = useState(true);
 
+  const openBillingPortal = async () => {
+    if (!user) return;
+    try {
+      setCheckoutLoading(true);
+      const res = await fetch('/api/v1/billing/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.uid })
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        if (res.status === 404 || data.error?.includes('Stripe não encontrado')) {
+          alert('Inconsistência identificada na conta. Sincronizando e reparando acesso...');
+          await fetch('/api/v1/billing/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.uid })
+          });
+          window.location.reload();
+          return;
+        }
+        alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Erro de comunicação.');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   const fetchSubscriptionAndOrg = async (forceSync = false) => {
     if (!user) return;
     try {
@@ -448,21 +481,7 @@ export function Dashboard() {
                         
                         {subscription?.stripeCustomerId && (
                           <button
-                            onClick={async () => {
-                              try {
-                                const res = await fetch('/api/v1/billing/portal', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ userId: user.uid })
-                                });
-                                const data = await res.json();
-                                if (data.url) window.location.href = data.url;
-                                else alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
-                              } catch (e) {
-                                console.error(e);
-                                alert('Erro de comunicação.');
-                              }
-                            }}
+                            onClick={openBillingPortal}
                             className="w-full py-3 px-4 mt-2 bg-white/5 text-[#A0A7B5] border border-white/5 rounded-xl font-semibold flex items-center justify-center hover:bg-white/10 hover:text-[#F5F7FA] transition-all active:scale-95"
                           >
                             <Settings className="w-4 h-4 mr-2" /> Gerenciar Assinatura
@@ -583,21 +602,7 @@ export function Dashboard() {
                     </div>
 
                     <button
-                      onClick={async () => {
-                        try {
-                          const res = await fetch('/api/v1/billing/portal', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ userId: user.uid })
-                          });
-                          const data = await res.json();
-                          if (data.url) window.location.href = data.url;
-                          else alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
-                        } catch (e) {
-                          console.error(e);
-                          alert('Erro de comunicação.');
-                        }
-                      }}
+                      onClick={openBillingPortal}
                       className="whitespace-nowrap px-6 py-4 bg-white/5 text-[#F5F7FA] border border-white/10 rounded-xl font-semibold flex items-center justify-center hover:bg-white/10 transition-all shadow-sm active:scale-95 h-fit w-full md:w-auto z-10"
                     >
                       Acessar Portal
@@ -793,24 +798,7 @@ export function Dashboard() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
                       <button 
-                        onClick={async () => {
-                          try {
-                            const res = await fetch('/api/v1/billing/portal', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ userId: user.uid })
-                            });
-                            const data = await res.json();
-                            if (data.url) {
-                              window.location.href = data.url;
-                            } else {
-                              alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
-                            }
-                          } catch (e) {
-                            console.error(e);
-                            alert('Erro de comunicação.');
-                          }
-                        }}
+                        onClick={openBillingPortal}
                         className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold hover:bg-white transition-all shadow-sm active:scale-95"
                       >
                         <Settings className="w-4 h-4 ml-1" /> Gerenciar Assinatura
@@ -818,45 +806,14 @@ export function Dashboard() {
                       
                       {subscription.status === 'canceled' || subscription.status === 'past_due' ? (
                         <button 
-                          onClick={async () => {
-                            try {
-                              const res = await fetch('/api/v1/billing/portal', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ userId: user.uid })
-                              });
-                              const data = await res.json();
-                              if (data.url) {
-                                window.location.href = data.url;
-                              }
-                            } catch (e) {
-                              console.error(e);
-                            }
-                          }}
+                          onClick={openBillingPortal}
                           className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#2B85EB] text-white rounded-xl font-semibold hover:bg-[#2B85EB]/90 transition-all shadow-sm active:scale-95"
                         >
                           Reativar Assinatura
                         </button>
                       ) : (
                         <button 
-                          onClick={async () => {
-                            try {
-                              const res = await fetch('/api/v1/billing/portal', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ userId: user.uid })
-                              });
-                              const data = await res.json();
-                              if (data.url) {
-                                window.location.href = data.url;
-                              } else {
-                                alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
-                              }
-                            } catch (e) {
-                              console.error(e);
-                              alert('Erro de comunicação.');
-                            }
-                          }}
+                          onClick={openBillingPortal}
                           className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-white/5 text-[#F5F7FA] border border-white/10 rounded-xl font-semibold hover:bg-white/10 transition-all shadow-sm active:scale-95"
                         >
                           Fazer Upgrade / Downgrade

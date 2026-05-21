@@ -974,7 +974,25 @@ async function startServer() {
       const products = await service.getProducts();
       const planItem = products.plans.find(p => p.lookupKey === lookupKey);
 
-      const session = await stripe.checkout.sessions.create({
+      let customerId: string | undefined;
+      if (db) {
+         const subDoc = await db.collection('subscriptions').doc(userId).get();
+         if (subDoc.exists) customerId = subDoc.data()?.stripeCustomerId;
+         
+         if (!customerId) {
+            const userDoc = await db.collection('users').doc(userId).get();
+            if (userDoc.exists) customerId = userDoc.data()?.stripeCustomerId;
+         }
+      }
+
+      if (!customerId && email) {
+        const customers = await stripe.customers.list({ email, limit: 1 });
+        if (customers.data.length > 0) {
+           customerId = customers.data[0].id;
+        }
+      }
+
+      const sessionArgs: Stripe.Checkout.SessionCreateParams = {
         payment_method_types: ['card'],
         line_items: [
           {
@@ -988,7 +1006,6 @@ async function startServer() {
           trial_period_days: 7, // 7 days trial mandatory by requirements
         },
         client_reference_id: userId,
-        customer_email: email,
         metadata: {
           uid: userId,
           plan: planItem ? planItem.tier || planItem.feature : 'unknown',
@@ -996,7 +1013,15 @@ async function startServer() {
         },
         success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
-      });
+      };
+
+      if (customerId) {
+         sessionArgs.customer = customerId;
+      } else {
+         sessionArgs.customer_email = email;
+      }
+
+      const session = await stripe.checkout.sessions.create(sessionArgs);
 
       console.log(`[Checkout] Session created successfully for user ${userId}`);
       res.json({ url: session.url });
@@ -1038,9 +1063,20 @@ async function startServer() {
       let customerId: string | undefined;
       if (db) {
          const subDoc = await db.collection('subscriptions').doc(userId).get();
-         if (subDoc.exists) {
-            customerId = subDoc.data()?.stripeCustomerId;
+         if (subDoc.exists) customerId = subDoc.data()?.stripeCustomerId;
+         
+         if (!customerId) {
+            const userDoc = await db.collection('users').doc(userId).get();
+            if (userDoc.exists) customerId = userDoc.data()?.stripeCustomerId;
          }
+      }
+
+      if (!customerId && email) {
+        const stripe = getStripe();
+        const customers = await stripe.customers.list({ email, limit: 1 });
+        if (customers.data.length > 0) {
+           customerId = customers.data[0].id;
+        }
       }
 
       const stripe = getStripe();
@@ -1097,12 +1133,31 @@ async function startServer() {
          return res.status(500).json({ error: 'Database error' });
       }
 
+      let customerId: string | undefined;
+
       const subDoc = await db.collection('subscriptions').doc(userId).get();
-      if (!subDoc.exists) {
-         return res.status(404).json({ error: "Sua assinatura ainda não foi processada." });
+      if (subDoc.exists) {
+         customerId = subDoc.data()?.stripeCustomerId;
       }
 
-      const customerId = subDoc.data()?.stripeCustomerId;
+      if (!customerId) {
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (userDoc.exists) {
+          customerId = userDoc.data()?.stripeCustomerId;
+          
+          if (!customerId) {
+             const email = userDoc.data()?.email;
+             if (email) {
+                const stripe = getStripe();
+                const customers = await stripe.customers.list({ email, limit: 1 });
+                if (customers.data.length > 0) {
+                   customerId = customers.data[0].id;
+                }
+             }
+          }
+        }
+      }
+
       if (!customerId) {
          return res.status(404).json({ error: "ID de cliente Stripe não encontrado." });
       }
