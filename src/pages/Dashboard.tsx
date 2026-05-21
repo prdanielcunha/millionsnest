@@ -215,7 +215,7 @@ export function Dashboard() {
   const showMusicScaleCard = hasMusicScaleAccess || subscription != null;
 
   const formattedRenewal = subscription?.currentPeriodEnd 
-    ? new Date(subscription.currentPeriodEnd.seconds * 1000).toLocaleDateString('pt-BR') 
+    ? new Date((subscription.currentPeriodEnd.seconds || subscription.currentPeriodEnd._seconds || 0) * 1000).toLocaleDateString('pt-BR') 
     : null;
 
   const handleAddonCheckout = async (lookupKey: string) => {
@@ -366,7 +366,7 @@ export function Dashboard() {
                       <span className="px-3 py-1 bg-[#EF4444]/10 text-[#EF4444] text-[10px] font-bold rounded-full border border-[#EF4444]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
                         <AlertCircle className="w-3.5 h-3.5" /> Cancelado
                       </span>
-                    ) : subscription != null ? (
+                    ) : subscription != null && subscription.status !== 'none' ? (
                        <span className="px-3 py-1 bg-[#2B85EB]/10 text-[#2B85EB] text-[10px] font-bold rounded-full border border-[#2B85EB]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
                         {subscription.status}
                       </span>
@@ -382,7 +382,7 @@ export function Dashboard() {
                     A plataforma completa para gestão e escalas de ministérios de louvor, integrada ao ecossistema central.
                   </p>
 
-                  {(subscription || loadingSub) && (
+                  {(subscription && subscription.status !== 'none' || loadingSub) && (
                     <div className="mb-6 bg-[#050505] rounded-2xl p-5 border border-white/5 relative overflow-hidden group shadow-inner">
                       {loadingSub ? (
                         <div className="flex flex-col gap-2 py-2 animate-pulse">

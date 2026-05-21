@@ -611,7 +611,7 @@ async function startServer() {
       }
 
       try {
-        if (customerId) {
+        if (customerId && !subscriptions) {
           // Detect mismatch before calling Stripe if possible
           if (isLiveKey && customerId.includes('test')) {
              console.warn(`[Sync] Local ID ${customerId} is from TEST mode, but currently using LIVE key. Triggering self-healing...`);
@@ -717,12 +717,21 @@ async function startServer() {
       const hasAccess = ['active', 'trialing'].includes(sub.status);
       const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000);
       const trialEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
+      
+      let discoveredPlan = 'monthly';
+      const firstItem = sub.items?.data?.[0];
+      if (firstItem && firstItem.price?.lookup_key) {
+         if (firstItem.price.lookup_key.includes('year') || firstItem.price.lookup_key.includes('annual')) {
+             discoveredPlan = 'annual';
+         }
+      }
 
-      console.log(`[Sync] Update successful. User: ${userId}, New Status: ${sub.status}`);
+      console.log(`[Sync] Update successful. User: ${userId}, New Status: ${sub.status}, Plan: ${discoveredPlan}`);
 
       const batch = db.batch();
       batch.set(db.collection('subscriptions').doc(userId), {
         status: sub.status,
+        plan: discoveredPlan,
         stripeCustomerId: customerId,
         stripeSubscriptionId: sub.id,
         currentPeriodEnd: currentPeriodEnd,
@@ -773,6 +782,70 @@ async function startServer() {
         error: 'Erro na sincronização com Stripe.',
         details: err.message 
       });
+    }
+  });
+
+  app.get('/api/admin/repair/pastordaniel', async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: 'DB not ready' });
+      const stripe = getStripe();
+      // Encontra a assinatura no Stripe do e-mail usado
+      const customers = await stripe.customers.list({ email: 'danielcunhapastor@gmail.com', limit: 1 });
+      if (customers.data.length === 0) return res.status(404).send('Not found in stripe');
+      
+      const customer = customers.data[0];
+      const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 1 });
+      if (subs.data.length === 0) return res.status(404).send('No sub found');
+      
+      const sub = subs.data[0];
+      const hasAccess = ['active', 'trialing'].includes(sub.status);
+      const cpEnd = admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000);
+      const tEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
+      
+      const userId = '7PUd8TAyXkT2CUkrcUtIGn5btch1';
+      
+      const batch = db.batch();
+      batch.set(db.collection('subscriptions').doc(userId), {
+        status: sub.status,
+        stripeCustomerId: customer.id,
+        stripeSubscriptionId: sub.id,
+        currentPeriodEnd: cpEnd,
+        trialEndsAt: tEnd,
+        plan: 'annual',
+        appsAccess: { musicscale: hasAccess },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      
+      batch.set(db.collection('users').doc(userId), {
+        subscriptionStatus: sub.status,
+        stripeCustomerId: customer.id,
+        stripeSubscriptionId: sub.id,
+        trialEndsAt: tEnd,
+        currentPeriodEnd: cpEnd,
+        appsAccess: { musicscale: hasAccess },
+        subscription: {
+          status: sub.status,
+          stripeCustomerId: customer.id,
+          stripeSubscriptionId: sub.id,
+          trialEndsAt: tEnd,
+          currentPeriodEnd: cpEnd,
+        },
+        permissions: { musicscale: hasAccess },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      batch.set(db.collection('organizations').doc(userId), {
+        subscriptionStatus: sub.status,
+        stripeCustomerId: customer.id,
+        stripeSubscriptionId: sub.id,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      await batch.commit();
+
+      res.status(200).json({ success: true, repairedStatus: sub.status });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
