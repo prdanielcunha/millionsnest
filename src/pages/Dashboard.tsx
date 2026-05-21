@@ -753,7 +753,7 @@ export function Dashboard() {
                   )}
                 </div>
                 
-                {subscription ? (
+                {subscription && subscription.status !== 'none' ? (
                   <div className="space-y-6">
                     <div className="bg-[#050505] rounded-2xl p-6 border border-white/5 shadow-inner">
                       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
