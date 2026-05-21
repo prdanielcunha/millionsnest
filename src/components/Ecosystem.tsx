@@ -10,16 +10,16 @@ export function Ecosystem() {
       features: ["Ordem do culto", "Cronograma", "Equipes", "Fluxo ao vivo"]
     },
     {
-      title: "Gestão Ministerial",
+      title: "Células e Pequenos Grupos",
       icon: <Users className="w-5 h-5" />,
-      desc: "Gestão inteligente, centralizada e acompanhamento de equipes e coordenações.",
-      features: ["Integração", "Líderes", "Membros", "Relatórios"]
+      desc: "Gerenciamento estratégico profundo para células, com relatórios fluídos e saúde pastoral.",
+      features: ["Relatórios intuitivos", "Gestão de líderes", "Acompanhamento", "Multiplicação"]
     },
     {
-      title: "Comunicação e Analytics",
+      title: "Recepção e Visitantes",
       icon: <QrCode className="w-5 h-5" />,
-      desc: "Plataforma de avisos e tomadas de decisão embasadas com detalhados.",
-      features: ["Avisos", "Dashboards integrados", "Otimização"]
+      desc: "Experiência de check-in, mapeamento de novos visitantes e relatórios precisos de integração.",
+      features: ["Registro ágil", "Métricas de culto", "Jornada de acompanhamento"]
     }
   ];
 
