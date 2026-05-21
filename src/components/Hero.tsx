@@ -7,10 +7,16 @@ const DashboardMockup = lazy(() => import("./DashboardMockup.js").then((m) => ({
 
 export function Hero() {
   return (
-    <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden bg-[#050505]">
-      {/* Premium Background Glow - Hardware Accelerated */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[300px] md:h-[400px] bg-[#2B85EB]/10 rounded-[100%] blur-[100px] md:blur-[120px] pointer-events-none transform-gpu" />
-      <div className="absolute top-40 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[250px] md:h-[300px] bg-[#F5F7FA]/5 rounded-[100%] blur-[80px] md:blur-[100px] pointer-events-none transform-gpu" />
+    <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden bg-[#050505] min-h-screen">
+      {/* Premium Background Glow & Image - Hardware Accelerated */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-20 mix-blend-screen mix-blend-lighten">
+        <img src="/M_fundo.png" alt="" className="w-full h-full object-cover object-top opacity-40" />
+      </div>
+      <div className="absolute inset-0 z-0 pointer-events-none flex justify-center mt-20 opacity-10 md:opacity-20">
+        <img src="/M_semfundo.png" alt="" className="w-[800px] max-w-none object-contain translate-y-10" />
+      </div>
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[300px] md:h-[400px] bg-[#2B85EB]/10 rounded-[100%] blur-[100px] md:blur-[120px] pointer-events-none transform-gpu z-0" />
+      <div className="absolute top-40 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[250px] md:h-[300px] bg-[#F5F7FA]/5 rounded-[100%] blur-[80px] md:blur-[100px] pointer-events-none transform-gpu z-0" />
 
       <div className="max-w-7xl mx-auto px-6 relative z-10 flex flex-col items-center text-center">
         
@@ -30,7 +36,7 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-[#F5F7FA] to-[#A0A7B5] max-w-5xl leading-[1.05] pb-2"
         >
-          O fim do caos.<br className="hidden md:block" /> O início da precisão.
+          Tecnologia para <br className="hidden md:block" /> fortalecer igrejas.
         </motion.h1>
 
         <motion.p
@@ -39,7 +45,7 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="mt-8 text-lg md:text-xl text-[#A0A7B5] max-w-2xl font-normal leading-relaxed"
         >
-          Adeus WhatsApp desorganizado, PDF perdido e cifras no tom errado. O ecossistema definitivo desenhado com a elegância que seu ministério merece para escalar, conectar e elevar a sua equipe.
+          O fim do caos operacional. O início de uma nova experiência ministerial para organizar equipes, repertórios, escalas e processos com excelência.
         </motion.p>
 
         <motion.div

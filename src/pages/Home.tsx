@@ -8,7 +8,7 @@ const Problem = lazy(() => import("../components/Problem.js").then((module) => (
 const Ecosystem = lazy(() => import("../components/Ecosystem.js").then((module) => ({ default: module.Ecosystem })));
 const Flagship = lazy(() => import("../components/Flagship.js").then((module) => ({ default: module.Flagship })));
 const Pricing = lazy(() => import("../components/Pricing.js").then((module) => ({ default: module.Pricing })));
-const FAQ = lazy(() => import("../components/FAQ.js").then((module) => ({ default: module.FAQ })));
+const Vision = lazy(() => import("../components/Vision.js").then((module) => ({ default: module.Vision })));
 const Footer = lazy(() => import("../components/Footer.js").then((module) => ({ default: module.Footer })));
 
 function SectionFallback() {
@@ -41,7 +41,7 @@ export function Home() {
         <Flagship />
         <Pricing />
         <Ecosystem />
-        <FAQ />
+        <Vision />
         <Footer />
       </Suspense>
     </div>

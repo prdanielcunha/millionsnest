@@ -28,7 +28,7 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
-          <img src="/logo_oficial.png" alt="MillionsNest Logo" className="h-8 md:h-9 w-auto object-contain transition-transform group-hover:scale-105" />
+          <img src="/logo02.png" alt="MillionsNest Logo" className="h-10 md:h-12 w-auto object-contain transition-transform group-hover:scale-105" />
           <span className="font-semibold text-lg tracking-tight text-[#F5F7FA]">MillionsNest</span>
         </Link>
 
@@ -57,7 +57,7 @@ export function Navbar() {
             <>
               <Link to="/login" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">Entrar</Link>
               <Link to="/login" className="text-sm font-medium px-5 py-2.5 rounded-lg bg-[#F5F7FA] text-[#050505] hover:bg-white transition-all shadow-sm hover:shadow active:scale-95">
-                Teste Grátis de 7 Dias
+                Teste grátis
               </Link>
             </>
           )}

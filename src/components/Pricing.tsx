@@ -139,9 +139,9 @@ export function Pricing() {
             
             <Link 
               to="/login" 
-              className="w-full py-4 px-6 rounded-xl bg-white/5 border border-white/10 text-[#F5F7FA] text-center font-semibold hover:bg-white/10 transition-all shadow-sm active:scale-95 mt-2 mb-8 block"
+              className="w-full py-4 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block"
             >
-              Começar Agora
+              Começar com o Starter
             </Link>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5">
@@ -209,9 +209,9 @@ export function Pricing() {
             
             <Link 
               to="/login" 
-              className="w-full py-4 px-3 md:px-6 rounded-xl bg-[#F5F7FA] text-[#050505] text-center font-semibold text-sm md:text-base hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 mt-2 mb-8 block relative z-10"
+              className="w-full py-4 px-3 md:px-6 rounded-xl bg-gradient-to-r from-[#2B85EB]/80 to-[#2B85EB] text-[#F5F7FA] border border-[#2B85EB] text-center font-semibold text-sm md:text-base hover:from-[#2B85EB] hover:to-[#4ca4ff] transition-all shadow-[0_0_20px_rgba(43,133,235,0.2)] hover:shadow-[0_0_30px_rgba(43,133,235,0.4)] active:scale-95 mt-2 mb-8 block relative z-10"
             >
-              Desbloquear Pro
+              Assinar o Plano Pro
             </Link>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5 relative z-10">

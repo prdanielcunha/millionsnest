@@ -43,14 +43,15 @@ export function Problem() {
             
             <ul className="space-y-6">
               {[
-                "Escalas perdidas no meio de conversas do WhatsApp",
-                "Arquivos descentralizados e informações confusas",
-                "Falta de comunicação e líderes sobrecarregados",
-                "Excesso de improviso e planilhas complexas",
-                "Gestão fragmentada em dezenas de ferramentas"
+                "Escalas perdidas no WhatsApp",
+                "Arquivos espalhados",
+                "Cifras em tons errados",
+                "Comunicação descentralizada",
+                "Líderes sobrecarregados",
+                "Improviso constante"
               ].map((item, i) => (
-                <li key={i} className="flex items-start gap-4 text-[#A0A7B5]">
-                  <span className="mt-1 text-[#EF4444]/40 text-sm">—</span>
+                <li key={i} className="flex items-center gap-4 text-[#A0A7B5]">
+                  <span className="text-[#EF4444]/40 text-sm">—</span>
                   <span className="font-normal text-base leading-relaxed">{item}</span>
                 </li>
               ))}
@@ -64,7 +65,8 @@ export function Problem() {
             viewport={{ once: true }}
             className="bg-[#050505] rounded-3xl p-8 md:p-10 border border-[#2B85EB]/20 relative overflow-hidden shadow-[0_0_40px_rgba(43,133,235,0.05)]"
           >
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(43,133,235,0.15),_transparent_60%)] pointer-events-none" />
+            <div className="absolute inset-0 bg-[#2B85EB]/[0.02] pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(43,133,235,0.1),_transparent_60%)] pointer-events-none" />
             <h3 className="text-sm font-semibold text-[#2B85EB] mb-8 uppercase tracking-widest flex items-center gap-2 relative z-10">
               <CheckCircle2 className="w-4 h-4" />
               A Excelência Ministerial
@@ -72,14 +74,15 @@ export function Problem() {
             
             <ul className="space-y-6 relative z-10">
               {[
-                "Processos centralizados e comunicação clara",
-                "Escalas inteligentes com informações precisas",
-                "Toda a estrutura em uma única plataforma",
-                "Tempo livre para pastorear e cuidar de pessoas",
-                "Operação silenciosa, previsível e profissional"
+                "Processos centralizados",
+                "Escalas inteligentes",
+                "Repertórios organizados",
+                "Comunicação clara",
+                "Equipe preparada",
+                "Mais tempo para cuidar de pessoas"
               ].map((item, i) => (
-                <li key={i} className="flex items-start gap-4 text-[#F5F7FA]">
-                  <CheckCircle2 className="w-5 h-5 mt-0.5 text-[#2B85EB] flex-shrink-0" />
+                <li key={i} className="flex items-center gap-4 text-[#F5F7FA]">
+                  <CheckCircle2 className="w-5 h-5 text-[#2B85EB] flex-shrink-0" />
                   <span className="font-normal text-base leading-relaxed">{item}</span>
                 </li>
               ))}

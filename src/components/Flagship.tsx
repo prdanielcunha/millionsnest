@@ -29,7 +29,7 @@ export function Flagship() {
               viewport={{ once: true }}
               className="text-4xl md:text-6xl font-semibold tracking-tight mb-6"
             >
-              Excelência e fluidez <br className="hidden md:block" /> para o louvor.
+              MusicScale: excelência <br className="hidden md:block" /> e fluidez para o louvor.
             </motion.h2>
             <motion.p 
               initial={{ opacity: 0, y: 20 }}
@@ -37,7 +37,7 @@ export function Flagship() {
               viewport={{ once: true }}
               className="text-lg md:text-xl text-[#A0A7B5] font-normal leading-relaxed"
             >
-              Esqueça as planilhas e mensagens perdidas. Uma plataforma construída para organizar repertórios, gerenciar escalas e preparar seu ministério com excelência real.
+              Organize repertórios, escalas, cifras, tons, ministros e preparação da equipe em uma experiência simples, rápida e premium.
             </motion.p>
           </div>
           
