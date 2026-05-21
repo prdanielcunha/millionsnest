@@ -47,14 +47,9 @@ export function Dashboard() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        if (res.status === 404 || data.error?.includes('Stripe não encontrado')) {
+        if (res.status === 404 || res.status === 500 || data.error?.includes('Stripe não encontrado') || data.error?.includes('No such customer')) {
           alert('Inconsistência identificada na conta. Sincronizando e reparando acesso...');
-          await fetch('/api/v1/billing/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.uid })
-          });
-          window.location.reload();
+          await fetchSubscriptionAndOrg(true);
           return;
         }
         alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');

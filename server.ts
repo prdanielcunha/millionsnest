@@ -598,12 +598,24 @@ async function startServer() {
       if (!customerId || (subscriptions && subscriptions.data.length === 0)) {
         if (userEmail) {
           console.log(`[Sync] Searching for customer by email ${userEmail} in the current environment...`);
-          const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+          const customers = await stripe.customers.list({ email: userEmail, limit: 100 });
           if (customers.data.length > 0) {
-            const newCustomer = customers.data[0];
-            customerId = newCustomer.id;
-            console.log(`[Sync] Healing successful! Found valid customer ID: ${customerId}`);
-            subscriptions = await stripe.subscriptions.list({ customer: customerId, limit: 1, status: 'all' });
+            let foundValidCustomer = false;
+            for (const cust of customers.data) {
+                const tempSubs = await stripe.subscriptions.list({ customer: cust.id, limit: 1, status: 'all' });
+                if (tempSubs.data.length > 0) {
+                    customerId = cust.id;
+                    subscriptions = tempSubs;
+                    foundValidCustomer = true;
+                    console.log(`[Sync] Healing successful! Found valid customer ID with subscription: ${customerId}`);
+                    break;
+                }
+            }
+            if (!foundValidCustomer) {
+                 // Fallback to the latest customer if none had subscriptions
+                 customerId = customers.data[0].id;
+                 console.log(`[Sync] No subscription found among customers. Kept latest customer ID: ${customerId}`);
+            }
           } else {
             console.log(`[Sync] No customer found in current environment for email ${userEmail}.`);
           }
@@ -1001,7 +1013,7 @@ async function startServer() {
           },
         ],
         mode: 'subscription',
-        allow_promotion_codes: true,
+        allow_promotion_codes: true, // Permite uso de cupons de desconto para novos planos
         subscription_data: {
           trial_period_days: 7, // 7 days trial mandatory by requirements
         },
@@ -1094,7 +1106,7 @@ async function startServer() {
           },
         ],
         mode: 'payment',
-        allow_promotion_codes: true,
+        allow_promotion_codes: true, // Permite uso de cupons de desconto para addons
         client_reference_id: userId,
         metadata: {
           uid: userId,
