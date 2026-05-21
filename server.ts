@@ -1066,6 +1066,23 @@ async function startServer() {
     }
   });
 
+  app.post('/api/user/organization', express.json(), async (req, res) => {
+    try {
+      const { orgId, name } = req.body;
+      if (!orgId || !name) {
+        res.status(400).json({ error: 'Missing orgId or name' });
+        return;
+      }
+      await admin.firestore().collection('organizations').doc(orgId).set({ 
+        name, 
+        updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+      }, { merge: true });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post('/api/v1/billing/checkout', async (req, res) => {
     try {
       const { userId, email, lookupKey } = req.body;

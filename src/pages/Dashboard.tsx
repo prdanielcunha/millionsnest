@@ -176,8 +176,12 @@ export function Dashboard() {
     setSavingOrg(true);
     try {
       const orgId = profile?.organizationId || user.uid;
-      const orgRef = doc(db, "organizations", orgId);
-      await setDoc(orgRef, { name: orgNameInput }, { merge: true });
+      const res = await fetch('/api/user/organization', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, name: orgNameInput })
+      });
+      if (!res.ok) throw new Error('Failed to save');
       setOrganization({ ...organization, name: orgNameInput });
       setIsEditingOrg(false);
     } catch (e) {
