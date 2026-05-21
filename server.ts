@@ -60,6 +60,8 @@ function getDb() {
   return db;
 }
 
+import compression from 'compression';
+
 // Centralizer for Stripe access to avoid environment mismatch and provide better logging
 let stripeInstance: Stripe | null = null;
 function getStripe(): Stripe {
@@ -96,6 +98,16 @@ async function startServer() {
     const app = express();
     const PORT = 3000;
 
+    app.use(compression({
+      level: 6, // optimal default
+      threshold: 10 * 1024, // only compress files over 10kb
+      filter: (req, res) => {
+        if (req.headers['x-no-compression']) {
+          return false;
+        }
+        return compression.filter(req, res);
+      }
+    }));
     app.use(cors());
 
   // Webhook Stripe tem que usar express.raw
@@ -1240,7 +1252,17 @@ async function startServer() {
       }
     } else {
       const distPath = path.join(process.cwd(), 'dist');
-      app.use(express.static(distPath));
+      app.use(express.static(distPath, {
+        setHeaders: (res, path) => {
+          if (path.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+          } else if (path.includes('/assets/')) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          } else {
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+          }
+        }
+      }));
       app.get('*', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });

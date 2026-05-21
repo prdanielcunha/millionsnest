@@ -55,7 +55,7 @@ export function FAQ() {
 
   return (
     <section id="faq" className="py-24 md:py-32 bg-[#050505] border-b border-white/5 relative">
-      <div className="absolute top-0 right-1/4 w-[300px] h-[300px] bg-[#2B85EB]/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute top-0 right-1/4 w-[300px] h-[300px] bg-[#2B85EB]/5 blur-[120px] rounded-full pointer-events-none transform-gpu" />
 
       <div className="max-w-4xl mx-auto px-6 relative z-10">
         <div className="text-center mb-16">

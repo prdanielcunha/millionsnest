@@ -7,7 +7,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
           <div className="md:col-span-2">
             <Link to="/" className="flex items-center gap-3 mb-6">
-              <img src="/logo_oficial.png" alt="MillionsNest Logo" className="h-6 md:h-8 w-auto object-contain opacity-90 hover:opacity-100 transition-opacity" />
+              <img src="/logo_oficial.png" alt="MillionsNest Logo" loading="lazy" decoding="async" className="h-6 md:h-8 w-auto object-contain opacity-90 hover:opacity-100 transition-opacity" />
               <span className="font-semibold text-lg tracking-tight text-[#F5F7FA]">MillionsNest</span>
             </Link>
             <p className="text-sm font-normal text-[#A0A7B5] max-w-sm leading-relaxed">

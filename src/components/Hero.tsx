@@ -1,14 +1,16 @@
 import { motion } from "framer-motion";
 import { ArrowRight, ChevronRight, Play } from "lucide-react";
 import { Link } from "react-router-dom";
-import { DashboardMockup } from "./DashboardMockup.js";
+import { Suspense, lazy } from "react";
+
+const DashboardMockup = lazy(() => import("./DashboardMockup.js").then((m) => ({ default: m.DashboardMockup })));
 
 export function Hero() {
   return (
     <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden bg-[#050505]">
-      {/* Premium Background Glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[400px] bg-[#2B85EB]/10 rounded-[100%] blur-[120px] pointer-events-none" />
-      <div className="absolute top-40 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[300px] bg-[#F5F7FA]/5 rounded-[100%] blur-[100px] pointer-events-none" />
+      {/* Premium Background Glow - Hardware Accelerated */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[300px] md:h-[400px] bg-[#2B85EB]/10 rounded-[100%] blur-[100px] md:blur-[120px] pointer-events-none transform-gpu" />
+      <div className="absolute top-40 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[250px] md:h-[300px] bg-[#F5F7FA]/5 rounded-[100%] blur-[80px] md:blur-[100px] pointer-events-none transform-gpu" />
 
       <div className="max-w-7xl mx-auto px-6 relative z-10 flex flex-col items-center text-center">
         
@@ -68,7 +70,9 @@ export function Hero() {
           <div className="relative z-10 mx-auto rounded-xl md:rounded-2xl border border-white/10 bg-[#0B0F19]/50 backdrop-blur-md p-1.5 md:p-2 premium-shadow overflow-hidden flex justify-center">
              <div className="w-full max-w-[1000px] h-[400px] sm:h-[500px] md:h-[600px] relative rounded-lg md:rounded-xl overflow-hidden bg-[#050505] border border-white/5">
                 <div className="absolute inset-0 origin-top scale-[0.6] sm:scale-[0.8] md:scale-100 flex justify-center w-[800px] max-w-none left-1/2 -translate-x-1/2 md:w-full md:left-0 md:translate-x-0">
-                  <DashboardMockup />
+                  <Suspense fallback={<div className="w-full h-full animate-pulse bg-white/5" />}>
+                    <DashboardMockup />
+                  </Suspense>
                 </div>
              </div>
           </div>

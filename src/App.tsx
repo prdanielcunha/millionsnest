@@ -4,29 +4,40 @@
  */
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Home } from './pages/Home.js';
-import { Terms } from './pages/Terms.js';
-import { Privacy } from './pages/Privacy.js';
-import { Refunds } from './pages/Refunds.js';
-import { Cancellation } from './pages/Cancellation.js';
+import { Suspense, lazy } from 'react';
 import { AuthProvider } from './contexts/AuthContext.js';
-import { Login } from './pages/Login.js';
 
-import { Dashboard } from './pages/Dashboard.js';
+const Home = lazy(() => import('./pages/Home.js').then(module => ({ default: module.Home })));
+const Terms = lazy(() => import('./pages/Terms.js').then(module => ({ default: module.Terms })));
+const Privacy = lazy(() => import('./pages/Privacy.js').then(module => ({ default: module.Privacy })));
+const Refunds = lazy(() => import('./pages/Refunds.js').then(module => ({ default: module.Refunds })));
+const Cancellation = lazy(() => import('./pages/Cancellation.js').then(module => ({ default: module.Cancellation })));
+const Login = lazy(() => import('./pages/Login.js').then(module => ({ default: module.Login })));
+const Dashboard = lazy(() => import('./pages/Dashboard.js').then(module => ({ default: module.Dashboard })));
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+      <div className="w-8 h-8 rounded-full border-2 border-[#2B85EB]/30 border-t-[#2B85EB] animate-spin" />
+    </div>
+  );
+}
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/termos-de-uso" element={<Terms />} />
-          <Route path="/politica-de-privacidade" element={<Privacy />} />
-          <Route path="/politicas-de-reembolso" element={<Refunds />} />
-          <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
-        </Routes>
+        <Suspense fallback={<LoadingFallback />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/termos-de-uso" element={<Terms />} />
+            <Route path="/politica-de-privacidade" element={<Privacy />} />
+            <Route path="/politicas-de-reembolso" element={<Refunds />} />
+            <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
   );

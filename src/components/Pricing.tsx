@@ -58,7 +58,7 @@ export function Pricing() {
 
   return (
     <section id="precos" className="py-24 md:py-32 bg-[#050505] relative overflow-hidden">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[400px] bg-[#2B85EB]/5 rounded-[100%] blur-[120px] pointer-events-none" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[400px] bg-[#2B85EB]/5 rounded-[100%] blur-[100px] md:blur-[120px] pointer-events-none transform-gpu" />
 
       <div className="max-w-7xl mx-auto px-6 relative z-10">
         

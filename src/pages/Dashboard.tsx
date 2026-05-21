@@ -307,7 +307,7 @@ export function Dashboard() {
             className="flex items-center gap-5 mb-2"
           >
             {profile?.photoURL ? (
-              <img src={profile.photoURL} alt="Profile" className="w-16 h-16 rounded-2xl border border-white/10 shadow-sm" />
+              <img src={profile.photoURL} alt="Profile" loading="lazy" decoding="async" className="w-16 h-16 rounded-2xl border border-white/10 shadow-sm" />
             ) : (
               <div className="w-16 h-16 bg-[#0B0F19] rounded-2xl flex items-center justify-center text-[#F5F7FA] font-bold text-2xl border border-white/10 shadow-sm">
                 {profile?.displayName?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}

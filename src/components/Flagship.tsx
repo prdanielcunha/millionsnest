@@ -7,8 +7,8 @@ export function Flagship() {
   return (
     <section id="funcionalidades" className="py-24 md:py-32 bg-[#050505] text-[#F5F7FA] relative overflow-hidden border-b border-white/5">
       {/* Dark mode glow */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#2B85EB]/10 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-white/5 blur-[140px] rounded-full pointer-events-none" />
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#2B85EB]/10 blur-[120px] rounded-full pointer-events-none transform-gpu" />
+      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-white/5 blur-[140px] rounded-full pointer-events-none transform-gpu" />
 
       <div className="max-w-7xl mx-auto px-6 relative z-10">
         

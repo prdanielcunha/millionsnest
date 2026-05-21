@@ -31,7 +31,7 @@ export function SocialProof() {
               "https://i.pravatar.cc/100?img=25"
             ].map((src, i) => (
               <div key={i} className="w-12 h-12 rounded-full border-2 border-[#050505] overflow-hidden bg-[#0B0F19]">
-                <img src={src} alt="User avatar" className="w-full h-full object-cover" />
+                <img src={src} alt="User avatar" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               </div>
             ))}
           </div>

@@ -1,14 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, Suspense, lazy } from "react";
 import { useLocation } from "react-router-dom";
 import { Navbar } from "../components/Navbar.js";
 import { Hero } from "../components/Hero.js";
-import { SocialProof } from "../components/SocialProof.js";
-import { Problem } from "../components/Problem.js";
-import { Ecosystem } from "../components/Ecosystem.js";
-import { Flagship } from "../components/Flagship.js";
-import { Pricing } from "../components/Pricing.js";
-import { FAQ } from "../components/FAQ.js";
-import { Footer } from "../components/Footer.js";
+
+const SocialProof = lazy(() => import("../components/SocialProof.js").then((module) => ({ default: module.SocialProof })));
+const Problem = lazy(() => import("../components/Problem.js").then((module) => ({ default: module.Problem })));
+const Ecosystem = lazy(() => import("../components/Ecosystem.js").then((module) => ({ default: module.Ecosystem })));
+const Flagship = lazy(() => import("../components/Flagship.js").then((module) => ({ default: module.Flagship })));
+const Pricing = lazy(() => import("../components/Pricing.js").then((module) => ({ default: module.Pricing })));
+const FAQ = lazy(() => import("../components/FAQ.js").then((module) => ({ default: module.FAQ })));
+const Footer = lazy(() => import("../components/Footer.js").then((module) => ({ default: module.Footer })));
+
+function SectionFallback() {
+  return <div className="py-20 flex justify-center"><div className="w-6 h-6 border-2 border-[#2B85EB]/30 border-t-[#2B85EB] rounded-full animate-spin"></div></div>;
+}
 
 export function Home() {
   const { hash } = useLocation();
@@ -30,13 +35,15 @@ export function Home() {
     <div className="min-h-screen font-sans overflow-x-hidden bg-[#050505] text-[#F5F7FA]">
       <Navbar />
       <Hero />
-      <SocialProof />
-      <Problem />
-      <Flagship />
-      <Ecosystem />
-      <Pricing />
-      <FAQ />
-      <Footer />
+      <Suspense fallback={<SectionFallback />}>
+        <SocialProof />
+        <Problem />
+        <Flagship />
+        <Pricing />
+        <Ecosystem />
+        <FAQ />
+        <Footer />
+      </Suspense>
     </div>
   );
 }
