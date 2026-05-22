@@ -833,7 +833,10 @@ export function Dashboard() {
                       
                       {members.length > 0 && (
                         <div className="flex flex-col gap-2 mb-4">
-                          {members.map(member => (
+                          {(() => {
+                            const currentUserRole = members.find(m => m.id === user?.uid)?.role || 'member';
+                            const canEditRoles = currentUserRole === 'owner' || currentUserRole === 'admin';
+                            return members.map(member => (
                             <div key={member.id} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/5 rounded-xl">
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB] font-bold text-xs uppercase">
@@ -841,17 +844,15 @@ export function Dashboard() {
                                 </div>
                                 <div className="flex flex-col">
                                   <span className="text-sm font-semibold text-[#F5F7FA]">
-                                    {member.displayName || 'Usuário'} {member.id === user.uid && '(Você)'}
-                                    {member.role && (
-                                       <span className="ml-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
-                                         {{owner: 'Dono', admin: 'Administrador', member: 'Membro', guest: 'Visitante'}[member.role as string] || member.role}
-                                       </span>
-                                    )}
+                                    {member.displayName || 'Usuário'} {member.id === user?.uid && '(Você)'}
+                                    <span className="ml-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
+                                      {{owner: 'Dono', admin: 'Administrador', member: 'Membro', guest: 'Visitante'}[(member.role as string) || 'member'] || member.role || 'Membro'}
+                                    </span>
                                   </span>
                                   <span className="text-[10px] text-[#A0A7B5]">{member.email}</span>
                                 </div>
                               </div>
-                              {member.id !== user.uid && (
+                              {member.id !== user?.uid && canEditRoles && (
                                 <div className="flex items-center gap-3">
                                   <select
                                     value={member.role || 'member'}
@@ -867,7 +868,8 @@ export function Dashboard() {
                                 </div>
                               )}
                             </div>
-                          ))}
+                            ));
+                          })()}
                         </div>
                       )}
 
