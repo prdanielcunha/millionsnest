@@ -92,6 +92,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                  ownerId: currentUser.uid,
                  createdAt: serverTimestamp()
                }, { merge: true });
+
+               const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${targetOrgId}`);
+               await setDoc(orgMemberRef, {
+                 uid: currentUser.uid,
+                 organizationId: targetOrgId,
+                 role: 'owner'
+               }, { merge: true });
             }
 
             if (inviteOrgId) {

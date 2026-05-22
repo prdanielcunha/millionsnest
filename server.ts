@@ -444,6 +444,8 @@ async function startServer() {
                     ownerId: userId,
                     subscriptionStatus: status,
                     status: status,
+                    trialEndsAt: trialEnd,
+                    currentPeriodEnd: currentPeriodEnd,
                     lastStripeEventTs: eventCreatedTs,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                  }, { merge: true });
@@ -540,7 +542,14 @@ async function startServer() {
             const orgDoc = await db.collection('organizations').doc(orgId).get();
             if (orgDoc.exists && ['active', 'trialing'].includes(orgDoc.data()?.subscriptionStatus)) {
               hasAccess = true;
-              status = orgDoc.data()?.subscriptionStatus;
+              status = orgDoc.data()?.subscriptionStatus || 'active';
+              plan = orgDoc.data()?.plan || 'monthly';
+              if (orgDoc.data()?.trialEndsAt) {
+                 trialEndsAt = new Date(orgDoc.data()?.trialEndsAt.seconds * 1000).toISOString();
+              }
+              if (orgDoc.data()?.currentPeriodEnd) {
+                 currentPeriodEnd = new Date(orgDoc.data()?.currentPeriodEnd.seconds * 1000).toISOString();
+              }
               console.log(`[API Access] Access granted via Org: ${orgId}`);
               break;
             }
@@ -776,6 +785,8 @@ async function startServer() {
         status: sub.status,
         stripeCustomerId: customerId,
         stripeSubscriptionId: sub.id,
+        trialEndsAt: trialEnd,
+        currentPeriodEnd: currentPeriodEnd,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
@@ -879,6 +890,8 @@ async function startServer() {
         status: sub.status,
         stripeCustomerId: customer.id,
         stripeSubscriptionId: sub.id,
+        trialEndsAt: tEnd,
+        currentPeriodEnd: cpEnd,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
@@ -948,6 +961,8 @@ async function startServer() {
             status: s.status,
             stripeCustomerId: customer.id,
             stripeSubscriptionId: s.id,
+            trialEndsAt: tEnd,
+            currentPeriodEnd: cpEnd,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
