@@ -207,6 +207,24 @@ export function Dashboard() {
     }
   };
 
+  const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
+    try {
+      // update in users collection
+      const userRef = doc(db, "users", memberId);
+      await updateDoc(userRef, { role: newRole });
+      
+      // update in organization_members collection
+      const orgId = profile?.organizationId || user?.uid;
+      const memberOrgRef = doc(db, "organization_members", `${memberId}_${orgId}`);
+      await updateDoc(memberOrgRef, { role: newRole });
+      
+      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole } : m));
+    } catch (e) {
+      console.error("Erro ao atualizar função", e);
+      alert("Erro ao atualizar função do membro.");
+    }
+  };
+
   const handleInviteWhatsapp = () => {
     const orgId = profile?.organizationId || user?.uid;
     const link = `${window.location.origin}/login?org=${orgId}`;
@@ -822,12 +840,31 @@ export function Dashboard() {
                                   {member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
                                 </div>
                                 <div className="flex flex-col">
-                                  <span className="text-sm font-semibold text-[#F5F7FA]">{member.displayName || 'Usuário'} {member.id === user.uid && '(Você)'}</span>
+                                  <span className="text-sm font-semibold text-[#F5F7FA]">
+                                    {member.displayName || 'Usuário'} {member.id === user.uid && '(Você)'}
+                                    {member.role && (
+                                       <span className="ml-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
+                                         {{owner: 'Dono', admin: 'Administrador', member: 'Membro', guest: 'Visitante'}[member.role as string] || member.role}
+                                       </span>
+                                    )}
+                                  </span>
                                   <span className="text-[10px] text-[#A0A7B5]">{member.email}</span>
                                 </div>
                               </div>
                               {member.id !== user.uid && (
-                                <button className="text-xs text-[#EF4444] hover:text-[#FCA5A5] font-medium" onClick={() => alert("Remoção de membros em desenvolvimento.")}>Excluir</button>
+                                <div className="flex items-center gap-3">
+                                  <select
+                                    value={member.role || 'member'}
+                                    onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
+                                    className="bg-white/5 border border-white/10 text-[#F5F7FA] text-xs rounded-md px-2 py-1 outline-none focus:border-[#2B85EB]"
+                                  >
+                                    <option value="owner">Dono</option>
+                                    <option value="admin">Administrador</option>
+                                    <option value="member">Membro</option>
+                                    <option value="guest">Visitante</option>
+                                  </select>
+                                  <button className="text-xs text-[#EF4444] hover:text-[#FCA5A5] font-medium" onClick={() => alert("Remoção de membros em desenvolvimento.")}>Excluir</button>
+                                </div>
                               )}
                             </div>
                           ))}
