@@ -1,50 +1,71 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 0. Regra global de segurança (bloqueia tudo que não for explicitamente permitido abaixo)
-    match /{document=**} {
-      allow read, write: if false;
+    match /{document=**} { allow read, write: if false; }
+
+    // ==========================================
+    // FUNÇÕES AUXILIARES E GLOBAIS
+    // ==========================================
+
+    function isAuthenticated() { return request.auth != null; }
+    function incoming() { return request.resource.data; }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // --- Helpers Globais ---
-    function isAuthenticated() { return request.auth != null; }
-    
-    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
-    
-    function incoming() { return request.resource.data; }
-    function existing() { return resource.data; }
-    
-    // --- Helpers Relacionais Multi-Tenant ---
     function checkMemberExists(orgId) {
       return (orgId is string) && (
         exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)) ||
         exists(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid))
       );
     }
-    
-    function checkOrgAccess(orgId) {
-      return checkMemberExists(orgId) && (
-        get(/databases/$(database)/documents/organizations/$(orgId)).data.subscription_status == 'active' ||
-        get(/databases/$(database)/documents/organizations/$(orgId)).data.subscription_status == 'trialing' ||
-        get(/databases/$(database)/documents/organizations/$(orgId)).data.subscriptionStatus == 'active' ||
-        get(/databases/$(database)/documents/organizations/$(orgId)).data.subscriptionStatus == 'trialing' ||
-        get(/databases/$(database)/documents/organizations/$(orgId)).data.status == 'active' ||
-        get(/databases/$(database)/documents/organizations/$(orgId)).data.status == 'trialing'
+
+    function isOrgActive(orgId) {
+      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
+      let orgData = orgDoc != null ? orgDoc.data : null;
+      let orgActive = orgData != null && (
+        orgData.subscription_status == 'active' ||
+        orgData.subscription_status == 'trialing' ||
+        orgData.subscriptionStatus == 'active' ||
+        orgData.subscriptionStatus == 'trialing' ||
+        orgData.status == 'active' ||
+        orgData.status == 'trialing'
       );
-    }
-    
-    function getUserRoleRef() {
-      // Adicionado fallback para evitar crash caso user não tenha roleId definida
+      
+      let subDoc = get(/databases/$(database)/documents/subscriptions/$(orgId));
+      let subActive = subDoc != null && subDoc.data != null && (subDoc.data.status == 'active' || subDoc.data.status == 'trialing');
+      
       let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return ('roleId' in userDoc.data) 
-        ? get(/databases/$(database)/documents/roles/$(userDoc.data.roleId)) 
-        : null;
+      let userData = userDoc != null ? userDoc.data : null;
+      let userActive = userData != null && (
+        userData.status == 'active' || userData.status == 'trialing' ||
+        userData.subscription_status == 'active' || userData.subscription_status == 'trialing' ||
+        userData.subscriptionStatus == 'active' || userData.subscriptionStatus == 'trialing'
+      );
+
+      return orgActive || subActive || userActive;
+    }
+
+    function checkOrgAccess(orgId) {
+      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
+      let orgData = orgDoc != null ? orgDoc.data : null;
+      let isOwner = orgData != null && (
+        orgData.ownerUid == request.auth.uid || 
+        orgData.ownerId == request.auth.uid || 
+        orgData.owner_user_id == request.auth.uid ||
+        orgData.ownerUserId == request.auth.uid
+      );
+      
+      return (checkMemberExists(orgId) || orgId == request.auth.uid || isOwner) && isOrgActive(orgId);
+    }
+
+    function hasOrgContext(data) {
+      return ('organizationId' in data) && checkOrgAccess(data.organizationId);
     }
     
     function getMemberRole(orgId) {
-        // Melhoria para suportar as duas ordens possíveis de salvamento do ID do membro e não travar o app
-        return exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId))
+       return exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId))
          ? get(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)).data.role
          : (exists(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid))
             ? get(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid)).data.role
@@ -53,174 +74,241 @@ service cloud.firestore {
 
     function isOrgAdmin(orgId) {
       let role = getMemberRole(orgId);
-      return role == 'admin' || role == 'owner' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Administrador';
+      return role == 'admin' || role == 'owner' || orgId == request.auth.uid;
     }
 
     function isOrgOwner(orgId) {
-      return getMemberRole(orgId) == 'owner';
+      let role = getMemberRole(orgId);
+      return role == 'owner' || orgId == request.auth.uid;
     }
 
     function hasPermission(orgId, permission) {
       let role = getMemberRole(orgId);
       return role == 'owner' || role == 'admin' || role == 'member';
     }
-
-    // --- Entity Validation Helpers ---
-    function isValidCreatedBy(obj) {
-      return obj is map && obj.keys().hasAll(['uid', 'displayName', 'photoURL']) && obj.uid == request.auth.uid && obj.uid.size() <= 128;
-    }
-
-    function isStringSafe(val, maxL) { return val is string && val.size() <= maxL; }
-
-    function isValidRole(data) {
-      return data.keys().hasAll(['name', 'description', 'permissions']) 
-        && data.name is string && data.name.size() <= 100
-        && data.description is string && data.description.size() <= 500
-        && data.permissions is map;
-    }
-
-    function isValidCategory(data) {
-      return data.keys().hasAll(['name', 'color'])
-        && data.name is string && data.name.size() <= 100
-        && data.color is string && data.color.size() <= 30;
-    }
-
-    function isValidSong(data) {
-      // Aceita tanto formato de música MillionsNest (categories) quanto MusicScale (artist) pra evitar bloqueios mútuos
-      return (data.keys().hasAll(['title', 'categories', 'status']) || data.keys().hasAll(['title', 'artist']))
-        && data.title is string && data.title.size() <= 200;
-    }
-
-    function isValidScale(data) {
-      // Aceita tanto formato padrão Millions (title, date, status) quanto formato Music Scale (date, songIds)
-      return data.keys().hasAll(['date']) 
-        && (data.keys().hasAll(['title', 'status']) || data.keys().hasAll(['songIds', 'eventTypeId']))
-        && data.date is string && data.date.size() <= 50;
-    }
-
-    // --- RULES POR COLEÇÃO ---
     
-    // 1. USUÁRIOS
-    match /users/{userId} {
-      allow read: if isAuthenticated() && userId == request.auth.uid;
-      allow read: if isAuthenticated() && 'organizationId' in resource.data && checkMemberExists(resource.data.organizationId);
-      allow create: if isAuthenticated() && userId == request.auth.uid;
-      allow update: if isAuthenticated() && isValidId(userId) && (
-        (userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastModifiedAt', 'lastLoginAt', 'chordViewerSettings', 'lyricsViewerSettings', 'organizationId', 'role', 'roleId', 'uid', 'email', 'createdAt', 'products', 'name'])) ||
-        (checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId) && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'roleId', 'lastModifiedAt']))
-      );
-      allow delete: if isAuthenticated() && userId == request.auth.uid;
+    function isSystemAdmin() {
+      return request.auth != null && 'email' in request.auth.token && (request.auth.token.email.toLowerCase() == 'pastordanielpcunha@gmail.com' || request.auth.token.email.toLowerCase() == 'danielcunhapastor@gmail.com');
     }
 
-    // 2. ORGANIZAÇÕES
+    // ==========================================
+    // 1. DADOS DOS USUÁRIOS
+    // ==========================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (userId == request.auth.uid || ('organizationId' in resource.data && checkOrgAccess(resource.data.organizationId)));
+      allow create: if isAuthenticated() && userId == request.auth.uid;
+      allow update: if isAuthenticated() && (isOwner(userId) || (resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId)));
+      allow delete: if isAuthenticated() && resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId);
+    }
+
+    match /users/{userId}/{document=**} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // ==========================================
+    // 2. DADOS DA ORGANIZAÇÃO (CORE)
+    // ==========================================
+
     match /organizations/{orgId} {
-      // Permite ler a organização
       allow read: if isAuthenticated() && (
-        resource.data.ownerUid == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid ||
-        resource.data.owner_user_id == request.auth.uid ||
+        (resource != null && resource.data.ownerUid == request.auth.uid) ||
+        (resource != null && resource.data.ownerId == request.auth.uid) ||
+        (resource != null && resource.data.owner_user_id == request.auth.uid) ||
         checkMemberExists(orgId) ||
         orgId == request.auth.uid
       );
-      allow create: if isAuthenticated() && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.ownerId == request.auth.uid || request.resource.data.owner_user_id == request.auth.uid || orgId == request.auth.uid);
+      allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (
+        isSystemAdmin() ||
         resource.data.ownerUid == request.auth.uid || 
         resource.data.ownerId == request.auth.uid || 
         resource.data.owner_user_id == request.auth.uid || 
-        orgId == request.auth.uid
+        orgId == request.auth.uid ||
+        (checkMemberExists(orgId) && isOrgOwner(orgId))
       );
       allow delete: if false; 
     }
 
-    // 3. MEMBROS DA ORGANIZAÇÃO
     match /organization_members/{id} {
-      // Must be formatted as userId_orgId
       allow read: if isAuthenticated() && (
-        id.split('_')[0] == request.auth.uid || 
-        checkOrgAccess(resource.data.organizationId) || 
-        checkOrgAccess(id.split('_')[1])
+        id.split('_')[0] == request.auth.uid ||
+        id.split('_')[1] == request.auth.uid ||
+        checkOrgAccess(id.split('_')[1]) ||
+        checkOrgAccess(id.split('_')[0])
       );
-      allow list: if isAuthenticated() && (resource.data.uid == request.auth.uid || checkOrgAccess(resource.data.organizationId));
-      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
-      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId);
-      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId);
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        request.resource.data.uid == request.auth.uid || 
+        request.resource.data.user_id == request.auth.uid || 
+        isOrgAdmin(request.resource.data.organizationId)
+      );
+      allow update: if isAuthenticated() && (
+        isSystemAdmin() || 
+        (checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId))
+      );
+      allow delete: if isAuthenticated() && (
+        isSystemAdmin() || 
+        (checkOrgAccess(resource.data.organizationId) && isOrgAdmin(resource.data.organizationId))
+      );
     }
 
-    // 4. ASSINATURAS E CONVITES
-    match /subscriptions/{subId} {
-      allow get: if isAuthenticated() && (subId == request.auth.uid || ('organizationId' in resource.data && checkMemberExists(resource.data.organizationId) && isOrgOwner(resource.data.organizationId)));
-      allow list: if false;
+    // ==========================================
+    // 3. ASSINATURAS E CONVITES
+    // ==========================================
+    
+    match /subscriptions/{userId} {
+      allow read, list: if isAuthenticated() && (
+        checkOrgAccess(userId) || 
+        (resource != null && 'organizationId' in resource.data && checkOrgAccess(resource.data.organizationId)) ||
+        (resource != null && 'userId' in resource.data && resource.data.userId == request.auth.uid) ||
+        (resource == null)
+      );
       allow write: if false; 
     }
 
+    match /stripe_events_audit/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /invitations/{inviteId} {
+       allow read: if isAuthenticated();
+       allow write: if isAuthenticated() && 
+                    checkMemberExists(request.resource.data.organizationId) &&
+                    isOrgAdmin(request.resource.data.organizationId) &&
+                    isOrgActive(request.resource.data.organizationId);
+    }
+    
     match /invites/{id} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organization_id);
       allow write: if false; 
     }
 
-    // --- REGRAS ESPECÍFICAS DO MUSIC SCALE E MILLIONS NEST ---
-    match /roles/{roleId} {
-      allow read: if isAuthenticated() && 'organizationId' in resource.data && checkMemberExists(resource.data.organizationId);
-      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId) && isValidRole(incoming());
-      allow update: if isAuthenticated() && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId) && isValidRole(incoming());
-      allow delete: if isAuthenticated() && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId);
+    // ==========================================
+    // 4. MÓDULOS DE NEGÓCIO (APP MILLIONSNEST)
+    // ==========================================
+    
+    match /repertoire/{songId} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.organizationId);
+      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
     }
 
-    match /categories/{categoryId} {
+    match /schedules/{scheduleId} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId) && isValidCategory(incoming());
-      allow update: if isAuthenticated() && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId) && isValidCategory(incoming());
-      allow delete: if isAuthenticated() && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.organizationId);
+      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
     }
+
+    match /feedbacks/{feedbackId} {
+       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+       allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.organizationId);
+       allow update, delete: if false;
+    }
+
+    // ==========================================
+    // 5. MÓDULOS MUSIC SCALE (ACERVO MUSIC SCALE)
+    // ==========================================
 
     match /songs/{songId} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && (isOrgAdmin(incoming().organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true) && isValidSong(incoming());
-      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true);
-      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
+      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
     }
 
     match /scales/{scaleId} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && (isOrgAdmin(incoming().organizationId) || getUserRoleRef().data.permissions.canManageScales == true) && isValidScale(incoming());
-      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageScales == true);
-      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageScales == true);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageScales');
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
     }
-    
-    // --- COLEÇÕES ADICIONAIS MUSIC SCALE QUE ESTAVAM CAUSANDO ERRO DE ACESSO E TELA DE CARREGAMENTO INFINITA ---
-    match /bandScales/{id} {
+
+    match /bandScales/{scaleId} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create, update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageScales == true);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageScales');
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
     }
-    
+
     match /fixedBandScales/{id} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create, update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageScales == true);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageScales');
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
+    }
+
+    match /roles/{roleId} {
+      allow get: if isAuthenticated() && 'organizationId' in resource.data && checkOrgAccess(resource.data.organizationId);
+      allow list: if isAuthenticated() && 'organizationId' in resource.data && (checkOrgAccess(resource.data.organizationId) || checkMemberExists(resource.data.organizationId) || resource.data.organizationId == request.auth.uid);
+      allow create: if isAuthenticated() && isOrgAdmin(incoming().organizationId);
+      allow update: if isAuthenticated() && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId);
+    }
+
+    match /locations/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+    }
+
+    match /eventTypes/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+    }
+
+    match /eventNames/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+    }
+
+    match /tags/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+    }
+
+    match /instruments/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
     }
 
     match /suggestions/{id} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasOrgContext(incoming());
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
     }
-    
-    match /instruments/{id} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create, update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true);
+
+    // ==========================================
+    // 6. RECURSOS GLOBAIS
+    // ==========================================
+
+    function hasGlobalLibraryFeature() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let orgId = userDoc != null ? userDoc.data.organizationId : null;
+      let subDoc = get(/databases/$(database)/documents/subscriptions/$(orgId));
+      return subDoc != null && subDoc.data.features != null && subDoc.data.features.globalLibrary == true;
     }
-    
-    match /eventTypes/{id} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create, update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true);
+
+    match /globalSongs/{id} {
+      allow read: if isAuthenticated() && (isSystemAdmin() || hasGlobalLibraryFeature());
+      allow write: if isSystemAdmin();
     }
-    
-    match /eventNames/{id} {
-       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-       allow create, update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && (isOrgAdmin(resource.data.organizationId) || getUserRoleRef().data.permissions.canManageRepertoire == true);
+
+    match /songSubmissions/{id} {
+      allow read: if isAuthenticated() && (isSystemAdmin() || resource.data.submittedBy == request.auth.uid);
+      allow create: if isAuthenticated() && hasOrgContext(incoming());
+      allow update, delete: if isSystemAdmin();
     }
-    
-    // Regras Extras Antigas do MillionsNest se necessário na sua stack
-    match /locations/{id} { allow read, write: if isAuthenticated() && checkOrgAccess(resource.data.organizationId); }
-    match /tags/{id} { allow read, write: if isAuthenticated() && checkOrgAccess(resource.data.organizationId); }
   }
 }
+
