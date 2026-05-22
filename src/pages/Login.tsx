@@ -96,8 +96,8 @@ export function Login() {
       >
         <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none rounded-[2rem]" />
         
-        <div className="flex justify-center mb-8">
-          <img src="/logo_oficial.png" alt="MillionsNest Logo" className="h-10 w-auto opacity-90" />
+        <div className="flex justify-center mb-10">
+          <img src="/logo02.png" alt="MillionsNest Logo" className="h-12 w-auto opacity-100" />
         </div>
         
         <h2 className="text-2xl font-semibold text-[#F5F7FA] text-center tracking-tight mb-2">

@@ -277,8 +277,10 @@ async function startServer() {
           batch.set(db.collection('organizations').doc(orgId), {
             name: `Organização de ${session.customer_email || userId}`,
             ownerUid: userId,
+            ownerId: userId,
             plan: plan,
             subscriptionStatus: subscription.status,
+            status: subscription.status,
             stripeCustomerId: customerId,
             stripeSubscriptionId: subscriptionId,
             lastStripeEventTs: eventCreatedTs,
@@ -434,9 +436,18 @@ async function startServer() {
                  }, { merge: true });
                  
                  batch.set(db.collection('organizations').doc(userId), {
+                    ownerUid: userId,
+                    ownerId: userId,
                     subscriptionStatus: status,
+                    status: status,
                     lastStripeEventTs: eventCreatedTs,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                 }, { merge: true });
+
+                 batch.set(db.collection('organization_members').doc(`${userId}_${userId}`), {
+                    uid: userId,
+                    organizationId: userId,
+                    role: 'owner'
                  }, { merge: true });
 
                  batch.set(db.collection('users').doc(userId), {
@@ -678,7 +689,10 @@ async function startServer() {
         }, { merge: true });
 
         batch.set(db.collection('organizations').doc(userId), {
+          ownerUid: userId,
+          ownerId: userId,
           subscriptionStatus: 'none',
+          status: 'none',
           stripeCustomerId: null,
           stripeSubscriptionId: null,
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -746,10 +760,19 @@ async function startServer() {
       }, { merge: true });
 
       batch.set(db.collection('organizations').doc(userId), {
+        ownerUid: userId,
+        ownerId: userId,
         subscriptionStatus: sub.status,
+        status: sub.status,
         stripeCustomerId: customerId,
         stripeSubscriptionId: sub.id,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      batch.set(db.collection('organization_members').doc(`${userId}_${userId}`), {
+        uid: userId,
+        organizationId: userId,
+        role: 'owner'
       }, { merge: true });
 
       batch.set(db.collection('users').doc(userId), {
@@ -840,10 +863,19 @@ async function startServer() {
       }, { merge: true });
 
       batch.set(db.collection('organizations').doc(userId), {
+        ownerUid: userId,
+        ownerId: userId,
         subscriptionStatus: sub.status,
+        status: sub.status,
         stripeCustomerId: customer.id,
         stripeSubscriptionId: sub.id,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      batch.set(db.collection('organization_members').doc(`${userId}_${userId}`), {
+        uid: userId,
+        organizationId: userId,
+        role: 'owner'
       }, { merge: true });
 
       await batch.commit();
@@ -900,10 +932,19 @@ async function startServer() {
 
         // Update organization
         batch.set(db.collection('organizations').doc(userId), {
+            ownerUid: userId,
+            ownerId: userId,
             subscriptionStatus: s.status,
+            status: s.status,
             stripeCustomerId: customer.id,
             stripeSubscriptionId: s.id,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        batch.set(db.collection('organization_members').doc(`${userId}_${userId}`), {
+            uid: userId,
+            organizationId: userId,
+            role: 'owner'
         }, { merge: true });
 
         // Update user

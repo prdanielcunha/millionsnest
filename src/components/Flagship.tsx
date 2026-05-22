@@ -94,7 +94,7 @@ export function Flagship() {
             {/* Visual element */}
             <div className="w-full mt-2 flex-1 relative overflow-hidden flex justify-center items-start pt-2">
                <div className="absolute inset-0 z-10 pointer-events-none bg-gradient-to-b from-transparent to-[#0B0F19]" />
-               <div className="w-[600px] md:w-[850px] origin-top scale-[0.55] md:scale-[0.65] lg:scale-[0.7] transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-2 group-hover:scale-[0.57] md:group-hover:scale-[0.67] lg:group-hover:scale-[0.72]">
+               <div className="w-[1024px] origin-top scale-[0.35] sm:scale-[0.5] md:scale-[0.55] lg:scale-[0.65] transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-2 group-hover:scale-[0.37] sm:group-hover:scale-[0.52] md:group-hover:scale-[0.57] lg:group-hover:scale-[0.67]">
                  <EscalasMockup />
                </div>
             </div>
