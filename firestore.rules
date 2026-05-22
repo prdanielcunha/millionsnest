@@ -57,7 +57,7 @@ service cloud.firestore {
         orgData.ownerUserId == request.auth.uid
       );
       
-      return (checkMemberExists(orgId) || orgId == request.auth.uid || isOwner) && isOrgActive(orgId);
+      return (checkMemberExists(orgId) || orgId == request.auth.uid || isOwner);
     }
 
     function hasOrgContext(data) {
@@ -185,24 +185,24 @@ service cloud.firestore {
     }
 
     // ==========================================
-    // 4. MÓDULOS DE NEGÓCIO (APP MILLIONSNEST)
+    // 4. MÓDULOS DE NEGÓCIO (APP MILLIONSNEST E OUTROS)
     // ==========================================
     
     match /repertoire/{songId} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.organizationId);
-      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.organizationId) && isOrgActive(request.resource.data.organizationId);
+      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /schedules/{scheduleId} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.organizationId);
-      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.organizationId) && isOrgActive(request.resource.data.organizationId);
+      allow update, delete: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /feedbacks/{feedbackId} {
-       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-       allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.organizationId);
+       allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+       allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.organizationId) && isOrgActive(request.resource.data.organizationId);
        allow update, delete: if false;
     }
 
@@ -211,31 +211,31 @@ service cloud.firestore {
     // ==========================================
 
     match /songs/{songId} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
-      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire') && isOrgActive(incoming().organizationId);
+      allow update: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /scales/{scaleId} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageScales');
-      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
-      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageScales') && isOrgActive(incoming().organizationId);
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /bandScales/{scaleId} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageScales');
-      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
-      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageScales') && isOrgActive(incoming().organizationId);
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /fixedBandScales/{id} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageScales');
-      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
-      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageScales') && isOrgActive(incoming().organizationId);
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageScales') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /roles/{roleId} {
@@ -247,45 +247,45 @@ service cloud.firestore {
     }
 
     match /locations/{id} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
-      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
-      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire') && isOrgActive(incoming().organizationId);
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /eventTypes/{id} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
-      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
-      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire') && isOrgActive(incoming().organizationId);
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /eventNames/{id} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
-      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
-      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire') && isOrgActive(incoming().organizationId);
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /tags/{id} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
-      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
-      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire') && isOrgActive(incoming().organizationId);
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /instruments/{id} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire');
-      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
-      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasPermission(incoming().organizationId, 'canManageRepertoire') && isOrgActive(incoming().organizationId);
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     match /suggestions/{id} {
-      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId);
-      allow create: if isAuthenticated() && hasOrgContext(incoming());
-      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
-      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId);
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow create: if isAuthenticated() && hasOrgContext(incoming()) && isOrgActive(incoming().organizationId);
+      allow update: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
+      allow delete: if isAuthenticated() && hasPermission(resource.data.organizationId, 'canManageRepertoire') && checkOrgAccess(resource.data.organizationId) && isOrgActive(resource.data.organizationId);
     }
 
     // ==========================================
