@@ -584,7 +584,7 @@ export function Dashboard() {
                           disabled={checkoutLoading}
                           className="w-full py-4 px-4 bg-[#2B85EB] text-[#F5F7FA] rounded-xl font-semibold flex-col flex items-center justify-center hover:bg-[#3B95FB] transition-all shadow-sm active:scale-95 relative overflow-hidden disabled:opacity-70"
                         >
-                          <span className="absolute top-0 right-0 bg-[#050505]/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-widest border-b border-l border-white/10">30% OFF</span>
+                          <span className="absolute top-0 right-0 bg-[#050505]/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-widest border-b border-l border-white/10">20% OFF</span>
                           <span className="flex items-center gap-2">
                             Assinatura Anual <ArrowRight className="w-4 h-4" />
                           </span>
@@ -626,7 +626,7 @@ export function Dashboard() {
                           disabled={checkoutLoading}
                           className="w-full py-4 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex-col flex items-center justify-center hover:bg-white transition-all shadow-sm active:scale-95 relative overflow-hidden disabled:opacity-70"
                         >
-                          <span className="absolute top-0 right-0 bg-black/5 text-[#050505] text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-widest border-b border-l border-black/10">30% OFF</span>
+                          <span className="absolute top-0 right-0 bg-black/5 text-[#050505] text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-widest border-b border-l border-black/10">20% OFF</span>
                           <span className="flex items-center gap-2">
                             Assinatura Anual <ArrowRight className="w-4 h-4" />
                           </span>
