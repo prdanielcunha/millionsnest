@@ -251,7 +251,8 @@ async function startServer() {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
             expand: ['discount', 'discount.promotion_code', 'discount.coupon']
           });
-          const orgId = userId; 
+          const userDocSnap = await db.collection('users').doc(userId).get();
+          const orgId = (userDocSnap.exists && userDocSnap.data()?.organizationId) ? userDocSnap.data()?.organizationId : userId;
 
           if (subscription.discounts && subscription.discounts.length > 0) {
              const discount = subscription.discounts[0] as any;
@@ -412,19 +413,22 @@ async function startServer() {
              const batch = db.batch();
              let processedCount = 0;
 
-             subsQuery.forEach(doc => {
+             for (const doc of subsQuery.docs) {
                  const docData = doc.data();
                  const userId = doc.id;
 
                  // IDEMPOTENCY CHECK: Only update if the event is newer than the last recorded event
                  if (docData.lastStripeEventTs && docData.lastStripeEventTs > eventCreatedTs) {
                    console.log(`[STRIPE_WEBHOOK] Skipping Outdated Event for user ${userId}: Incoming TS ${eventCreatedTs} is older than current TS ${docData.lastStripeEventTs}`);
-                   return;
+                   continue;
                  }
 
                  const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(currentPeriodEndTs * 1000);
                  const trialEnd = trialEndTs ? admin.firestore.Timestamp.fromMillis(trialEndTs * 1000) : null;
                  const hasAccess = ['active', 'trialing'].includes(status);
+
+                 const userDocSnap = await db.collection('users').doc(userId).get();
+                 const orgId = (userDocSnap.exists && userDocSnap.data()?.organizationId) ? userDocSnap.data()?.organizationId : userId;
 
                  batch.set(doc.ref, {
                     status: status,
@@ -435,7 +439,7 @@ async function startServer() {
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                  }, { merge: true });
                  
-                 batch.set(db.collection('organizations').doc(userId), {
+                 batch.set(db.collection('organizations').doc(orgId), {
                     ownerUid: userId,
                     ownerId: userId,
                     subscriptionStatus: status,
@@ -444,9 +448,9 @@ async function startServer() {
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                  }, { merge: true });
 
-                 batch.set(db.collection('organization_members').doc(`${userId}_${userId}`), {
+                 batch.set(db.collection('organization_members').doc(`${userId}_${orgId}`), {
                     uid: userId,
-                    organizationId: userId,
+                    organizationId: orgId,
                     role: 'owner'
                  }, { merge: true });
 
@@ -469,7 +473,7 @@ async function startServer() {
                  }, { merge: true });
                  
                  processedCount++;
-             });
+             }
              
              if (processedCount > 0) {
                await batch.commit();
@@ -677,6 +681,9 @@ async function startServer() {
       if (!subscriptions || subscriptions.data.length === 0) {
         console.warn(`[Sync] No subscription found in current environment for user ${userId}. Resetting local status to avoid stale trial state.`);
         
+        const userDocRef = await db.collection('users').doc(userId).get();
+        const orgId = (userDocRef.exists && userDocRef.data()?.organizationId) ? userDocRef.data()?.organizationId : userId;
+
         const batch = db.batch();
         batch.set(db.collection('subscriptions').doc(userId), {
           status: 'none',
@@ -688,7 +695,7 @@ async function startServer() {
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
-        batch.set(db.collection('organizations').doc(userId), {
+        batch.set(db.collection('organizations').doc(orgId), {
           ownerUid: userId,
           ownerId: userId,
           subscriptionStatus: 'none',
@@ -746,6 +753,9 @@ async function startServer() {
 
       console.log(`[Sync] Update successful. User: ${userId}, New Status: ${sub.status}, Plan: ${discoveredPlan}, Tier: ${discoveredTier}`);
 
+      const userDocRef2 = await db.collection('users').doc(userId).get();
+      const orgId2 = (userDocRef2.exists && userDocRef2.data()?.organizationId) ? userDocRef2.data()?.organizationId : userId;
+
       const batch = db.batch();
       batch.set(db.collection('subscriptions').doc(userId), {
         status: sub.status,
@@ -759,7 +769,7 @@ async function startServer() {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
-      batch.set(db.collection('organizations').doc(userId), {
+      batch.set(db.collection('organizations').doc(orgId2), {
         ownerUid: userId,
         ownerId: userId,
         subscriptionStatus: sub.status,
@@ -769,9 +779,9 @@ async function startServer() {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
-      batch.set(db.collection('organization_members').doc(`${userId}_${userId}`), {
+      batch.set(db.collection('organization_members').doc(`${userId}_${orgId2}`), {
         uid: userId,
-        organizationId: userId,
+        organizationId: orgId2,
         role: 'owner'
       }, { merge: true });
 
