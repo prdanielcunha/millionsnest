@@ -874,7 +874,7 @@ export function Dashboard() {
                                   <span className="text-sm font-semibold text-[#F5F7FA]">
                                     {member.displayName || 'Usuário'} {member.id === user?.uid && '(Você)'}
                                     <span className="ml-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
-                                      {{owner: 'Dono', admin: 'Administrador', member: 'Membro', guest: 'Visitante'}[(member.role as string) || 'member'] || member.role || 'Membro'}
+                                      {{owner: 'Dono', admin: 'Administrador', secretary: 'Secretária', member: 'Membro', guest: 'Visitante'}[(member.role as string) || 'member'] || member.role || 'Membro'}
                                     </span>
                                   </span>
                                   <span className="text-[10px] text-[#A0A7B5]">{member.email}</span>
@@ -889,6 +889,7 @@ export function Dashboard() {
                                   >
                                     <option value="owner">Dono</option>
                                     <option value="admin">Administrador</option>
+                                    <option value="secretary">Secretária</option>
                                     <option value="member">Membro</option>
                                     <option value="guest">Visitante</option>
                                   </select>
