@@ -589,20 +589,40 @@ async function startServer() {
   app.post('/api/v1/billing/sync', async (req, res) => {
     try {
       const { userId, sessionId } = req.body;
-      if (!userId || !db) return res.status(400).json({ error: 'Missing uid or db' });
+      if (!userId || !db) {
+        console.error('[SYNC_FATAL_ERROR]', { error: 'Missing params', dbReady: !!db });
+        return res.status(400).json({ error: 'Missing uid or db' });
+      }
 
-      console.log(`[Sync] Request for user: ${userId}`);
+      console.log('[SYNC_START]', {
+        userId: userId,
+        sessionId: sessionId || null,
+        timestamp: new Date().toISOString()
+      });
+
       const stripe = getStripe();
       const isLiveKey = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live');
 
       const userDoc = await db.collection('users').doc(userId).get();
-      if (!userDoc.exists) return res.status(404).json({ error: 'User not found' });
+      if (!userDoc.exists) {
+        console.error('[SYNC_FATAL_ERROR]', { error: 'User not found' });
+        return res.status(404).json({ error: 'User not found' });
+      }
       
       const userData = userDoc.data()!;
       const userEmail = userData.email;
       let customerId = userData.stripeCustomerId;
 
       const orgIdBase = userData.organizationId || userId;
+      
+      console.log('[SYNC_FIREBASE_USER]', {
+        found: true,
+        uid: userId,
+        organizationId: orgIdBase,
+        hasEmail: !!userEmail,
+        stripeCustomerId: customerId || null
+      });
+
       const subDocBase = await db.collection('subscriptions').doc(orgIdBase).get();
       if (!customerId && subDocBase.exists) {
         customerId = subDocBase.data()?.stripeCustomerId;
@@ -612,7 +632,7 @@ async function startServer() {
       
       try {
         if (sessionId) {
-            console.log(`[Sync] Explicit sessionId provided: ${sessionId}. Retrieving session directly...`);
+            console.log('[SYNC_STRIPE_SESSION_LOOKUP]', { sessionId });
             const session = await stripe.checkout.sessions.retrieve(sessionId);
             if (session.customer) {
                 customerId = session.customer as string;
@@ -620,18 +640,18 @@ async function startServer() {
             if (session.subscription) {
                 const sessionSub = await stripe.subscriptions.retrieve(session.subscription as string);
                 subscriptions = { data: [sessionSub], has_more: false, object: 'list', url: '' };
-                console.log(`[Sync] Retrieved subscription ${sessionSub.id} directly from session.`);
+                console.log('[SYNC_STRIPE_SESSION_FOUND]', { subscriptionId: sessionSub.id });
             }
         }
       } catch (e) {
-          console.error(`[Sync] Failed to retrieve session ${sessionId}:`, e);
+          console.error('[SYNC_STRIPE_SESSION_ERROR]', { sessionId, error: e });
       }
 
       try {
         if (customerId && !subscriptions) {
           // Detect mismatch before calling Stripe if possible
           if (isLiveKey && customerId.includes('test')) {
-             console.warn(`[Sync] Local ID ${customerId} is from TEST mode, but currently using LIVE key. Triggering self-healing...`);
+             console.warn('[SYNC_ENV_MISMATCH]', { customerId, environment: 'live' });
              customerId = null; 
           } else {
             // Attempt to list by ID
@@ -640,12 +660,16 @@ async function startServer() {
               limit: 1,
               status: 'all'
             });
+            console.log('[SYNC_STRIPE_CUSTOMER_LOOKUP]', {
+              customerId,
+              subscriptionsFound: subscriptions.data.length
+            });
           }
         }
       } catch (stripeErr: any) {
         // Handle Environment Mismatch at runtime
         if (stripeErr.type === 'StripeInvalidRequestError' && (stripeErr.message.includes('No such customer') || stripeErr.message.includes('test mode') || stripeErr.message.includes('live mode'))) {
-          console.warn(`[Sync] Environment mismatch error for ${userId} (ID: ${customerId}). Attempting healing via email: ${userEmail}`);
+          console.warn('[SYNC_ENV_MISMATCH]', { error: stripeErr.message, email: userEmail });
           customerId = null; 
         } else {
           throw stripeErr;
@@ -655,7 +679,7 @@ async function startServer() {
       // Self-Healing Logic: Use Email to find the correct customer ID in the CURRENT environment
       if (!customerId || (subscriptions && subscriptions.data.length === 0)) {
         if (userEmail) {
-          console.log(`[Sync] Searching for customer by email ${userEmail} in the current environment...`);
+          console.log('[SYNC_HEALING_START]', { userEmail });
           const customers = await stripe.customers.list({ email: userEmail, limit: 100 });
           if (customers.data.length > 0) {
             let foundValidCustomer = false;
@@ -665,26 +689,31 @@ async function startServer() {
                     customerId = cust.id;
                     subscriptions = tempSubs;
                     foundValidCustomer = true;
-                    console.log(`[Sync] Healing successful! Found valid customer ID with subscription: ${customerId}`);
+                    console.log('[SYNC_HEALING_SUCCESS]', { customerId });
                     break;
                 }
             }
             if (!foundValidCustomer) {
                  // Fallback to the latest customer if none had subscriptions
                  customerId = customers.data[0].id;
-                 console.log(`[Sync] No subscription found among customers. Kept latest customer ID: ${customerId}`);
+                 console.log('[SYNC_HEALING_FALLBACK]', { customerId });
             }
           } else {
-            console.log(`[Sync] No customer found in current environment for email ${userEmail}.`);
+            console.log('[SYNC_HEALING_FAILED]', { reason: 'No customer found for email' });
           }
         }
       }
 
       if (!subscriptions || subscriptions.data.length === 0) {
-        console.warn(`[Sync] No subscription found in current environment for user ${userId}. Resetting local status to avoid stale trial state.`);
+        console.warn('[SYNC_NO_SUBSCRIPTION]', { userId });
         
         const userDocRef = await db.collection('users').doc(userId).get();
         const orgId = (userDocRef.exists && userDocRef.data()?.organizationId) ? userDocRef.data()?.organizationId : userId;
+
+        console.log('[SYNC_FIRESTORE_WRITE]', {
+           path: `subscriptions/${orgId}`,
+           operation: 'reset'
+        });
 
         const batch = db.batch();
         batch.set(db.collection('subscriptions').doc(orgId), {
@@ -736,13 +765,17 @@ async function startServer() {
          }
       }
 
-      console.log(`[Sync] Update successful. User: ${userId}, New Status: ${sub.status}, Plan: ${discoveredPlan}, Tier: ${discoveredTier}`);
+      console.log('[SYNC_SUCCESS_PREP]', {
+        userId,
+        status: sub.status,
+        plan: discoveredPlan,
+        tier: discoveredTier
+      });
 
       const userDocRef2 = await db.collection('users').doc(userId).get();
       const orgId2 = (userDocRef2.exists && userDocRef2.data()?.organizationId) ? userDocRef2.data()?.organizationId : userId;
 
-      const batch = db.batch();
-      batch.set(db.collection('subscriptions').doc(orgId2), {
+      const subPayload = {
         schemaVersion: 1,
         organizationId: orgId2,
         status: sub.status,
@@ -757,7 +790,16 @@ async function startServer() {
           musicScale: hasAccess
         },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      };
+
+      console.log('[SYNC_FIRESTORE_WRITE]', {
+        path: `subscriptions/${orgId2}`,
+        payload: subPayload,
+        operation: 'set (merge)'
+      });
+
+      const batch = db.batch();
+      batch.set(db.collection('subscriptions').doc(orgId2), subPayload, { merge: true });
 
       batch.set(db.collection('organizations').doc(orgId2), {
         ownerUid: userId,
@@ -798,7 +840,11 @@ async function startServer() {
       return res.json({ status: 'synced', stripeStatus: sub.status, hasAccess, customerId, environment: isLiveKey ? 'live' : 'test' });
 
     } catch (err: any) {
-      console.error('[Sync Error]', err);
+      console.error('[SYNC_FATAL_ERROR]', {
+        error: err.message,
+        stack: err.stack,
+        code: err.code || 'unknown'
+      });
       res.status(500).json({ 
         error: 'Erro na sincronização com Stripe.',
         details: err.message 
@@ -888,17 +934,39 @@ async function startServer() {
       const uid = decodedToken.uid;
       const email = decodedToken.email;
       
-      if (!db || !email) return res.status(400).json({ error: 'Missing params', message: 'Ocorreu um problema ao identificar os dados necessários para o sistema (email/uid).' });
+      if (!db || !email) {
+        console.error('[REPAIR_FATAL_ERROR]', { error: 'Missing params', dbReady: !!db, email });
+        return res.status(400).json({ error: 'Missing params', message: 'Ocorreu um problema ao identificar os dados necessários para o sistema (email/uid).' });
+      }
 
-      console.log(`[MUSICSCALE_REPAIR_REQUEST] request started for UID: ${uid}, Timestamp: ${new Date().toISOString()}`);
+      console.log('[REPAIR_START]', {
+        email: email,
+        uid: uid,
+        timestamp: new Date().toISOString()
+      });
 
       const userDoc = await db.collection('users').doc(uid).get();
-      if (!userDoc.exists) return res.status(404).json({ error: 'User not found', message: 'Usuário não localizado no banco de dados.' });
+      if (!userDoc.exists) {
+        console.error('[REPAIR_FATAL_ERROR]', { error: 'User not found' });
+        return res.status(404).json({ error: 'User not found', message: 'Usuário não localizado no banco de dados.' });
+      }
       
       const userData = userDoc.data()!;
       const orgId = userData.organizationId || uid;
 
-      console.log(`[MUSICSCALE_REPAIR_REQUEST] resolved orgId: ${orgId}`);
+      console.log('[REPAIR_FIREBASE_USER]', {
+        found: true,
+        uid: uid,
+        organizationId: orgId,
+        organizationRole: userData.organizationRole || 'unknown',
+        userDocPreview: Object.keys(userData)
+      });
+
+      console.log('[REPAIR_ORG_RESOLUTION]', {
+        resolvedOrgId: orgId,
+        fallbackApplied: !userData.organizationId,
+        expectedPath: `subscriptions/${orgId}`
+      });
 
       let legacyDocFound = false;
       let legacyPath = '';
@@ -912,11 +980,22 @@ async function startServer() {
       const stripe = getStripe();
       const customers = await stripe.customers.list({ email, limit: 1 });
       if (customers.data.length === 0) {
+          console.log('[REPAIR_STRIPE_LOOKUP]', { foundCustomer: false, email });
           return res.json({ success: false, message: 'Nenhuma assinatura ou cliente localizado no Stripe.', repaired: false });
       }
 
       const customer = customers.data[0];
       const subs = await stripe.subscriptions.list({ customer: customer.id, limit: 10, status: 'all' });
+
+      console.log('[REPAIR_STRIPE_LOOKUP]', {
+          foundCustomer: true,
+          customerId: customer.id,
+          subscriptionsCount: subs.data.length,
+          status: subs.data.length > 0 ? subs.data[0].status : 'none',
+          plan: subs.data.length > 0 ? subs.data[0].metadata?.plan : 'none',
+          trialing: subs.data.length > 0 ? subs.data[0].status === 'trialing' : false,
+          active: subs.data.length > 0 ? ['active', 'trialing'].includes(subs.data[0].status) : false
+      });
 
       if (subs.data.length === 0) {
           return res.json({ success: false, message: 'Seu usuário foi localizado, mas não há assinaturas ativas no momento.', repaired: false });
@@ -944,6 +1023,13 @@ async function startServer() {
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
 
+      console.log('[REPAIR_FIRESTORE_WRITE]', {
+        path: `subscriptions/${orgId}`,
+        payload: subPayload,
+        operation: 'set (merge)',
+        success: 'pending'
+      });
+
       const batch = db.batch();
       batch.set(db.collection('subscriptions').doc(orgId), subPayload, { merge: true });
 
@@ -969,20 +1055,13 @@ async function startServer() {
 
       await batch.commit();
 
-      console.log('[OWNER_REPAIR]', {
-        uid: uid,
+      console.log('[REPAIR_SUCCESS]', {
         organizationId: orgId,
-        motivo: 'repair/sync',
-        assinaturaEncontrada: s.id,
-        status: 'ownership_corrigido'
+        subscriptionStatus: s.status,
+        features: subPayload.features,
+        ownershipCorrected: true,
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION
       });
-
-      console.log(`[MILLIONSNEST_REPAIR_EXECUTION] Repair executado com sucesso:`);
-      console.log(`- stripe customer: ${customer.id}`);
-      console.log(`- assinatura: ${s.id} (${s.status})`);
-      console.log(`- path legado encontrado: ${legacyDocFound ? legacyPath : 'Nenhum'}`);
-      console.log(`- novo path salvo: subscriptions/${orgId}`);
-      console.log(`- payload final:`, subPayload);
 
       return res.json({
          success: true,
@@ -992,8 +1071,12 @@ async function startServer() {
       });
 
     } catch (e: any) {
-      console.error('[MILLIONSNEST_REPAIR_EXECUTION] Error:', e.message);
-      res.status(500).json({ error: e.message, message: 'Não foi possível concluir o sync automático. Erro de servidor.' });
+      console.error('[REPAIR_FATAL_ERROR]', {
+        error: e.message,
+        stack: e.stack,
+        code: e.code || 'unknown'
+      });
+      res.status(500).json({ error: e.message, message: 'Não foi possível concluir o sync automático. Erro de servidor.', code: e.code || 'unknown', step: 'sync_execution' });
     }
   });
 

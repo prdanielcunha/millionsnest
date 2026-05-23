@@ -53,10 +53,11 @@ export function Dashboard() {
         alert("Assinatura sincronizada com sucesso.");
         fetchSubscriptionAndOrg(true); // Sincroniza estado sem reload
       } else {
-        alert(data.message || "A conta não possui assinaturas ativas para serem verificadas.");
+        alert(`Falha ao sincronizar: ${data.message || data.error || 'A conta não possui assinaturas ativas para serem verificadas.'}`);
+        console.error("Repair response:", data);
       }
-    } catch (e) {
-      alert("Falha na comunicação para verificar a conta.");
+    } catch (e: any) {
+      alert(`Falha na comunicação para verificar a conta: ${e.message}`);
     } finally {
       setRepairing(false);
     }
