@@ -359,6 +359,14 @@ export default function Checkout() {
                         {addons.map(addon => {
                             const isSelected = addon.lookupKey ? selectedAddonsLookup.includes(addon.lookupKey) : false;
                             
+                            const fallbackDescriptions: Record<string, string> = {
+                              'musicscale_setup_premium': 'Avaliação completa, relatórios e plano de ação estruturado para sua equipe.',
+                              'musicscale_training_express': 'Acesso a workshops rápidos para desenvolver habilidades técnicas e espirituais.',
+                              'musicscale_worship_100': 'Acesso instantâneo a 100 cifras e recursos exclusivos de worship.',
+                              'musicscale_music_pack_10': 'Pacote adicional de 10 músicas premium com todos os recursos.'
+                            };
+                            const description = addon.description || (addon.lookupKey ? fallbackDescriptions[addon.lookupKey] : null) || '';
+
                             return (
                                 <div 
                                     key={addon.id}
@@ -376,7 +384,7 @@ export default function Checkout() {
                                                 <span className="text-[9px] uppercase tracking-wider font-bold bg-white/10 text-white px-2 py-0.5 rounded">Pagamento Único</span>
                                               )}
                                            </h4>
-                                           <p className="text-[#A0A7B5] text-sm">{addon.description}</p>
+                                           <p className="text-[#A0A7B5] text-sm">{description}</p>
                                        </div>
                                     </div>
                                     <div className="font-medium text-white tracking-tight">
