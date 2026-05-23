@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import path from 'path';
 import { BillingService } from './src/server/services/BillingService.js';
-import { getDefaultPermissions } from './src/lib/rbac.js';
+import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
 
 dotenv.config();
 
@@ -297,6 +297,7 @@ async function startServer() {
              uid: userId,
              organizationId: orgId,
              role: 'owner',
+             permissionsVersion: CURRENT_PERMISSIONS_VERSION,
              permissions: getDefaultPermissions('owner')
           }, { merge: true });
 
@@ -773,6 +774,7 @@ async function startServer() {
         uid: userId,
         organizationId: orgId2,
         role: 'owner',
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
         permissions: getDefaultPermissions('owner')
       }, { merge: true });
 
@@ -855,6 +857,7 @@ async function startServer() {
         uid: userId,
         organizationId: userId,
         role: 'owner',
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
         permissions: getDefaultPermissions('owner')
       }, { merge: true });
 
@@ -960,6 +963,7 @@ async function startServer() {
           uid: uid,
           organizationId: orgId,
           role: 'owner',
+          permissionsVersion: CURRENT_PERMISSIONS_VERSION,
           permissions: getDefaultPermissions('owner')
       }, { merge: true });
 
@@ -1110,6 +1114,7 @@ async function startServer() {
             uid: userId,
             organizationId: orgId,
             role: 'owner',
+            permissionsVersion: CURRENT_PERMISSIONS_VERSION,
             permissions: getDefaultPermissions('owner')
         }, { merge: true });
 
@@ -1317,6 +1322,7 @@ async function startServer() {
         uid: uid,
         organizationId: orgId,
         role: 'owner',
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
         permissions: getDefaultPermissions('owner')
       }, { merge: true });
 

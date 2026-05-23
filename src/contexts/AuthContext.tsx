@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../lib/firebase.js";
+import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 
 interface UserProfile {
   uid: string;
@@ -98,14 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                  uid: currentUser.uid,
                  organizationId: targetOrgId,
                  role: 'owner',
-                 permissions: {
-                   manageMembers: true,
-                   manageSchedules: true,
-                   manageSongs: true,
-                   manageBilling: true,
-                   manageOrganization: true,
-                   manageRoles: true
-                 }
+                 permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+                 permissions: getDefaultPermissions('owner')
                }, { merge: true });
             }
 

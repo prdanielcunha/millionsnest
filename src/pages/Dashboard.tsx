@@ -10,7 +10,7 @@ import {
 import { Navbar } from "../components/Navbar.js";
 import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
-import { getDefaultPermissions } from "../lib/rbac.js";
+import { getDefaultPermissions, normalizePermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -262,14 +262,14 @@ export function Dashboard() {
 
       // update in users collection
       const userRef = doc(db, "users", memberId);
-      await updateDoc(userRef, { role: newRole, permissions: perms });
+      await updateDoc(userRef, { role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION });
       
       // update in organization_members collection
       const orgId = profile?.organizationId || user?.uid;
       const memberOrgRef = doc(db, "organization_members", `${memberId}_${orgId}`);
-      await updateDoc(memberOrgRef, { role: newRole, permissions: perms });
+      await updateDoc(memberOrgRef, { role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION });
       
-      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole, permissions: perms } : m));
+      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION } : m));
     } catch (e) {
       console.error("Erro ao atualizar função", e);
       alert("Erro ao atualizar função do membro.");
@@ -385,7 +385,7 @@ export function Dashboard() {
   };
 
   const currentUserData = members.find(m => m.id === user?.uid);
-  const currentUserPerms = currentUserData?.permissions || getDefaultPermissions(currentUserData?.role || 'member');
+  const currentUserPerms = normalizePermissions(currentUserData?.permissions, currentUserData?.role || 'member', currentUserData?.permissionsVersion);
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#F5F7FA]">
@@ -401,7 +401,7 @@ export function Dashboard() {
           >
             Visão Geral
           </button>
-          {currentUserPerms.manageOrganization && (
+          {currentUserPerms['organization.manageOrganization'] && (
             <button 
               onClick={() => setActiveTab("organization")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "organization" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
@@ -409,7 +409,7 @@ export function Dashboard() {
               Organização
             </button>
           )}
-          {currentUserPerms.manageBilling && (
+          {currentUserPerms['organization.manageBilling'] && (
             <button 
               onClick={() => setActiveTab("billing")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
@@ -866,7 +866,7 @@ export function Dashboard() {
                       </div>
                     </div>
 
-                    {currentUserPerms.manageMembers && (
+                    {currentUserPerms['organization.manageMembers'] && (
                       <div className="flex flex-col gap-4 pb-6 border-b border-white/5">
                         <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5]">Membros & Convites</p>
                         
@@ -888,7 +888,7 @@ export function Dashboard() {
                                     <span className="text-[10px] text-[#A0A7B5]">{member.email}</span>
                                   </div>
                                 </div>
-                                {member.id !== user?.uid && currentUserPerms.manageRoles && (
+                                {member.id !== user?.uid && currentUserPerms['organization.manageRoles'] && (
                                   <div className="flex items-center gap-3">
                                     <select
                                       value={member.role || 'member'}
