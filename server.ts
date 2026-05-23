@@ -326,11 +326,21 @@ async function startServer() {
           // 4. User
           batch.set(db.collection('users').doc(userId), {
             organizationId: orgId,
+            organizationRole: 'owner',
             lastStripeEventTs: eventCreatedTs,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
 
           await batch.commit();
+          
+          console.log('[OWNERSHIP_SYNC]', {
+            uid: userId,
+            organizationId: orgId,
+            role_anterior: 'unknown',
+            role_nova: 'owner',
+            motivo: 'checkout.session.completed'
+          });
+
           console.log(`[STRIPE_WEBHOOK] Successfully provisioned architecture for user: ${userId}`);
           await auditRef.update({ status: 'success', processedUserId: userId });
           break;
@@ -747,19 +757,36 @@ async function startServer() {
       }, { merge: true });
 
       batch.set(db.collection('organizations').doc(orgId2), {
+        ownerUid: userId,
+        ownerId: userId,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
       batch.set(db.collection('users').doc(userId), {
+        organizationRole: 'owner',
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      batch.set(db.collection('organization_members').doc(`${userId}_${orgId2}`), {
+        uid: userId,
+        organizationId: orgId2,
+        role: 'owner'
       }, { merge: true });
 
       await batch.commit();
 
+      console.log('[OWNERSHIP_SYNC]', {
+        uid: userId,
+        organizationId: orgId2,
+        role_anterior: 'unknown',
+        role_nova: 'owner',
+        motivo: 'billing/sync'
+      });
+
       if (hasAccess) {
         await db.collection('users').doc(userId).update({
-          organizationId: userId,
-          activeOrganizationId: userId
+          organizationId: orgId2,
+          activeOrganizationId: orgId2
         });
       }
 
@@ -914,10 +941,14 @@ async function startServer() {
       batch.set(db.collection('subscriptions').doc(orgId), subPayload, { merge: true });
 
       batch.set(db.collection('organizations').doc(orgId), {
+          ownerUid: uid,
+          ownerId: uid,
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
       batch.set(db.collection('users').doc(uid), {
+          organizationId: orgId,
+          organizationRole: 'owner',
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
@@ -928,6 +959,14 @@ async function startServer() {
       }, { merge: true });
 
       await batch.commit();
+
+      console.log('[OWNER_REPAIR]', {
+        uid: uid,
+        organizationId: orgId,
+        motivo: 'repair/sync',
+        assinaturaEncontrada: s.id,
+        status: 'ownership_corrigido'
+      });
 
       console.log(`[MILLIONSNEST_REPAIR_EXECUTION] Repair executado com sucesso:`);
       console.log(`- stripe customer: ${customer.id}`);
@@ -1245,10 +1284,50 @@ async function startServer() {
         res.status(400).json({ error: 'Missing orgId or name' });
         return;
       }
-      await admin.firestore().collection('organizations').doc(orgId).set({ 
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      const uid = decodedToken.uid;
+      const batch = admin.firestore().batch();
+
+      batch.set(admin.firestore().collection('organizations').doc(orgId), { 
         name, 
+        ownerUid: uid,
+        ownerId: uid,
         updatedAt: admin.firestore.FieldValue.serverTimestamp() 
       }, { merge: true });
+
+      batch.set(admin.firestore().collection('organization_members').doc(`${uid}_${orgId}`), {
+        uid: uid,
+        organizationId: orgId,
+        role: 'owner'
+      }, { merge: true });
+
+      batch.set(admin.firestore().collection('users').doc(uid), {
+        organizationRole: 'owner',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      await batch.commit();
+
+      console.log('[OWNERSHIP_SYNC]', {
+        uid: uid,
+        organizationId: orgId,
+        role_anterior: 'unknown',
+        role_nova: 'owner',
+        motivo: 'criação/edição da organização'
+      });
+
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -1274,9 +1353,9 @@ async function startServer() {
       }
 
       const promo = promos.data[0];
-      const coupon = promo.coupon;
+      const coupon = (promo as any).coupon;
 
-      if (!coupon.valid) {
+      if (!coupon || !coupon.valid) {
           return res.status(400).json({ error: 'Este cupom não é mais válido.' });
       }
 
@@ -1316,7 +1395,7 @@ async function startServer() {
 
       const stripe = getStripe();
       
-      const line_items: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+      const line_items: any[] = [];
 
       // Find plan price
       if (planLookupKey) {
@@ -1375,7 +1454,7 @@ async function startServer() {
       const productsReq = await service.getProducts();
       const allProds = [...productsReq.plans, ...productsReq.addons];
       
-      const sessionArgs: Stripe.Checkout.SessionCreateParams = {
+      const sessionArgs: any = {
         payment_method_types: ['card'],
         line_items,
         client_reference_id: userId,

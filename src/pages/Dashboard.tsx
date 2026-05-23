@@ -220,9 +220,13 @@ export function Dashboard() {
     setSavingOrg(true);
     try {
       const orgId = profile?.organizationId || user.uid;
+      const token = await user.getIdToken();
       const res = await fetch('/api/user/organization', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ orgId, name: orgNameInput })
       });
       if (!res.ok) throw new Error('Failed to save');
