@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import path from 'path';
 import { BillingService } from './src/server/services/BillingService.js';
+import { getDefaultPermissions } from './src/lib/rbac.js';
 
 dotenv.config();
 
@@ -295,7 +296,8 @@ async function startServer() {
           batch.set(db.collection('organization_members').doc(`${userId}_${orgId}`), {
              uid: userId,
              organizationId: orgId,
-             role: 'owner'
+             role: 'owner',
+             permissions: getDefaultPermissions('owner')
           }, { merge: true });
 
           // 3. Subscription
@@ -770,7 +772,8 @@ async function startServer() {
       batch.set(db.collection('organization_members').doc(`${userId}_${orgId2}`), {
         uid: userId,
         organizationId: orgId2,
-        role: 'owner'
+        role: 'owner',
+        permissions: getDefaultPermissions('owner')
       }, { merge: true });
 
       await batch.commit();
@@ -851,7 +854,8 @@ async function startServer() {
       batch.set(db.collection('organization_members').doc(`${userId}_${userId}`), {
         uid: userId,
         organizationId: userId,
-        role: 'owner'
+        role: 'owner',
+        permissions: getDefaultPermissions('owner')
       }, { merge: true });
 
       await batch.commit();
@@ -955,7 +959,8 @@ async function startServer() {
       batch.set(db.collection('organization_members').doc(`${uid}_${orgId}`), {
           uid: uid,
           organizationId: orgId,
-          role: 'owner'
+          role: 'owner',
+          permissions: getDefaultPermissions('owner')
       }, { merge: true });
 
       await batch.commit();
@@ -1104,7 +1109,8 @@ async function startServer() {
         batch.set(db.collection('organization_members').doc(`${userId}_${orgId}`), {
             uid: userId,
             organizationId: orgId,
-            role: 'owner'
+            role: 'owner',
+            permissions: getDefaultPermissions('owner')
         }, { merge: true });
 
         // Update user
@@ -1310,7 +1316,8 @@ async function startServer() {
       batch.set(admin.firestore().collection('organization_members').doc(`${uid}_${orgId}`), {
         uid: uid,
         organizationId: orgId,
-        role: 'owner'
+        role: 'owner',
+        permissions: getDefaultPermissions('owner')
       }, { merge: true });
 
       batch.set(admin.firestore().collection('users').doc(uid), {

@@ -97,7 +97,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                await setDoc(orgMemberRef, {
                  uid: currentUser.uid,
                  organizationId: targetOrgId,
-                 role: 'owner'
+                 role: 'owner',
+                 permissions: {
+                   manageMembers: true,
+                   manageSchedules: true,
+                   manageSongs: true,
+                   manageBilling: true,
+                   manageOrganization: true,
+                   manageRoles: true
+                 }
                }, { merge: true });
             }
 

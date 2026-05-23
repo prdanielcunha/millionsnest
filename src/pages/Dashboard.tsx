@@ -10,6 +10,7 @@ import {
 import { Navbar } from "../components/Navbar.js";
 import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
+import { getDefaultPermissions } from "../lib/rbac.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -257,16 +258,18 @@ export function Dashboard() {
 
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
     try {
+      const perms = getDefaultPermissions(newRole);
+
       // update in users collection
       const userRef = doc(db, "users", memberId);
-      await updateDoc(userRef, { role: newRole });
+      await updateDoc(userRef, { role: newRole, permissions: perms });
       
       // update in organization_members collection
       const orgId = profile?.organizationId || user?.uid;
       const memberOrgRef = doc(db, "organization_members", `${memberId}_${orgId}`);
-      await updateDoc(memberOrgRef, { role: newRole });
+      await updateDoc(memberOrgRef, { role: newRole, permissions: perms });
       
-      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole } : m));
+      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole, permissions: perms } : m));
     } catch (e) {
       console.error("Erro ao atualizar função", e);
       alert("Erro ao atualizar função do membro.");
@@ -381,6 +384,9 @@ export function Dashboard() {
     navigate('/checkout');
   };
 
+  const currentUserData = members.find(m => m.id === user?.uid);
+  const currentUserPerms = currentUserData?.permissions || getDefaultPermissions(currentUserData?.role || 'member');
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#F5F7FA]">
       <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-[#2B85EB]/5 blur-[150px] rounded-full pointer-events-none" />
@@ -395,18 +401,22 @@ export function Dashboard() {
           >
             Visão Geral
           </button>
-          <button 
-            onClick={() => setActiveTab("organization")}
-            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "organization" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
-          >
-            Organização
-          </button>
-          <button 
-            onClick={() => setActiveTab("billing")}
-            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
-          >
-            Valores e Assinatura
-          </button>
+          {currentUserPerms.manageOrganization && (
+            <button 
+              onClick={() => setActiveTab("organization")}
+              className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "organization" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
+            >
+              Organização
+            </button>
+          )}
+          {currentUserPerms.manageBilling && (
+            <button 
+              onClick={() => setActiveTab("billing")}
+              className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
+            >
+              Valores e Assinatura
+            </button>
+          )}
           <button 
             onClick={() => setActiveTab("account")}
             className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "account" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
@@ -856,61 +866,59 @@ export function Dashboard() {
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-4 pb-6 border-b border-white/5">
-                      <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5]">Membros & Convites</p>
-                      
-                      {members.length > 0 && (
-                        <div className="flex flex-col gap-2 mb-4">
-                          {(() => {
-                            const currentUserRole = members.find(m => m.id === user?.uid)?.role || 'member';
-                            const canEditRoles = currentUserRole === 'owner' || currentUserRole === 'admin';
-                            return members.map(member => (
-                            <div key={member.id} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/5 rounded-xl">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB] font-bold text-xs uppercase">
-                                  {member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
-                                </div>
-                                <div className="flex flex-col">
-                                  <span className="text-sm font-semibold text-[#F5F7FA]">
-                                    {member.displayName || 'Usuário'} {member.id === user?.uid && '(Você)'}
-                                    <span className="ml-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
-                                      {{owner: 'Dono', admin: 'Administrador', secretary: 'Secretária', member: 'Membro', guest: 'Visitante'}[(member.role as string) || 'member'] || member.role || 'Membro'}
-                                    </span>
-                                  </span>
-                                  <span className="text-[10px] text-[#A0A7B5]">{member.email}</span>
-                                </div>
-                              </div>
-                              {member.id !== user?.uid && canEditRoles && (
+                    {currentUserPerms.manageMembers && (
+                      <div className="flex flex-col gap-4 pb-6 border-b border-white/5">
+                        <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5]">Membros & Convites</p>
+                        
+                        {members.length > 0 && (
+                          <div className="flex flex-col gap-2 mb-4">
+                            {members.map(member => (
+                              <div key={member.id} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/5 rounded-xl">
                                 <div className="flex items-center gap-3">
-                                  <select
-                                    value={member.role || 'member'}
-                                    onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                                    className="bg-white/5 border border-white/10 text-[#F5F7FA] text-xs rounded-md px-2 py-1 outline-none focus:border-[#2B85EB]"
-                                  >
-                                    <option value="owner">Dono</option>
-                                    <option value="admin">Administrador</option>
-                                    <option value="secretary">Secretária</option>
-                                    <option value="member">Membro</option>
-                                    <option value="guest">Visitante</option>
-                                  </select>
-                                  <button className="text-xs text-[#EF4444] hover:text-[#FCA5A5] font-medium" onClick={() => alert("Remoção de membros em desenvolvimento.")}>Excluir</button>
+                                  <div className="w-8 h-8 rounded-full bg-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB] font-bold text-xs uppercase">
+                                    {member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-semibold text-[#F5F7FA]">
+                                      {member.displayName || 'Usuário'} {member.id === user?.uid && '(Você)'}
+                                      <span className="ml-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
+                                        {{owner: 'Dono', admin: 'Administrador', secretary: 'Secretária', member: 'Membro', guest: 'Visitante'}[(member.role as string) || 'member'] || member.role || 'Membro'}
+                                      </span>
+                                    </span>
+                                    <span className="text-[10px] text-[#A0A7B5]">{member.email}</span>
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                            ));
-                          })()}
-                        </div>
-                      )}
+                                {member.id !== user?.uid && currentUserPerms.manageRoles && (
+                                  <div className="flex items-center gap-3">
+                                    <select
+                                      value={member.role || 'member'}
+                                      onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
+                                      className="bg-white/5 border border-white/10 text-[#F5F7FA] text-xs rounded-md px-2 py-1 outline-none focus:border-[#2B85EB]"
+                                    >
+                                      <option value="owner">Dono</option>
+                                      <option value="admin">Administrador</option>
+                                      <option value="secretary">Secretária</option>
+                                      <option value="member">Membro</option>
+                                      <option value="guest">Visitante</option>
+                                    </select>
+                                    <button className="text-xs text-[#EF4444] hover:text-[#FCA5A5] font-medium" onClick={() => alert("Remoção de membros em desenvolvimento.")}>Excluir</button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
 
-                      <div className="flex items-center gap-3">
-                        <button onClick={handleInviteWhatsapp} className="flex items-center gap-2 px-4 py-2 bg-[#10B981]/10 text-[#10B981] rounded-xl hover:bg-[#10B981]/20 transition-colors border border-[#10B981]/20 text-sm font-medium">
-                          <Link className="w-4 h-4" /> Whatsapp
-                        </button>
-                        <button onClick={handleCopyLink} className="flex items-center gap-2 px-4 py-2 bg-white/5 text-[#F5F7FA] rounded-xl hover:bg-white/10 transition-colors border border-white/10 text-sm font-medium">
-                          {copiedLink ? <Check className="w-4 h-4 text-[#10B981]" /> : <Copy className="w-4 h-4" />} Copiar Link
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button onClick={handleInviteWhatsapp} className="flex items-center gap-2 px-4 py-2 bg-[#10B981]/10 text-[#10B981] rounded-xl hover:bg-[#10B981]/20 transition-colors border border-[#10B981]/20 text-sm font-medium">
+                            <Link className="w-4 h-4" /> Whatsapp
+                          </button>
+                          <button onClick={handleCopyLink} className="flex items-center gap-2 px-4 py-2 bg-white/5 text-[#F5F7FA] rounded-xl hover:bg-white/10 transition-colors border border-white/10 text-sm font-medium">
+                            {copiedLink ? <Check className="w-4 h-4 text-[#10B981]" /> : <Copy className="w-4 h-4" />} Copiar Link
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     <div className="flex items-center justify-between">
                       <div>
