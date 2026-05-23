@@ -1,3 +1,4 @@
+import React from 'react';
 import { 
   LayoutGrid, Calendar, Music, BookOpen, Users, 
   Database, Headphones, Home, Settings, HelpCircle, 

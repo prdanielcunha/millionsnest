@@ -287,10 +287,6 @@ async function startServer() {
             ownerUid: userId,
             ownerId: userId,
             plan: plan,
-            subscriptionStatus: subscription.status,
-            status: subscription.status,
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: subscriptionId,
             lastStripeEventTs: eventCreatedTs,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
@@ -304,19 +300,23 @@ async function startServer() {
 
           // 3. Subscription
           const subPayload = {
-            product: 'musicscale',
+            schemaVersion: 1,
+            organizationId: orgId,
             status: subscription.status,
+            plan: plan,
             stripeCustomerId: customerId,
             stripeSubscriptionId: subscriptionId,
-            plan: plan,
             currentPeriodEnd: currentPeriodEnd,
             trialEndsAt: trialEnd,
             lastStripeEventTs: eventCreatedTs,
-            appsAccess: { musicscale: hasAccess },
+            features: {
+              globalLibrary: hasAccess,
+              musicScale: hasAccess
+            },
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           };
           
-          console.log('[STRIPE_WEBHOOK_DEBUG_PAYLOAD_SUBSCRIPTION]', {
+          console.log('[STRIPE_WEBHOOK_DEBUG_PAYLOAD]', {
             path_exato_salvo: `subscriptions/${orgId}`,
             payload_salvo: subPayload
           });
@@ -326,27 +326,7 @@ async function startServer() {
           // 4. User
           batch.set(db.collection('users').doc(userId), {
             organizationId: orgId,
-            products: admin.firestore.FieldValue.arrayUnion('musicscale'),
-            subscriptionStatus: subscription.status,
-            trialEndsAt: trialEnd,
-            currentPeriodEnd: currentPeriodEnd,
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: subscriptionId,
-            plan: plan,
             lastStripeEventTs: eventCreatedTs,
-            appsAccess: { musicscale: hasAccess },
-            subscription: {
-              status: subscription.status,
-              plan: plan,
-              stripeCustomerId: customerId,
-              stripeSubscriptionId: subscriptionId,
-              trialEndsAt: trialEnd,
-              currentPeriodEnd: currentPeriodEnd,
-              lastStripeEventTs: eventCreatedTs,
-            },
-            permissions: {
-              musicscale: hasAccess
-            },
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
 
@@ -449,42 +429,25 @@ async function startServer() {
                     currentPeriodEnd: currentPeriodEnd,
                     trialEndsAt: trialEnd,
                     lastStripeEventTs: eventCreatedTs,
-                    appsAccess: { musicscale: hasAccess },
+                    features: {
+                      globalLibrary: hasAccess,
+                      musicScale: hasAccess
+                    },
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                  }, { merge: true });
                  
+                 console.log('[STRIPE_WEBHOOK_DEBUG_PAYLOAD]', {
+                   path: `subscriptions/${doc.id}`,
+                   hasAccess
+                 });
+                 
                  batch.set(db.collection('organizations').doc(orgId), {
-                    ownerUid: userId,
-                    ownerId: userId,
-                    subscriptionStatus: status,
-                    status: status,
-                    trialEndsAt: trialEnd,
-                    currentPeriodEnd: currentPeriodEnd,
                     lastStripeEventTs: eventCreatedTs,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                  }, { merge: true });
 
-                 batch.set(db.collection('organization_members').doc(`${userId}_${orgId}`), {
-                    uid: userId,
-                    organizationId: orgId,
-                    role: 'owner'
-                 }, { merge: true });
-
                  batch.set(db.collection('users').doc(userId), {
-                    subscriptionStatus: status,
-                    trialEndsAt: trialEnd,
-                    currentPeriodEnd: currentPeriodEnd,
                     lastStripeEventTs: eventCreatedTs,
-                    appsAccess: { musicscale: hasAccess },
-                    subscription: {
-                      status: status,
-                      trialEndsAt: trialEnd,
-                      currentPeriodEnd: currentPeriodEnd,
-                      lastStripeEventTs: eventCreatedTs,
-                    },
-                    permissions: {
-                      musicscale: hasAccess
-                    },
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                  }, { merge: true });
                  
@@ -717,35 +680,18 @@ async function startServer() {
           stripeSubscriptionId: null,
           trialEndsAt: null,
           currentPeriodEnd: null,
-          appsAccess: { musicscale: false },
+          features: {
+            globalLibrary: false,
+            musicScale: false
+          },
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
         batch.set(db.collection('organizations').doc(orgId), {
-          ownerUid: userId,
-          ownerId: userId,
-          subscriptionStatus: 'none',
-          status: 'none',
-          stripeCustomerId: null,
-          stripeSubscriptionId: null,
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
         batch.set(db.collection('users').doc(userId), {
-          subscriptionStatus: 'none',
-          stripeCustomerId: null,
-          stripeSubscriptionId: null,
-          trialEndsAt: null,
-          currentPeriodEnd: null,
-          appsAccess: { musicscale: false },
-          subscription: {
-             status: 'none',
-             stripeCustomerId: null,
-             stripeSubscriptionId: null,
-             trialEndsAt: null,
-             currentPeriodEnd: null,
-          },
-          permissions: { musicscale: false },
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
@@ -784,6 +730,8 @@ async function startServer() {
 
       const batch = db.batch();
       batch.set(db.collection('subscriptions').doc(orgId2), {
+        schemaVersion: 1,
+        organizationId: orgId2,
         status: sub.status,
         plan: discoveredPlan,
         tier: discoveredTier,
@@ -791,43 +739,18 @@ async function startServer() {
         stripeSubscriptionId: sub.id,
         currentPeriodEnd: currentPeriodEnd,
         trialEndsAt: trialEnd,
-        appsAccess: { musicscale: hasAccess },
+        features: {
+          globalLibrary: hasAccess,
+          musicScale: hasAccess
+        },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
       batch.set(db.collection('organizations').doc(orgId2), {
-        ownerUid: userId,
-        ownerId: userId,
-        subscriptionStatus: sub.status,
-        status: sub.status,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: sub.id,
-        trialEndsAt: trialEnd,
-        currentPeriodEnd: currentPeriodEnd,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
-      batch.set(db.collection('organization_members').doc(`${userId}_${orgId2}`), {
-        uid: userId,
-        organizationId: orgId2,
-        role: 'owner'
-      }, { merge: true });
-
       batch.set(db.collection('users').doc(userId), {
-        subscriptionStatus: sub.status,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: sub.id,
-        trialEndsAt: trialEnd,
-        currentPeriodEnd: currentPeriodEnd,
-        appsAccess: { musicscale: hasAccess },
-        subscription: {
-          status: sub.status,
-          stripeCustomerId: customerId,
-          stripeSubscriptionId: sub.id,
-          trialEndsAt: trialEnd,
-          currentPeriodEnd: currentPeriodEnd,
-        },
-        permissions: { musicscale: hasAccess },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
@@ -875,43 +798,26 @@ async function startServer() {
       
       const batch = db.batch();
       batch.set(db.collection('subscriptions').doc(orgId3), {
+        schemaVersion: 1,
+        organizationId: orgId3,
         status: sub.status,
         stripeCustomerId: customer.id,
         stripeSubscriptionId: sub.id,
         currentPeriodEnd: cpEnd,
         trialEndsAt: tEnd,
         plan: 'annual',
-        appsAccess: { musicscale: hasAccess },
+        features: {
+          globalLibrary: hasAccess,
+          musicScale: hasAccess
+        },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
       
       batch.set(db.collection('users').doc(userId), {
-        subscriptionStatus: sub.status,
-        stripeCustomerId: customer.id,
-        stripeSubscriptionId: sub.id,
-        trialEndsAt: tEnd,
-        currentPeriodEnd: cpEnd,
-        appsAccess: { musicscale: hasAccess },
-        subscription: {
-          status: sub.status,
-          stripeCustomerId: customer.id,
-          stripeSubscriptionId: sub.id,
-          trialEndsAt: tEnd,
-          currentPeriodEnd: cpEnd,
-        },
-        permissions: { musicscale: hasAccess },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
       batch.set(db.collection('organizations').doc(userId), {
-        ownerUid: userId,
-        ownerId: userId,
-        subscriptionStatus: sub.status,
-        status: sub.status,
-        stripeCustomerId: customer.id,
-        stripeSubscriptionId: sub.id,
-        trialEndsAt: tEnd,
-        currentPeriodEnd: cpEnd,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
@@ -968,26 +874,23 @@ async function startServer() {
         const batch = db.batch();
         const subRef = db.collection('subscriptions').doc(orgId);
         batch.set(subRef, {
+            schemaVersion: 1,
+            organizationId: orgId,
             status: s.status,
             stripeCustomerId: customer.id,
             stripeSubscriptionId: s.id,
             currentPeriodEnd: cpEnd,
             trialEndsAt: tEnd,
             plan: s.metadata?.plan || 'monthly',
-            appsAccess: { musicscale: hasAccess },
+            features: {
+              globalLibrary: hasAccess,
+              musicScale: hasAccess
+            },
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
         // Update organization
         batch.set(db.collection('organizations').doc(userId), {
-            ownerUid: userId,
-            ownerId: userId,
-            subscriptionStatus: s.status,
-            status: s.status,
-            stripeCustomerId: customer.id,
-            stripeSubscriptionId: s.id,
-            trialEndsAt: tEnd,
-            currentPeriodEnd: cpEnd,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
@@ -998,23 +901,9 @@ async function startServer() {
         }, { merge: true });
 
         // Update user
-        batch.update(db.collection('users').doc(userId), {
-            subscriptionStatus: s.status,
-            stripeCustomerId: customer.id,
-            stripeSubscriptionId: s.id,
-            trialEndsAt: tEnd,
-            currentPeriodEnd: cpEnd,
-            appsAccess: { musicscale: hasAccess },
-            subscription: {
-              status: s.status,
-              stripeCustomerId: customer.id,
-              stripeSubscriptionId: s.id,
-              trialEndsAt: tEnd,
-              currentPeriodEnd: cpEnd,
-            },
-            permissions: { musicscale: hasAccess },
+        batch.set(db.collection('users').doc(userId), {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
 
         await batch.commit();
         console.log(`[REPAIR] User ${userId} successfully synchronized with Stripe status: ${s.status}`);
@@ -1051,7 +940,7 @@ async function startServer() {
       const subs = await stripe.subscriptions.list({ customer: customer.id, limit: 10, status: 'all' });
       
       const userSnap = await db.collection('users').where('email', '==', email).get();
-      const userData = userSnap.empty ? null : { id: userSnap.docs[0].id, ...userSnap.docs[0].data() };
+      const userData: any = userSnap.empty ? null : { id: userSnap.docs[0].id, ...userSnap.docs[0].data() };
       
       let subData = null;
       let orgData = null;
@@ -1396,17 +1285,15 @@ async function startServer() {
          }
       }
           
-          if (!customerId) {
-             const email = userDoc.data()?.email;
-             if (email) {
-                const stripe = getStripe();
-                const customers = await stripe.customers.list({ email, limit: 1 });
-                if (customers.data.length > 0) {
-                   customerId = customers.data[0].id;
-                }
-             }
-          }
-        }
+      if (!customerId) {
+         const email = userDoc.data()?.email;
+         if (email) {
+            const stripe = getStripe();
+            const customers = await stripe.customers.list({ email, limit: 1 });
+            if (customers.data.length > 0) {
+               customerId = customers.data[0].id;
+            }
+         }
       }
 
       if (!customerId) {
