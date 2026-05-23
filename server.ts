@@ -253,6 +253,13 @@ async function startServer() {
           });
           const userDocSnap = await db.collection('users').doc(userId).get();
           const orgId = (userDocSnap.exists && userDocSnap.data()?.organizationId) ? userDocSnap.data()?.organizationId : userId;
+          
+          console.log('[STRIPE_WEBHOOK_DEBUG]', {
+            metadata_recebida: session.metadata,
+            organizationId_detectado: orgId,
+            userId_detectado: userId,
+            timestamp_da_sincronizacao: new Date().toISOString()
+          });
 
           if (subscription.discounts && subscription.discounts.length > 0) {
              const discount = subscription.discounts[0] as any;
@@ -296,7 +303,7 @@ async function startServer() {
           }, { merge: true });
 
           // 3. Subscription
-          batch.set(db.collection('subscriptions').doc(userId), {
+          const subPayload = {
             product: 'musicscale',
             status: subscription.status,
             stripeCustomerId: customerId,
@@ -307,7 +314,14 @@ async function startServer() {
             lastStripeEventTs: eventCreatedTs,
             appsAccess: { musicscale: hasAccess },
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
+          };
+          
+          console.log('[STRIPE_WEBHOOK_DEBUG_PAYLOAD_SUBSCRIPTION]', {
+            path_exato_salvo: `subscriptions/${orgId}`,
+            payload_salvo: subPayload
+          });
+
+          batch.set(db.collection('subscriptions').doc(orgId), subPayload, { merge: true });
 
           // 4. User
           batch.set(db.collection('users').doc(userId), {
@@ -516,8 +530,21 @@ async function startServer() {
 
       console.log(`[API Access] Checking access for UID: ${uid}`);
 
-      // 1. Direct subscription check (Personal/Legacy)
-      const subDoc = await db.collection('subscriptions').doc(uid).get();
+      // Fetch user specific data first
+      let orgId = uid;
+      const userDoc = await db.collection('users').doc(uid).get();
+      let appsAccess: any = {};
+      let musicCredits = 0;
+      
+      if (userDoc.exists) {
+        const userData = userDoc.data()!;
+        orgId = userData.organizationId || uid;
+        appsAccess = userData.appsAccess || {};
+        musicCredits = userData.musicCredits || 0;
+      }
+
+      // 1. Direct subscription check on OrgId
+      const subDoc = await db.collection('subscriptions').doc(orgId).get();
       let hasAccess = false;
       let status = "none";
       let plan = "none";
@@ -538,8 +565,8 @@ async function startServer() {
         const memberships = await db.collection('organization_members').where('uid', '==', uid).get();
         if (!memberships.empty) {
           for (const memberDoc of memberships.docs) {
-            const orgId = memberDoc.data().organizationId;
-            const orgDoc = await db.collection('organizations').doc(orgId).get();
+            const mOrgId = memberDoc.data().organizationId;
+            const orgDoc = await db.collection('organizations').doc(mOrgId).get();
             if (orgDoc.exists && ['active', 'trialing'].includes(orgDoc.data()?.subscriptionStatus)) {
               hasAccess = true;
               status = orgDoc.data()?.subscriptionStatus || 'active';
@@ -550,22 +577,11 @@ async function startServer() {
               if (orgDoc.data()?.currentPeriodEnd) {
                  currentPeriodEnd = new Date(orgDoc.data()?.currentPeriodEnd.seconds * 1000).toISOString();
               }
-              console.log(`[API Access] Access granted via Org: ${orgId}`);
+              console.log(`[API Access] Access granted via Org: ${mOrgId}`);
               break;
             }
           }
         }
-      }
-
-      // Fetch user specific data for addons
-      const userDoc = await db.collection('users').doc(uid).get();
-      let appsAccess: any = {};
-      let musicCredits = 0;
-      
-      if (userDoc.exists) {
-        const userData = userDoc.data()!;
-        appsAccess = userData.appsAccess || {};
-        musicCredits = userData.musicCredits || 0;
       }
 
       return res.json({
@@ -610,7 +626,8 @@ async function startServer() {
       const userEmail = userData.email;
       let customerId = userData.stripeCustomerId;
 
-      const subDocBase = await db.collection('subscriptions').doc(userId).get();
+      const orgIdBase = userData.organizationId || userId;
+      const subDocBase = await db.collection('subscriptions').doc(orgIdBase).get();
       if (!customerId && subDocBase.exists) {
         customerId = subDocBase.data()?.stripeCustomerId;
       }
@@ -694,7 +711,7 @@ async function startServer() {
         const orgId = (userDocRef.exists && userDocRef.data()?.organizationId) ? userDocRef.data()?.organizationId : userId;
 
         const batch = db.batch();
-        batch.set(db.collection('subscriptions').doc(userId), {
+        batch.set(db.collection('subscriptions').doc(orgId), {
           status: 'none',
           stripeCustomerId: null,
           stripeSubscriptionId: null,
@@ -766,7 +783,7 @@ async function startServer() {
       const orgId2 = (userDocRef2.exists && userDocRef2.data()?.organizationId) ? userDocRef2.data()?.organizationId : userId;
 
       const batch = db.batch();
-      batch.set(db.collection('subscriptions').doc(userId), {
+      batch.set(db.collection('subscriptions').doc(orgId2), {
         status: sub.status,
         plan: discoveredPlan,
         tier: discoveredTier,
@@ -853,8 +870,11 @@ async function startServer() {
       
       const userId = '7PUd8TAyXkT2CUkrcUtIGn5btch1';
       
+      const userDocRef3 = await db.collection('users').doc(userId).get();
+      const orgId3 = (userDocRef3.exists && userDocRef3.data()?.organizationId) ? userDocRef3.data()?.organizationId : userId;
+      
       const batch = db.batch();
-      batch.set(db.collection('subscriptions').doc(userId), {
+      batch.set(db.collection('subscriptions').doc(orgId3), {
         status: sub.status,
         stripeCustomerId: customer.id,
         stripeSubscriptionId: sub.id,
@@ -932,6 +952,11 @@ async function startServer() {
 
       if (!userId) return res.status(404).send('User ID not found in Firestore or Stripe metadata. Please log in once.');
 
+      let orgId = userId;
+      if (!usersQuery.empty) {
+        orgId = usersQuery.docs[0].data()?.organizationId || userId;
+      }
+
       let stripeStatus = 'no_subscription';
       if (subs.data.length > 0) {
         const s = subs.data[0];
@@ -941,7 +966,7 @@ async function startServer() {
         const tEnd = s.trial_end ? admin.firestore.Timestamp.fromMillis(s.trial_end * 1000) : null;
 
         const batch = db.batch();
-        const subRef = db.collection('subscriptions').doc(userId);
+        const subRef = db.collection('subscriptions').doc(orgId);
         batch.set(subRef, {
             status: s.status,
             stripeCustomerId: customer.id,
@@ -1031,10 +1056,11 @@ async function startServer() {
       let subData = null;
       let orgData = null;
       if (userData) {
-        const sDoc = await db.collection('subscriptions').doc(userData.id).get();
+        const orgId = userData.organizationId || userData.id;
+        const sDoc = await db.collection('subscriptions').doc(orgId).get();
         subData = sDoc.exists ? sDoc.data() : null;
         
-        const oDoc = await db.collection('organizations').doc(userData.id).get();
+        const oDoc = await db.collection('organizations').doc(orgId).get();
         orgData = oDoc.exists ? oDoc.data() : null;
       }
 
@@ -1189,13 +1215,17 @@ async function startServer() {
       const planItem = products.plans.find(p => p.lookupKey === lookupKey);
 
       let customerId: string | undefined;
+      let orgId = userId;
       if (db) {
-         const subDoc = await db.collection('subscriptions').doc(userId).get();
-         if (subDoc.exists) customerId = subDoc.data()?.stripeCustomerId;
+         const userDoc = await db.collection('users').doc(userId).get();
+         if (userDoc.exists) {
+            customerId = userDoc.data()?.stripeCustomerId;
+            orgId = userDoc.data()?.organizationId || userId;
+         }
          
          if (!customerId) {
-            const userDoc = await db.collection('users').doc(userId).get();
-            if (userDoc.exists) customerId = userDoc.data()?.stripeCustomerId;
+            const subDoc = await db.collection('subscriptions').doc(orgId).get();
+            if (subDoc.exists) customerId = subDoc.data()?.stripeCustomerId;
          }
       }
 
@@ -1275,13 +1305,17 @@ async function startServer() {
 
       // Check if user has a customer ID in firestore to link it to the same customer
       let customerId: string | undefined;
+      let orgId = userId;
       if (db) {
-         const subDoc = await db.collection('subscriptions').doc(userId).get();
-         if (subDoc.exists) customerId = subDoc.data()?.stripeCustomerId;
+         const userDoc = await db.collection('users').doc(userId).get();
+         if (userDoc.exists) {
+            customerId = userDoc.data()?.stripeCustomerId;
+            orgId = userDoc.data()?.organizationId || userId;
+         }
          
          if (!customerId) {
-            const userDoc = await db.collection('users').doc(userId).get();
-            if (userDoc.exists) customerId = userDoc.data()?.stripeCustomerId;
+            const subDoc = await db.collection('subscriptions').doc(orgId).get();
+            if (subDoc.exists) customerId = subDoc.data()?.stripeCustomerId;
          }
       }
 
@@ -1348,16 +1382,19 @@ async function startServer() {
       }
 
       let customerId: string | undefined;
-
-      const subDoc = await db.collection('subscriptions').doc(userId).get();
-      if (subDoc.exists) {
-         customerId = subDoc.data()?.stripeCustomerId;
+      let orgId = userId;
+      const userDoc = await db.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        customerId = userDoc.data()?.stripeCustomerId;
+        orgId = userDoc.data()?.organizationId || userId;
       }
-
+      
       if (!customerId) {
-        const userDoc = await db.collection('users').doc(userId).get();
-        if (userDoc.exists) {
-          customerId = userDoc.data()?.stripeCustomerId;
+         const subDoc = await db.collection('subscriptions').doc(orgId).get();
+         if (subDoc.exists) {
+            customerId = subDoc.data()?.stripeCustomerId;
+         }
+      }
           
           if (!customerId) {
              const email = userDoc.data()?.email;
