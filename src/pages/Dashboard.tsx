@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext.js";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { 
   Music, ArrowRight, Settings, ExternalLink, ShieldCheck, 
   CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight, Building2,
@@ -15,6 +15,7 @@ type Tab = "overview" | "organization" | "account" | "billing";
 
 export function Dashboard() {
   const { user, profile, loading, logout } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [subscription, setSubscription] = useState<any>(null);
   const [organization, setOrganization] = useState<any>(null);
@@ -32,16 +33,24 @@ export function Dashboard() {
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [repairing, setRepairing] = useState(false);
+  const [subscriptionRepairAvailable, setSubscriptionRepairAvailable] = useState(false);
 
   const handleRepairAccount = async () => {
-    if (!user?.email) return;
+    if (!user) return;
     setRepairing(true);
     try {
-      const res = await fetch(`/api/admin/repair/${encodeURIComponent(user.email)}`);
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/repair/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await res.json();
       if (data.success || data.repaired) {
-        alert("Conta verificada e atualizada com sucesso.");
-        window.location.reload();
+        alert("Assinatura sincronizada com sucesso.");
+        fetchSubscriptionAndOrg(true); // Sincroniza estado sem reload
       } else {
         alert(data.message || "A conta não possui assinaturas ativas para serem verificadas.");
       }
@@ -146,10 +155,22 @@ export function Dashboard() {
          }
       } else {
          setSubscription(null);
-         // If user is logged in but has no sub doc, maybe try one sync if we don't have sub state
+         // If user is logged in but has no sub doc, check for inconsistency
          if (!forceSync) {
-           console.log("[Dashboard] No sub doc found, attempt one sync...");
-           // fetchSubscriptionAndOrg(true); // Don't loop infinitely
+           console.log("[Dashboard] No sub doc found, checking if repair is available...");
+           try {
+             const token = await user.getIdToken();
+             const checkRes = await fetch('/api/repair/check', {
+               headers: { 'Authorization': `Bearer ${token}` }
+             });
+             const checkData = await checkRes.json();
+             if (checkData.requiresRepair) {
+               setSubscriptionRepairAvailable(true);
+               console.warn("🚨 [MILLIONSNEST_SYNC] DOCUMENTO NÃO ENCONTRADO mas Stripe possui assinatura. Repair sugerido.");
+             }
+           } catch (e) {
+             console.error("[Dashboard] Repair check failed", e);
+           }
          }
       }
 
@@ -349,49 +370,11 @@ export function Dashboard() {
     : null;
 
   const handleAddonCheckout = async (lookupKey: string) => {
-    if (!user || checkoutLoading) return;
-    setCheckoutLoading(true);
-    try {
-      const res = await fetch('/api/v1/billing/addons', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid, email: user.email, lookupKey })
-      });
-      const data = await res.json();
-      if (res.ok && data.url) {
-        window.location.href = data.url;
-      } else {
-        alert("Erro ao iniciar checkout: " + data.error);
-        setCheckoutLoading(false);
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert("Erro ao conectar com o servidor.");
-      setCheckoutLoading(false);
-    }
+    navigate('/checkout');
   };
 
   const handleSubscribe = async (lookupKey: string) => {
-    if (!user || checkoutLoading) return;
-    setCheckoutLoading(true);
-    try {
-      const res = await fetch('/api/v1/billing/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid, email: user.email, lookupKey })
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        alert(data.error || 'Erro ao iniciar checkout');
-      }
-    } catch (e) {
-      console.error(e);
-      alert('Erro de comunicação com o servidor de pagamento');
-    } finally {
-      setCheckoutLoading(false);
-    }
+    navigate('/checkout');
   };
 
   return (
@@ -593,23 +576,31 @@ export function Dashboard() {
                           <span className="px-3 py-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-full border border-white/10 uppercase tracking-widest shadow-sm">
                              Sem Assinatura
                           </span>
-                          <button 
-                            onClick={handleRepairAccount}
-                            disabled={repairing}
-                            className="text-[10px] text-[#A0A7B5] hover:text-[#2B85EB] uppercase tracking-wider font-bold transition-colors flex items-center gap-1"
-                          >
-                            <Loader2 className={`w-3 h-3 ${repairing ? 'animate-spin' : ''}`} />
-                            {repairing ? 'Sincronizando...' : 'Sincronizar Conta'}
-                          </button>
+                          {subscriptionRepairAvailable && (
+                            <button 
+                              onClick={handleRepairAccount}
+                              disabled={repairing}
+                              className="text-[10px] bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/40 hover:bg-[#2B85EB]/30 uppercase tracking-wider font-bold transition-colors flex items-center gap-1 px-3 py-1.5 rounded-full"
+                            >
+                              <Loader2 className={`w-3 h-3 ${repairing ? 'animate-spin' : ''}`} />
+                              {repairing ? 'Sincronizando...' : 'Sincronizar Conta'}
+                            </button>
+                          )}
                         </div>
                       </div>
                       
                       <h3 className="text-2xl font-semibold text-[#F5F7FA] tracking-tight mb-2 flex items-center gap-2">
                         MusicScale <span className="text-[#2B85EB] uppercase text-sm tracking-wider font-bold bg-[#2B85EB]/10 px-2 py-0.5 rounded-md border border-[#2B85EB]/20">Pró</span>
                       </h3>
-                      <p className="text-[#A0A7B5] text-sm mb-6 flex-1 font-normal leading-relaxed">
-                        Acesso total. Equipes ilimitadas, repertório ilimitado, notificações automatizadas no Whatsapp e métricas de desempenho.
-                      </p>
+                      {subscriptionRepairAvailable ? (
+                        <p className="text-[#FCA5A5] text-sm mb-6 flex-1 font-medium leading-relaxed bg-red-900/20 border border-red-500/20 p-3 rounded-xl">
+                          Encontramos uma possível inconsistência na sua assinatura. Clique em "Sincronizar Conta" para restaurar seu acesso automaticamente.
+                        </p>
+                      ) : (
+                        <p className="text-[#A0A7B5] text-sm mb-6 flex-1 font-normal leading-relaxed">
+                          Acesso total. Equipes ilimitadas, repertório ilimitado, notificações automatizadas no Whatsapp e métricas de desempenho.
+                        </p>
+                      )}
 
                       <div className="flex flex-col gap-3 relative mt-auto">
                         <button 

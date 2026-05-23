@@ -836,6 +836,158 @@ async function startServer() {
   });
 
   // Admin Repair Tool
+  app.post('/api/repair/sync', express.json(), async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Token de autenticação ausente ou inválido.' });
+      }
+      
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token', message: 'Falha na validação do seu token de acesso.' });
+      }
+
+      const uid = decodedToken.uid;
+      const email = decodedToken.email;
+      
+      if (!db || !email) return res.status(400).json({ error: 'Missing params', message: 'Ocorreu um problema ao identificar os dados necessários para o sistema (email/uid).' });
+
+      console.log(`[MUSICSCALE_REPAIR_REQUEST] request started for UID: ${uid}, Timestamp: ${new Date().toISOString()}`);
+
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (!userDoc.exists) return res.status(404).json({ error: 'User not found', message: 'Usuário não localizado no banco de dados.' });
+      
+      const userData = userDoc.data()!;
+      const orgId = userData.organizationId || uid;
+
+      console.log(`[MUSICSCALE_REPAIR_REQUEST] resolved orgId: ${orgId}`);
+
+      let legacyDocFound = false;
+      let legacyPath = '';
+
+      const legacySubDoc = await db.collection('subscriptions').doc(uid).get();
+      if (legacySubDoc.exists && orgId !== uid) {
+         legacyDocFound = true;
+         legacyPath = `subscriptions/${uid}`;
+      }
+
+      const stripe = getStripe();
+      const customers = await stripe.customers.list({ email, limit: 1 });
+      if (customers.data.length === 0) {
+          return res.json({ success: false, message: 'Nenhuma assinatura ou cliente localizado no Stripe.', repaired: false });
+      }
+
+      const customer = customers.data[0];
+      const subs = await stripe.subscriptions.list({ customer: customer.id, limit: 10, status: 'all' });
+
+      if (subs.data.length === 0) {
+          return res.json({ success: false, message: 'Seu usuário foi localizado, mas não há assinaturas ativas no momento.', repaired: false });
+      }
+
+      const s = subs.data[0];
+      const hasAccess = ['active', 'trialing'].includes(s.status);
+      const cpEnd = admin.firestore.Timestamp.fromMillis((s as any).current_period_end * 1000);
+      const tEnd = s.trial_end ? admin.firestore.Timestamp.fromMillis(s.trial_end * 1000) : null;
+      const plan = s.metadata?.plan || 'monthly';
+
+      const subPayload = {
+          schemaVersion: 1,
+          organizationId: orgId,
+          status: s.status,
+          plan: plan,
+          stripeCustomerId: customer.id,
+          stripeSubscriptionId: s.id,
+          currentPeriodEnd: cpEnd,
+          trialEndsAt: tEnd,
+          features: {
+            globalLibrary: hasAccess,
+            musicScale: hasAccess
+          },
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      const batch = db.batch();
+      batch.set(db.collection('subscriptions').doc(orgId), subPayload, { merge: true });
+
+      batch.set(db.collection('organizations').doc(orgId), {
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      batch.set(db.collection('users').doc(uid), {
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      batch.set(db.collection('organization_members').doc(`${uid}_${orgId}`), {
+          uid: uid,
+          organizationId: orgId,
+          role: 'owner'
+      }, { merge: true });
+
+      await batch.commit();
+
+      console.log(`[MILLIONSNEST_REPAIR_EXECUTION] Repair executado com sucesso:`);
+      console.log(`- stripe customer: ${customer.id}`);
+      console.log(`- assinatura: ${s.id} (${s.status})`);
+      console.log(`- path legado encontrado: ${legacyDocFound ? legacyPath : 'Nenhum'}`);
+      console.log(`- novo path salvo: subscriptions/${orgId}`);
+      console.log(`- payload final:`, subPayload);
+
+      return res.json({
+         success: true,
+         repaired: true,
+         orgId,
+         message: 'Assinatura sincronizada com sucesso.'
+      });
+
+    } catch (e: any) {
+      console.error('[MILLIONSNEST_REPAIR_EXECUTION] Error:', e.message);
+      res.status(500).json({ error: e.message, message: 'Não foi possível concluir o sync automático. Erro de servidor.' });
+    }
+  });
+
+  app.get('/api/repair/check', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      const uid = decodedToken.uid;
+      const email = decodedToken.email;
+      if (!db || !email) return res.status(400).json({ error: 'Missing params' });
+
+      // Only checking Stripe here. If local is empty but Stripe has something -> requires repair.
+      const stripe = getStripe();
+      const customers = await stripe.customers.list({ email, limit: 1 });
+      if (customers.data.length === 0) {
+          return res.json({ requiresRepair: false });
+      }
+      const customer = customers.data[0];
+      const subs = await stripe.subscriptions.list({ customer: customer.id, limit: 1, status: 'all' });
+      
+      if (subs.data.length > 0) {
+          return res.json({ requiresRepair: true });
+      }
+
+      return res.json({ requiresRepair: false });
+    } catch (e: any) {
+      console.error('[MILLIONSNEST_REPAIR_CHECK] Error:', e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get('/api/admin/repair/:email', async (req, res) => {
     try {
       const { email } = req.params;
@@ -1099,6 +1251,190 @@ async function startServer() {
       }, { merge: true });
       res.json({ success: true });
     } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/v1/billing/validate-coupon', async (req, res) => {
+    try {
+      const { code } = req.body;
+      if (!code) return res.status(400).json({ error: 'Code is required' });
+
+      const isMock = process.env.STRIPE_SECRET_KEY === undefined;
+      if (isMock) {
+         return res.json({ valid: true, id: 'mock_promo', percentOff: 20 });
+      }
+
+      const stripe = getStripe();
+      // list promotion codes by the code string
+      const promos = await stripe.promotionCodes.list({ code, active: true, limit: 1 });
+      
+      if (promos.data.length === 0) {
+          return res.status(404).json({ error: 'Cupom inválido ou expirado.' });
+      }
+
+      const promo = promos.data[0];
+      const coupon = promo.coupon;
+
+      if (!coupon.valid) {
+          return res.status(400).json({ error: 'Este cupom não é mais válido.' });
+      }
+
+      res.json({
+         valid: true,
+         id: promo.id,
+         percentOff: coupon.percent_off,
+         amountOff: coupon.amount_off ? coupon.amount_off / 100 : null,
+         currency: coupon.currency,
+         duration: coupon.duration
+      });
+    } catch (e: any) {
+      console.error('[Validate Coupon] Error:', e.message);
+      res.status(500).json({ error: 'Erro ao validar cupom.' });
+    }
+  });
+
+  app.post('/api/v1/billing/unified-checkout', async (req, res) => {
+    try {
+      const { userId, email, planLookupKey, addonLookupKeys, promoCodeId } = req.body;
+
+      if (!userId || !email) {
+        res.status(400).json({ error: 'Missing userId or email' });
+        return;
+      }
+
+      console.log(`[Unified Checkout] Creating checkout session for user ${userId}`);
+
+      const service = getBillingService();
+      const isMock = process.env.STRIPE_SECRET_KEY === undefined;
+
+      if (isMock) {
+         console.error('[Unified Checkout] STRIPE_SECRET_KEY env variable is missing');
+         res.status(400).json({ error: 'A Chave do Stripe não está configurada (Modo Mock).' });
+         return;
+      }
+
+      const stripe = getStripe();
+      
+      const line_items: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+
+      // Find plan price
+      if (planLookupKey) {
+        const planPriceId = await service.getPriceByLookupKey(planLookupKey);
+        if (planPriceId) {
+          line_items.push({ price: planPriceId, quantity: 1 });
+        } else {
+          res.status(400).json({ error: `Plano ${planLookupKey} não encontrado no sistema.` });
+          return;
+        }
+      }
+
+      // Find addon prices
+      if (addonLookupKeys && Array.isArray(addonLookupKeys)) {
+        for (const addonKey of addonLookupKeys) {
+          const addonPriceId = await service.getPriceByLookupKey(addonKey);
+          if (addonPriceId) {
+            line_items.push({ price: addonPriceId, quantity: 1 });
+          } else {
+            res.status(400).json({ error: `Addon ${addonKey} não encontrado.` });
+            return;
+          }
+        }
+      }
+
+      if (line_items.length === 0) {
+        res.status(400).json({ error: 'Nenhum item selecionado para o checkout.' });
+        return;
+      }
+
+      // Find customer
+      let customerId: string | undefined;
+      let orgId = userId;
+      if (db) {
+         const userDoc = await db.collection('users').doc(userId).get();
+         if (userDoc.exists) {
+            customerId = userDoc.data()?.stripeCustomerId;
+            orgId = userDoc.data()?.organizationId || userId;
+         }
+         
+         if (!customerId) {
+            const subDoc = await db.collection('subscriptions').doc(orgId).get();
+            if (subDoc.exists) customerId = subDoc.data()?.stripeCustomerId;
+         }
+      }
+
+      if (!customerId && email) {
+        const customers = await stripe.customers.list({ email, limit: 1 });
+        if (customers.data.length > 0) {
+           customerId = customers.data[0].id;
+        }
+      }
+
+      // We only pass subscription data if there's at least one recurring item. Check prices.
+      let hasRecurring = false;
+      const productsReq = await service.getProducts();
+      const allProds = [...productsReq.plans, ...productsReq.addons];
+      
+      const sessionArgs: Stripe.Checkout.SessionCreateParams = {
+        payment_method_types: ['card'],
+        line_items,
+        client_reference_id: userId,
+        success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
+      };
+
+      if (promoCodeId) {
+        sessionArgs.discounts = [{ promotion_code: promoCodeId }];
+        sessionArgs.allow_promotion_codes = undefined;
+      } else {
+        sessionArgs.allow_promotion_codes = true;
+      }
+
+      // Determine mode based on recurring vs one-time
+      // Stripe requires 'subscription' mode if there is AT LEAST ONE recurring price.
+      // If we mix one-time and recurring, it MUST be 'subscription' mode.
+      const lookupKeys = [planLookupKey, ...(addonLookupKeys || [])].filter(Boolean);
+      for (const key of lookupKeys) {
+        const p = allProds.find(x => x.lookupKey === key);
+        if (p && p.interval && p.interval !== 'one_time') {
+          hasRecurring = true;
+          break;
+        }
+      }
+
+      if (hasRecurring) {
+        sessionArgs.mode = 'subscription';
+        sessionArgs.subscription_data = {
+          trial_period_days: 7, // 7 days trial
+          metadata: {
+            uid: userId,
+            plan: planLookupKey || 'unknown'
+          }
+        };
+      } else {
+        sessionArgs.mode = 'payment';
+      }
+
+      // Global metadata
+      sessionArgs.metadata = {
+        uid: userId,
+        unified_checkout: 'true',
+        plan: planLookupKey || 'none',
+        addons: addonLookupKeys ? addonLookupKeys.join(',') : ''
+      };
+
+      if (customerId) {
+         sessionArgs.customer = customerId;
+      } else {
+         sessionArgs.customer_email = email;
+      }
+
+      const session = await stripe.checkout.sessions.create(sessionArgs);
+
+      console.log(`[Unified Checkout] Session created successfully for user ${userId}`);
+      res.json({ url: session.url });
+    } catch (e: any) {
+      console.error('[Unified Checkout] Error creating checkout session:', e);
       res.status(500).json({ error: e.message });
     }
   });

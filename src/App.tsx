@@ -14,6 +14,7 @@ const Refunds = lazy(() => import('./pages/Refunds.js').then(module => ({ defaul
 const Cancellation = lazy(() => import('./pages/Cancellation.js').then(module => ({ default: module.Cancellation })));
 const Login = lazy(() => import('./pages/Login.js').then(module => ({ default: module.Login })));
 const Dashboard = lazy(() => import('./pages/Dashboard.js').then(module => ({ default: module.Dashboard })));
+const Checkout = lazy(() => import('./pages/Checkout.js'));
 
 function LoadingFallback() {
   return (
@@ -32,6 +33,8 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/upgrade" element={<Checkout />} />
+            <Route path="/checkout" element={<Checkout />} />
             <Route path="/termos-de-uso" element={<Terms />} />
             <Route path="/politica-de-privacidade" element={<Privacy />} />
             <Route path="/politicas-de-reembolso" element={<Refunds />} />
