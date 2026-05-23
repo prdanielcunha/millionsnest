@@ -841,7 +841,7 @@ async function startServer() {
       const { email } = req.params;
       if (!db || !email) return res.status(400).send('Missing params');
 
-      console.log(`[REPAIR] Locating user for email: ${email}`);
+      console.log(`[REPAIR] Inciando análise para email: ${email}`);
       const stripe = getStripe();
       const customers = await stripe.customers.list({ email, limit: 1 });
       if (customers.data.length === 0) return res.status(404).send('Customer not found in Stripe');
@@ -859,8 +859,19 @@ async function startServer() {
       if (!userId) return res.status(404).send('User ID not found in Firestore or Stripe metadata. Please log in once.');
 
       let orgId = userId;
+      let legacyDocFound = false;
+      let legacyPath = '';
+
       if (!usersQuery.empty) {
         orgId = usersQuery.docs[0].data()?.organizationId || userId;
+      }
+
+      // Check for legacy doc
+      const legacySubDoc = await db.collection('subscriptions').doc(userId).get();
+      if (legacySubDoc.exists && orgId !== userId) {
+         legacyDocFound = true;
+         legacyPath = `subscriptions/${userId}`;
+         console.log(`[REPAIR_DEBUG] Documento legado encontrado no path antigo: ${legacyPath}`);
       }
 
       let stripeStatus = 'no_subscription';
@@ -870,10 +881,13 @@ async function startServer() {
         const hasAccess = ['active', 'trialing'].includes(s.status);
         const cpEnd = admin.firestore.Timestamp.fromMillis((s as any).current_period_end * 1000);
         const tEnd = s.trial_end ? admin.firestore.Timestamp.fromMillis(s.trial_end * 1000) : null;
+        
+        console.log(`[REPAIR_DEBUG] Assinatura encontrada no Stripe: ${s.id} com status: ${s.status}`);
 
         const batch = db.batch();
         const subRef = db.collection('subscriptions').doc(orgId);
-        batch.set(subRef, {
+        
+        const subPayload = {
             schemaVersion: 1,
             organizationId: orgId,
             status: s.status,
@@ -887,16 +901,18 @@ async function startServer() {
               musicScale: hasAccess
             },
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        };
+
+        batch.set(subRef, subPayload, { merge: true });
 
         // Update organization
-        batch.set(db.collection('organizations').doc(userId), {
+        batch.set(db.collection('organizations').doc(orgId), {
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
-        batch.set(db.collection('organization_members').doc(`${userId}_${userId}`), {
+        batch.set(db.collection('organization_members').doc(`${userId}_${orgId}`), {
             uid: userId,
-            organizationId: userId,
+            organizationId: orgId,
             role: 'owner'
         }, { merge: true });
 
@@ -906,16 +922,34 @@ async function startServer() {
         }, { merge: true });
 
         await batch.commit();
-        console.log(`[REPAIR] User ${userId} successfully synchronized with Stripe status: ${s.status}`);
+        
+        console.log(`[REPAIR_DEBUG] Path novo da organização centralizada: subscriptions/${orgId}`);
+        console.log(`[REPAIR_DEBUG] Repair executado com sucesso e salva a estrutura correta.`);
+        console.log(`[REPAIR_DEBUG] Payload final salvo: `, subPayload);
+
+        return res.json({
+          success: true,
+          email,
+          userId,
+          orgId,
+          legacyDocFound,
+          legacyPath,
+          customerId: customer.id,
+          stripeStatus,
+          repaired: true,
+          message: 'Assinatura migrada e/ou consertada com sucesso.'
+        });
       }
 
       return res.json({
         success: true,
         email,
         userId,
+        orgId,
         customerId: customer.id,
         stripeStatus,
-        repaired: true
+        repaired: false,
+        message: 'O usuário não possui assinaturas ativas no Stripe.'
       });
 
     } catch (err: any) {
