@@ -1,15 +1,18 @@
+import { ROLE_KEYS, PERMISSION_KEYS } from "./constants.js";
+
 export interface AppPermissions {
-  'organization.manageMembers': boolean;
-  'organization.manageRoles': boolean;
-  'organization.manageBilling': boolean;
-  'organization.manageOrganization': boolean;
-  'musicScale.manageSongs': boolean;
-  'musicScale.manageScales': boolean;
-  'musicScale.manageTeams': boolean;
+  [PERMISSION_KEYS.ORG_MANAGE_MEMBERS]: boolean;
+  [PERMISSION_KEYS.ORG_MANAGE_ROLES]: boolean;
+  [PERMISSION_KEYS.ORG_MANAGE_BILLING]: boolean;
+  [PERMISSION_KEYS.ORG_MANAGE_ORGANIZATION]: boolean;
+  [PERMISSION_KEYS.MUSIC_MANAGE_SONGS]: boolean;
+  [PERMISSION_KEYS.MUSIC_MANAGE_SCALES]: boolean;
+  [PERMISSION_KEYS.MUSIC_MANAGE_TEAMS]: boolean;
   [key: string]: boolean;
 }
 
-export const CURRENT_PERMISSIONS_VERSION = 1;
+export { CURRENT_PERMISSIONS_VERSION, ROLE_KEYS, PERMISSION_KEYS } from "./constants.js";
+import { CURRENT_PERMISSIONS_VERSION } from "./constants.js";
 
 export function getDefaultPermissions(role: string): AppPermissions {
   switch (role) {
