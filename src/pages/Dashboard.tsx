@@ -31,6 +31,27 @@ export function Dashboard() {
   const [profileNameInput, setProfileNameInput] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
+  const [repairing, setRepairing] = useState(false);
+
+  const handleRepairAccount = async () => {
+    if (!user?.email) return;
+    setRepairing(true);
+    try {
+      const res = await fetch(`/api/admin/repair/${encodeURIComponent(user.email)}`);
+      const data = await res.json();
+      if (data.success || data.repaired) {
+        alert("Conta verificada e atualizada com sucesso.");
+        window.location.reload();
+      } else {
+        alert(data.message || "A conta não possui assinaturas ativas para serem verificadas.");
+      }
+    } catch (e) {
+      alert("Falha na comunicação para verificar a conta.");
+    } finally {
+      setRepairing(false);
+    }
+  };
+
   // Invite Link states
   const [copiedLink, setCopiedLink] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
@@ -101,7 +122,10 @@ export function Dashboard() {
         }
       }
 
-      const subRef = doc(db, "subscriptions", user.uid);
+      // Org is usually 1:1 right now (orgId === user.uid)
+      const orgId = profile?.organizationId || user.uid;
+
+      const subRef = doc(db, "subscriptions", orgId);
       const subSnap = await getDoc(subRef);
       
       if (subSnap.exists()) {
@@ -130,7 +154,6 @@ export function Dashboard() {
       }
 
       // Org is usually 1:1 right now (orgId === user.uid)
-      const orgId = profile?.organizationId || user.uid;
       const orgRef = doc(db, "organizations", orgId);
       const orgSnap = await getDoc(orgRef);
       if (orgSnap.exists()) {
@@ -566,9 +589,19 @@ export function Dashboard() {
                         <div className="w-14 h-14 bg-[#2B85EB]/10 rounded-2xl flex items-center justify-center border border-[#2B85EB]/20 shadow-inner">
                           <Music className="w-6 h-6 text-[#2B85EB]" />
                         </div>
-                        <span className="px-3 py-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-full border border-white/10 uppercase tracking-widest shadow-sm">
-                           Sem Assinatura
-                        </span>
+                        <div className="flex flex-col items-end gap-2">
+                          <span className="px-3 py-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-full border border-white/10 uppercase tracking-widest shadow-sm">
+                             Sem Assinatura
+                          </span>
+                          <button 
+                            onClick={handleRepairAccount}
+                            disabled={repairing}
+                            className="text-[10px] text-[#A0A7B5] hover:text-[#2B85EB] uppercase tracking-wider font-bold transition-colors flex items-center gap-1"
+                          >
+                            <Loader2 className={`w-3 h-3 ${repairing ? 'animate-spin' : ''}`} />
+                            {repairing ? 'Sincronizando...' : 'Sincronizar Conta'}
+                          </button>
+                        </div>
                       </div>
                       
                       <h3 className="text-2xl font-semibold text-[#F5F7FA] tracking-tight mb-2 flex items-center gap-2">
