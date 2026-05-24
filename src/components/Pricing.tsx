@@ -95,6 +95,16 @@ export function Pricing() {
           >
             Acessível. Escalável. Premium.
           </motion.h2>
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1 }}
+            className="text-[#A0A7B5] text-lg"
+          >
+            Escolha o plano ideal para o tamanho do seu time. <br />
+            <span className="text-[#2B85EB] font-medium">Cancele a qualquer momento. 7 dias por nossa conta.</span>
+          </motion.p>
           
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -142,6 +152,12 @@ export function Pricing() {
                  R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/mês</span>
+            </div>
+            
+            <div className="mt-2 mb-6">
+               <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB]/10 text-[#2B85EB] rounded-md border border-[#2B85EB]/20">
+                 7 dias grátis
+               </span>
             </div>
             
             {isAnnual ? (
@@ -212,6 +228,12 @@ export function Pricing() {
                  R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/mês</span>
+            </div>
+
+            <div className="mt-2 mb-6 relative z-10">
+               <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB] text-white rounded-md shadow-[0_0_15px_rgba(43,133,235,0.4)]">
+                 7 dias grátis
+               </span>
             </div>
             
             {isAnnual ? (

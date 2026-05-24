@@ -39,10 +39,10 @@ export function Hero() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-[#A0A7B5] uppercase tracking-widest mb-8 hover:bg-white/10 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-[#A0A7B5] mb-8 hover:bg-white/10 transition-colors cursor-pointer group"
         >
           <span className="flex h-1.5 w-1.5 rounded-full bg-[#2B85EB] opacity-100 shadow-[0_0_8px_rgba(43,133,235,0.8)]"></span>
-          A nova geração da gestão ministerial
+          <span>A nova geração da <span className="text-[#F5F7FA] font-bold">gestão ministerial</span>. <span className="hidden sm:inline text-[#2B85EB]">7 dias grátis.</span></span>
         </motion.div>
 
         <motion.h1
@@ -60,7 +60,7 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="mt-8 text-lg md:text-xl text-[#A0A7B5] max-w-2xl font-normal leading-relaxed"
         >
-          O fim do caos operacional. O início de uma nova experiência ministerial para organizar equipes, repertórios, escalas e processos com excelência.
+          O fim do caos operacional. Comece hoje seu teste de <span className="text-[#F5F7FA] font-semibold underline decoration-[#2B85EB]/50 underline-offset-4">7 dias grátis</span> e profissionalize seu ministério com excelência.
         </motion.p>
 
         <motion.div

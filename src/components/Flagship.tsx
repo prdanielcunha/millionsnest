@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Music, LayoutGrid, Smartphone, Database } from "lucide-react";
+import { Music, LayoutGrid, Smartphone, Database, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { EscalasMockup } from "./EscalasMockup.js";
 
@@ -78,7 +78,7 @@ export function Flagship() {
         {/* Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[300px]">
           
-          {/* Card 1: Escalas */}
+          {/* Card 1: Escalas & Setlists */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -87,8 +87,11 @@ export function Flagship() {
           >
             <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
             <div className="p-8 pb-4 relative z-10">
-              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Organização Absoluta</h3>
-              <p className="text-[#A0A7B5] font-normal">Cronogramas claros, limpos e sem confusão.</p>
+              <div className="flex items-center gap-3 mb-2">
+                <LayoutGrid className="w-5 h-5 text-[#2B85EB]" />
+                <h3 className="text-2xl font-semibold text-[#F5F7FA]">Setlists e Escalas</h3>
+              </div>
+              <p className="text-[#A0A7B5] font-normal">Músicas escaladas com detalhes de <strong>versão, tom e BPM</strong>. Organização absoluta para o altar.</p>
             </div>
             
             {/* Visual element */}
@@ -100,7 +103,7 @@ export function Flagship() {
             </div>
           </motion.div>
 
-          {/* Card 2: Mobile */}
+          {/* Card 2: Sharing & Team */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -109,14 +112,17 @@ export function Flagship() {
             className="md:col-span-1 rounded-[2rem] bg-[#0B0F19] border border-white/5 p-8 flex flex-col justify-between relative overflow-hidden group hover:border-white/10 transition-colors"
           >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,_rgba(43,133,235,0.1),_transparent_80%)] opacity-50" />
-            <Smartphone className="w-8 h-8 text-[#2B85EB] relative z-10" />
+            <div className="flex items-center justify-between relative z-10">
+              <Users className="w-8 h-8 text-[#2B85EB]" />
+              <div className="px-2 py-1 rounded bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[10px] font-bold text-[#2B85EB] uppercase tracking-tighter">WhatsApp ready</div>
+            </div>
             <div className="relative z-10">
-              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Experiência Fluida</h3>
-              <p className="text-[#A0A7B5] font-normal">Perfeito para o altar. Suas cifras onde você estiver.</p>
+              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Equipe e Banda</h3>
+              <p className="text-[#A0A7B5] font-normal leading-snug">Escala de músicos e compartilhamento direto para o <strong>WhatsApp</strong> do grupo.</p>
             </div>
           </motion.div>
 
-          {/* Card 3: Banco */}
+          {/* Card 3: Transposição */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -124,14 +130,18 @@ export function Flagship() {
             transition={{ delay: 0.2 }}
             className="md:col-span-1 rounded-[2rem] bg-[#0B0F19] border border-white/5 p-8 flex flex-col justify-between relative overflow-hidden group hover:border-white/10 transition-colors"
           >
-            <Database className="w-8 h-8 text-[#F5F7FA]/70 relative z-10" />
+            <div className="flex gap-3 relative z-10">
+              <div className="w-12 h-12 flex items-center justify-center bg-white/5 rounded-xl border border-white/10 text-sm font-semibold font-mono text-[#F5F7FA] shadow-sm">C</div>
+              <div className="w-12 h-12 flex items-center justify-center bg-transparent text-sm font-semibold font-mono text-[#A0A7B5]">→</div>
+              <div className="w-12 h-12 flex items-center justify-center bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl border border-[#2B85EB]/20 text-sm font-bold font-mono shadow-sm">D</div>
+            </div>
             <div className="relative z-10">
-              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Repertório Central</h3>
-              <p className="text-[#A0A7B5] font-normal">Músicas centralizadas e sempre na versão correta.</p>
+              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Transposição</h3>
+              <p className="text-[#A0A7B5] font-normal leading-snug">Mude o tom da cifra instantaneamente com um clique.</p>
             </div>
           </motion.div>
 
-          {/* Card 4: Funcionalidades Extra */}
+          {/* Card 4: Cifras Inteligentes */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -140,12 +150,23 @@ export function Flagship() {
             className="md:col-span-2 rounded-[2rem] bg-[#0B0F19] border border-white/5 p-8 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden group hover:border-white/10 transition-colors"
           >
              <div className="flex-1 w-full relative z-10">
-               <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Preparação Completa</h3>
-               <p className="text-[#A0A7B5] font-normal mb-8">Mude o tom da cifra instantaneamente. Centralize sua liturgia e alinhe toda a equipe antes do culto começar.</p>
-               <div className="flex gap-3">
-                 <div className="w-12 h-12 flex items-center justify-center bg-white/5 rounded-xl border border-white/10 text-sm font-semibold font-mono text-[#F5F7FA] shadow-sm">C</div>
-                 <div className="w-12 h-12 flex items-center justify-center bg-transparent text-sm font-semibold font-mono text-[#A0A7B5]">→</div>
-                 <div className="w-12 h-12 flex items-center justify-center bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl border border-[#2B85EB]/20 text-sm font-bold font-mono shadow-sm">D</div>
+               <div className="flex items-center gap-3 mb-2">
+                 <Database className="w-5 h-5 text-[#2B85EB]" />
+                 <h3 className="text-2xl font-semibold text-[#F5F7FA]">Acervo e Formatação</h3>
+               </div>
+               <p className="text-[#A0A7B5] font-normal mb-8">
+                 Biblioteca atualizada periodicamente com milhares de músicas. 
+                 Letras e cifras com <strong>formatação customizada</strong> de cores e fontes para máxima leitura no altar.
+               </p>
+               <div className="flex gap-4">
+                 <div className="flex flex-col gap-1">
+                    <div className="h-1.5 w-16 bg-[#2B85EB] rounded-full" />
+                    <div className="h-1.5 w-12 bg-white/10 rounded-full" />
+                 </div>
+                 <div className="flex flex-col gap-1 mt-4">
+                    <div className="h-1.5 w-14 bg-[#2B85EB] rounded-full" />
+                    <div className="h-1.5 w-20 bg-white/10 rounded-full" />
+                 </div>
                </div>
              </div>
              <LayoutGrid className="w-32 h-32 text-white/[0.03] absolute -bottom-8 -right-8 -rotate-12 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6" />
