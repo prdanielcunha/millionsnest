@@ -916,7 +916,7 @@ async function startServer() {
   });
 
   // Admin Repair Tool
-  app.post(['/api/repair/sync', '/api/admin/repair-by-token'], express.json(), async (req, res) => {
+  const repairSyncHandler = async (req: express.Request, res: express.Response) => {
     try {
       console.log('[REPAIR_ROUTE_HIT]', {
         method: req.method,
@@ -1084,7 +1084,12 @@ async function startServer() {
       });
       res.status(500).json({ success: false, error: 'REPAIR_FAILED', message: e.message, code: e.code || 'unknown', step: 'sync_execution' });
     }
-  });
+  };
+
+  app.post('/api/repair/sync', express.json(), repairSyncHandler);
+  app.post('/api/admin/repair-by-token', express.json(), repairSyncHandler);
+  app.options('/api/admin/repair-by-token', cors()); // Ensure preflight explicit
+  app.options('/api/repair/sync', cors());
 
   app.get('/api/repair/check', async (req, res) => {
     try {
@@ -1870,6 +1875,16 @@ async function startServer() {
       console.error('[Portal] Error creating portal session:', e);
       res.status(500).json({ error: e.message });
     }
+  });
+
+  // API Fallback mechanism to prevent 405 issues from express.static
+  app.all('/api/*', (req, res) => {
+    // Se a requisição chegou aqui é porque bateu no endpoint /api/ mas não deu match em router de method nenhum
+    res.status(404).json({
+      success: false,
+      error: 'API_ENDPOINT_NOT_FOUND',
+      message: `Endpoint ${req.method} ${req.path} não foi encontrado no backend.`,
+    });
   });
 
   // Vite middleware for development (Só roda localmente)
