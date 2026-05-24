@@ -10,6 +10,8 @@ const Flagship = lazy(() => import("../components/Flagship.js").then((module) =>
 const Testimonials = lazy(() => import("../components/Testimonials.js").then((module) => ({ default: module.Testimonials })));
 const Pricing = lazy(() => import("../components/Pricing.js").then((module) => ({ default: module.Pricing })));
 const FAQ = lazy(() => import("../components/FAQ.js").then((module) => ({ default: module.FAQ })));
+const Guarantee = lazy(() => import("../components/Guarantee.js").then((module) => ({ default: module.Guarantee })));
+const SalesChat = lazy(() => import("../components/SalesChat.js").then((module) => ({ default: module.SalesChat })));
 const Vision = lazy(() => import("../components/Vision.js").then((module) => ({ default: module.Vision })));
 const Footer = lazy(() => import("../components/Footer.js").then((module) => ({ default: module.Footer })));
 
@@ -43,10 +45,12 @@ export function Home() {
         <Flagship />
         <Testimonials />
         <Pricing />
+        <Guarantee />
         <FAQ />
         <Ecosystem />
         <Vision />
         <Footer />
+        <SalesChat />
       </Suspense>
     </div>
   );

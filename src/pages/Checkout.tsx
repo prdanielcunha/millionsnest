@@ -320,7 +320,7 @@ export default function Checkout() {
                                <div className="flex justify-between items-start mb-6">
                                    <div>
                                        <h3 className="text-2xl font-medium text-white mb-1">{plan.name}</h3>
-                                       <p className="text-[#A0A7B5] text-sm font-light">{plan.description || (isPro ? "Acesso completo aos recursos Premium." : "O essencial para decolar.")}</p>
+                                       <p className="text-[#A0A7B5] text-sm font-light">{plan.description || (isPro ? "Para ministérios que desejam mais liberdade, crescimento e acesso contínuo aos recursos premium do MusicScale." : "Ideal para equipes e igrejas que desejam organizar o ministério de louvor com simplicidade e excelência.")}</p>
                                    </div>
                                    <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#2B85EB] border-[#2B85EB]' : 'border-white/20 group-hover:border-white/40'}`}>
                                        {isSelected && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
@@ -334,20 +334,22 @@ export default function Checkout() {
                                    </div>
                                </div>
 
-                               <ul className="space-y-4">
+                               <ul className="space-y-3">
                                    {isPro ? (
                                        <>
-                                         <FeatureItem text="Equipes Ilimitadas" />
-                                         <FeatureItem text="Repertório em Nuvem Ilimitado" />
-                                         <FeatureItem text="Integração WhatsApp Bot" />
-                                         <FeatureItem text="Suporte Prioritário VIP" />
+                                         <FeatureItem text="Tudo do Starter" />
+                                         <FeatureItem text="Pessoas ilimitadas" />
+                                         <FeatureItem text="Biblioteca Viva MusicScale" />
+                                         <FeatureItem text="Atualização constante do acervo" />
+                                         <FeatureItem text="Prioridade em novos recursos" />
                                        </>
                                    ) : (
                                        <>
-                                         <FeatureItem text="Até 5 Equipes" />
-                                         <FeatureItem text="Repertório Localizado" />
-                                         <FeatureItem text="Sem Integração WhatsApp" />
-                                         <FeatureItem text="Suporte Padrão" />
+                                         <FeatureItem text="Músicas e Escalas ilimitadas" />
+                                         <FeatureItem text="Até 10 pessoas" />
+                                         <FeatureItem text="Compartilhamento de escalas" />
+                                         <FeatureItem text="Sincronização em nuvem" />
+                                         <FeatureItem text="Suporte padrão" />
                                        </>
                                    )}
                                </ul>
@@ -370,10 +372,10 @@ export default function Checkout() {
                             const isSelected = addon.lookupKey ? selectedAddonsLookup.includes(addon.lookupKey) : false;
                             
                             const fallbackDescriptions: Record<string, string> = {
-                              'musicscale_setup_premium': 'Avaliação completa, relatórios e plano de ação estruturado para sua equipe.',
-                              'musicscale_training_express': 'Acesso a workshops rápidos para desenvolver habilidades técnicas e espirituais.',
-                              'musicscale_worship_100': 'Acesso instantâneo a 100 cifras e recursos exclusivos de worship.',
-                              'musicscale_music_pack_10': 'Pacote adicional de 10 músicas premium com todos os recursos.'
+                              'musicscale_setup_premium': 'Configuração inicial assistida para estruturar rapidamente sua equipe no MusicScale.',
+                              'musicscale_training_express': 'Treinamento online prático para aprender rapidamente o fluxo do MusicScale.',
+                              'musicscale_worship_100': 'Acervo pronto de 100 músicas já organizadas, incluindo cifra e letra integradas.',
+                              'musicscale_music_pack_10': 'Pacote avulso para adicionar até 10 novas músicas ao acervo da sua organização.'
                             };
                             const description = addon.description || (addon.lookupKey ? fallbackDescriptions[addon.lookupKey] : null) || '';
 
