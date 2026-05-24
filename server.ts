@@ -916,8 +916,14 @@ async function startServer() {
   });
 
   // Admin Repair Tool
-  app.post('/api/repair/sync', express.json(), async (req, res) => {
+  app.post(['/api/repair/sync', '/api/admin/repair-by-token'], express.json(), async (req, res) => {
     try {
+      console.log('[REPAIR_ROUTE_HIT]', {
+        method: req.method,
+        path: req.path,
+        timestamp: new Date().toISOString()
+      });
+
       const authHeader = req.headers.authorization;
       if (!authHeader?.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Unauthorized', message: 'Token de autenticação ausente ou inválido.' });
@@ -1076,7 +1082,7 @@ async function startServer() {
         stack: e.stack,
         code: e.code || 'unknown'
       });
-      res.status(500).json({ error: e.message, message: 'Não foi possível concluir o sync automático. Erro de servidor.', code: e.code || 'unknown', step: 'sync_execution' });
+      res.status(500).json({ success: false, error: 'REPAIR_FAILED', message: e.message, code: e.code || 'unknown', step: 'sync_execution' });
     }
   });
 
