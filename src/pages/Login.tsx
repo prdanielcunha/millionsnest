@@ -26,7 +26,14 @@ export function Login() {
     if (authLoading) return;
     
     if (user && profile) {
-      navigate('/dashboard');
+      // UX Optimized: Check if user was trying to buy something before login
+      const purchaseIntent = sessionStorage.getItem('purchase_intent');
+      if (purchaseIntent) {
+        sessionStorage.removeItem('purchase_intent');
+        navigate(`/checkout?plan=${purchaseIntent}`);
+      } else {
+        navigate('/dashboard');
+      }
     }
   }, [user, profile, authLoading, navigate]);
 

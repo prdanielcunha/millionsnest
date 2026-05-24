@@ -1,11 +1,26 @@
 import { motion } from "framer-motion";
 import { ArrowRight, ChevronRight, Play } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Suspense, lazy } from "react";
+import { useAuth } from "../contexts/AuthContext.js";
 
 const DashboardMockup = lazy(() => import("./DashboardMockup.js").then((m) => ({ default: m.DashboardMockup })));
 
 export function Hero() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const handleCtaClick = () => {
+    const defaultPlan = 'musicscale_pro_monthly';
+    sessionStorage.setItem('purchase_intent', defaultPlan);
+    
+    if (user) {
+      navigate(`/checkout?plan=${defaultPlan}`);
+    } else {
+      navigate('/login');
+    }
+  };
+
   return (
     <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden bg-[#050505] min-h-screen">
       {/* Premium Background Glow & Image - Hardware Accelerated */}
@@ -54,10 +69,13 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.3 }}
           className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto"
         >
-          <Link to="/login" className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#F5F7FA] text-[#050505] font-semibold hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 flex items-center justify-center gap-2 group">
+          <button 
+            onClick={handleCtaClick}
+            className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#F5F7FA] text-[#050505] font-semibold hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 flex items-center justify-center gap-2 group"
+          >
             Começar agora
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </Link>
+          </button>
           <button onClick={() => alert('Vídeo de demonstração em breve!')} className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#0B0F19] text-[#F5F7FA] font-medium border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2 group shadow-sm">
             <Play className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors" />
             Ver demonstração

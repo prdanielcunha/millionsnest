@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check, Star, Zap, Headphones, Settings, Video, ListMusic } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext.js";
 
 export function Pricing() {
   const [isAnnual, setIsAnnual] = useState(true);
+  const navigate = useNavigate();
+  const { user } = useAuth();
   
   // Dynamic prices state
   const [plansData, setPlansData] = useState<any[]>([]);
@@ -55,6 +58,19 @@ export function Pricing() {
       })
       .catch(err => console.error(err));
   }, []);
+
+  const handlePurchase = (lookupKey: string) => {
+    // Analytics/UX: Guardar a intenção imediata de compra
+    sessionStorage.setItem('purchase_intent', lookupKey);
+    
+    if (user) {
+      // Se logado, vai direto pro checkout com o plano selecionado
+      navigate(`/checkout?plan=${lookupKey}`);
+    } else {
+      // Se deslogado, vai pro login. O Login.tsx cuidará do redirect inteligente.
+      navigate('/login');
+    }
+  };
 
   return (
     <section id="precos" className="py-24 md:py-32 bg-[#050505] relative overflow-hidden">
@@ -137,12 +153,12 @@ export function Pricing() {
               <div className="h-5 md:h-6 mb-6" />
             )}
             
-            <Link 
-              to="/login" 
-              className="w-full py-4 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block"
+            <button 
+              onClick={() => handlePurchase(isAnnual ? 'musicscale_starter_yearly' : 'musicscale_starter_monthly')}
+              className="w-full py-4 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block select-none"
             >
               Começar com o Starter
-            </Link>
+            </button>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5">
               {[
@@ -207,12 +223,12 @@ export function Pricing() {
               <div className="h-5 md:h-6 mb-6 relative z-10" />
             )}
             
-            <Link 
-              to="/login" 
-              className="w-full py-4 px-3 md:px-6 rounded-xl bg-gradient-to-r from-[#2B85EB]/80 to-[#2B85EB] text-[#F5F7FA] border border-[#2B85EB] text-center font-semibold text-sm md:text-base hover:from-[#2B85EB] hover:to-[#4ca4ff] transition-all shadow-[0_0_20px_rgba(43,133,235,0.2)] hover:shadow-[0_0_30px_rgba(43,133,235,0.4)] active:scale-95 mt-2 mb-8 block relative z-10"
+            <button 
+              onClick={() => handlePurchase(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
+              className="w-full py-4 px-3 md:px-6 rounded-xl bg-gradient-to-r from-[#2B85EB]/80 to-[#2B85EB] text-[#F5F7FA] border border-[#2B85EB] text-center font-semibold text-sm md:text-base hover:from-[#2B85EB] hover:to-[#4ca4ff] transition-all shadow-[0_0_20px_rgba(43,133,235,0.2)] hover:shadow-[0_0_30px_rgba(43,133,235,0.4)] active:scale-95 mt-2 mb-8 block relative z-10 select-none"
             >
               Assinar o Plano Pro
-            </Link>
+            </button>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5 relative z-10">
               {[
@@ -280,9 +296,9 @@ export function Pricing() {
                 <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Onboarding assistido</li>
                 <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Organização da equipe</li>
               </ul>
-              <Link to="/login" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors">
+              <button onClick={() => handlePurchase('musicscale_setup_premium')} className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors select-none">
                 Solicitar Setup
-              </Link>
+              </button>
             </motion.div>
 
             {/* SERVIÇO 2 */}
@@ -308,9 +324,9 @@ export function Pricing() {
                 <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Boas práticas</li>
                 <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Gravação disponível</li>
               </ul>
-              <Link to="/login" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors">
+              <button onClick={() => handlePurchase('musicscale_training_express')} className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors select-none">
                 Quero Participar
-              </Link>
+              </button>
             </motion.div>
 
             {/* SERVIÇO 3 */}
@@ -339,9 +355,9 @@ export function Pricing() {
                 <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Implantação imediata</li>
                 <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Economia de tempo para sua equipe</li>
               </ul>
-              <Link to="/login" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors">
+              <button onClick={() => handlePurchase('musicscale_worship_100')} className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors select-none">
                 Comprar Acervo
-              </Link>
+              </button>
             </motion.div>
 
             {/* SERVIÇO 4 */}
@@ -368,9 +384,9 @@ export function Pricing() {
                 <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Com letra e cifra</li>
                 <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Atualização rápida</li>
               </ul>
-              <Link to="/login" className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors">
+              <button onClick={() => handlePurchase('musicscale_music_pack_10')} className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors select-none">
                 Comprar Pacote
-              </Link>
+              </button>
             </motion.div>
 
           </div>

@@ -53,8 +53,18 @@ export default function Checkout() {
          if (data.plans) setPlans(data.plans);
          if (data.addons) setAddons(data.addons);
          
-         // By default select MusicScale Pro if it exists
-         if (data.plans) {
+         // UX Optimized: Prioritize plan from URL or Session
+         const params = new URLSearchParams(window.location.search);
+         const planParam = params.get('plan');
+         
+         if (planParam) {
+           setSelectedPlanLookup(planParam);
+           // If it's an addon, also select it
+           if (data.addons?.some((a: any) => a.lookupKey === planParam)) {
+             setSelectedAddonsLookup([planParam]);
+             // If we only selected an addon, we still need a base plan usually, but we'll let the user decide
+           }
+         } else if (data.plans) {
              const proMonthly = data.plans.find((p: any) => p.lookupKey === 'musicscale_pro_monthly');
              if (proMonthly) {
                  setSelectedPlanLookup(proMonthly.lookupKey);
