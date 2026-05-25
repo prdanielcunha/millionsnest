@@ -40,7 +40,7 @@ export function SalesChat() {
   const handleSendToWhatsapp = () => {
     const text = userQuestion || (selectedFaq ? `Minha dúvida: ${selectedFaq.q}` : "Olá! Gostaria de tirar algumas dúvidas sobre o MusicScale.");
     const encoded = encodeURIComponent(text);
-    window.open(`https://wa.me/${whatsappNumber}?text=${encoded}`, '_blank');
+    window.open(`https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${encoded}`, '_blank');
     setIsOpen(false);
   };
 

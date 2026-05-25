@@ -32,7 +32,7 @@ export function Footer() {
               <li><Link to="/politica-de-privacidade" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">Política de Privacidade</Link></li>
               <li><Link to="/politicas-de-cancelamento" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">Políticas de Cancelamento</Link></li>
               <li><Link to="/politicas-de-reembolso" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">Políticas de Reembolso</Link></li>
-              <li><a href="https://wa.me/5543999907071" target="_blank" rel="noopener noreferrer" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">Contato</a></li>
+              <li><a href="https://api.whatsapp.com/send?phone=5543999907071" target="_blank" rel="noopener noreferrer" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">Contato</a></li>
             </ul>
           </div>
         </div>
