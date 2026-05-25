@@ -8,7 +8,7 @@ import {
   Star, Zap, Headphones, Video, ListMusic, Check, Users, Link, Mail, Plus, X, Loader2, Copy
 } from "lucide-react";
 import { Navbar } from "../components/Navbar.js";
-import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc, limit } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { getDefaultPermissions, normalizePermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 
@@ -66,6 +66,7 @@ export function Dashboard() {
   // Invite Link states
   const [copiedLink, setCopiedLink] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   const [prices, setPrices] = useState({ 
     starter_monthly: 0,
@@ -194,6 +195,23 @@ export function Dashboard() {
         setMembers(mems);
       } catch (err) {
         console.error("Erro ao buscar membros", err);
+      }
+
+      // Fetch audit logs
+      try {
+        const auditRef = collection(db, "audit_logs");
+        const auditQ = query(auditRef, where("organizationId", "==", orgId), limit(5));
+        const auditSnap = await getDocs(auditQ);
+        const audits = auditSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // sort descending since we can't do orderby with where in firestore without index unless we do it client side for now just sort by timestamp
+        audits.sort((a: any, b: any) => {
+          const tA = a.timestamp?.seconds || 0;
+          const tB = b.timestamp?.seconds || 0;
+          return tB - tA;
+        });
+        setAuditLogs(audits);
+      } catch(err) {
+        console.error("Erro ao buscar audit logs", err);
       }
 
     } catch (error) {
@@ -471,351 +489,215 @@ export function Dashboard() {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
             >
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-xl font-semibold text-[#F5F7FA] flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
-                    <LayoutGrid className="w-4 h-4 text-[#A0A7B5]" />
-                  </span>
-                  Seus Apps e Produtos
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* MusicScale Card(s) */}
-                {hasValidSubscription ? (
-                  <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 md:p-8 border border-white/5 shadow-2xl flex flex-col h-full transform transition-all duration-300 hover:border-white/10 hover:shadow-[0_0_40px_rgba(43,133,235,0.05)] relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-[#2B85EB]/5 rounded-bl-[100px] -z-10 transition-transform group-hover:scale-110 blur-xl" />
-
-                    <div className="flex items-start justify-between mb-6">
-                      <div className="w-14 h-14 bg-[#050505] rounded-2xl flex items-center justify-center border border-white/5 shadow-inner">
-                        <Music className="w-6 h-6 text-[#2B85EB]" />
-                      </div>
-                      
-                      {loadingSub ? (
-                        <div className="h-6 w-20 bg-white/5 rounded-full animate-pulse" />
-                      ) : isTrialing ? (
-                        <span className="px-3 py-1 bg-[#F59E0B]/10 text-[#F59E0B] text-[10px] font-bold rounded-full border border-[#F59E0B]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
-                          <Clock className="w-3.5 h-3.5" /> Trial
-                        </span>
-                      ) : isActive ? (
-                        <span className="px-3 py-1 bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold rounded-full border border-[#10B981]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
-                          <ShieldCheck className="w-3.5 h-3.5" /> Ativo
-                        </span>
-                      ) : (
-                        <span className="px-3 py-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-full border border-white/10 uppercase tracking-widest shadow-sm">
-                           Sem Assinatura
-                        </span>
-                      )}
-                    </div>
-                    
-                    <h3 className="text-2xl font-semibold text-[#F5F7FA] tracking-tight mb-2 flex items-center gap-2">
-                      MusicScale {subscription?.tier && <span className="text-[#2B85EB] uppercase text-sm tracking-wider font-bold bg-[#2B85EB]/10 px-2 py-0.5 rounded-md border border-[#2B85EB]/20">{subscription.tier === 'pro' ? 'Pró' : 'Starter'}</span>}
-                    </h3>
-                    
-                    <p className="text-[#A0A7B5] text-sm mb-6 flex-1 font-normal leading-relaxed">
-                      A plataforma completa para gestão e escalas de ministérios de louvor, integrada ao ecossistema central.
-                    </p>
-
-                    {(subscription && subscription.status !== 'none' || loadingSub) && (
-                      <div className="mb-6 bg-[#050505] rounded-2xl p-5 border border-white/5 relative overflow-hidden group shadow-inner">
-                        {loadingSub ? (
-                          <div className="flex flex-col gap-2 py-2 animate-pulse">
-                            <div className="h-3 w-20 bg-white/5 rounded"></div>
-                            <div className="h-4 w-32 bg-white/5 rounded"></div>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex justify-between items-start mb-4">
-                              <div>
-                                <p className="text-[9px] text-[#A0A7B5] font-bold uppercase tracking-widest mb-2">Status da Assinatura</p>
-                                <div className="flex items-center gap-2">
-                                  <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest border ${
-                                    subscription.status === 'active' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' :
-                                    subscription.status === 'trialing' ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' :
-                                    'bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/20'
-                                  }`}>
-                                    {subscription.status === 'trialing' ? 'Trial Ativo' : subscription.status === 'active' ? 'Ativo' : subscription.status}
-                                  </span>
-                                  <span className="text-xs font-semibold text-[#F5F7FA]">
-                                    {subscription?.plan === 'annual' ? 'Plano Anual' : 'Plano Mensal'}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="w-8 h-8 bg-white/5 rounded-lg border border-white/5 flex items-center justify-center">
-                                <ShieldCheck className="w-4 h-4 text-[#A0A7B5]" />
-                              </div>
-                            </div>
-
-                            <div className="space-y-3">
-                              <div className="flex justify-between items-center text-xs">
-                                <span className="text-[#A0A7B5]">Próximo Faturamento</span>
-                                <span className="font-semibold text-[#F5F7FA]">
-                                  {formattedRenewal || "Sincronizando..."}
-                                </span>
-                              </div>
-                              
-                              {subscription?.status === 'trialing' && (
-                                <div className="flex items-start gap-2 p-3 bg-[#2B85EB]/10 rounded-xl border border-[#2B85EB]/20 mt-3">
-                                  <Clock className="w-3.5 h-3.5 text-[#2B85EB] mt-0.5 flex-shrink-0" />
-                                  <p className="text-[11px] text-[#2B85EB] font-medium leading-relaxed">
-                                    Seu teste grátis termina em <strong className="font-bold text-[#F5F7FA]">{formattedRenewal}</strong>. Nenhuma cobrança será feita até lá.
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="flex flex-col gap-3 mt-auto">
-                      <a 
-                        href="https://musicscale.millionsnest.com" 
-                        target="_blank" rel="noopener noreferrer"
-                        className="w-full py-3.5 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-white transition-all shadow-sm active:scale-95 mt-auto"
-                      >
-                        Abrir App
-                        <ExternalLink className="w-4 h-4 ml-1" />
-                      </a>
-                      {subscription?.stripeCustomerId && (
-                        <button
-                          onClick={openBillingPortal}
-                          className="w-full py-3 px-4 mt-2 bg-white/5 text-[#A0A7B5] border border-white/5 rounded-xl font-semibold flex items-center justify-center hover:bg-white/10 hover:text-[#F5F7FA] transition-all active:scale-95"
-                        >
-                          <Settings className="w-4 h-4 mr-2" /> Gerenciar Assinatura
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* MusicScale Pro Card */}
-                    <div className="bg-[#0B0F19]/70 backdrop-blur-xl rounded-[2rem] p-6 md:p-8 border border-[#2B85EB]/40 shadow-2xl flex flex-col h-full transform transition-all duration-300 hover:border-[#2B85EB]/80 relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-[#2B85EB]/10 rounded-bl-[100px] -z-10 transition-transform group-hover:scale-110 blur-xl" />
-
-                      <div className="flex items-start justify-between mb-6">
-                        <div className="w-14 h-14 bg-[#2B85EB]/10 rounded-2xl flex items-center justify-center border border-[#2B85EB]/20 shadow-inner">
-                          <Music className="w-6 h-6 text-[#2B85EB]" />
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <span className="px-3 py-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-full border border-white/10 uppercase tracking-widest shadow-sm">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left Column: Main Content */}
+                <div className="col-span-1 lg:col-span-2 space-y-6">
+                  
+                  {/* Organization Current Status */}
+                  <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 lg:p-8 border border-white/5 shadow-2xl relative overflow-hidden group">
+                     {/* Ambient decoration */}
+                     <div className="absolute top-0 right-0 w-64 h-64 bg-[#2B85EB]/5 rounded-full blur-[80px] -z-10 group-hover:scale-110 transition-transform duration-700" />
+                     
+                     <div className="flex items-start justify-between mb-8">
+                       <div className="flex items-center gap-4">
+                         <div className="w-14 h-14 rounded-2xl bg-[#050505] flex items-center justify-center border border-white/10 shadow-inner">
+                           <Building2 className="w-6 h-6 text-[#F5F7FA]" />
+                         </div>
+                         <div>
+                           <p className="text-[#A0A7B5] text-xs font-bold uppercase tracking-widest mb-1">Organização Ativa</p>
+                           <h2 className="text-xl md:text-2xl font-semibold text-[#F5F7FA] tracking-tight">{organization?.name || "Carregando..."}</h2>
+                         </div>
+                       </div>
+                       
+                       <div className="flex items-center gap-3">
+                         {isTrialing ? (
+                           <span className="px-3 py-1 bg-[#F59E0B]/10 text-[#F59E0B] text-[10px] font-bold rounded-full border border-[#F59E0B]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
+                             <Clock className="w-3.5 h-3.5" /> Trial Ativo
+                           </span>
+                         ) : isActive ? (
+                           <span className="px-3 py-1 bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold rounded-full border border-[#10B981]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
+                             <ShieldCheck className="w-3.5 h-3.5" /> Ativo
+                           </span>
+                         ) : (
+                           <span className="px-3 py-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-full border border-white/10 uppercase tracking-widest shadow-sm">
                              Sem Assinatura
+                           </span>
+                         )}
+                       </div>
+                     </div>
+
+                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
+                          <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
+                             <Users className="w-3.5 h-3.5" /> Membros
+                          </p>
+                          <p className="text-2xl font-semibold text-[#F5F7FA]">{members.length}</p>
+                        </div>
+                        <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
+                          <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
+                             <LayoutGrid className="w-3.5 h-3.5" /> Apps Ativos
+                          </p>
+                          <p className="text-2xl font-semibold text-[#F5F7FA]">{organization?.enabledApps?.length || (showMusicScaleCard ? 1 : 0)}</p>
+                        </div>
+                        <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
+                          <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
+                             <ListMusic className="w-3.5 h-3.5" /> Plano Atual
+                          </p>
+                          <p className="text-sm font-semibold text-[#F5F7FA] mt-1 capitalize">{subscription?.tier || organization?.subscriptionPlan || 'Gratuito'}</p>
+                        </div>
+                        <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
+                          <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
+                             <CreditCard className="w-3.5 h-3.5" /> Vencimento
+                          </p>
+                          <p className="text-sm font-semibold text-[#F5F7FA] mt-1">{formattedRenewal || "---"}</p>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Upcoming Activities / Empty State for Now */}
+                  <div className="bg-[#0B0F19]/30 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 border-dashed flex flex-col justify-center items-center text-center group transition-all hover:bg-[#0B0F19]/50 hover:border-white/10 min-h-[160px]">
+                    <div className="w-12 h-12 bg-[#050505] rounded-2xl flex items-center justify-center mb-4 text-[#A0A7B5] shadow-inner border border-white/5 transition-transform group-hover:scale-105">
+                       <Clock className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-[#A0A7B5] tracking-tight mb-2">Próximas Atividades</h3>
+                    <p className="text-[#A0A7B5]/60 text-sm font-normal px-4 max-w-sm">
+                      Nenhuma atividade urgente no ecossistema MillionsNest. (Integração de escalas em breve).
+                    </p>
+                  </div>
+
+                  {/* Active Ecosystem Apps */}
+                  <div>
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-lg font-semibold text-[#F5F7FA] flex items-center gap-2">
+                        <LayoutGrid className="w-5 h-5 text-[#A0A7B5]" />
+                        Aplicativos Ecossistema
+                      </h3>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* MusicScale Module */}
+                      <div className="bg-[#050505] rounded-3xl p-5 border border-white/10 shadow-lg flex flex-col transition-all hover:border-[#2B85EB]/30 relative overflow-hidden group">
+                        <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="w-12 h-12 bg-[#2B85EB]/10 rounded-xl flex items-center justify-center border border-[#2B85EB]/20">
+                            <Music className="w-5 h-5 text-[#2B85EB]" />
+                          </div>
+                          <span className="px-2 py-1 bg-white/5 text-[#A0A7B5] text-[9px] font-bold rounded-md border border-white/10 uppercase tracking-widest shadow-sm">
+                            Ativo
                           </span>
-                          {subscriptionRepairAvailable && (
-                            <button 
-                              onClick={handleRepairAccount}
-                              disabled={repairing}
-                              className="text-[10px] bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/40 hover:bg-[#2B85EB]/30 uppercase tracking-wider font-bold transition-colors flex items-center gap-1 px-3 py-1.5 rounded-full"
+                        </div>
+                        <h4 className="text-lg font-semibold text-[#F5F7FA] mb-1">MusicScale</h4>
+                        <p className="text-[#A0A7B5] text-xs leading-relaxed mb-6 flex-1">Gestão inteligente de equipes, escalas e repertório para seu ministério de louvor.</p>
+                        
+                        <div className="flex items-center gap-3">
+                          <a 
+                            href="https://musicscale.millionsnest.com" 
+                            target="_blank" rel="noopener noreferrer"
+                            className="flex-1 py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95"
+                          >
+                            Abrir <ArrowRight className="w-3.5 h-3.5" />
+                          </a>
+                          {(profile?.systemRole === 'ceo' || currentUserPerms['organization.manageBilling']) && (
+                            <button
+                               onClick={() => setActiveTab('billing')}
+                               className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/10 transition-colors"
                             >
-                              <Loader2 className={`w-3 h-3 ${repairing ? 'animate-spin' : ''}`} />
-                              {repairing ? 'Sincronizando...' : 'Sincronizar Conta'}
+                               <Settings className="w-4 h-4" />
                             </button>
                           )}
                         </div>
                       </div>
-                      
-                      <h3 className="text-2xl font-semibold text-[#F5F7FA] tracking-tight mb-2 flex items-center gap-2">
-                        MusicScale <span className="text-[#2B85EB] uppercase text-sm tracking-wider font-bold bg-[#2B85EB]/10 px-2 py-0.5 rounded-md border border-[#2B85EB]/20">Pró</span>
-                      </h3>
-                      {subscriptionRepairAvailable ? (
-                        <p className="text-[#FCA5A5] text-sm mb-6 flex-1 font-medium leading-relaxed bg-red-900/20 border border-red-500/20 p-3 rounded-xl">
-                          Encontramos uma possível inconsistência na sua assinatura. Clique em "Sincronizar Conta" para restaurar seu acesso automaticamente.
-                        </p>
-                      ) : (
-                        <p className="text-[#A0A7B5] text-sm mb-6 flex-1 font-normal leading-relaxed">
-                          Acesso total. Equipes ilimitadas, repertório ilimitado, notificações automatizadas no Whatsapp e métricas de desempenho.
+
+                      {/* CultoFlow Placeholder */}
+                      <div className="bg-[#050505] rounded-3xl p-5 border border-white/5 border-dashed flex flex-col items-center justify-center text-center group transition-all hover:bg-[#0B0F19]/50 hover:border-white/10 relative overflow-hidden">
+                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center border border-white/5 mb-4 text-[#A0A7B5]">
+                          <Plus className="w-5 h-5" />
+                        </div>
+                        <h4 className="text-sm font-semibold text-[#A0A7B5] mb-1">Adicionar App</h4>
+                        <p className="text-[#A0A7B5]/60 text-[11px] leading-relaxed max-w-[180px]">Catálogo de novos aplicativos será liberado nas próximas atualizações.</p>
+                      </div>
+
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Right Column: Activity & Team summary */}
+                <div className="space-y-6">
+                  {/* Recent Activity */}
+                  <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 shadow-2xl h-fit">
+                    <h3 className="text-base font-semibold text-[#F5F7FA] flex items-center justify-between mb-6">
+                      <span className="flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-[#2B85EB]" /> Atividade Recente
+                      </span>
+                    </h3>
+                    
+                    <div className="space-y-4">
+                      {auditLogs.length > 0 ? auditLogs.map(log => (
+                        <div key={log.id} className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className="w-2 h-2 rounded-full bg-[#2B85EB]" />
+                            <div className="w-px h-full bg-white/5 my-1" />
+                          </div>
+                          <div className="pb-4">
+                            <p className="text-sm text-[#F5F7FA]">{log.action}</p>
+                            <p className="text-[10px] text-[#A0A7B5] mt-0.5">
+                              {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('pt-BR') : 'Agora'}
+                              {log.actorUid && ` • Usuario: ${members.find(m => m.id === log.actorUid)?.displayName || log.actorUid.substring(0, 5) + "..."}`}
+                            </p>
+                          </div>
+                        </div>
+                      )) : (
+                        <p className="text-sm text-[#A0A7B5] py-4 text-center border border-white/5 border-dashed rounded-xl">
+                          Nenhuma atividade recente registrada em logs.
                         </p>
                       )}
-
-                      <div className="flex flex-col gap-3 relative mt-auto">
-                        <button 
-                          onClick={() => handleSubscribe('musicscale_pro_yearly')}
-                          disabled={checkoutLoading}
-                          className="w-full py-4 px-4 bg-[#2B85EB] text-[#F5F7FA] rounded-xl font-semibold flex-col flex items-center justify-center hover:bg-[#3B95FB] transition-all shadow-sm active:scale-95 relative overflow-hidden disabled:opacity-70"
-                        >
-                          <span className="absolute top-0 right-0 bg-[#050505]/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-widest border-b border-l border-white/10">20% OFF</span>
-                          <span className="flex items-center gap-2">
-                            Assinatura Anual <ArrowRight className="w-4 h-4" />
-                          </span>
-                          <span className="text-xs text-white/90 mt-1 font-bold">R$ {(prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
-                          <span className="text-[10px] text-white/70 font-medium">7 dias grátis, depois R$ {prices.pro_annual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/ano</span>
-                        </button>
-
-                        <button 
-                          onClick={() => handleSubscribe('musicscale_pro_monthly')}
-                          disabled={checkoutLoading}
-                          className="w-full py-3 px-4 bg-transparent text-[#F5F7FA] border border-white/10 rounded-xl font-semibold flex flex-col items-center justify-center hover:bg-white/5 transition-all active:scale-95 disabled:opacity-70"
-                        >
-                          <span className="flex items-center gap-2 text-sm">
-                            Assinatura Mensal
-                          </span>
-                          <span className="text-[10px] text-[#A0A7B5] font-medium mt-1">7 dias grátis, depois R$ {prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
-                        </button>
-                      </div>
                     </div>
+                  </div>
 
-                    {/* MusicScale Starter Card */}
-                    <div className="bg-[#0B0F19]/30 backdrop-blur-xl rounded-[2rem] p-6 md:p-8 border border-white/5 shadow-2xl flex flex-col h-full transform transition-all duration-300 hover:border-white/10 relative overflow-hidden group">
-                      <div className="flex items-start justify-between mb-6">
-                        <div className="w-14 h-14 bg-[#050505] rounded-2xl flex items-center justify-center border border-white/5 shadow-inner opacity-70">
-                          <Music className="w-6 h-6 text-[#A0A7B5]" />
+                  {/* Team Members Short summary */}
+                  <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 shadow-2xl">
+                    <h3 className="text-base font-semibold text-[#F5F7FA] flex items-center justify-between mb-6">
+                      <span className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-[#A0A7B5]" /> Equipe
+                      </span>
+                      {currentUserPerms['organization.manageMembers'] && (
+                        <button onClick={() => setActiveTab('organization')} className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB]">
+                          Gerenciar
+                        </button>
+                      )}
+                    </h3>
+                    <div className="space-y-3">
+                      {members.slice(0, 5).map(m => (
+                        <div key={m.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition-colors cursor-default">
+                          <div className="flex items-center gap-3">
+                            {m.photoURL ? (
+                              <img src={m.photoURL} className="w-8 h-8 rounded-lg border border-white/10" alt="" />
+                            ) : (
+                              <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center text-[#F5F7FA] text-xs font-bold border border-white/10">
+                                {m.displayName?.charAt(0) || m.email?.charAt(0)}
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-xs font-semibold text-[#F5F7FA]">{m.displayName || "Usuário"}</p>
+                              <p className="text-[10px] text-[#A0A7B5] truncate max-w-[120px]">{m.email}</p>
+                            </div>
+                          </div>
+                          <span className="px-2 py-0.5 bg-white/5 text-[#A0A7B5] text-[9px] font-bold rounded-md border border-white/10 uppercase tracking-widest">
+                            {m.role || 'Membro'}
+                          </span>
                         </div>
-                      </div>
-                      
-                      <h3 className="text-2xl font-semibold text-[#F5F7FA] tracking-tight mb-2 flex items-center gap-2">
-                        MusicScale <span className="text-[#A0A7B5] uppercase text-sm tracking-wider font-bold bg-white/5 px-2 py-0.5 rounded-md border border-white/10">Starter</span>
-                      </h3>
-                      <p className="text-[#A0A7B5] text-sm mb-6 flex-1 font-normal leading-relaxed opacity-80">
-                        O essencial. Gestão básica de equipe, escalas padrão e controle de repertório simplificado sem automações avançadas.
-                      </p>
-
-                      <div className="flex flex-col gap-3 relative mt-auto">
-                        <button 
-                          onClick={() => handleSubscribe('musicscale_starter_yearly')}
-                          disabled={checkoutLoading}
-                          className="w-full py-4 px-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold flex-col flex items-center justify-center hover:bg-white transition-all shadow-sm active:scale-95 relative overflow-hidden disabled:opacity-70"
-                        >
-                          <span className="absolute top-0 right-0 bg-black/5 text-[#050505] text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-widest border-b border-l border-black/10">20% OFF</span>
-                          <span className="flex items-center gap-2">
-                            Assinatura Anual <ArrowRight className="w-4 h-4" />
-                          </span>
-                          <span className="text-xs text-[#050505]/70 mt-1 font-bold">R$ {(prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
-                          <span className="text-[10px] text-[#050505]/50 font-medium">7 dias grátis, depois R$ {prices.starter_annual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/ano</span>
+                      ))}
+                      {members.length > 5 && (
+                        <button onClick={() => setActiveTab('organization')} className="w-full py-2 mt-2 bg-white/5 text-[#A0A7B5] text-xs font-semibold rounded-xl hover:bg-white/10 transition-colors border border-white/5">
+                          Ver Todos ({members.length})
                         </button>
-
-                        <button 
-                          onClick={() => handleSubscribe('musicscale_starter_monthly')}
-                          disabled={checkoutLoading}
-                          className="w-full py-3 px-4 bg-transparent text-[#F5F7FA] border border-white/10 rounded-xl font-semibold flex flex-col items-center justify-center hover:bg-white/5 transition-all active:scale-95 disabled:opacity-70"
-                        >
-                          <span className="flex items-center gap-2 text-sm">
-                            Assinatura Mensal
-                          </span>
-                          <span className="text-[10px] text-[#A0A7B5] font-medium mt-1">7 dias grátis, depois R$ {prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês</span>
-                        </button>
-                      </div>
+                      )}
                     </div>
-                  </>
-                )}
-
-                {/* Placeholder */}
-                <div className="bg-[#0B0F19]/30 rounded-[2rem] p-6 md:p-8 border border-white/5 border-dashed flex flex-col justify-center items-center text-center group transition-all hover:bg-[#0B0F19]/50 hover:border-white/10">
-                  <div className="w-16 h-16 bg-[#050505] rounded-2xl flex items-center justify-center mb-6 text-[#A0A7B5] shadow-inner border border-white/5 transition-transform group-hover:scale-105">
-                     <LayoutGrid className="w-6 h-6" />
                   </div>
-                  <h3 className="text-lg font-semibold text-[#A0A7B5] tracking-tight mb-2">Comunicação e Analytics</h3>
-                  <p className="text-[#A0A7B5]/60 text-sm font-normal px-4">
-                    Estamos construindo novas integrações de gestão e relatórios para o ecossistema.
-                  </p>
+
                 </div>
               </div>
-
-              {/* Addons Section */}
-              <div className="mt-16">
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-xl font-semibold text-[#F5F7FA] flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
-                      <Zap className="w-4 h-4 text-[#F59E0B]" />
-                    </span>
-                    Potencialize seu Ministério
-                  </h2>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* Setup Premium */}
-                  <div className="bg-[#0B0F19]/50 rounded-2xl p-6 border border-white/5 flex flex-col transition-all hover:border-white/10 hover:bg-[#0B0F19]/80 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-[#2B85EB]/10 rounded-bl-[80px] -z-10 blur-xl group-hover:scale-125 transition-transform" />
-                    <h4 className="text-[#F5F7FA] font-semibold text-sm mb-2">Setup Premium</h4>
-                    <p className="text-[#A0A7B5] text-xs leading-relaxed flex-1 mb-4">Avaliação completa, relatórios e plano de ação estruturado para sua equipe.</p>
-                    <div className="text-lg font-semibold text-[#F5F7FA] mb-4">
-                      R$ {prices.setup_premium > 0 ? prices.setup_premium.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "..."}
-                    </div>
-                    <button 
-                      onClick={() => handleSubscribe('musicscale_setup_premium')}
-                      disabled={checkoutLoading}
-                      className="w-full py-2.5 px-4 bg-white/5 text-[#F5F7FA] text-xs font-semibold rounded-xl hover:bg-white/10 transition-all active:scale-95 border border-white/5"
-                    >
-                      Adicionar
-                    </button>
-                  </div>
-
-                  {/* Treinamento Express */}
-                  <div className="bg-[#0B0F19]/50 rounded-2xl p-6 border border-white/5 flex flex-col transition-all hover:border-white/10 hover:bg-[#0B0F19]/80 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-[#A855F7]/10 rounded-bl-[80px] -z-10 blur-xl group-hover:scale-125 transition-transform" />
-                    <h4 className="text-[#F5F7FA] font-semibold text-sm mb-2">Treinamento Express</h4>
-                    <p className="text-[#A0A7B5] text-xs leading-relaxed flex-1 mb-4">Acesso a workshops rápidos para desenvolver habilidades técnicas e espirituais.</p>
-                    <div className="text-lg font-semibold text-[#F5F7FA] mb-4">
-                      R$ {prices.training_express > 0 ? prices.training_express.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "..."}
-                    </div>
-                    <button 
-                       onClick={() => handleSubscribe('musicscale_training_express')}
-                       disabled={checkoutLoading}
-                       className="w-full py-2.5 px-4 bg-white/5 text-[#F5F7FA] text-xs font-semibold rounded-xl hover:bg-white/10 transition-all active:scale-95 border border-white/5"
-                    >
-                      Adicionar
-                    </button>
-                  </div>
-
-                  {/* Worship 100 */}
-                  <div className="bg-[#0B0F19]/50 rounded-2xl p-6 border border-white/5 flex flex-col transition-all hover:border-white/10 hover:bg-[#0B0F19]/80 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-[#10B981]/10 rounded-bl-[80px] -z-10 blur-xl group-hover:scale-125 transition-transform" />
-                    <h4 className="text-[#F5F7FA] font-semibold text-sm mb-2">Acervo Worship 100</h4>
-                    <p className="text-[#A0A7B5] text-xs leading-relaxed flex-1 mb-4">Acesso instantâneo a 100 cifras e recursos exclusivos de worship.</p>
-                    <div className="text-lg font-semibold text-[#F5F7FA] mb-4">
-                      R$ {prices.worship_100 > 0 ? prices.worship_100.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "..."}
-                    </div>
-                    <button 
-                       onClick={() => handleSubscribe('musicscale_worship_100')}
-                       disabled={checkoutLoading}
-                       className="w-full py-2.5 px-4 bg-white/5 text-[#F5F7FA] text-xs font-semibold rounded-xl hover:bg-white/10 transition-all active:scale-95 border border-white/5"
-                    >
-                      Adicionar
-                    </button>
-                  </div>
-
-                  {/* Music Pack +10 */}
-                  <div className="bg-[#0B0F19]/50 rounded-2xl p-6 border border-white/5 flex flex-col transition-all hover:border-white/10 hover:bg-[#0B0F19]/80 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-[#F59E0B]/10 rounded-bl-[80px] -z-10 blur-xl group-hover:scale-125 transition-transform" />
-                    <h4 className="text-[#F5F7FA] font-semibold text-sm mb-2">Music Pack +10</h4>
-                    <p className="text-[#A0A7B5] text-xs leading-relaxed flex-1 mb-4">Pacote adicional de 10 músicas premium com todos os recursos.</p>
-                    <div className="text-lg font-semibold text-[#F5F7FA] mb-4">
-                      R$ {prices.music_pack_10 > 0 ? prices.music_pack_10.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "..."}
-                    </div>
-                    <button 
-                       onClick={() => handleSubscribe('musicscale_music_pack_10')}
-                       disabled={checkoutLoading}
-                       className="w-full py-2.5 px-4 bg-white/5 text-[#F5F7FA] text-xs font-semibold rounded-xl hover:bg-white/10 transition-all active:scale-95 border border-white/5"
-                    >
-                      Adicionar
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {hasValidSubscription && (
-                <div className="mt-16 flex justify-center">
-                  <div className="bg-[#0B0F19]/50 rounded-2xl p-6 md:p-8 border border-white/5 flex flex-col md:flex-row items-center justify-between gap-6 w-full max-w-4xl relative overflow-hidden group hover:border-white/10 transition-all">
-                    <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-br-[100px] -z-10 blur-xl group-hover:scale-110 transition-transform" />
-                    
-                    <div className="flex flex-col gap-3 max-w-xl text-center md:text-left z-10 w-full md:w-auto">
-                      <h3 className="text-[#F5F7FA] font-semibold text-lg flex items-center justify-center md:justify-start gap-2">
-                        <Settings className="w-5 h-5 text-[#A0A7B5]" />
-                        Fazer Upgrade / Downgrade
-                      </h3>
-                      <p className="text-[#A0A7B5] text-sm leading-relaxed">
-                        Gerencie seu plano atual, faça upgrade para adicionar novos recursos ou altere a periodicidade do faturamento.
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={openBillingPortal}
-                      className="whitespace-nowrap px-6 py-4 bg-white/5 text-[#F5F7FA] border border-white/10 rounded-xl font-semibold flex items-center justify-center hover:bg-white/10 transition-all shadow-sm active:scale-95 h-fit w-full md:w-auto z-10"
-                    >
-                      Acessar Portal
-                    </button>
-                  </div>
-                </div>
-              )}
             </motion.section>
           )}
 
