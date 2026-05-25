@@ -424,6 +424,16 @@ export function Dashboard() {
           >
             Minha Conta
           </button>
+          
+          {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin') && (
+            <button 
+              onClick={() => navigate("/admin/ecosystem")}
+              className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap border-transparent text-[#2B85EB] hover:text-[#3B95FB] flex items-center gap-2`}
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Ecossistema
+            </button>
+          )}
         </div>
       </div>
       

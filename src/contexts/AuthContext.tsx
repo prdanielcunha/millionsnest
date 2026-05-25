@@ -9,10 +9,14 @@ interface UserProfile {
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
-  products: string[];
-  organizationId?: string;
+  products: string[]; // Legacy
+  organizationId?: string; // Active Org
+  organizations?: string[]; // Standardized ecosystem field
+  subscriptionStatus?: string; // Standardized ecosystem field
+  systemRole?: 'ceo' | 'admin';
   lastLoginAt: any;
   createdAt: any;
+  updatedAt?: any;
 }
 
 interface AuthContextType {
@@ -57,6 +61,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Check for pending invite logic if needed locally?
             const inviteOrgId = localStorage.getItem('invite_org_id');
             let mergeData: any = { lastLoginAt: serverTimestamp() };
+            
+            // Auto-assign CEO role to specific email
+            if (currentUser.email === 'pastordanielpcunha@gmail.com' && userData.systemRole !== 'ceo') {
+              mergeData.systemRole = 'ceo';
+              userData.systemRole = 'ceo';
+            }
+
             if (inviteOrgId && !userData.organizationId) {
               mergeData.organizationId = inviteOrgId;
               userData.organizationId = inviteOrgId;
@@ -80,7 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               products: [],
               lastLoginAt: serverTimestamp(),
               createdAt: serverTimestamp(),
-              organizationId: targetOrgId
+              updatedAt: serverTimestamp(),
+              organizationId: targetOrgId,
+              organizations: [targetOrgId],
+              subscriptionStatus: 'none',
+              systemRole: currentUser.email === 'pastordanielpcunha@gmail.com' ? 'ceo' : undefined
             };
             
             await setDoc(userRef, newProfile);
@@ -89,19 +104,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!inviteOrgId) {
                const orgRef = doc(db, 'organizations', targetOrgId);
                await setDoc(orgRef, {
+                 id: targetOrgId,
                  name: `Organização de ${currentUser.displayName || currentUser.email?.split('@')[0]}`,
-                 ownerId: currentUser.uid,
+                 slug: targetOrgId, // default slug
+                 ownerUid: currentUser.uid, // standardized field
+                 ownerId: currentUser.uid, // legacy field
+                 enabledApps: ['musicscale'], // default apps access
+                 subscriptionPlan: 'monthly',
+                 subscriptionStatus: 'none',
                  createdAt: serverTimestamp()
                }, { merge: true });
 
                const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${targetOrgId}`);
-               await setDoc(orgMemberRef, {
+               const newMemberRef = doc(db, `organizations/${targetOrgId}/members`, currentUser.uid);
+               const memberData = {
                  uid: currentUser.uid,
                  organizationId: targetOrgId,
                  role: 'owner',
                  permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-                 permissions: getDefaultPermissions('owner')
-               }, { merge: true });
+                 permissions: getDefaultPermissions('owner'),
+                 createdAt: serverTimestamp()
+               };
+               await setDoc(orgMemberRef, memberData, { merge: true });
+               await setDoc(newMemberRef, memberData, { merge: true });
             }
 
             if (inviteOrgId) {

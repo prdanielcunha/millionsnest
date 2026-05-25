@@ -16,6 +16,7 @@ const Login = lazy(() => import('./pages/Login.js').then(module => ({ default: m
 const Dashboard = lazy(() => import('./pages/Dashboard.js').then(module => ({ default: module.Dashboard })));
 const Checkout = lazy(() => import('./pages/Checkout.js'));
 const AdminDebug = lazy(() => import('./pages/AdminDebug.js'));
+const EcosystemAdmin = lazy(() => import('./pages/EcosystemAdmin.js').then(module => ({ default: module.EcosystemAdmin })));
 
 function LoadingFallback() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/admin/debug/organization" element={<AdminDebug />} />
+            <Route path="/admin/ecosystem" element={<EcosystemAdmin />} />
             <Route path="/upgrade" element={<Checkout />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/termos-de-uso" element={<Terms />} />
