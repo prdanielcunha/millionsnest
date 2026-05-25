@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle, X, Send, User, ChevronRight, HelpCircle } from "lucide-react";
+import { MessageCircle, X, Send, User, ChevronRight, DollarSign, Wrench, Handshake } from "lucide-react";
 
 const commonQuestions = [
   {
@@ -12,14 +12,15 @@ const commonQuestions = [
     a: "Temos o Starter (essencial) e o Pro (completo com Biblioteca Viva). Veja a seção de preços para detalhes."
   },
   {
-    q: "O WhatsApp Bot está incluso?",
-    a: "A integração com WhatsApp para envio de escalas está disponível nos planos pagos para facilitar a comunicação do time."
+    q: "Compartilhamento no WhatsApp?",
+    a: "Sim! Você pode compartilhar todas as suas escalas e setlists diretamente para o WhatsApp do grupo ou da equipe com um clique."
   }
 ];
 
 export function SalesChat() {
   const [isOpen, setIsOpen] = useState(false);
-  const [step, setStep] = useState<'welcome' | 'faq' | 'input'>('welcome');
+  const [step, setStep] = useState<'intent' | 'faq' | 'input'>('intent');
+  const [selectedIntent, setSelectedIntent] = useState<'pricing' | 'support' | 'partnership' | null>(null);
   const [selectedFaq, setSelectedFaq] = useState<typeof commonQuestions[0] | null>(null);
   const [userQuestion, setUserQuestion] = useState("");
   const whatsappNumber = "5543999907071";
@@ -38,10 +39,33 @@ export function SalesChat() {
   }, []);
 
   const handleSendToWhatsapp = () => {
-    const text = userQuestion || (selectedFaq ? `Minha dúvida: ${selectedFaq.q}` : "Olá! Gostaria de tirar algumas dúvidas sobre o MusicScale.");
-    const encoded = encodeURIComponent(text);
+    let prefix = "";
+    if (selectedIntent === 'pricing') prefix = "[Planos e Preços] ";
+    else if (selectedIntent === 'support') prefix = "[Suporte Técnico] ";
+    else if (selectedIntent === 'partnership') prefix = "[Parcerias Comerciais] ";
+
+    let baseText = "";
+    if (userQuestion) {
+      baseText = `${prefix}${userQuestion}`;
+    } else if (selectedFaq) {
+      baseText = `${prefix}Minha dúvida: ${selectedFaq.q}`;
+    } else {
+      const intentName = selectedIntent === 'pricing' ? 'Planos e Preços' : selectedIntent === 'support' ? 'Suporte Técnico' : 'Parcerias Comerciais';
+      baseText = `Olá! Gostaria de falar sobre ${intentName}.`;
+    }
+
+    const encoded = encodeURIComponent(baseText);
     window.open(`https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${encoded}`, '_blank');
     setIsOpen(false);
+  };
+
+  const handleIntentSelect = (intent: 'pricing' | 'support' | 'partnership') => {
+    setSelectedIntent(intent);
+    if (intent === 'pricing') {
+      setStep('faq');
+    } else {
+      setStep('input');
+    }
   };
 
   return (
@@ -82,49 +106,65 @@ export function SalesChat() {
                   <h3 className="font-bold text-lg">Consultor MusicScale</h3>
                   <div className="flex items-center gap-1.5 text-xs text-white/80">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    Online agora para te ajudar
+                    Online agora
                   </div>
                 </div>
               </div>
               <p className="text-sm text-white/90 leading-relaxed">
-                Olá! 👋 Como posso ajudar a transformar seu ministério hoje?
+                Olá! Como podemos ajudar a transformar o seu ministério hoje?
               </p>
             </div>
 
             {/* Chat Body */}
-            <div className="flex-1 p-6 max-h-[350px] overflow-y-auto bg-[#0B0F19]">
+            <div className="flex-1 p-6 max-h-[360px] overflow-y-auto bg-[#0B0F19]">
               <AnimatePresence mode="wait">
-                {step === 'welcome' && (
+                {step === 'intent' && (
                   <motion.div
-                    key="welcome"
+                    key="intent"
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -10 }}
-                    className="space-y-4"
+                    className="space-y-3"
                   >
+                    <p className="text-xs font-semibold text-[#A0A7B5] mb-4">Escolha sobre o que deseja falar:</p>
+                    
                     <button
-                      onClick={() => setStep('faq')}
-                      className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex items-center justify-between group"
+                      onClick={() => handleIntentSelect('pricing')}
+                      className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-[#2B85EB]/30 transition-all flex items-center justify-between group"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-[#2B85EB]/10 flex items-center justify-center">
-                          <HelpCircle className="w-4 h-4 text-[#2B85EB]" />
+                        <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <DollarSign className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">Dúvida rápida sobre planos</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">Planos e Preços</span>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform" />
+                      <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
+
                     <button
-                      onClick={() => setStep('input')}
-                      className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex items-center justify-between group"
+                      onClick={() => handleIntentSelect('support')}
+                      className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-[#2B85EB]/30 transition-all flex items-center justify-between group"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-[#2B85EB]/10 flex items-center justify-center">
-                          <MessageCircle className="w-4 h-4 text-[#2B85EB]" />
+                        <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Wrench className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">Fala direto no WhatsApp</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">Suporte Técnico</span>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform" />
+                      <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
+                    </button>
+
+                    <button
+                      onClick={() => handleIntentSelect('partnership')}
+                      className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-[#2B85EB]/30 transition-all flex items-center justify-between group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Handshake className="w-4.5 h-4.5 text-[#2B85EB]" />
+                        </div>
+                        <span className="text-sm font-medium text-[#F5F7FA]">Parcerias e Comercial</span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
                   </motion.div>
                 )}
@@ -138,10 +178,10 @@ export function SalesChat() {
                     className="space-y-3"
                   >
                     <button 
-                      onClick={() => { setStep('welcome'); setSelectedFaq(null); }}
+                      onClick={() => { setStep('intent'); setSelectedIntent(null); setSelectedFaq(null); }}
                       className="text-xs text-[#2B85EB] font-semibold mb-2 hover:underline"
                     >
-                      ← Voltar
+                      ← Voltar às opções
                     </button>
                     {commonQuestions.map((q, i) => (
                       <button
@@ -161,14 +201,15 @@ export function SalesChat() {
                         )}
                       </button>
                     ))}
-                    {selectedFaq && (
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <p className="text-xs font-medium text-[#A0A7B5] text-center mb-3">Não encontrou o que procurava?</p>
                       <button
-                        onClick={handleSendToWhatsapp}
-                        className="w-full mt-4 py-3 bg-[#2B85EB] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2"
+                        onClick={() => setStep('input')}
+                        className="w-full py-3 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/30 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
                       >
-                        Ainda com dúvida? Chamar no Zap <ChevronRight className="w-3 h-3" />
+                        <MessageCircle className="w-3.5 h-3.5" /> Falar com consultor 
                       </button>
-                    )}
+                    </div>
                   </motion.div>
                 )}
 
@@ -181,18 +222,23 @@ export function SalesChat() {
                     className="space-y-4"
                   >
                     <button 
-                      onClick={() => setStep('welcome')}
+                      onClick={() => {
+                        if (selectedIntent === 'pricing') setStep('faq');
+                        else setStep('intent');
+                      }}
                       className="text-xs text-[#2B85EB] font-semibold hover:underline"
                     >
-                      ← Voltar
+                      ← {selectedIntent === 'pricing' ? 'Voltar ao FAQ' : 'Voltar às opções'}
                     </button>
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[#A0A7B5]">Qual sua principal dúvida?</label>
+                      <label className="text-xs font-semibold text-[#A0A7B5]">
+                        Como podemos te ajudar com {selectedIntent === 'support' ? 'suporte' : selectedIntent === 'partnership' ? 'parcerias' : 'planos'}?
+                      </label>
                       <textarea
                         autoFocus
                         value={userQuestion}
                         onChange={(e) => setUserQuestion(e.target.value)}
-                        placeholder="Ex: Como importar meu acervo?"
+                        placeholder="Digite sua mensagem aqui..."
                         className="w-full h-24 p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-[#F5F7FA] placeholder:text-[#A0A7B5]/40 focus:border-[#2B85EB]/50 focus:outline-none transition-all resize-none"
                       />
                     </div>
@@ -209,9 +255,9 @@ export function SalesChat() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 bg-white/[0.02] border-t border-white/5 flex items-center justify-center gap-2 text-[10px] text-[#A0A7B5] uppercase tracking-widest font-semibold">
-              <span className="w-1 h-1 rounded-full bg-[#2B85EB]" />
-              Suporte VIP Inteligente
+            <div className="px-6 py-4 bg-[#050505] border-t border-white/5 flex items-center justify-center gap-2 text-[10px] text-[#A0A7B5] uppercase tracking-widest font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              Atendimento Humanizado
             </div>
           </motion.div>
         )}
