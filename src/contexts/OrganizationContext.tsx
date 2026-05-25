@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { doc, getDoc, collection, query, getDocs } from "firebase/firestore";
+import { createContext, useContext, useEffect, useState, ReactNode, useMemo, useCallback } from "react";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { useAuth } from "./AuthContext.js";
 
@@ -28,19 +28,32 @@ interface OrganizationContextType {
   organization: Organization | null;
   memberRole: MemberRole | null;
   loadingOrg: boolean;
+  hasPermission: (permissionName: string) => boolean;
 }
 
 const OrganizationContext = createContext<OrganizationContextType>({
   organization: null,
   memberRole: null,
   loadingOrg: true,
+  hasPermission: () => false,
 });
 
 export function OrganizationProvider({ children }: { children: ReactNode }) {
   const { user, profile, loading: authLoading } = useAuth();
-  const [organization, setOrganization] = useState<Organization | null>(null);
-  const [memberRole, setMemberRole] = useState<MemberRole | null>(null);
-  const [loadingOrg, setLoadingOrg] = useState(true);
+  
+  // Try to load cached values to avoid wait times and flash of empty content
+  const cachedContext = useMemo(() => {
+    try {
+      const stored = localStorage.getItem('mn_org_context');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [organization, setOrganization] = useState<Organization | null>(cachedContext?.organization || null);
+  const [memberRole, setMemberRole] = useState<MemberRole | null>(cachedContext?.memberRole || null);
+  const [loadingOrg, setLoadingOrg] = useState(!cachedContext);
 
   useEffect(() => {
     let active = true;
@@ -53,6 +66,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
           setOrganization(null);
           setMemberRole(null);
           setLoadingOrg(false);
+          localStorage.removeItem('mn_org_context');
         }
         return;
       }
@@ -88,6 +102,10 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         if (active) {
           setOrganization(currentOrg);
           setMemberRole(roleData);
+          localStorage.setItem('mn_org_context', JSON.stringify({
+            organization: currentOrg,
+            memberRole: roleData
+          }));
         }
       } catch (error) {
         console.error("Error loading organization context:", error);
@@ -103,8 +121,26 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     };
   }, [user, profile, authLoading]);
 
+  const hasPermission = useCallback((permissionName: string) => {
+    // If the user is a global 'ceo', they might bypass some checks globally or within the org
+    if (profile?.systemRole === 'ceo' || profile?.systemRole === 'admin') {
+      return true;
+    }
+    
+    // Otherwise fallback to memberRole permissions
+    if (!memberRole?.permissions) return false;
+    return !!memberRole.permissions[permissionName];
+  }, [profile?.systemRole, memberRole?.permissions]);
+
+  const contextValue = useMemo(() => ({
+    organization,
+    memberRole,
+    loadingOrg,
+    hasPermission
+  }), [organization, memberRole, loadingOrg, hasPermission]);
+
   return (
-    <OrganizationContext.Provider value={{ organization, memberRole, loadingOrg }}>
+    <OrganizationContext.Provider value={contextValue}>
       {children}
     </OrganizationContext.Provider>
   );

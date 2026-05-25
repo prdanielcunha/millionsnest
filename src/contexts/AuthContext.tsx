@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useMemo } from "react";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../lib/firebase.js";
@@ -35,7 +35,14 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    try {
+      const cached = localStorage.getItem('mn_user_profile');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -77,7 +84,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Atualizar lastLoginAt e possível org
             await setDoc(userRef, mergeData, { merge: true });
             
-            setProfile({ ...userData, lastLoginAt: new Date() });
+            const updatedProfile = { ...userData, lastLoginAt: new Date() };
+            setProfile(updatedProfile);
+            localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
           } else {
             // Criar novo usuário
             const inviteOrgId = localStorage.getItem('invite_org_id');
@@ -134,12 +143,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
 
             setProfile(newProfile as UserProfile);
+            localStorage.setItem('mn_user_profile', JSON.stringify(newProfile));
           }
         } catch (error) {
           console.error("Erro ao carregar ou criar perfil do usuário:", error);
         }
       } else {
         setProfile(null);
+        localStorage.removeItem('mn_user_profile');
+        localStorage.removeItem('mn_org_context');
       }
       
       setLoading(false);
@@ -149,11 +161,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = async () => {
+    localStorage.removeItem('mn_user_profile');
+    localStorage.removeItem('mn_org_context');
     await signOut(auth);
   };
 
+  const contextValue = useMemo(() => ({
+    user,
+    profile,
+    loading,
+    logout
+  }), [user, profile, loading]);
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, logout }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
