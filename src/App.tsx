@@ -6,6 +6,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { AuthProvider } from './contexts/AuthContext.js';
+import { OrganizationProvider } from './contexts/OrganizationContext.js';
 
 const Home = lazy(() => import('./pages/Home.js').then(module => ({ default: module.Home })));
 const Terms = lazy(() => import('./pages/Terms.js').then(module => ({ default: module.Terms })));
@@ -29,23 +30,25 @@ function LoadingFallback() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Suspense fallback={<LoadingFallback />}>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/admin/debug/organization" element={<AdminDebug />} />
-            <Route path="/admin/ecosystem" element={<EcosystemAdmin />} />
-            <Route path="/upgrade" element={<Checkout />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/termos-de-uso" element={<Terms />} />
-            <Route path="/politica-de-privacidade" element={<Privacy />} />
-            <Route path="/politicas-de-reembolso" element={<Refunds />} />
-            <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
+      <OrganizationProvider>
+        <BrowserRouter>
+          <Suspense fallback={<LoadingFallback />}>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/admin/debug/organization" element={<AdminDebug />} />
+              <Route path="/admin/ecosystem" element={<EcosystemAdmin />} />
+              <Route path="/upgrade" element={<Checkout />} />
+              <Route path="/checkout" element={<Checkout />} />
+              <Route path="/termos-de-uso" element={<Terms />} />
+              <Route path="/politica-de-privacidade" element={<Privacy />} />
+              <Route path="/politicas-de-reembolso" element={<Refunds />} />
+              <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </OrganizationProvider>
     </AuthProvider>
   );
 }
