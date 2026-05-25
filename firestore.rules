@@ -16,6 +16,7 @@ service cloud.firestore {
 
     function checkMemberExists(orgId) {
       return (orgId is string) && (
+        exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)) ||
         exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)) ||
         exists(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid))
       );
@@ -65,11 +66,13 @@ service cloud.firestore {
     }
     
     function getMemberRole(orgId) {
-       return exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId))
-         ? get(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)).data.role
-         : (exists(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid))
-            ? get(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid)).data.role
-            : null);
+       return exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid))
+         ? get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.role
+         : (exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId))
+            ? get(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)).data.role
+            : (exists(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid))
+               ? get(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid)).data.role
+               : null));
     }
 
     function isOrgAdmin(orgId) {
@@ -82,9 +85,24 @@ service cloud.firestore {
       return role == 'owner' || orgId == request.auth.uid;
     }
 
+    function getMemberPermissions(orgId) {
+      return exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid))
+         ? get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data
+         : (exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId))
+            ? get(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)).data
+            : (exists(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid))
+               ? get(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid)).data
+               : null));
+    }
+
     function hasPermission(orgId, permission) {
-      let role = getMemberRole(orgId);
-      return role == 'owner' || role == 'admin' || role == 'member';
+      let memberData = getMemberPermissions(orgId);
+      let role = memberData != null ? memberData.role : null;
+      let hasExplicitPerm = memberData != null && 'permissions' in memberData && permission in memberData.permissions && memberData.permissions[permission] == true;
+      
+      // Endurecimento progressivo: liberado para admin/owner/systemAdmin, ou se tiver a permissão explicitamente.
+      // E fallback tolerante para 'member' para não quebrar a produção abruptamente.
+      return isSystemAdmin() || role == 'owner' || role == 'admin' || hasExplicitPerm || role == 'member';
     }
     
     function isSystemAdmin() {
@@ -128,6 +146,31 @@ service cloud.firestore {
         (checkMemberExists(orgId) && isOrgOwner(orgId))
       );
       allow delete: if false; 
+
+      // ---------------------------------------------------------------------------------
+      // MULTI-TENANT ISOLATION (NOVA ESTRUTURA)
+      // ---------------------------------------------------------------------------------
+      
+      match /members/{uid} {
+        allow read: if isAuthenticated() && (
+          uid == request.auth.uid || checkOrgAccess(orgId) || isSystemAdmin()
+        );
+        allow list: if isAuthenticated() && (checkOrgAccess(orgId) || isSystemAdmin());
+        allow create: if isAuthenticated() && (
+          uid == request.auth.uid || isOrgAdmin(orgId) || isSystemAdmin()
+        );
+        allow update, delete: if isAuthenticated() && (
+          isOrgAdmin(orgId) || isSystemAdmin()
+        );
+      }
+
+      // Generic match for all apps inside the organization (e.g. /organizations/{orgId}/musicscale/songs/{songId})
+      match /{app}/{document=**} {
+        allow read: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        // Progressivo: permitir updates genéricos para quem tem acesso em fase de fallback
+        allow update, delete: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+      }
     }
 
     match /organization_members/{id} {
@@ -308,6 +351,26 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (isSystemAdmin() || resource.data.submittedBy == request.auth.uid);
       allow create: if isAuthenticated() && hasOrgContext(incoming());
       allow update, delete: if isSystemAdmin();
+    }
+    // ==========================================
+    // 7. ECOSYSTEM INFRASTRUCTURE COLLECTIONS
+    // ==========================================
+
+    match /audit_logs/{logId} {
+      // Audit logs are write-only for clients (or read for admins)
+      allow create: if isAuthenticated(); 
+      allow read: if isSystemAdmin();
+      allow update, delete: if false; // Immutable
+    }
+
+    match /apps/{appId} {
+      allow read: if isAuthenticated(); // Anyone in the system can read available apps
+      allow write: if isSystemAdmin();
+    }
+
+    match /system_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isSystemAdmin();
     }
   }
 }
