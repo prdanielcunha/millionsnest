@@ -1,27 +1,29 @@
 import { motion } from "framer-motion";
 import { CalendarDays, Users, QrCode, Music, MessageSquare, BarChart3, Bot } from "lucide-react";
+import { useTranslation, Trans } from 'react-i18next';
 
 export function Ecosystem() {
+  const { t } = useTranslation(['landing']);
   const futureApps = [
     {
-      title: "Louvor e Repertório",
+      title: t('eco_feat1_title'),
       icon: <Music className="w-5 h-5" />,
-      desc: "MusicScale: nosso primeiro módulo ativo. Escalas, cifras e gestão de banda na ponta dos dedos.",
-      features: ["Disponível agora", "Revisão e integração ativa"],
+      desc: t('eco_feat1_desc'),
+      features: [],
       active: true
     },
     {
-      title: "Cultos e Escalas",
+      title: t('eco_feat2_title'),
       icon: <CalendarDays className="w-5 h-5" />,
-      desc: "Planejamento e coordenação completa da liturgia, direção e equipes voluntárias.",
-      features: ["Ordem de culto", "Gestão de voluntários"],
+      desc: t('eco_feat2_desc'),
+      features: [],
       active: false
     },
     {
-      title: "Células e Pequenos Grupos",
+      title: t('eco_feat3_title'),
       icon: <Users className="w-5 h-5" />,
-      desc: "Gerenciamento estratégico para células e relatórios sobre a saúde pastoral.",
-      features: ["Métricas avançadas", "Cuidado pastoral"],
+      desc: t('eco_feat3_desc'),
+      features: [],
       active: false
     },
     {
@@ -46,7 +48,7 @@ export function Ecosystem() {
             viewport={{ once: true }}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-medium text-[#A0A7B5] uppercase tracking-widest mb-6"
           >
-            A Visão MillionsNest
+            {t('eco_tag')}
           </motion.div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
@@ -54,7 +56,7 @@ export function Ecosystem() {
             viewport={{ once: true }}
             className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight mb-6"
           >
-            Um ecossistema criado para fortalecer a operação ministerial.
+            <Trans i18nKey="landing:eco_title" components={{ 1: <span className="text-[#2B85EB]" /> }} />
           </motion.h2>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
@@ -62,7 +64,7 @@ export function Ecosystem() {
             viewport={{ once: true }}
             className="text-lg text-[#A0A7B5] font-normal leading-relaxed"
           >
-            Hoje, MusicScale. Amanhã, uma infraestrutura completa para conectar áreas, equipes, dados e decisões em uma única plataforma.
+            {t('eco_desc')}
           </motion.p>
         </div>
 

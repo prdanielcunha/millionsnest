@@ -1,7 +1,9 @@
 import { motion } from "framer-motion";
 import { Users, Heart, Lightbulb } from "lucide-react";
+import { useTranslation, Trans } from 'react-i18next';
 
 export function Vision() {
+  const { t } = useTranslation(['landing']);
   const pillars = [
     {
       title: "Pessoas",
@@ -32,7 +34,7 @@ export function Vision() {
             viewport={{ once: true }}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-medium text-[#A0A7B5] uppercase tracking-widest mb-6"
           >
-            A Essência
+            {t('vision_tag')}
           </motion.div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
@@ -40,10 +42,16 @@ export function Vision() {
             viewport={{ once: true }}
             className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight leading-loose md:leading-snug"
           >
-            Feita para pessoas.<br />
-            <span className="text-[#A0A7B5]">Movida por propósito.</span><br />
-            Construída para transformar.
+            <Trans i18nKey="landing:vision_title" components={{ 1: <span className="text-[#A0A7B5]" /> }} />
           </motion.h2>
+           <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-lg text-[#A0A7B5] font-normal leading-relaxed mt-4 max-w-2xl mx-auto"
+          >
+            {t('vision_desc')}
+          </motion.p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-12">

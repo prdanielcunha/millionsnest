@@ -1,28 +1,31 @@
 import { motion } from "framer-motion";
 import { Quote, Star } from "lucide-react";
+import { useTranslation, Trans } from 'react-i18next';
 
-const testimonials = [
-  {
-    name: "Pr. Marcos Oliveira",
-    role: "Líder de Louvor, Igreja Batista Central",
-    content: "O MusicScale mudou a forma como organizamos nossas cifras e escalas. Antes era uma confusão de PDFs, agora tudo está em um só lugar.",
+export function Testimonials() {
+  const { t } = useTranslation(['landing']);
+  
+  const testimonials = [
+    {
+      name: t('test_1_name'),
+      role: t('test_1_role'),
+      content: t('test_1_quote'),
     avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&q=80"
   },
   {
-    name: "André Santos",
-    role: "Diretor Musical",
-    content: "A agilidade para mudar o tom de uma música e o time todo receber a atualização na hora é impressionante. Economizamos horas de ensaio.",
+    name: t('test_2_name'),
+    role: t('test_2_role'),
+    content: t('test_2_quote'),
     avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop&q=80"
   },
   {
-    name: "Juliana Costa",
-    role: "Ministério de Música",
-    content: "Super intuitivo. Até quem não tem muita afinidade com tecnologia na equipe conseguiu usar sem problemas. O suporte é excelente.",
+    name: t('test_3_name'),
+    role: t('test_3_role'),
+    content: t('test_3_quote'),
     avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&q=80"
   }
 ];
 
-export function Testimonials() {
   return (
     <section id="depoimentos" className="py-24 bg-[#050505] relative">
       <div className="max-w-7xl mx-auto px-6">
@@ -34,13 +37,13 @@ export function Testimonials() {
             className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-xs font-semibold mb-6"
           >
             <Star className="w-3 h-3 fill-current" />
-            Prova Social
+            {t('test_tag')}
           </motion.div>
           <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-[#F5F7FA] mb-6">
-            Quem usa, <span className="text-[#2B85EB]">confia</span>
+            <Trans i18nKey="landing:test_title" components={{ 1: <span className="text-[#2B85EB]" /> }} />
           </h2>
           <p className="text-[#A0A7B5] max-w-2xl mx-auto">
-            Times de louvor e departamentos musicais que profissionalizaram sua gestão com o MusicScale.
+            {t('test_desc')}
           </p>
         </div>
 

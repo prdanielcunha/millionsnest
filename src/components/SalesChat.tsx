@@ -1,23 +1,26 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, User, ChevronRight, DollarSign, Wrench, Handshake } from "lucide-react";
-
-const commonQuestions = [
-  {
-    q: "Como funciona o teste grátis?",
-    a: "Você tem 7 dias de acesso total em qualquer plano. Nada será cobrado se você cancelar antes do prazo."
-  },
-  {
-    q: "Quais os planos disponíveis?",
-    a: "Temos o Starter (essencial) e o Pro (completo com Biblioteca Viva). Veja a seção de preços para detalhes."
-  },
-  {
-    q: "Compartilhamento no WhatsApp?",
-    a: "Sim! Você pode compartilhar todas as suas escalas e setlists diretamente para o WhatsApp do grupo ou da equipe com um clique."
-  }
-];
+import { useTranslation } from 'react-i18next';
 
 export function SalesChat() {
+  const { t } = useTranslation(['landing']);
+  
+  const commonQuestions = [
+    {
+      q: t('faq_q1'),
+      a: t('faq_a1')
+    },
+    {
+      q: t('faq_q2'),
+      a: t('faq_a2')
+    },
+    {
+      q: t('faq_q3'),
+      a: t('faq_a3')
+    }
+  ];
+
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<'intent' | 'faq' | 'input'>('intent');
   const [selectedIntent, setSelectedIntent] = useState<'pricing' | 'support' | 'partnership' | null>(null);
@@ -106,12 +109,12 @@ export function SalesChat() {
                   <h3 className="font-bold text-lg">Consultor MusicScale</h3>
                   <div className="flex items-center gap-1.5 text-xs text-white/80">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    Online agora
+                    Online
                   </div>
                 </div>
               </div>
               <p className="text-sm text-white/90 leading-relaxed">
-                Olá! Como podemos ajudar a transformar o seu ministério hoje?
+                {t('chat_greet')}
               </p>
             </div>
 
@@ -136,7 +139,7 @@ export function SalesChat() {
                         <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <DollarSign className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">Planos e Preços</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">{t('pricing_title')}</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
@@ -149,7 +152,7 @@ export function SalesChat() {
                         <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <Wrench className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">Suporte Técnico</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">{t('faq_tag')}</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
@@ -238,7 +241,7 @@ export function SalesChat() {
                         autoFocus
                         value={userQuestion}
                         onChange={(e) => setUserQuestion(e.target.value)}
-                        placeholder="Digite sua mensagem aqui..."
+                        placeholder={t('chat_placeholder')}
                         className="w-full h-24 p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-[#F5F7FA] placeholder:text-[#A0A7B5]/40 focus:border-[#2B85EB]/50 focus:outline-none transition-all resize-none"
                       />
                     </div>
@@ -247,7 +250,7 @@ export function SalesChat() {
                       className="w-full py-4 bg-[#2B85EB] text-white text-sm font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-[#1a5fb4] transition-colors"
                     >
                       <Send className="w-4 h-4" />
-                      Iniciar conversa
+                      {t('chat_button')}
                     </button>
                   </motion.div>
                 )}

@@ -2,8 +2,10 @@ import { motion } from "framer-motion";
 import { Music, LayoutGrid, Smartphone, Database, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { EscalasMockup } from "./EscalasMockup.js";
+import { useTranslation, Trans } from 'react-i18next';
 
 export function Flagship() {
+  const { t } = useTranslation(['landing']);
   return (
     <section id="funcionalidades" className="py-24 md:py-32 bg-[#050505] text-[#F5F7FA] relative overflow-hidden border-b border-white/5">
       {/* Dark mode glow */}
@@ -21,7 +23,7 @@ export function Flagship() {
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#2B85EB]/10 text-[#2B85EB] text-xs font-semibold mb-6 uppercase tracking-widest border border-[#2B85EB]/20"
             >
               <Music className="w-3.5 h-3.5" />
-              MusicScale
+              {t('flagship_tag')}
             </motion.div>
             <motion.h2 
               initial={{ opacity: 0, y: 20 }}
@@ -29,7 +31,7 @@ export function Flagship() {
               viewport={{ once: true }}
               className="text-4xl md:text-6xl font-semibold tracking-tight mb-6"
             >
-              MusicScale: excelência <br className="hidden md:block" /> e fluidez para o louvor.
+              <Trans i18nKey="landing:flagship_title" components={{ 1: <span className="text-[#2B85EB]" /> }} />
             </motion.h2>
             <motion.p 
               initial={{ opacity: 0, y: 20 }}
@@ -37,7 +39,7 @@ export function Flagship() {
               viewport={{ once: true }}
               className="text-lg md:text-xl text-[#A0A7B5] font-normal leading-relaxed"
             >
-              Organize repertórios, escalas, cifras, tons, ministros e preparação da equipe em uma experiência simples, rápida e premium.
+              {t('flagship_desc')}
             </motion.p>
           </div>
           
@@ -51,7 +53,7 @@ export function Flagship() {
               to="/login" 
               className="px-8 py-4 rounded-xl bg-[#F5F7FA] text-[#050505] font-semibold hover:bg-white transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto"
             >
-              Explorar MusicScale
+              {t('flagship_cta')}
             </Link>
           </motion.div>
         </div>
@@ -89,9 +91,9 @@ export function Flagship() {
             <div className="p-8 pb-4 relative z-10">
               <div className="flex items-center gap-3 mb-2">
                 <LayoutGrid className="w-5 h-5 text-[#2B85EB]" />
-                <h3 className="text-2xl font-semibold text-[#F5F7FA]">Setlists e Escalas</h3>
+                <h3 className="text-2xl font-semibold text-[#F5F7FA]">{t('flagship_feature2_title')}</h3>
               </div>
-              <p className="text-[#A0A7B5] font-normal">Músicas escaladas com detalhes de <strong>versão, tom e BPM</strong>. Organização absoluta para o altar.</p>
+              <p className="text-[#A0A7B5] font-normal"><Trans i18nKey="landing:flagship_feature2_desc" components={{ 1: <strong /> }} /></p>
             </div>
             
             {/* Visual element */}
@@ -117,8 +119,8 @@ export function Flagship() {
               <div className="px-2 py-1 rounded bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[10px] font-bold text-[#2B85EB] uppercase tracking-tighter">WhatsApp ready</div>
             </div>
             <div className="relative z-10">
-              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Equipe e Banda</h3>
-              <p className="text-[#A0A7B5] font-normal leading-snug">Escala de músicos e compartilhamento direto para o <strong>WhatsApp</strong> do grupo.</p>
+              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">{t('flagship_feature3_title')}</h3>
+              <p className="text-[#A0A7B5] font-normal leading-snug"><Trans i18nKey="landing:flagship_feature3_desc" components={{ 1: <strong /> }} /></p>
             </div>
           </motion.div>
 
@@ -136,8 +138,10 @@ export function Flagship() {
               <div className="w-12 h-12 flex items-center justify-center bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl border border-[#2B85EB]/20 text-sm font-bold font-mono shadow-sm">D</div>
             </div>
             <div className="relative z-10">
-              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">Transposição</h3>
-              <p className="text-[#A0A7B5] font-normal leading-snug">Mude o tom da cifra instantaneamente com um clique.</p>
+              <h3 className="text-2xl font-semibold mb-2 text-[#F5F7FA]">{t('flagship_feature4_title')}</h3>
+              <p className="text-[#A0A7B5] font-normal leading-snug">
+                <Trans i18nKey="landing:flagship_feature4_desc" components={{ 1: <strong /> }} />
+              </p>
             </div>
           </motion.div>
 
@@ -152,11 +156,10 @@ export function Flagship() {
              <div className="flex-1 w-full relative z-10">
                <div className="flex items-center gap-3 mb-2">
                  <Database className="w-5 h-5 text-[#2B85EB]" />
-                 <h3 className="text-2xl font-semibold text-[#F5F7FA]">Acervo e Formatação</h3>
+                 <h3 className="text-2xl font-semibold text-[#F5F7FA]">{t('flagship_feature1_title')}</h3>
                </div>
                <p className="text-[#A0A7B5] font-normal mb-8">
-                 Biblioteca atualizada periodicamente com milhares de músicas. 
-                 Letras e cifras com <strong>formatação customizada</strong> de cores e fontes para máxima leitura no altar.
+                 <Trans i18nKey="landing:flagship_feature1_desc" components={{ 1: <strong /> }} />
                </p>
                <div className="flex gap-4">
                  <div className="flex flex-col gap-1">

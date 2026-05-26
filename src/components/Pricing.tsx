@@ -3,8 +3,10 @@ import { motion } from "framer-motion";
 import { Check, Star, Zap, Headphones, Settings, Video, ListMusic } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.js";
+import { useTranslation, Trans } from 'react-i18next';
 
 export function Pricing() {
+  const { t } = useTranslation(['landing']);
   const [isAnnual, setIsAnnual] = useState(true);
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -85,7 +87,7 @@ export function Pricing() {
             viewport={{ once: true }}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-[#A0A7B5] uppercase tracking-widest mb-6"
           >
-            Investimento
+            {t('pricing_tag')}
           </motion.div>
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
@@ -93,7 +95,7 @@ export function Pricing() {
             viewport={{ once: true }}
             className="text-3xl md:text-5xl font-semibold tracking-tight text-[#F5F7FA] mb-6"
           >
-            Acessível. Escalável. Premium.
+            {t('pricing_title')}
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -102,8 +104,7 @@ export function Pricing() {
             transition={{ delay: 0.1 }}
             className="text-[#A0A7B5] text-lg"
           >
-            Escolha o plano ideal para o tamanho do seu time. <br />
-            <span className="text-[#2B85EB] font-medium">Cancele a qualquer momento. 7 dias por nossa conta.</span>
+            <Trans i18nKey="landing:pricing_desc" components={{ 1: <br />, 2: <span className="text-[#2B85EB] font-medium" /> }} />
           </motion.p>
           
           <motion.div 
@@ -142,16 +143,16 @@ export function Pricing() {
             transition={{ delay: 0.1 }}
             className="bg-[#0B0F19] rounded-[2rem] p-6 md:p-10 border border-white/5 relative z-10 flex flex-col h-full hover:border-white/10 transition-colors"
           >
-            <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">Starter</h3>
+              <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">{t('pricing_plan1_name')}</h3>
             <p className="text-[#A0A7B5] text-sm mb-6 min-h-[60px]">
-              Ideal para equipes e igrejas que desejam organizar o ministério de louvor com simplicidade e excelência.
+              {t('pricing_plan1_desc')}
             </p>
             
             <div className="flex items-baseline gap-1 mb-1">
               <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
                  R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
               </span>
-              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/mês</span>
+              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/{t('pricing_period')}</span>
             </div>
             
             <div className="mt-2 mb-6">
@@ -173,20 +174,15 @@ export function Pricing() {
               onClick={() => handlePurchase(isAnnual ? 'musicscale_starter_yearly' : 'musicscale_starter_monthly')}
               className="w-full py-4 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block select-none"
             >
-              Começar com o Starter
+              {t('pricing_plan1_cta')}
             </button>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5">
               {[
-                "Músicas ilimitadas",
-                "Escalas ilimitadas",
-                "Até 10 pessoas por organização",
-                "Compartilhamento de escalas",
-                "Organização por cultos e eventos",
-                "Personalização básica",
-                "Acesso mobile",
-                "Sincronização em nuvem",
-                "Suporte padrão",
+                t('pricing_plan1_f1'),
+                t('pricing_plan1_f2'),
+                t('pricing_plan1_f3'),
+                t('pricing_plan1_f4'),
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#A0A7B5]">
                   <Check className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />
@@ -209,14 +205,14 @@ export function Pricing() {
             {plansData?.find(p => p.lookupKey === 'musicscale_pro_monthly')?.featured && (
               <div className="absolute top-4 right-4 md:top-6 md:right-8">
                 <div className="bg-[#2B85EB] text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-widest flex items-center gap-1">
-                  <Star className="w-3 h-3" /> Mais Popular
+                  <Star className="w-3 h-3" /> {t('pricing_popular')}
                 </div>
               </div>
             )}
 
-            <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-4 md:mt-0">Pro</h3>
+            <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-4 md:mt-0">{t('pricing_plan2_name')}</h3>
             <p className="text-[#A0A7B5] text-sm mb-4 min-h-[60px] relative z-10">
-              Para ministérios que desejam mais liberdade, crescimento e acesso contínuo aos recursos premium do MusicScale.
+              {t('pricing_plan2_desc')}
             </p>
             <div className="bg-[#2B85EB]/10 border border-[#2B85EB]/20 rounded-xl p-4 mb-6 relative z-10">
               <h4 className="text-[#2B85EB] font-bold text-[11px] md:text-xs mb-1.5 uppercase tracking-widest break-words leading-tight">Biblioteca Viva MusicScale</h4>
@@ -227,7 +223,7 @@ export function Pricing() {
               <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
                  R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
               </span>
-              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/mês</span>
+              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/{t('pricing_period')}</span>
             </div>
 
             <div className="mt-2 mb-6 relative z-10">
@@ -249,18 +245,16 @@ export function Pricing() {
               onClick={() => handlePurchase(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
               className="w-full py-4 px-3 md:px-6 rounded-xl bg-gradient-to-r from-[#2B85EB]/80 to-[#2B85EB] text-[#F5F7FA] border border-[#2B85EB] text-center font-semibold text-sm md:text-base hover:from-[#2B85EB] hover:to-[#4ca4ff] transition-all shadow-[0_0_20px_rgba(43,133,235,0.2)] hover:shadow-[0_0_30px_rgba(43,133,235,0.4)] active:scale-95 mt-2 mb-8 block relative z-10 select-none"
             >
-              Assinar o Plano Pro
+              {t('pricing_plan2_cta')}
             </button>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5 relative z-10">
               {[
-                "Tudo do Starter",
-                "Pessoas ilimitadas por organização",
-                "Acesso à Biblioteca Viva MusicScale",
-                "Novas músicas adicionadas continuamente",
-                "Atualização constante do acervo",
-                "Experiência premium",
-                "Prioridade em novos recursos"
+                t('pricing_plan2_f1'),
+                t('pricing_plan2_f2'),
+                t('pricing_plan2_f3'),
+                t('pricing_plan2_f4'),
+                t('pricing_plan2_f5'),
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#F5F7FA]">
                   <Zap className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />

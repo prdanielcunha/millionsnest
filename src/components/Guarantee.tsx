@@ -1,7 +1,9 @@
 import { motion } from "framer-motion";
 import { ShieldCheck, Calendar, RotateCcw } from "lucide-react";
+import { useTranslation, Trans } from 'react-i18next';
 
 export function Guarantee() {
+  const { t } = useTranslation(['landing']);
   return (
     <section className="py-16 bg-[#050505] border-t border-white/5">
       <div className="max-w-7xl mx-auto px-6">
@@ -12,13 +14,13 @@ export function Guarantee() {
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-500 text-xs font-semibold mb-6">
                 <ShieldCheck className="w-3 h-3" />
-                Risco Zero
+                {t('guarantee_tag')}
               </div>
               <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#F5F7FA] mb-6">
-                Garantia <span className="text-[#2B85EB]">Blindada</span> MusicScale
+                <Trans i18nKey="landing:guarantee_title" components={{ 1: <span className="text-[#2B85EB]" /> }} />
               </h2>
               <p className="text-[#A0A7B5] text-lg leading-relaxed mb-8">
-                Experimente o MusicScale por 7 dias com acesso total. Se por qualquer motivo você sentir que não é para o seu ministério, basta cancelar no painel com um clique. Sem perguntas, sem burocracia e sem cobranças parciais.
+                {t('guarantee_desc')}
               </p>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -36,7 +38,7 @@ export function Guarantee() {
                     <RotateCcw className="w-5 h-5 text-[#2B85EB]" />
                   </div>
                   <div>
-                    <h4 className="text-[#F5F7FA] font-semibold text-sm">Cancelamento Fácil</h4>
+                    <h4 className="text-[#F5F7FA] font-semibold text-sm">{t('guarantee_cta')}</h4>
                     <p className="text-[#A0A7B5] text-xs">Um clique e está feito</p>
                   </div>
                 </div>

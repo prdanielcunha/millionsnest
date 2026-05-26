@@ -1,7 +1,9 @@
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
+import { useTranslation } from 'react-i18next';
 
 export function SocialProof() {
+  const { t } = useTranslation(['landing']);
   return (
     <section className="py-16 md:py-24 bg-[#050505] border-b border-white/5">
       <div className="max-w-7xl mx-auto px-6 text-center">
@@ -11,7 +13,7 @@ export function SocialProof() {
           viewport={{ once: true, margin: "-100px" }}
           className="text-[#A0A7B5] font-normal text-sm md:text-base max-w-2xl mx-auto"
         >
-          Líderes de excelência estão abandonando planilhas e grupos confusos para elevar o nível da sua gestão.
+          {t('social_proof_title')}
         </motion.p>
         
         <motion.div 
@@ -43,7 +45,7 @@ export function SocialProof() {
               ))}
             </div>
             <p className="text-sm font-semibold text-[#F5F7FA] mt-2">
-              Amado por ministérios em todo o Brasil
+              {t('social_proof_loved')}
             </p>
           </div>
         </motion.div>

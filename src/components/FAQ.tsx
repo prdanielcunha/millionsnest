@@ -1,31 +1,29 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Minus, HelpCircle } from "lucide-react";
-
-const faqs = [
-  {
-    question: "Como funciona o teste de 7 dias grátis?",
-    answer: "Ao assinar qualquer plano, você tem 7 dias de acesso total sem cobrança. Você pode cancelar a qualquer momento dentro desse período pelo painel e nada será debitado do seu cartão."
-  },
-  {
-    question: "Preciso cadastrar cartão de crédito para testar?",
-    answer: "Sim, solicitamos o cadastro para garantir que a transição para a assinatura oficial seja perfeita caso você decida continuar, mas o primeiro débito só ocorre após os 7 dias."
-  },
-  {
-    question: "Posso mudar de plano depois?",
-    answer: "Com certeza! Você pode fazer o upgrade ou downgrade do seu plano diretamente nas configurações da sua conta a qualquer momento."
-  },
-  {
-    question: "O MusicScale funciona offline?",
-    answer: "As cifras que você visualizou recentemente ficam salvas no cache do seu navegador para consulta rápida, mas para sincronização completa e novas músicas, é necessária conexão com a internet."
-  },
-  {
-    question: "O que acontece se eu cancelar?",
-    answer: "Se você cancelar, manterá o acesso até o final do período já pago (ou período de teste). Após isso, sua conta voltará para o nível gratuito com limitações."
-  }
-];
+import { useTranslation, Trans } from 'react-i18next';
 
 export function FAQ() {
+  const { t } = useTranslation(['landing']);
+  const faqs = [
+    {
+      question: t('faq_q1'),
+      answer: t('faq_a1')
+    },
+    {
+      question: t('faq_q2'),
+      answer: t('faq_a2')
+    },
+    {
+      question: t('faq_q3'),
+      answer: t('faq_a3')
+    },
+    {
+      question: t('faq_q4'),
+      answer: t('faq_a4')
+    }
+  ];
+
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
@@ -34,14 +32,11 @@ export function FAQ() {
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-xs font-semibold mb-6">
             <HelpCircle className="w-3 h-3" />
-            Suporte
+            {t('faq_tag')}
           </div>
           <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-[#F5F7FA] mb-6">
-            Dúvidas <span className="text-[#2B85EB]">Frequentes</span>
+            <Trans i18nKey="landing:faq_title" components={{ 1: <span className="text-[#2B85EB]" /> }} />
           </h2>
-          <p className="text-[#A0A7B5]">
-            Tudo o que você precisa saber antes de profissionalizar seu time.
-          </p>
         </div>
 
         <div className="space-y-4">
