@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Menu, X, LogOut, LayoutDashboard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '../lib/utils.js';
+import { LanguageSwitcher } from './LanguageSwitcher.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { eventBus } from '../packages/events/index.js';
 
@@ -51,6 +52,7 @@ export function Navbar() {
 
         {/* Actions */}
         <div className="hidden lg:flex items-center gap-4">
+          <LanguageSwitcher />
           {user ? (
             <>
               <button onClick={openSearch} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 text-[#A0A7B5] hover:text-[#F5F7FA] transition-colors">
@@ -82,6 +84,7 @@ export function Navbar() {
 
         {/* Mobile Toggle & Search */}
         <div className="lg:hidden flex items-center gap-3">
+          <LanguageSwitcher />
           {user && (
             <button 
               className="text-[#A0A7B5] hover:text-white transition-colors bg-white/5 p-2 rounded-lg"
