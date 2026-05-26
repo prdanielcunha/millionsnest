@@ -10,6 +10,24 @@ export default {
     edit: "Editar",
     delete: "Excluir"
   },
+  auth: {
+    welcome_back: "Bem-vindo de volta",
+    create_account: "Crie sua conta",
+    access_central: "Acesse a central MillionsNest",
+    firebase_error: "Firebase não está configurado. Verifique as variáveis de ambiente.",
+    auth_error: "Erro na autenticação",
+    google_error: "Erro ao fazer login com Google.",
+    continue_google: "Continuar com Google",
+    or: "Ou",
+    email: "Email",
+    email_placeholder: "seu@ministerio.com",
+    password: "Senha",
+    password_placeholder: "••••••••",
+    login_button: "Entrar",
+    create_button: "Criar conta",
+    no_account: "Não tem uma conta? Cadastre-se",
+    has_account: "Já possui conta? Entre"
+  },
   commandPalette: {
     placeholder: "O que você precisa fazer?",
     musicscale_placeholder: "Busque músicas, escalas, pessoas ou comandos...",
