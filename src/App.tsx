@@ -13,6 +13,7 @@ import { SmartResume } from './components/SmartResume.js';
 import { telemetry } from './packages/telemetry/index.js';
 import { performanceEngine } from './packages/telemetry/performance.js';
 import { i18nEngine } from './packages/i18n/index.js';
+import { ErrorBoundary } from './components/ErrorBoundary.js';
 
 const Home = lazy(() => import('./pages/Home.js').then(module => ({ default: module.Home })));
 const Terms = lazy(() => import('./pages/Terms.js').then(module => ({ default: module.Terms })));
@@ -53,15 +54,16 @@ function GlobalTelemetry() {
 
 export default function App() {
   return (
-    <I18nextProvider i18n={i18nEngine}>
-      <AuthProvider>
-        <OrganizationProvider>
-          <GlobalTelemetry />
-          <BrowserRouter>
-            <CommandPalette />
-            <SmartResume />
-            <Suspense fallback={<LoadingFallback />}>
-              <Routes>
+    <ErrorBoundary>
+      <I18nextProvider i18n={i18nEngine}>
+        <AuthProvider>
+          <OrganizationProvider>
+            <GlobalTelemetry />
+            <BrowserRouter>
+              <CommandPalette />
+              <SmartResume />
+              <Suspense fallback={<LoadingFallback />}>
+                <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/dashboard" element={<Dashboard />} />
@@ -79,5 +81,6 @@ export default function App() {
         </OrganizationProvider>
       </AuthProvider>
     </I18nextProvider>
+    </ErrorBoundary>
   );
 }

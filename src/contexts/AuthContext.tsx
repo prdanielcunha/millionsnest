@@ -4,6 +4,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../lib/firebase.js";
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 import { analytics } from "../lib/analytics.js";
+import { withTimeout } from "../lib/utils.js";
 
 interface UserProfile {
   uid: string;
@@ -61,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userRef = doc(db, "users", currentUser.uid);
         
         try {
-          const userSnap = await getDoc(userRef);
+          const userSnap = await withTimeout(getDoc(userRef), 8000, "Firestore timeout loading user");
           
           if (userSnap.exists()) {
             const userData = userSnap.data() as UserProfile;

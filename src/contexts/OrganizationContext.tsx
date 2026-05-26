@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode, useMemo, use
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { useAuth } from "./AuthContext.js";
+import { withTimeout } from "../lib/utils.js";
 
 interface Organization {
   id: string;
@@ -75,7 +76,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       try {
         const orgId = profile.organizationId;
         const orgRef = doc(db, "organizations", orgId);
-        const orgSnap = await getDoc(orgRef);
+        const orgSnap = await withTimeout(getDoc(orgRef), 8000, "Firestore timeout loading org");
 
         let currentOrg = null;
         if (orgSnap.exists()) {
@@ -85,7 +86,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         // Fetch user's role in this organization
         // We look at /organizations/{orgId}/members/{uid}
         const memberRef = doc(db, `organizations/${orgId}/members`, user.uid);
-        const memberSnap = await getDoc(memberRef);
+        const memberSnap = await withTimeout(getDoc(memberRef), 8000, "Firestore timeout loading member");
         
         let roleData = null;
         if (memberSnap.exists()) {
@@ -93,7 +94,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         } else {
           // Fallback checking legacy organization_members collection if migration not 100% complete
           const legacyMemberRef = doc(db, 'organization_members', `${user.uid}_${orgId}`);
-          const legacySnap = await getDoc(legacyMemberRef);
+          const legacySnap = await withTimeout(getDoc(legacyMemberRef), 8000, "Firestore timeout loading legacy member");
           if (legacySnap.exists()) {
             roleData = legacySnap.data() as MemberRole;
           }
