@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Menu, X, LogOut, LayoutDashboard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '../lib/utils.js';
+import { useTranslation, Trans } from 'react-i18next';
 import { LanguageSwitcher } from './LanguageSwitcher.js';
 import { useAuth } from '../contexts/AuthContext.js';
 import { eventBus } from '../packages/events/index.js';
@@ -11,6 +12,7 @@ export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, profile, logout } = useAuth();
+  const { t } = useTranslation(['common']);
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -51,13 +53,13 @@ export function Navbar() {
         </nav>
 
         {/* Actions */}
-        <div className="hidden lg:flex items-center gap-4">
+            <div className="hidden lg:flex items-center gap-4">
           <LanguageSwitcher />
           {user ? (
             <>
               <button onClick={openSearch} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 text-[#A0A7B5] hover:text-[#F5F7FA] transition-colors">
                 <Search className="w-4 h-4" />
-                <span className="text-xs font-medium">Buscar...</span>
+                <span className="text-xs font-medium">{t('common:search', 'Buscar...')}</span>
                 <kbd className="hidden md:inline-flex items-center gap-1 text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono font-bold tracking-wider ml-2">⌘K</kbd>
               </button>
               
@@ -65,18 +67,18 @@ export function Navbar() {
                  <span className="text-sm font-medium text-[#A0A7B5]">{profile?.displayName || user.email}</span>
                  <Link to="/dashboard" className="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg bg-[#0B0F19] text-white border border-white/10 hover:bg-white/5 transition-colors shadow-sm">
                     <LayoutDashboard className="w-4 h-4" />
-                    Painel
+                    {t('common:dashboard', 'Painel')}
                  </Link>
-                 <button onClick={logout} className="p-2 text-[#A0A7B5] hover:text-white transition-colors rounded-lg hover:bg-white/5">
+                 <button onClick={logout} className="p-2 text-[#A0A7B5] hover:text-white transition-colors rounded-lg hover:bg-white/5" title={t('common:logout')}>
                     <LogOut className="w-4 h-4" />
                  </button>
               </div>
             </>
           ) : (
             <>
-              <Link to="/login" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">Entrar</Link>
+              <Link to="/login" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:login', 'Entrar')}</Link>
               <Link to="/login" className="text-sm font-medium px-5 py-2.5 rounded-lg bg-[#F5F7FA] text-[#050505] hover:bg-white transition-all shadow-sm hover:shadow active:scale-95">
-                Teste grátis
+                {t('common:free_trial', 'Teste grátis')}
               </Link>
             </>
           )}
@@ -120,16 +122,16 @@ export function Navbar() {
                <>
                  <div className="flex items-center justify-between text-[#F5F7FA] font-medium">
                    <span className="truncate">{profile?.displayName || user.email}</span>
-                   <button onClick={() => { logout(); setMobileMenuOpen(false); }} className="p-2 text-[#A0A7B5] hover:text-white"><LogOut className="w-5 h-5"/></button>
+                   <button onClick={() => { logout(); setMobileMenuOpen(false); }} className="p-2 text-[#A0A7B5] hover:text-white" title={t('common:logout')}><LogOut className="w-5 h-5"/></button>
                  </div>
                  <Link to="/dashboard" className="text-lg font-medium bg-[#F5F7FA] text-[#050505] text-center py-3 rounded-lg flex items-center justify-center gap-2" onClick={() => setMobileMenuOpen(false)}>
-                   <LayoutDashboard className="w-5 h-5" /> Painel Central
+                   <LayoutDashboard className="w-5 h-5" /> {t('common:dashboard', 'Painel Central')}
                  </Link>
                </>
             ) : (
                <>
-                <Link to="/login" className="text-lg font-medium text-[#A0A7B5] hover:text-white" onClick={() => setMobileMenuOpen(false)}>Entrar</Link>
-                <Link to="/login" className="text-lg font-medium bg-[#F5F7FA] text-[#050505] hover:bg-white text-center py-3 rounded-lg" onClick={() => setMobileMenuOpen(false)}>Teste Grátis de 7 Dias</Link>
+                <Link to="/login" className="text-lg font-medium text-[#A0A7B5] hover:text-white" onClick={() => setMobileMenuOpen(false)}>{t('common:login', 'Entrar')}</Link>
+                <Link to="/login" className="text-lg font-medium bg-[#F5F7FA] text-[#050505] hover:bg-white text-center py-3 rounded-lg" onClick={() => setMobileMenuOpen(false)}>{t('common:free_trial_full', 'Teste Grátis de 7 Dias')}</Link>
                </>
             )}
           </motion.div>

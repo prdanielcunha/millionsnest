@@ -31,7 +31,7 @@ i18n
   .init({
     fallbackLng: 'pt',
     supportedLngs: ['pt', 'en', 'es'],
-    ns: ['common', 'auth', 'commandPalette', 'resume'],
+    ns: ['common', 'auth', 'commandPalette', 'resume', 'landing'],
     defaultNS: 'common',
     interpolation: {
       escapeValue: false, // React already safeguards from xss

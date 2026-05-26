@@ -3,12 +3,14 @@ import { ArrowRight, ChevronRight, Play } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Suspense, lazy } from "react";
 import { useAuth } from "../contexts/AuthContext.js";
+import { useTranslation, Trans } from 'react-i18next';
 
 const DashboardMockup = lazy(() => import("./DashboardMockup.js").then((m) => ({ default: m.DashboardMockup })));
 
 export function Hero() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation(['landing']);
 
   const handleCtaClick = () => {
     const defaultPlan = 'musicscale_pro_monthly';
@@ -42,7 +44,7 @@ export function Hero() {
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-[#A0A7B5] mb-8 hover:bg-white/10 transition-colors cursor-pointer group"
         >
           <span className="flex h-1.5 w-1.5 rounded-full bg-[#2B85EB] opacity-100 shadow-[0_0_8px_rgba(43,133,235,0.8)]"></span>
-          <span>A nova geração da <span className="text-[#F5F7FA] font-bold">gestão ministerial</span>. <span className="hidden sm:inline text-[#2B85EB]">7 dias grátis.</span></span>
+          <span><Trans i18nKey="landing:hero_tag" components={{ 1: <span className="text-[#F5F7FA] font-bold" /> }} /> <span className="hidden sm:inline text-[#2B85EB]">{t('hero_tag_free')}</span></span>
         </motion.div>
 
         <motion.h1
@@ -51,7 +53,7 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-[#F5F7FA] to-[#A0A7B5] max-w-5xl leading-[1.05] pb-2"
         >
-          Tecnologia para <br className="hidden md:block" /> fortalecer igrejas.
+          <Trans i18nKey="landing:hero_title" components={{ br: <br className="hidden md:block" /> }} />
         </motion.h1>
 
         <motion.p
@@ -60,7 +62,7 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="mt-8 text-lg md:text-xl text-[#A0A7B5] max-w-2xl font-normal leading-relaxed"
         >
-          O fim do caos operacional. Comece hoje seu teste de <span className="text-[#F5F7FA] font-semibold underline decoration-[#2B85EB]/50 underline-offset-4">7 dias grátis</span> e profissionalize seu ministério com excelência.
+          <Trans i18nKey="landing:hero_desc" components={{ 1: <span className="text-[#F5F7FA] font-semibold underline decoration-[#2B85EB]/50 underline-offset-4" /> }} />
         </motion.p>
 
         <motion.div
@@ -73,12 +75,12 @@ export function Hero() {
             onClick={handleCtaClick}
             className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#F5F7FA] text-[#050505] font-semibold hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 flex items-center justify-center gap-2 group"
           >
-            Começar agora
+            {t('hero_cta_primary')}
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
           <button onClick={() => alert('Vídeo de demonstração em breve!')} className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#0B0F19] text-[#F5F7FA] font-medium border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2 group shadow-sm">
             <Play className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors" />
-            Ver demonstração
+            {t('hero_cta_secondary')}
           </button>
         </motion.div>
 
