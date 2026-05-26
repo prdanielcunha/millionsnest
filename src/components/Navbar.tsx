@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, LogOut, LayoutDashboard } from 'lucide-react';
+import { Search, Menu, X, LogOut, LayoutDashboard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '../lib/utils.js';
 import { useAuth } from '../contexts/AuthContext.js';
+import { eventBus } from '../packages/events/index.js';
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -15,6 +16,14 @@ export function Navbar() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const openSearch = () => {
+    eventBus.publish('ui.command_palette.open', {
+      organizationId: profile?.organizationId || 'guest',
+      userId: user?.uid || 'guest',
+      appSource: 'core'
+    });
+  };
 
   return (
     <header
@@ -42,8 +51,14 @@ export function Navbar() {
 
         {/* Actions */}
         <div className="hidden lg:flex items-center gap-4">
+          <button onClick={openSearch} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 text-[#A0A7B5] hover:text-[#F5F7FA] transition-colors">
+            <Search className="w-4 h-4" />
+            <span className="text-xs font-medium">Buscar...</span>
+            <kbd className="hidden md:inline-flex items-center gap-1 text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono font-bold tracking-wider ml-2">⌘K</kbd>
+          </button>
+          
           {user ? (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 border-l border-white/10 pl-4">
                <span className="text-sm font-medium text-[#A0A7B5]">{profile?.displayName || user.email}</span>
                <Link to="/dashboard" className="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg bg-[#0B0F19] text-white border border-white/10 hover:bg-white/5 transition-colors shadow-sm">
                   <LayoutDashboard className="w-4 h-4" />
@@ -63,13 +78,21 @@ export function Navbar() {
           )}
         </div>
 
-        {/* Mobile Toggle */}
-        <button 
-          className="lg:hidden text-[#A0A7B5] hover:text-white transition-colors"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        {/* Mobile Toggle & Search */}
+        <div className="lg:hidden flex items-center gap-3">
+          <button 
+            className="text-[#A0A7B5] hover:text-white transition-colors bg-white/5 p-2 rounded-lg"
+            onClick={openSearch}
+          >
+            <Search size={20} />
+          </button>
+          <button 
+            className="text-[#A0A7B5] hover:text-white transition-colors"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Menu */}

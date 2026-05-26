@@ -42,6 +42,7 @@ export type EventMiddleware = (action: EventAction, payload: EventBusPayload) =>
  */
 class EcosystemEventBus {
   private middlewares: EventMiddleware[] = [];
+  private listeners: Map<string, Set<(payload: EventBusPayload) => void>> = new Map();
   private static instance: EcosystemEventBus;
 
   private constructor() {}
@@ -61,6 +62,25 @@ class EcosystemEventBus {
   }
 
   /**
+   * Subscribe to a specific event action
+   */
+  public subscribe(action: EventAction, callback: (payload: EventBusPayload) => void) {
+    if (!this.listeners.has(action)) {
+      this.listeners.set(action, new Set());
+    }
+    this.listeners.get(action)!.add(callback);
+  }
+
+  /**
+   * Unsubscribe from a specific event action
+   */
+  public unsubscribe(action: EventAction, callback: (payload: EventBusPayload) => void) {
+    if (this.listeners.has(action)) {
+      this.listeners.get(action)!.delete(callback);
+    }
+  }
+
+  /**
    * Publish an event to the ecosystem
    */
   public async publish(action: EventAction, payload: EventBusPayload) {
@@ -69,6 +89,13 @@ class EcosystemEventBus {
       ...payload,
       timestamp: Date.now()
     };
+
+    // Run listeners synchronously
+    if (this.listeners.has(action)) {
+      this.listeners.get(action)!.forEach(fn => {
+        try { fn(enrichedPayload) } catch (e) { console.error('Listener error', e) }
+      });
+    }
 
     // Run through middlewares concurrently
     await Promise.allSettled(

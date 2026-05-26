@@ -18,6 +18,7 @@ export * from './intelligence/graph';
 export * from './intelligence/health';
 export * from './intelligence/search';
 export * from './intelligence/ai-ops';
+export * from './intelligence/presence';
 
 // Auth & Security
 export * from './auth/index';

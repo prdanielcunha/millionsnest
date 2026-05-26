@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { AuthProvider } from './contexts/AuthContext.js';
 import { OrganizationProvider } from './contexts/OrganizationContext.js';
+import { CommandPalette } from './components/CommandPalette.js';
 
 const Home = lazy(() => import('./pages/Home.js').then(module => ({ default: module.Home })));
 const Terms = lazy(() => import('./pages/Terms.js').then(module => ({ default: module.Terms })));
@@ -32,6 +33,7 @@ export default function App() {
     <AuthProvider>
       <OrganizationProvider>
         <BrowserRouter>
+          <CommandPalette />
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
               <Route path="/" element={<Home />} />
