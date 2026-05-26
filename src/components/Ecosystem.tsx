@@ -9,28 +9,28 @@ export function Ecosystem() {
       title: t('eco_feat1_title'),
       icon: <Music className="w-5 h-5" />,
       desc: t('eco_feat1_desc'),
-      features: [],
+      features: [t('eco_app1_feat1', 'Disponível agora'), t('eco_app1_feat2', 'Revisão e integração ativa')],
       active: true
     },
     {
       title: t('eco_feat2_title'),
       icon: <CalendarDays className="w-5 h-5" />,
       desc: t('eco_feat2_desc'),
-      features: [],
+      features: [t('eco_app2_feat1', 'Ordem de culto'), t('eco_app2_feat2', 'Gestão de voluntários')],
       active: false
     },
     {
       title: t('eco_feat3_title'),
       icon: <Users className="w-5 h-5" />,
       desc: t('eco_feat3_desc'),
-      features: [],
+      features: [t('eco_app3_feat1', 'Métricas avançadas'), t('eco_app3_feat2', 'Cuidado pastoral')],
       active: false
     },
     {
-      title: "Membros e Visitantes",
+      title: t('eco_app4_title', 'Membros e Visitantes'),
       icon: <QrCode className="w-5 h-5" />,
-      desc: "Experiência de check-in, mapeamento de novos visitantes e relatórios precisos.",
-      features: ["Jornada do visitante", "Integração fluida"],
+      desc: t('eco_app4_desc', 'Experiência de check-in, mapeamento de novos visitantes e relatórios precisos.'),
+      features: [t('eco_app4_feat1', 'Jornada do visitante'), t('eco_app4_feat2', 'Integração fluida')],
       active: false
     }
   ];
@@ -82,12 +82,12 @@ export function Ecosystem() {
 
               {!app.active && (
                 <div className="absolute top-6 right-6 text-[9px] font-bold px-2 py-1.5 rounded-md bg-white/5 text-[#A0A7B5] uppercase tracking-widest border border-white/5">
-                  Em Breve
+                  {t('soon', 'Em Breve')}
                 </div>
               )}
               {app.active && (
                 <div className="absolute top-6 right-6 text-[9px] font-bold px-2 py-1.5 rounded-md bg-[#2B85EB]/10 text-[#2B85EB] uppercase tracking-widest border border-[#2B85EB]/20">
-                  Ao Vivo
+                  {t('live', 'Ao Vivo')}
                 </div>
               )}
               

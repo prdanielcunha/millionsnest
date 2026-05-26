@@ -64,7 +64,7 @@ export function Flagship() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           className="w-full h-[250px] sm:h-[400px] md:h-[500px] bg-[#0B0F19] rounded-[2rem] border border-white/5 mb-24 relative overflow-hidden flex items-center justify-center group cursor-pointer hover:border-white/10 transition-colors"
-          onClick={() => alert('Vídeo prático demonstrando o uso do app na igreja será adicionado aqui em breve!')}
+          onClick={() => alert(t('flagship_demo_alert', 'Vídeo prático demonstrando o uso do app na igreja será adicionado aqui em breve!'))}
         >
           <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent pointer-events-none" />
           <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/5 border border-white/10 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:bg-white/10 transition-all backdrop-blur-sm z-10 shadow-lg">
@@ -73,7 +73,7 @@ export function Flagship() {
             </svg>
           </div>
           <p className="absolute bottom-6 text-[#A0A7B5] text-sm font-medium z-10 flex items-center gap-2">
-            Ver aplicativo em ação <span className="text-xs px-2 py-0.5 rounded-md bg-white/5 border border-white/10">Em breve</span>
+            {t('flagship_watch_action', 'Ver aplicativo em ação')} <span className="text-xs px-2 py-0.5 rounded-md bg-white/5 border border-white/10">{t('soon', 'Em breve')}</span>
           </p>
         </motion.div>
 

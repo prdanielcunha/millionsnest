@@ -29,8 +29,8 @@ export function Guarantee() {
                     <Calendar className="w-5 h-5 text-[#2B85EB]" />
                   </div>
                   <div>
-                    <h4 className="text-[#F5F7FA] font-semibold text-sm">7 Dias de Teste</h4>
-                    <p className="text-[#A0A7B5] text-xs">Acesso premium liberado</p>
+                    <h4 className="text-[#F5F7FA] font-semibold text-sm">{t('guarantee_sub1_title')}</h4>
+                    <p className="text-[#A0A7B5] text-xs">{t('guarantee_sub1_desc')}</p>
                   </div>
                 </div>
                 <div className="flex gap-4">
@@ -39,7 +39,7 @@ export function Guarantee() {
                   </div>
                   <div>
                     <h4 className="text-[#F5F7FA] font-semibold text-sm">{t('guarantee_cta')}</h4>
-                    <p className="text-[#A0A7B5] text-xs">Um clique e está feito</p>
+                    <p className="text-[#A0A7B5] text-xs">{t('guarantee_sub2_desc')}</p>
                   </div>
                 </div>
               </div>
@@ -55,8 +55,8 @@ export function Guarantee() {
                 <div className="absolute inset-0 bg-[#2B85EB]/20 blur-3xl rounded-full" />
                 <div className="w-48 h-48 md:w-64 md:h-64 rounded-full border-[12px] border-[#2B85EB]/20 bg-[#0B0F19] flex flex-col items-center justify-center text-center p-6 relative bg-clip-padding backdrop-blur-xl">
                   <span className="text-[#2B85EB] font-black text-5xl md:text-7xl leading-none">7</span>
-                  <span className="text-[#F5F7FA] font-bold text-lg md:text-xl uppercase tracking-tighter">Dias de</span>
-                  <span className="text-[#A0A7B5] font-medium text-xs md:text-sm uppercase tracking-widest">Garantia</span>
+                  <span className="text-[#F5F7FA] font-bold text-lg md:text-xl uppercase tracking-tighter">{t('guarantee_badge_days')}</span>
+                  <span className="text-[#A0A7B5] font-medium text-xs md:text-sm uppercase tracking-widest">{t('guarantee_badge_title')}</span>
                   <ShieldCheck className="absolute -top-2 -right-2 w-12 h-12 text-[#2B85EB] fill-[#0B0F19]" />
                 </div>
               </motion.div>

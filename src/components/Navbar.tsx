@@ -46,10 +46,10 @@ export function Navbar() {
 
         {/* Desktop Nav */}
         <nav className="hidden lg:flex items-center gap-8">
-          <a href="/#musicscale" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">MusicScale</a>
-          <a href="/#funcionalidades" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">Funcionalidades</a>
-          <a href="/#ecossistema" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">Ecossistema</a>
-          <a href="/#precos" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">Valores</a>
+          <a href="/#musicscale" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_musicscale', 'MusicScale')}</a>
+          <a href="/#funcionalidades" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_features', 'Funcionalidades')}</a>
+          <a href="/#ecossistema" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_ecosystem', 'Ecossistema')}</a>
+          <a href="/#precos" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_pricing', 'Valores')}</a>
         </nav>
 
         {/* Actions */}
@@ -113,10 +113,10 @@ export function Navbar() {
             exit={{ opacity: 0, y: -10 }}
             className="absolute top-full left-0 right-0 bg-[#0B0F19] border-b border-white/10 shadow-2xl p-6 flex flex-col gap-4 lg:hidden"
           >
-            <a href="/#musicscale" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>MusicScale</a>
-            <a href="/#funcionalidades" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>Funcionalidades</a>
-            <a href="/#ecossistema" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>Ecossistema</a>
-            <a href="/#precos" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>Preços</a>
+            <a href="/#musicscale" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_musicscale', 'MusicScale')}</a>
+            <a href="/#funcionalidades" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_features', 'Funcionalidades')}</a>
+            <a href="/#ecossistema" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_ecosystem', 'Ecossistema')}</a>
+            <a href="/#precos" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_pricing', 'Preços')}</a>
             <hr className="border-white/10" />
             {user ? (
                <>

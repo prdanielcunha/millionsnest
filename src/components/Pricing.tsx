@@ -118,13 +118,13 @@ export function Pricing() {
                 onClick={() => setIsAnnual(false)}
                 className={`relative z-10 px-6 py-2.5 text-sm font-semibold rounded-lg transition-colors ${!isAnnual ? 'text-[#050505]' : 'text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
               >
-                Mensal
+                {t('pricing_monthly_tab', 'Mensal')}
               </button>
               <button 
                 onClick={() => setIsAnnual(true)}
                 className={`relative z-10 px-6 py-2.5 text-sm font-semibold rounded-lg transition-colors ${isAnnual ? 'text-[#050505]' : 'text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
               >
-                Anual
+                {t('pricing_yearly_tab', 'Anual')}
               </button>
               <div 
                 className="absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-[#F5F7FA] rounded-lg transition-transform duration-300 ease-in-out"
@@ -152,12 +152,12 @@ export function Pricing() {
               <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
                  R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
               </span>
-              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/{t('pricing_period')}</span>
+              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">{t('pricing_period')}</span>
             </div>
             
             <div className="mt-2 mb-6">
                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB]/10 text-[#2B85EB] rounded-md border border-[#2B85EB]/20">
-                 7 dias grátis
+                 {t('pricing_free_trial', '7 dias grátis')}
                </span>
             </div>
             
@@ -215,20 +215,20 @@ export function Pricing() {
               {t('pricing_plan2_desc')}
             </p>
             <div className="bg-[#2B85EB]/10 border border-[#2B85EB]/20 rounded-xl p-4 mb-6 relative z-10">
-              <h4 className="text-[#2B85EB] font-bold text-[11px] md:text-xs mb-1.5 uppercase tracking-widest break-words leading-tight">Biblioteca Viva MusicScale</h4>
-              <p className="text-[#A0A7B5] text-[11px] md:text-xs leading-relaxed">Acesso contínuo ao acervo atualizado do MusicScale, com novas músicas adicionadas regularmente para sua equipe ter o melhor repertório.</p>
+              <h4 className="text-[#2B85EB] font-bold text-[11px] md:text-xs mb-1.5 uppercase tracking-widest break-words leading-tight">{t('pricing_lib_title', 'Biblioteca Viva MusicScale')}</h4>
+              <p className="text-[#A0A7B5] text-[11px] md:text-xs leading-relaxed">{t('pricing_lib_desc', 'Acesso contínuo ao acervo atualizado do MusicScale, com novas músicas adicionadas regularmente para sua equipe ter o melhor repertório.')}</p>
             </div>
             
             <div className="flex items-baseline gap-1 mb-1 relative z-10">
               <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
                  R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
               </span>
-              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">/{t('pricing_period')}</span>
+              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">{t('pricing_period')}</span>
             </div>
 
             <div className="mt-2 mb-6 relative z-10">
                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB] text-white rounded-md shadow-[0_0_15px_rgba(43,133,235,0.4)]">
-                 7 dias grátis
+                 {t('pricing_free_trial', '7 dias grátis')}
                </span>
             </div>
             
@@ -274,7 +274,7 @@ export function Pricing() {
               viewport={{ once: true }}
               className="text-2xl md:text-3xl font-semibold tracking-tight text-[#F5F7FA] mb-4"
             >
-              Serviços Premium
+              {t('pricing_premium_services_title', 'Serviços Premium')}
             </motion.h3>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -283,7 +283,7 @@ export function Pricing() {
               transition={{ delay: 0.1 }}
               className="text-[#A0A7B5] text-base"
             >
-              Complementos operacionais para acelerar a estruturação do seu ministério.
+              {t('pricing_premium_services_desc', 'Complementos operacionais para acelerar a estruturação do seu ministério.')}
             </motion.p>
           </div>
 
@@ -300,20 +300,20 @@ export function Pricing() {
               <div className="w-10 h-10 bg-[#050505] rounded-xl border border-white/5 flex items-center justify-center mb-6">
                 <Settings className="w-5 h-5 text-[#A0A7B5]" />
               </div>
-              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Setup Premium</h4>
+              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">{t('addon_setup_title', 'Setup Premium')}</h4>
               <div className="text-[#2B85EB] font-mono text-sm mb-4">
-                 R$ {prices.setup_premium > 0 ? prices.setup_premium.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+                 R$ {prices.setup_premium > 0 ? prices.setup_premium.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
               </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
-                Configuração inicial assistida para estruturar rapidamente sua equipe no MusicScale.
+                {t('addon_setup_desc', 'Configuração inicial assistida para estruturar rapidamente sua equipe no MusicScale.')}
               </p>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Configuração inicial</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Onboarding assistido</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Organização da equipe</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_setup_f1', 'Configuração inicial')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_setup_f2', 'Onboarding assistido')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_setup_f3', 'Organização da equipe')}</li>
               </ul>
               <button onClick={() => handlePurchase('musicscale_setup_premium')} className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors select-none">
-                Solicitar Setup
+                {t('addon_setup_cta', 'Solicitar Setup')}
               </button>
             </motion.div>
 
@@ -328,20 +328,20 @@ export function Pricing() {
               <div className="w-10 h-10 bg-[#050505] rounded-xl border border-white/5 flex items-center justify-center mb-6">
                 <Video className="w-5 h-5 text-[#A0A7B5]" />
               </div>
-              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Treinamento Express</h4>
+              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">{t('addon_training_title', 'Treinamento Express')}</h4>
               <div className="text-[#2B85EB] font-mono text-sm mb-4">
-                 R$ {prices.training_express > 0 ? prices.training_express.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+                 R$ {prices.training_express > 0 ? prices.training_express.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
               </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
-                Treinamento online prático para aprender rapidamente o fluxo do MusicScale.
+                {t('addon_training_desc', 'Treinamento online prático para aprender rapidamente o fluxo do MusicScale.')}
               </p>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Treinamento em grupo</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Boas práticas</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Gravação disponível</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_training_f1', 'Treinamento em grupo')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_training_f2', 'Boas práticas')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_training_f3', 'Gravação disponível')}</li>
               </ul>
               <button onClick={() => handlePurchase('musicscale_training_express')} className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors select-none">
-                Quero Participar
+                {t('addon_training_cta', 'Quero Participar')}
               </button>
             </motion.div>
 
@@ -356,23 +356,23 @@ export function Pricing() {
               <div className="w-10 h-10 bg-[#050505] rounded-xl border border-white/5 flex items-center justify-center mb-6">
                 <ListMusic className="w-5 h-5 text-[#A0A7B5]" />
               </div>
-              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Acervo Inicial Worship</h4>
+              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">{t('addon_worship_title', 'Acervo Inicial Worship')}</h4>
               <div className="text-[#2B85EB] font-mono text-sm mb-4">
-                 R$ {prices.worship_100 > 0 ? prices.worship_100.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+                 R$ {prices.worship_100 > 0 ? prices.worship_100.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
               </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
-                Comece mais rápido com um acervo pronto de 100 músicas já organizadas no MusicScale, incluindo cifra e letra integradas.
+                {t('addon_worship_desc', 'Comece mais rápido com um acervo pronto de 100 músicas já organizadas no MusicScale, incluindo cifra e letra integradas.')}
               </p>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> 100 músicas já cadastradas</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Cifra integrada</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Letras organizadas</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Estrutura pronta no MusicScale</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Implantação imediata</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Economia de tempo para sua equipe</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_worship_f1', '100 músicas já cadastradas')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_worship_f2', 'Cifra integrada')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_worship_f3', 'Letras organizadas')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_worship_f4', 'Estrutura pronta no MusicScale')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_worship_f5', 'Implantação imediata')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_worship_f6', 'Economia de tempo para sua equipe')}</li>
               </ul>
               <button onClick={() => handlePurchase('musicscale_worship_100')} className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors select-none">
-                Comprar Acervo
+                {t('addon_worship_cta', 'Comprar Acervo')}
               </button>
             </motion.div>
 
@@ -387,21 +387,21 @@ export function Pricing() {
               <div className="w-10 h-10 bg-[#050505] rounded-xl border border-white/5 flex items-center justify-center mb-6">
                 <Headphones className="w-5 h-5 text-[#A0A7B5]" />
               </div>
-              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">Music Pack +10</h4>
+              <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">{t('addon_pack_title', 'Music Pack +10')}</h4>
               <div className="text-[#2B85EB] font-mono text-sm mb-4">
-                 R$ {prices.music_pack_10 > 0 ? prices.music_pack_10.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">/único</span>
+                 R$ {prices.music_pack_10 > 0 ? prices.music_pack_10.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
               </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
-                Pacote avulso para adicionar até 10 novas músicas ao acervo da sua organização.
+                {t('addon_pack_desc', 'Pacote avulso para adicionar até 10 novas músicas ao acervo da sua organização.')}
               </p>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Até 10 novas músicas</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Organização no acervo</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Com letra e cifra</li>
-                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> Atualização rápida</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_pack_f1', 'Até 10 novas músicas')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_pack_f2', 'Organização no acervo')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_pack_f3', 'Com letra e cifra')}</li>
+                <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_pack_f4', 'Atualização rápida')}</li>
               </ul>
               <button onClick={() => handlePurchase('musicscale_music_pack_10')} className="w-full py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 text-[#F5F7FA] text-xs text-center font-semibold hover:bg-white/10 transition-colors select-none">
-                Comprar Pacote
+                {t('addon_pack_cta', 'Comprar Pacote')}
               </button>
             </motion.div>
 

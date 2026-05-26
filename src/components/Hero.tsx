@@ -78,7 +78,7 @@ export function Hero() {
             {t('hero_cta_primary')}
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
-          <button onClick={() => alert('Vídeo de demonstração em breve!')} className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#0B0F19] text-[#F5F7FA] font-medium border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2 group shadow-sm">
+          <button onClick={() => alert(t('hero_demo_alert', 'Vídeo de demonstração em breve!'))} className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#0B0F19] text-[#F5F7FA] font-medium border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2 group shadow-sm">
             <Play className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors" />
             {t('hero_cta_secondary')}
           </button>

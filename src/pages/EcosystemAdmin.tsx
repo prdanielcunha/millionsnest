@@ -2,8 +2,27 @@ import { useState, useEffect } from "react";
 import { collection, query, getDocs, doc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
-import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, Activity, TrendingUp } from "lucide-react";
+import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+
+function ActivityIcon({ className }: { className?: string }) {
+  return (
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      width="24"
+      height="24"
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      className={className}
+    >
+      <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
+    </svg>
+  );
+}
 
 export function EcosystemAdmin() {
   const { profile, loading } = useAuth();
@@ -99,7 +118,7 @@ export function EcosystemAdmin() {
               onClick={() => setActiveTab('analytics')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-sm transition-colors ${activeTab === 'analytics' ? 'bg-[#2B85EB]/10 text-[#2B85EB]' : 'text-[#A0A7B5] hover:bg-white/5'}`}
             >
-              <Activity className="w-4 h-4" />
+              <ActivityIcon className="w-4 h-4" />
               Analytics e Growth
             </button>
           </div>
@@ -282,7 +301,7 @@ export function EcosystemAdmin() {
 
                         <div className="bg-[#0B0F19] rounded-2xl p-6 border border-yellow-500/10 group hover:border-yellow-500/50 transition-colors">
                           <div className="flex items-center gap-3 mb-2">
-                            <Activity className="w-5 h-5 text-yellow-500" />
+                            <ActivityIcon className="w-5 h-5 text-yellow-500" />
                             <h3 className="text-[#A0A7B5] font-medium text-sm">Gargalos e Lags</h3>
                           </div>
                           <p className="text-3xl font-semibold text-[#F5F7FA]">{perfIssues}</p>
@@ -354,7 +373,7 @@ export function EcosystemAdmin() {
                     <div className="flex items-center gap-4 text-xs text-[#A0A7B5]">
                       <span className="flex items-center gap-1.5"><Users className="w-4 h-4 text-[#A0A7B5]" /> {users.length} Total Users</span>
                       <span className="flex items-center gap-1.5"><Building className="w-4 h-4 text-[#A0A7B5]" /> {organizations.length} Orgs</span>
-                      <span className="flex items-center gap-1.5"><Activity className="w-4 h-4 text-[#A0A7B5]" /> {analyticsEvents.length} Events</span>
+                      <span className="flex items-center gap-1.5"><ActivityIcon className="w-4 h-4 text-[#A0A7B5]" /> {analyticsEvents.length} Events</span>
                     </div>
                   </div>
                   <p className="text-sm text-[#A0A7B5] mb-6">

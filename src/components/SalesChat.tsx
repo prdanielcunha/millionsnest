@@ -106,10 +106,10 @@ export function SalesChat() {
                   <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-[#2B85EB] rounded-full" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg">Consultor MusicScale</h3>
+                  <h3 className="font-bold text-lg">{t('chat_consultant', 'Consultor MusicScale')}</h3>
                   <div className="flex items-center gap-1.5 text-xs text-white/80">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    Online
+                    {t('chat_online', 'Online')}
                   </div>
                 </div>
               </div>
@@ -129,7 +129,7 @@ export function SalesChat() {
                     exit={{ opacity: 0, x: -10 }}
                     className="space-y-3"
                   >
-                    <p className="text-xs font-semibold text-[#A0A7B5] mb-4">Escolha sobre o que deseja falar:</p>
+                    <p className="text-xs font-semibold text-[#A0A7B5] mb-4">{t('chat_choose', 'Escolha sobre o que deseja falar:')}</p>
                     
                     <button
                       onClick={() => handleIntentSelect('pricing')}
@@ -139,7 +139,7 @@ export function SalesChat() {
                         <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <DollarSign className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">{t('pricing_title')}</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">{t('chat_opt_plans', 'Planos e Preços')}</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
@@ -152,7 +152,7 @@ export function SalesChat() {
                         <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <Wrench className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">{t('faq_tag')}</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">{t('chat_opt_support', 'Dúvidas e Suporte')}</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
@@ -165,7 +165,7 @@ export function SalesChat() {
                         <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <Handshake className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">Parcerias e Comercial</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">{t('chat_opt_partnership', 'Parcerias e Comercial')}</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
@@ -184,7 +184,7 @@ export function SalesChat() {
                       onClick={() => { setStep('intent'); setSelectedIntent(null); setSelectedFaq(null); }}
                       className="text-xs text-[#2B85EB] font-semibold mb-2 hover:underline"
                     >
-                      ← Voltar às opções
+                      {t('chat_back_options', '← Voltar às opções')}
                     </button>
                     {commonQuestions.map((q, i) => (
                       <button
@@ -205,12 +205,12 @@ export function SalesChat() {
                       </button>
                     ))}
                     <div className="mt-4 pt-4 border-t border-white/10">
-                      <p className="text-xs font-medium text-[#A0A7B5] text-center mb-3">Não encontrou o que procurava?</p>
+                      <p className="text-xs font-medium text-[#A0A7B5] text-center mb-3">{t('chat_no_faq_found', 'Não encontrou o que procurava?')}</p>
                       <button
                         onClick={() => setStep('input')}
                         className="w-full py-3 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/30 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
                       >
-                        <MessageCircle className="w-3.5 h-3.5" /> Falar com consultor 
+                        <MessageCircle className="w-3.5 h-3.5" /> {t('chat_talk_consultant', 'Falar com consultor')}
                       </button>
                     </div>
                   </motion.div>
@@ -231,11 +231,11 @@ export function SalesChat() {
                       }}
                       className="text-xs text-[#2B85EB] font-semibold hover:underline"
                     >
-                      ← {selectedIntent === 'pricing' ? 'Voltar ao FAQ' : 'Voltar às opções'}
+                      ← {selectedIntent === 'pricing' ? t('chat_back_faq', 'Voltar ao FAQ') : t('chat_back_options', 'Voltar às opções')}
                     </button>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-[#A0A7B5]">
-                        Como podemos te ajudar com {selectedIntent === 'support' ? 'suporte' : selectedIntent === 'partnership' ? 'parcerias' : 'planos'}?
+                        {selectedIntent === 'support' ? t('chat_how_help_support', 'Como podemos te ajudar com suporte?') : selectedIntent === 'partnership' ? t('chat_how_help_partnership', 'Como podemos te ajudar com parcerias?') : t('chat_how_help_plans', 'Como podemos te ajudar com planos?')}
                       </label>
                       <textarea
                         autoFocus
@@ -260,7 +260,7 @@ export function SalesChat() {
             {/* Footer */}
             <div className="px-6 py-4 bg-[#050505] border-t border-white/5 flex items-center justify-center gap-2 text-[10px] text-[#A0A7B5] uppercase tracking-widest font-semibold">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              Atendimento Humanizado
+              {t('chat_human_support', 'Atendimento Humanizado')}
             </div>
           </motion.div>
         )}

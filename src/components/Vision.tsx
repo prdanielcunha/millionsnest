@@ -6,19 +6,19 @@ export function Vision() {
   const { t } = useTranslation(['landing']);
   const pillars = [
     {
-      title: "Pessoas",
+      title: t('vision_p1_title', 'Pessoas'),
       icon: <Users className="w-6 h-6" />,
-      desc: "Não construímos para instituições, construímos para quem as lidera. Tecnologia que liberta tempo para o cuidado focado em vidas."
+      desc: t('vision_p1_desc', 'Não construímos para instituições, construímos para quem as lidera. Tecnologia que liberta tempo para o cuidado focado em vidas.')
     },
     {
-      title: "Propósito",
+      title: t('vision_p2_title', 'Propósito'),
       icon: <Heart className="w-6 h-6" />,
-      desc: "Nossa métrica de sucesso não é apenas retenção, mas a quantidade de igrejas que podem servir com mais excelência e foco."
+      desc: t('vision_p2_desc', 'Nossa métrica de sucesso não é apenas retenção, mas a quantidade de igrejas que podem servir com mais excelência e foco.')
     },
     {
-      title: "Transformação",
+      title: t('vision_p3_title', 'Transformação'),
       icon: <Lightbulb className="w-6 h-6" />,
-      desc: "Onde o mundo vê sistemas, nós vemos ferramentas fundamentais para expandir o alcance da igreja na próxima geração."
+      desc: t('vision_p3_desc', 'Onde o mundo vê sistemas, nós vemos ferramentas fundamentais para expandir o alcance da igreja na próxima geração.')
     }
   ];
 

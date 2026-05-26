@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useNavigate } from 'react-router-dom';
 import { Check, ArrowRight, ShieldCheck, CreditCard, ChevronLeft, Briefcase, Zap, Layers, Tag, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface NormalizedProduct {
   id: string; // Stripe Price ID
@@ -24,6 +25,7 @@ interface NormalizedProduct {
 export default function Checkout() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation(['checkout']);
 
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -172,10 +174,10 @@ export default function Checkout() {
             setAppliedCoupon({ id: data.id, percentOff: data.percentOff, amountOff: data.amountOff, duration: data.duration });
             setCouponCode('');
         } else {
-            setCouponError(data.error || 'Cupom inválido');
+            setCouponError(data.error || t('invalid_coupon', 'Cupom inválido'));
         }
      } catch(e) {
-        setCouponError('Erro ao validar.');
+        setCouponError(t('validate_error', 'Erro ao validar.'));
      } finally {
         setCouponLoading(false);
      }
@@ -189,7 +191,7 @@ export default function Checkout() {
   const handleCheckout = async () => {
     if (!user || checkoutLoading) return;
     if (!selectedPlanLookup) {
-        alert("Por favor, selecione um plano principal.");
+        alert(t('error_plan', 'Por favor, selecione um plano principal.'));
         return;
     }
     
@@ -228,7 +230,7 @@ export default function Checkout() {
             className="text-[#A0A7B5] font-medium tracking-wide flex items-center gap-3"
         >
             <div className="w-5 h-5 border-2 border-[#2B85EB]/30 border-t-[#2B85EB] rounded-full animate-spin" />
-            Carregando catálogo premium...
+            {t('loading', 'Carregando catálogo premium...')}
         </motion.div>
       </div>
     );
@@ -246,7 +248,7 @@ export default function Checkout() {
                 className="flex items-center gap-2 text-[#A0A7B5] hover:text-white transition-colors text-sm font-medium tracking-wide"
             >
                 <ChevronLeft className="w-4 h-4" />
-                Voltar ao Dashboard
+                {t('back', 'Voltar ao Dashboard')}
             </button>
             <div className="mx-auto flex items-center gap-2">
                 <div className="w-6 h-6 rounded bg-gradient-to-tr from-[#2B85EB] to-[#6BA6F3] flex items-center justify-center shadow-lg shadow-[#2B85EB]/20">
@@ -267,10 +269,10 @@ export default function Checkout() {
                 {/* Header */}
                 <div className="space-y-4">
                     <h1 className="text-4xl lg:text-5xl font-semibold tracking-tight text-white leading-tight">
-                        Evolua com o plano ideal para você.
+                        {t('title', 'Evolua com o plano ideal para você.')}
                     </h1>
                     <p className="text-[#A0A7B5] text-lg font-light max-w-xl">
-                        Acesso total às ferramentas MusicScale. Teste por 7 dias grátis, cancele quando quiser com 1 clique no painel.
+                        {t('subtitle', 'Acesso total às ferramentas MusicScale. Teste por 7 dias grátis, cancele quando quiser com 1 clique no painel.')}
                     </p>
                 </div>
 
@@ -280,13 +282,13 @@ export default function Checkout() {
                        onClick={() => setBillingCycle('monthly')}
                        className={`px-8 py-2.5 rounded-full text-sm font-medium transition-all relative z-10 ${billingCycle === 'monthly' ? 'text-white' : 'text-[#A0A7B5] hover:text-white'}`}
                    >
-                       Mensal
+                       {t('monthly', 'Mensal')}
                    </button>
                    <button 
                        onClick={() => setBillingCycle('yearly')}
                        className={`px-8 py-2.5 rounded-full text-sm font-medium transition-all relative z-10 ${billingCycle === 'yearly' ? 'text-white' : 'text-[#A0A7B5] hover:text-white'}`}
                    >
-                       Anual <span className="ml-1 text-[10px] bg-[#2B85EB] text-white px-2 py-0.5 rounded-full tracking-widest uppercase font-bold">-20%</span>
+                       {t('yearly', 'Anual')} <span className="ml-1 text-[10px] bg-[#2B85EB] text-white px-2 py-0.5 rounded-full tracking-widest uppercase font-bold">-20%</span>
                    </button>
                    <motion.div 
                        className="absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full bg-white/10 border border-white/10"
@@ -313,14 +315,14 @@ export default function Checkout() {
                                
                                {isPro && (
                                    <div className="absolute -top-3 left-8 bg-gradient-to-r from-[#2B85EB] to-[#4A9CFC] text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full shadow-lg shadow-[#2B85EB]/30">
-                                       Recomendado
+                                       {t('recommended', 'Recomendado')}
                                    </div>
                                )}
                                
                                <div className="flex justify-between items-start mb-6">
                                    <div>
                                        <h3 className="text-2xl font-medium text-white mb-1">{plan.name}</h3>
-                                       <p className="text-[#A0A7B5] text-sm font-light">{plan.description || (isPro ? "Para ministérios que desejam mais liberdade, crescimento e acesso contínuo aos recursos premium do MusicScale." : "Ideal para equipes e igrejas que desejam organizar o ministério de louvor com simplicidade e excelência.")}</p>
+                                       <p className="text-[#A0A7B5] text-sm font-light">{plan.description || (isPro ? t('pro_desc', "Para ministérios que desejam mais liberdade, crescimento e acesso contínuo aos recursos premium do MusicScale.") : t('starter_desc', "Ideal para equipes e igrejas que desejam organizar o ministério de louvor com simplicidade e excelência."))}</p>
                                    </div>
                                    <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#2B85EB] border-[#2B85EB]' : 'border-white/20 group-hover:border-white/40'}`}>
                                        {isSelected && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
@@ -330,26 +332,26 @@ export default function Checkout() {
                                <div className="mb-8">
                                    <div className="flex items-baseline gap-1">
                                        <span className="text-4xl font-semibold tracking-tighter text-white">R${plan.price.toFixed(2).replace('.',',')}</span>
-                                       <span className="text-[#A0A7B5] text-sm">/ {billingCycle === 'yearly' ? 'ano' : 'mês'}</span>
+                                       <span className="text-[#A0A7B5] text-sm">/ {billingCycle === 'yearly' ? t('yearly_period', 'ano') : t('monthly_period', 'mês')}</span>
                                    </div>
                                </div>
 
                                <ul className="space-y-3">
                                    {isPro ? (
                                        <>
-                                         <FeatureItem text="Tudo do Starter" />
-                                         <FeatureItem text="Pessoas ilimitadas" />
-                                         <FeatureItem text="Biblioteca Viva MusicScale" />
-                                         <FeatureItem text="Atualização constante do acervo" />
-                                         <FeatureItem text="Prioridade em novos recursos" />
+                                         <FeatureItem text={t('pro_features.0', "Tudo do Starter")} />
+                                         <FeatureItem text={t('pro_features.1', "Pessoas ilimitadas")} />
+                                         <FeatureItem text={t('pro_features.2', "Biblioteca Viva MusicScale")} />
+                                         <FeatureItem text={t('pro_features.3', "Atualização constante do acervo")} />
+                                         <FeatureItem text={t('pro_features.4', "Prioridade em novos recursos")} />
                                        </>
                                    ) : (
                                        <>
-                                         <FeatureItem text="Músicas e Escalas ilimitadas" />
-                                         <FeatureItem text="Até 10 pessoas" />
-                                         <FeatureItem text="Compartilhamento de escalas" />
-                                         <FeatureItem text="Sincronização em nuvem" />
-                                         <FeatureItem text="Suporte padrão" />
+                                         <FeatureItem text={t('star_features.0', "Músicas e Escalas ilimitadas")} />
+                                         <FeatureItem text={t('star_features.1', "Até 10 pessoas")} />
+                                         <FeatureItem text={t('star_features.2', "Compartilhamento de escalas")} />
+                                         <FeatureItem text={t('star_features.3', "Sincronização em nuvem")} />
+                                         <FeatureItem text={t('star_features.4', "Suporte padrão")} />
                                        </>
                                    )}
                                </ul>
@@ -364,7 +366,7 @@ export default function Checkout() {
                 <div className="space-y-6">
                     <div className="flex items-center gap-2 mb-2">
                         <Layers className="w-5 h-5 text-[#A0A7B5]" />
-                        <h2 className="text-xl font-medium text-white tracking-tight">Melhorias adicionais</h2>
+                        <h2 className="text-xl font-medium text-white tracking-tight">{t('addons_title', 'Melhorias adicionais')}</h2>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4">
@@ -372,10 +374,10 @@ export default function Checkout() {
                             const isSelected = addon.lookupKey ? selectedAddonsLookup.includes(addon.lookupKey) : false;
                             
                             const fallbackDescriptions: Record<string, string> = {
-                              'musicscale_setup_premium': 'Configuração inicial assistida para estruturar rapidamente sua equipe no MusicScale.',
-                              'musicscale_training_express': 'Treinamento online prático para aprender rapidamente o fluxo do MusicScale.',
-                              'musicscale_worship_100': 'Acervo pronto de 100 músicas já organizadas, incluindo cifra e letra integradas.',
-                              'musicscale_music_pack_10': 'Pacote avulso para adicionar até 10 novas músicas ao acervo da sua organização.'
+                              'musicscale_setup_premium': t('addon_setup_desc', 'Configuração inicial assistida para estruturar rapidamente sua equipe no MusicScale.'),
+                              'musicscale_training_express': t('addon_training_desc', 'Treinamento online prático para aprender rapidamente o fluxo do MusicScale.'),
+                              'musicscale_worship_100': t('addon_worship_desc', 'Acervo pronto de 100 músicas já organizadas, incluindo cifra e letra integradas.'),
+                              'musicscale_music_pack_10': t('addon_pack_desc', 'Pacote avulso para adicionar até 10 novas músicas ao acervo da sua organização.')
                             };
                             const description = addon.description || (addon.lookupKey ? fallbackDescriptions[addon.lookupKey] : null) || '';
 
@@ -393,7 +395,7 @@ export default function Checkout() {
                                            <h4 className="text-base font-medium text-white flex items-center gap-2">
                                               {addon.name}
                                               {addon.interval === 'one_time' && (
-                                                <span className="text-[9px] uppercase tracking-wider font-bold bg-white/10 text-white px-2 py-0.5 rounded">Pagamento Único</span>
+                                                <span className="text-[9px] uppercase tracking-wider font-bold bg-white/10 text-white px-2 py-0.5 rounded">{t('one_time_badge', 'Pagamento Único')}</span>
                                               )}
                                            </h4>
                                            <p className="text-[#A0A7B5] text-sm">{description}</p>
@@ -407,7 +409,7 @@ export default function Checkout() {
                             );
                         })}
                         {addons.length === 0 && (
-                            <p className="text-[#A0A7B5] text-sm">Nenhuma melhoria disponível no momento.</p>
+                            <p className="text-[#A0A7B5] text-sm">{t('no_addons', 'Nenhuma melhoria disponível no momento.')}</p>
                         )}
                     </div>
                 </div>
@@ -419,7 +421,7 @@ export default function Checkout() {
                 <div className="sticky top-28 bg-[#101217] border border-white/5 pt-8 p-8 rounded-[2rem] shadow-2xl flex flex-col gap-8">
                     
                     <div>
-                        <h3 className="text-xl font-medium tracking-tight text-white mb-6">Resumo da Assinatura</h3>
+                        <h3 className="text-xl font-medium tracking-tight text-white mb-6">{t('summary_title', 'Resumo da Assinatura')}</h3>
                         
                         <div className="space-y-4 mb-6">
                             {selectedPlanItem && (
@@ -436,7 +438,7 @@ export default function Checkout() {
                                 <div className="space-y-3 pt-4 border-t border-white/5">
                                     {selectedAddonsItems.map(a => (
                                        <div key={a.id} className="flex justify-between items-baseline text-[#A0A7B5] text-sm">
-                                          <span>{a.name} {a.interval === 'one_time' && <span className="text-xs opacity-50">(Vitalício)</span>}</span>
+                                          <span>{a.name} {a.interval === 'one_time' && <span className="text-xs opacity-50">({t('lifetime', 'Vitalício')})</span>}</span>
                                           <span className="text-white">+ R${a.price.toFixed(2).replace('.',',')}</span>
                                        </div>
                                     ))}
@@ -457,7 +459,7 @@ export default function Checkout() {
                                        <div className="flex items-center gap-2 text-emerald-400">
                                            <Check className="w-4 h-4" />
                                            <span className="text-sm font-medium">
-                                               Cupom Aplicado
+                                               {t('coupon_applied', 'Cupom Aplicado')}
                                            </span>
                                        </div>
                                        <button 
@@ -479,7 +481,7 @@ export default function Checkout() {
                                                <Tag className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#A0A7B5]" />
                                                <input 
                                                    type="text" 
-                                                   placeholder="Cupom de desconto"
+                                                   placeholder={t('coupon_placeholder', 'Cupom de desconto')}
                                                    value={couponCode}
                                                    onChange={(e) => setCouponCode(e.target.value)}
                                                    className="w-full bg-[#181C25] border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-[#A0A7B5] focus:outline-none focus:border-[#2B85EB]/50 focus:ring-1 focus:ring-[#2B85EB]/50 transition-all font-mono uppercase"
@@ -493,7 +495,7 @@ export default function Checkout() {
                                            >
                                                {couponLoading ? (
                                                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                               ) : "Aplicar"}
+                                               ) : t('apply', 'Aplicar')}
                                            </button>
                                        </div>
                                        {couponError && (
@@ -510,7 +512,7 @@ export default function Checkout() {
                        
                        {totalOneTime > 0 && (
                            <div className="flex justify-between items-baseline mb-2">
-                               <span className="text-[#A0A7B5] text-sm font-medium">Cobrança Hoje (Módulos Opcionais)</span>
+                               <span className="text-[#A0A7B5] text-sm font-medium">{t('charge_today', 'Cobrança Hoje (Módulos Opcionais)')}</span>
                                <span className="text-xl font-semibold text-white tracking-tight flex flex-col items-end">
                                    {savingsOneTime > 0 && (
                                        <span className="text-xs text-[#A0A7B5] line-through font-normal">R${totalOneTime.toFixed(2).replace('.',',')}</span>
@@ -522,8 +524,8 @@ export default function Checkout() {
 
                        <div className="flex justify-between items-baseline border-t border-white/5 pt-4 mt-2">
                           <div>
-                              <span className="font-semibold text-white block">Assinatura Regular</span>
-                              <span className="text-[#A0A7B5] text-xs mt-1 block">Inicia após o período de 7 dias grátis.</span>
+                              <span className="font-semibold text-white block">{t('regular_sub', 'Assinatura Regular')}</span>
+                              <span className="text-[#A0A7B5] text-xs mt-1 block">{t('starts_after_trial', 'Inicia após o período de 7 dias grátis.')}</span>
                           </div>
                           <div className="text-right">
                               {savingsMonthly > 0 && (
@@ -539,7 +541,7 @@ export default function Checkout() {
                                animate={{ opacity: 1, height: 'auto' }}
                                className="text-emerald-400 text-xs text-right font-medium"
                            >
-                               Você economiza R${(savingsMonthly + savingsOneTime).toFixed(2).replace('.',',')}{savingsMonthly > 0 && typeof billingCycle === 'string' ? `/${billingCycle === 'monthly' ? 'mês' : 'ano'}` : ''}
+                               {t('savings', 'Você economiza')} R${(savingsMonthly + savingsOneTime).toFixed(2).replace('.',',')}{savingsMonthly > 0 && typeof billingCycle === 'string' ? `/${billingCycle === 'monthly' ? t('monthly_period', 'mês') : t('yearly_period', 'ano')}` : ''}
                            </motion.div>
                        )}
                     </div>
@@ -553,7 +555,7 @@ export default function Checkout() {
                            <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
                        ) : (
                            <>
-                              Iniciar Teste de 7 Dias 
+                              {t('cta', 'Iniciar Teste de 7 Dias')} 
                               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                            </>
                        )}
@@ -561,12 +563,12 @@ export default function Checkout() {
 
                     <div className="flex items-center justify-center gap-2 text-xs text-[#A0A7B5]">
                         <ShieldCheck className="w-4 h-4 text-emerald-500/80" />
-                        <span>Transação criptografada by <strong>Stripe</strong></span>
+                        <span>{t('encrypted', 'Transação criptografada by Stripe')}</span>
                     </div>
 
                     <div className="text-center">
                         <p className="text-[11px] text-[#A0A7B5]/60 font-light max-w-[200px] mx-auto leading-relaxed">
-                            Cancele a qualquer momento antes do trial acabar e não seja cobrado.
+                            {t('cancel_info', 'Cancele a qualquer momento antes do trial acabar e não seja cobrado.')}
                         </p>
                     </div>
 
