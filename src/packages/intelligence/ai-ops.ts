@@ -1,5 +1,5 @@
-import { BaseEventPayload, RegisteredEvents } from './registry';
-import { aiEngine } from '../ai';
+import { BaseEventPayload, RegisteredEvents } from './registry.js';
+import { aiEngine } from '../ai/index.js';
 
 export interface AIInsight {
   id: string;
@@ -24,9 +24,10 @@ export class AIOperationsLayer {
     console.log(`[AI Ops] Generating insights for Org: ${orgId}`);
     
     // Fallback static rules before heavy lifting
-    const frictionEvents = recentEvents.filter(e => 
-      e.action === RegisteredEvents.SCALE_DECLINED || e.action === RegisteredEvents.AI_IMPORT_FAILED
-    );
+    const frictionEvents = recentEvents.filter(e => {
+      const evt = e as any;
+      return evt.action === RegisteredEvents.SCALE_DECLINED || evt.action === RegisteredEvents.AI_IMPORT_FAILED;
+    });
     
     const insights: AIInsight[] = [];
 

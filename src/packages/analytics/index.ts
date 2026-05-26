@@ -1,4 +1,4 @@
-import { eventBus, EventAction, EventBusPayload } from '../events';
+import { eventBus, EventAction, EventBusPayload } from '../events/index.js';
 
 export interface AnalyticsSession {
   id: string;

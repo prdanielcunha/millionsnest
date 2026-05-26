@@ -344,7 +344,7 @@ export function Dashboard() {
         metadata: { type: 'addon', product: addonSuccess }
       });
 
-      eventBus.publish('billing.upgraded', {
+      eventBus.publish('billing.upgraded' as any, {
         organizationId: profile?.organizationId || '',
         actorUid: user?.uid || '',
         appSource: 'core',
@@ -369,7 +369,7 @@ export function Dashboard() {
         metadata: { type: 'subscription', sessionId }
       });
 
-      eventBus.publish('billing.upgraded', {
+      eventBus.publish('billing.upgraded' as any, {
         organizationId: profile?.organizationId || '',
         actorUid: user?.uid || '',
         appSource: 'core',

@@ -1,4 +1,4 @@
-import { BaseEventPayload, RegisteredEvents } from './registry';
+import { BaseEventPayload, RegisteredEvents } from './registry.js';
 
 export interface HealthMetrics {
   healthScore: number;

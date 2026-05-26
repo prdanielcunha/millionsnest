@@ -1,4 +1,4 @@
-import { debounce } from "../core/utils";
+import { debounce } from "../core/utils.js";
 
 // Types
 export interface SyncOperation {

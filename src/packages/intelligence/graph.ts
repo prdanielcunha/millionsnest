@@ -1,4 +1,4 @@
-import { BaseEventPayload } from './registry';
+import { BaseEventPayload } from './registry.js';
 
 export type GraphNodeType = 'user' | 'team' | 'ministry' | 'activity' | 'cell' | 'song';
 export type GraphEdgeType = 'leads' | 'member_of' | 'scheduled_for' | 'parent_of' | 'composed_by';

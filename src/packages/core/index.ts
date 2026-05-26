@@ -1,7 +1,7 @@
-import { eventBus } from '../events';
-import { offlineEngine } from '../offline';
-import { telemetry } from '../telemetry';
-import { analytics } from '../analytics';
+import { eventBus } from '../events/index.js';
+import { offlineEngine } from '../offline/index.js';
+import { telemetry } from '../telemetry/index.js';
+import { analytics } from '../analytics/index.js';
 
 export interface MNOSConfig {
   analyticsFlushAdapter?: (events: any[]) => Promise<void>;

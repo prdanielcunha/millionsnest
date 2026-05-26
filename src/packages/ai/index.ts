@@ -1,8 +1,11 @@
+import { i18nEngine } from '../i18n/index.js';
+
 export interface AIRequestOptions {
   model?: 'fast' | 'reasoning' | 'creative';
   temperature?: number;
   userId: string;
   organizationId: string;
+  locale?: string;
 }
 
 export interface AIServiceResponse<T = any> {
@@ -27,6 +30,16 @@ export class AIService {
   public async prompt<T>(promptText: string, context: any, options: AIRequestOptions): Promise<AIServiceResponse<T>> {
     const start = Date.now();
     
+    // Inject system locale automatically if not specified
+    const effectiveOptions = {
+      ...options,
+      locale: options.locale || i18nEngine.language || 'pt'
+    };
+
+    // Prepare system instructions for localization constraints
+    const localeInstruction = `[CRITICAL: Respond logically in the following locale code: ${effectiveOptions.locale}. Do NOT translate user-names, specific entity titles like songs or groups, or specific tags unless explicitly asked.]`;
+    const enrichedPrompt = `${localeInstruction}\n\n${promptText}`;
+    
     // In a real implementation, this would:
     // 1. Call your secure `/api/ai/invoke` endpoint
     // 2. Which then calls Gemini via @google/genai SDK
@@ -36,7 +49,7 @@ export class AIService {
       const response = await fetch('/api/v1/ai/prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptText, context, options })
+        body: JSON.stringify({ prompt: enrichedPrompt, context, options: effectiveOptions })
       });
       
       if (!response.ok) throw new Error('AI Engine failed');

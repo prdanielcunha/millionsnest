@@ -4,10 +4,15 @@
  */
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
-import { AuthProvider } from './contexts/AuthContext.js';
+import { Suspense, lazy, useEffect } from 'react';
+import { I18nextProvider } from 'react-i18next';
+import { AuthProvider, useAuth } from './contexts/AuthContext.js';
 import { OrganizationProvider } from './contexts/OrganizationContext.js';
 import { CommandPalette } from './components/CommandPalette.js';
+import { SmartResume } from './components/SmartResume.js';
+import { telemetry } from './packages/telemetry/index.js';
+import { performanceEngine } from './packages/telemetry/performance.js';
+import { i18nEngine } from './packages/i18n/index.js';
 
 const Home = lazy(() => import('./pages/Home.js').then(module => ({ default: module.Home })));
 const Terms = lazy(() => import('./pages/Terms.js').then(module => ({ default: module.Terms })));
@@ -28,29 +33,51 @@ function LoadingFallback() {
   );
 }
 
+function GlobalTelemetry() {
+  const { user, profile } = useAuth();
+  
+  useEffect(() => {
+    if (user && profile?.organizationId) {
+      telemetry.initialize(user.uid, profile.organizationId);
+      performanceEngine.initialize(user.uid, profile.organizationId);
+      
+      return () => {
+        telemetry.teardown();
+        performanceEngine.teardown();
+      };
+    }
+  }, [user, profile?.organizationId]);
+
+  return null;
+}
+
 export default function App() {
   return (
-    <AuthProvider>
-      <OrganizationProvider>
-        <BrowserRouter>
-          <CommandPalette />
-          <Suspense fallback={<LoadingFallback />}>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/admin/debug/organization" element={<AdminDebug />} />
-              <Route path="/admin/ecosystem" element={<EcosystemAdmin />} />
-              <Route path="/upgrade" element={<Checkout />} />
-              <Route path="/checkout" element={<Checkout />} />
-              <Route path="/termos-de-uso" element={<Terms />} />
-              <Route path="/politica-de-privacidade" element={<Privacy />} />
-              <Route path="/politicas-de-reembolso" element={<Refunds />} />
-              <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-      </OrganizationProvider>
-    </AuthProvider>
+    <I18nextProvider i18n={i18nEngine}>
+      <AuthProvider>
+        <OrganizationProvider>
+          <GlobalTelemetry />
+          <BrowserRouter>
+            <CommandPalette />
+            <SmartResume />
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/admin/debug/organization" element={<AdminDebug />} />
+                <Route path="/admin/ecosystem" element={<EcosystemAdmin />} />
+                <Route path="/upgrade" element={<Checkout />} />
+                <Route path="/checkout" element={<Checkout />} />
+                <Route path="/termos-de-uso" element={<Terms />} />
+                <Route path="/politica-de-privacidade" element={<Privacy />} />
+                <Route path="/politicas-de-reembolso" element={<Refunds />} />
+                <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </OrganizationProvider>
+      </AuthProvider>
+    </I18nextProvider>
   );
 }

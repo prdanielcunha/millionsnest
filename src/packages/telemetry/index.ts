@@ -1,4 +1,4 @@
-import { eventBus } from '../events';
+import { eventBus } from '../events/index.js';
 
 /**
  * Advanced Telemetry Engine
@@ -102,3 +102,4 @@ export class TelemetryEngine {
 }
 
 export const telemetry = new TelemetryEngine();
+export * from './performance.js';
