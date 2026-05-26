@@ -11,6 +11,7 @@ import { Navbar } from "../components/Navbar.js";
 import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc, limit } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { getDefaultPermissions, normalizePermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
+import { analytics } from "../lib/analytics.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -35,6 +36,16 @@ export function Dashboard() {
 
   const [repairing, setRepairing] = useState(false);
   const [subscriptionRepairAvailable, setSubscriptionRepairAvailable] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      analytics.track('page_view', {
+        userId: user.uid,
+        organizationId: profile?.organizationId,
+        metadata: { path: '/dashboard' }
+      });
+    }
+  }, [user]);
 
   const handleRepairAccount = async () => {
     if (!user) return;
@@ -86,6 +97,11 @@ export function Dashboard() {
     if (!user) return;
     try {
       setCheckoutLoading(true);
+      analytics.track('checkout_started', {
+        userId: user.uid,
+        organizationId: profile?.organizationId,
+        metadata: { type: 'portal' }
+      });
       const res = await fetch('/api/v1/billing/portal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -300,6 +316,7 @@ export function Dashboard() {
     const link = `${window.location.origin}/login?org=${orgId}`;
     const text = encodeURIComponent(`Olá! Quero te convidar para acessar nossa organização no ecossistema MillionsNest.\n\nAcesse: ${link}`);
     window.open(`https://wa.me/?text=${text}`, '_blank');
+    analytics.track('invite_sent', { userId: user?.uid, organizationId: orgId, metadata: { method: 'whatsapp' } });
   };
 
   const handleCopyLink = () => {
@@ -308,6 +325,7 @@ export function Dashboard() {
     navigator.clipboard.writeText(link);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+    analytics.track('invite_sent', { userId: user?.uid, organizationId: orgId, metadata: { method: 'copy_link' } });
   };
 
   useEffect(() => {
@@ -318,6 +336,13 @@ export function Dashboard() {
     if (addonSuccess) {
       window.history.replaceState({}, document.title, window.location.pathname);
       console.log('Returned from Addon checkout:', addonSuccess);
+      
+      analytics.track('checkout_completed', {
+        userId: user?.uid,
+        organizationId: profile?.organizationId,
+        metadata: { type: 'addon', product: addonSuccess }
+      });
+      
       alert(`Compra de ${addonSuccess.replace(/_/g, ' ')} concluída com sucesso! Obrigado!`);
       setLoadingSub(true);
       fetchSubscriptionAndOrg(true);
@@ -327,6 +352,13 @@ export function Dashboard() {
     if (sessionId) {
       window.history.replaceState({}, document.title, window.location.pathname);
       console.log('Returned from Stripe session:', sessionId);
+      
+      analytics.track('checkout_completed', {
+        userId: user?.uid,
+        organizationId: profile?.organizationId,
+        metadata: { type: 'subscription', sessionId }
+      });
+      
       // TODO: Criar suporte visual futuro no MillionsNest: "Cupom aplicado com sucesso"
       // Aqui podemos checar se houve desconto na session e exibir uma notificação.
       setLoadingSub(true);
@@ -593,6 +625,7 @@ export function Dashboard() {
                           <a 
                             href="https://musicscale.millionsnest.com" 
                             target="_blank" rel="noopener noreferrer"
+                            onClick={() => analytics.track('app_usage', { userId: user?.uid, organizationId: profile?.organizationId, app: 'musicscale' })}
                             className="flex-1 py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95"
                           >
                             Abrir <ArrowRight className="w-3.5 h-3.5" />

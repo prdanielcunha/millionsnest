@@ -3,6 +3,7 @@ import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../lib/firebase.js";
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
+import { analytics } from "../lib/analytics.js";
 
 interface UserProfile {
   uid: string;
@@ -87,6 +88,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const updatedProfile = { ...userData, lastLoginAt: new Date() };
             setProfile(updatedProfile);
             localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
+            
+            analytics.track('login', {
+              userId: currentUser.uid,
+              organizationId: updatedProfile.organizationId || currentUser.uid
+            });
           } else {
             // Criar novo usuário
             const inviteOrgId = localStorage.getItem('invite_org_id');
@@ -144,6 +150,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             setProfile(newProfile as UserProfile);
             localStorage.setItem('mn_user_profile', JSON.stringify(newProfile));
+            
+            analytics.track('signup', {
+              userId: currentUser.uid,
+              organizationId: targetOrgId,
+              metadata: { invite: !!inviteOrgId }
+            });
           }
         } catch (error) {
           console.error("Erro ao carregar ou criar perfil do usuário:", error);

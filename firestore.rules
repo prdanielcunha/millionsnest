@@ -356,6 +356,12 @@ service cloud.firestore {
     // 7. ECOSYSTEM INFRASTRUCTURE COLLECTIONS
     // ==========================================
 
+    match /analytics_events/{eventId} {
+      allow create: if isAuthenticated();
+      allow read: if isSystemAdmin();
+      allow update, delete: if false;
+    }
+
     match /audit_logs/{logId} {
       // Audit logs are write-only for clients (or read for admins)
       allow create: if isAuthenticated(); 
