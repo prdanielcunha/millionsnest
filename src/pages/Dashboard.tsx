@@ -12,6 +12,7 @@ import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, q
 import { db } from "../lib/firebase.js";
 import { getDefaultPermissions, normalizePermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 import { analytics } from "../lib/analytics.js";
+import { eventBus } from "../sdk/events.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -342,6 +343,15 @@ export function Dashboard() {
         organizationId: profile?.organizationId,
         metadata: { type: 'addon', product: addonSuccess }
       });
+
+      eventBus.publish('billing.upgraded', {
+        organizationId: profile?.organizationId || '',
+        actorUid: user?.uid || '',
+        appSource: 'core',
+        isPublicTimeline: true,
+        title: 'Resource Add-on Adquirido',
+        description: addonSuccess.replace(/_/g, ' ')
+      });
       
       alert(`Compra de ${addonSuccess.replace(/_/g, ' ')} concluída com sucesso! Obrigado!`);
       setLoadingSub(true);
@@ -357,6 +367,15 @@ export function Dashboard() {
         userId: user?.uid,
         organizationId: profile?.organizationId,
         metadata: { type: 'subscription', sessionId }
+      });
+
+      eventBus.publish('billing.upgraded', {
+        organizationId: profile?.organizationId || '',
+        actorUid: user?.uid || '',
+        appSource: 'core',
+        isPublicTimeline: true,
+        title: 'Assinatura Atualizada',
+        description: 'Nova configuração de plano ativada'
       });
       
       // TODO: Criar suporte visual futuro no MillionsNest: "Cupom aplicado com sucesso"
@@ -586,15 +605,36 @@ export function Dashboard() {
                      </div>
                   </div>
 
-                  {/* Upcoming Activities / Empty State for Now */}
-                  <div className="bg-[#0B0F19]/30 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 border-dashed flex flex-col justify-center items-center text-center group transition-all hover:bg-[#0B0F19]/50 hover:border-white/10 min-h-[160px]">
-                    <div className="w-12 h-12 bg-[#050505] rounded-2xl flex items-center justify-center mb-4 text-[#A0A7B5] shadow-inner border border-white/5 transition-transform group-hover:scale-105">
-                       <Clock className="w-5 h-5" />
+                      {/* Upcoming Activities / Empty State for Now */}
+                  <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 shadow-inner transition-all relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    
+                    <h3 className="text-lg font-semibold text-[#F5F7FA] tracking-tight mb-4 flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-[#2B85EB]" /> Timeline Ministerial
+                    </h3>
+                    
+                    <div className="space-y-4 relative">
+                      <div className="absolute left-2.5 top-2 bottom-2 w-px bg-white/5" />
+                      
+                      {/* Timeline Items (Mocked for presentation until Graph is fed) */}
+                      <div className="relative pl-8">
+                        <div className="absolute left-[5px] top-1.5 w-2 h-2 rounded-full bg-[#10B981] ring-4 ring-[#0B0F19]" />
+                        <p className="text-sm font-medium text-[#F5F7FA]">Escala de Domingo Confirmada</p>
+                        <p className="text-xs text-[#A0A7B5] mt-0.5">Equipe de Louvor • <span className="text-[#10B981] font-medium">Você aceitou</span> • Há 2 horas</p>
+                      </div>
+
+                      <div className="relative pl-8">
+                        <div className="absolute left-[5px] top-1.5 w-2 h-2 rounded-full bg-[#2B85EB] ring-4 ring-[#0B0F19]" />
+                        <p className="text-sm font-medium text-[#F5F7FA]">Novo Integrante: Mateus Costa</p>
+                        <p className="text-xs text-[#A0A7B5] mt-0.5">Adicionado como Baixista • Há 1 dia</p>
+                      </div>
+
+                      <div className="relative pl-8">
+                        <div className="absolute left-[5px] top-1.5 w-2 h-2 rounded-full bg-white/20 ring-4 ring-[#0B0F19]" />
+                        <p className="text-sm font-medium text-[#F5F7FA]">Assinatura Renovada</p>
+                        <p className="text-xs text-[#A0A7B5] mt-0.5">Sistema Central • Há 3 dias</p>
+                      </div>
                     </div>
-                    <h3 className="text-lg font-semibold text-[#A0A7B5] tracking-tight mb-2">Próximas Atividades</h3>
-                    <p className="text-[#A0A7B5]/60 text-sm font-normal px-4 max-w-sm">
-                      Nenhuma atividade urgente no ecossistema MillionsNest. (Integração de escalas em breve).
-                    </p>
                   </div>
 
                   {/* Active Ecosystem Apps */}
