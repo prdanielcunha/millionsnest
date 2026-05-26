@@ -229,6 +229,24 @@ export function EcosystemAdmin() {
 
                   const conversionRate = checkoutsStarted > 0 ? Math.round((checkoutsCompleted / checkoutsStarted) * 100) : 0;
 
+                  // UX Funnels
+                  let onboardingStarted = 0;
+                  let onboardingCompleted = 0;
+                  let aiImportStarted = 0;
+                  let aiImportCompleted = 0;
+                  let aiImportAbandoned = 0;
+
+                  analyticsEvents.forEach(evt => {
+                    if (evt.eventType === 'onboarding_started') onboardingStarted++;
+                    if (evt.eventType === 'onboarding_completed') onboardingCompleted++;
+                    if (evt.eventType === 'ai_processing_started') aiImportStarted++;
+                    if (evt.eventType === 'ai_processing_completed') aiImportCompleted++;
+                    if (evt.eventType === 'import_abandoned') aiImportAbandoned++;
+                  });
+
+                  const onboardingConv = onboardingStarted > 0 ? Math.round((onboardingCompleted / onboardingStarted) * 100) : 0;
+                  const aiConv = aiImportStarted > 0 ? Math.round((aiImportCompleted / aiImportStarted) * 100) : 0;
+
                   return (
                     <>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -271,6 +289,61 @@ export function EcosystemAdmin() {
                           <p className="text-xs text-[#A0A7B5] mt-2">Long Tasks e Slow Renders detectados</p>
                         </div>
                       </div>
+
+                      {/* UX Funnels */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="bg-[#0B0F19] rounded-2xl p-6 border border-white/10">
+                           <h3 className="text-[#F5F7FA] font-medium mb-4 flex items-center gap-2">
+                             <Users className="w-4 h-4 text-[#A0A7B5]"/> Onboarding Funnel
+                           </h3>
+                           <div className="space-y-4">
+                              <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span className="text-[#A0A7B5]">Iniciou ({onboardingStarted})</span>
+                                  <span className="text-[#A0A7B5]">100%</span>
+                                </div>
+                                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                                  <div className="h-full bg-[#2B85EB]" style={{ width: '100%' }} />
+                                </div>
+                              </div>
+                              <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span className="text-[#A0A7B5]">Concluiu ({onboardingCompleted})</span>
+                                  <span className="text-[#A0A7B5]">{onboardingConv}%</span>
+                                </div>
+                                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                                  <div className="h-full bg-[#10B981]" style={{ width: `${onboardingConv}%` }} />
+                                </div>
+                              </div>
+                           </div>
+                        </div>
+
+                        <div className="bg-[#0B0F19] rounded-2xl p-6 border border-white/10">
+                           <h3 className="text-[#F5F7FA] font-medium mb-4 flex items-center gap-2">
+                             <TrendingUp className="w-4 h-4 text-[#A0A7B5]"/> IA Import Funnel
+                           </h3>
+                           <div className="space-y-4">
+                              <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span className="text-[#A0A7B5]">Iniciou ({aiImportStarted})</span>
+                                  <span className="text-[#A0A7B5]">100%</span>
+                                </div>
+                                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                                  <div className="h-full bg-[#A855F7]" style={{ width: '100%' }} />
+                                </div>
+                              </div>
+                              <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span className="text-[#A0A7B5]">Concluiu ({aiImportCompleted} / Abandono {aiImportAbandoned})</span>
+                                  <span className="text-[#A0A7B5]">{aiConv}%</span>
+                                </div>
+                                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                                  <div className="h-full bg-[#10B981]" style={{ width: `${aiConv}%` }} />
+                                </div>
+                              </div>
+                           </div>
+                        </div>
+                      </div>
                     </>
                   );
                 })()}
@@ -289,26 +362,70 @@ export function EcosystemAdmin() {
                   </p>
                   
                   <div className="space-y-4">
-                    <h4 className="text-sm font-medium text-[#F5F7FA]">Log de Eventos (Top 10 Recentes)</h4>
-                    <div className="space-y-2">
-                      {analyticsEvents.slice(0, 10).map(event => (
-                        <div key={event.id} className="flex flex-col md:flex-row md:items-center justify-between p-3 bg-white/5 border border-white/10 rounded-lg text-sm">
-                          <div className="flex items-center gap-3">
-                            <span className="px-2 py-1 bg-white/10 text-white text-[10px] uppercase font-bold rounded">
-                              {event.eventType}
-                            </span>
-                            <span className="text-[#A0A7B5] text-xs">Org: {event.organizationId?.substring(0, 8)}...</span>
-                          </div>
-                          <span className="text-[#A0A7B5] text-xs mt-2 md:mt-0">
-                            {event.timestamp ? new Date(event.timestamp.seconds * 1000).toLocaleString('pt-BR') : 'Agora'}
-                          </span>
-                        </div>
-                      ))}
-                      {analyticsEvents.length === 0 && (
-                        <p className="text-sm text-[#A0A7B5] py-4 text-center border border-white/5 border-dashed rounded-xl">
-                          Nenhum evento registrado ainda.
-                        </p>
-                      )}
+                    <h4 className="text-sm font-medium text-[#F5F7FA]">UX Timeline (Sessões Recentes)</h4>
+                    <div className="space-y-4">
+                      {(() => {
+                        // Group events by session
+                        const sessions: Record<string, any[]> = {};
+                        analyticsEvents.forEach(evt => {
+                          const sid = evt.sessionId || 'unknown';
+                          if (!sessions[sid]) sessions[sid] = [];
+                          sessions[sid].push(evt);
+                        });
+
+                        // Sort sessions by latest event
+                        const sortedSessions = Object.entries(sessions).sort((a, b) => {
+                          const maxA = Math.max(...a[1].map(e => e.timestamp?.seconds || 0));
+                          const maxB = Math.max(...b[1].map(e => e.timestamp?.seconds || 0));
+                          return maxB - maxA;
+                        }).slice(0, 5);
+
+                        if (sortedSessions.length === 0) {
+                          return (
+                            <p className="text-sm text-[#A0A7B5] py-4 text-center border border-white/5 border-dashed rounded-xl">
+                              Nenhuma sessão registrada.
+                            </p>
+                          );
+                        }
+
+                        return sortedSessions.map(([sid, events]) => {
+                          // Sort events ascending within session to form timeline
+                          const sortedEvents = [...events].sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+                          const userEvt = sortedEvents.find(e => e.userId && e.userId !== 'none');
+                          
+                          return (
+                            <div key={sid} className="bg-white/5 border border-white/10 rounded-xl p-4">
+                              <div className="flex justify-between items-center mb-4">
+                                <h5 className="text-xs font-semibold text-[#F5F7FA] uppercase tracking-wider">
+                                  Session: {sid.substring(0, 8)}...
+                                </h5>
+                                <span className="text-[#A0A7B5] text-xs">
+                                  User: {userEvt ? userEvt.userId.substring(0, 5) : 'Anon'} | Eventos: {events.length}
+                                </span>
+                              </div>
+                              <div className="space-y-3">
+                                {sortedEvents.map(event => (
+                                  <div key={event.id} className="flex gap-3">
+                                    <div className="flex flex-col items-center">
+                                      <div className={`w-2 h-2 rounded-full ${event.eventType === 'error' ? 'bg-red-500' : event.eventType === 'import_abandoned' ? 'bg-yellow-500' : 'bg-[#2B85EB]'}`} />
+                                      <div className="w-px h-full bg-white/10 my-1" />
+                                    </div>
+                                    <div className="pb-3 flex-1 flex justify-between items-start">
+                                      <div>
+                                        <p className="text-[11px] font-medium text-[#F5F7FA] uppercase">{event.eventType}</p>
+                                        <p className="text-[10px] text-[#A0A7B5] mt-0.5">Org: {event.organizationId?.substring(0, 8) || 'none'} | App: {event.app || 'core'}</p>
+                                      </div>
+                                      <span className="text-[#A0A7B5] text-[10px]">
+                                        {event.timestamp ? new Date(event.timestamp.seconds * 1000).toLocaleTimeString('pt-BR') : 'Agora'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 </div>

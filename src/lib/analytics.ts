@@ -15,12 +15,24 @@ export type AnalyticsEventType =
   | 'checkout_completed'
   | 'error'
   | 'performance_metric'
+  | 'onboarding_started'
+  | 'onboarding_completed'
+  | 'song_import_started'
+  | 'ai_processing_started'
+  | 'ai_processing_completed'
+  | 'ai_processing_failed'
+  | 'import_abandoned'
+  | 'scale_creation_started'
+  | 'scale_creation_completed'
+  | 'performance_mode_started'
+  | 'performance_mode_ended'
   | string;
 
 interface AnalyticsEvent {
   eventType: AnalyticsEventType;
   organizationId?: string;
   userId?: string;
+  sessionId?: string;
   app?: string;
   metadata?: Record<string, any>;
   timestamp: Date;
@@ -31,8 +43,18 @@ class AnalyticsManager {
   private flushInterval: any = null;
   private readonly MAX_BUFFER_SIZE = 20;
   private readonly FLUSH_INTERVAL_MS = 10000; // 10 seconds
+  private sessionId: string = '';
 
   constructor() {
+    if (typeof window !== 'undefined') {
+      let sid = sessionStorage.getItem('mn_session_id');
+      if (!sid) {
+        sid = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        sessionStorage.setItem('mn_session_id', sid);
+      }
+      this.sessionId = sid;
+    }
+
     this.startInterval();
     if (typeof window !== 'undefined') {
       window.addEventListener('beforeunload', () => {
@@ -102,6 +124,7 @@ class AnalyticsManager {
     payload: { 
       organizationId?: string, 
       userId?: string, 
+      sessionId?: string,
       app?: string, 
       metadata?: Record<string, any> 
     } = {}
@@ -110,6 +133,7 @@ class AnalyticsManager {
       eventType,
       organizationId: payload.organizationId || 'none',
       userId: payload.userId || 'none',
+      sessionId: payload.sessionId || this.sessionId,
       app: payload.app || 'millionsnest_core',
       metadata: payload.metadata || {},
       timestamp: new Date()
