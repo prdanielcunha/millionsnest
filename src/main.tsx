@@ -23,5 +23,11 @@ window.onerror = function(message, source, lineno, colno, error) {
 };
 
 window.addEventListener('unhandledrejection', function(event) {
-  console.error("GLOBAL_PROMISE_REJECTION:", event.reason);
+  // Aprimorando o log para capturar o stack trace se for um Error object
+  const reason = event.reason;
+  console.error("GLOBAL_PROMISE_REJECTION (detalhes):", {
+    reason,
+    message: reason instanceof Error ? reason.message : 'Sem mensagem',
+    stack: reason instanceof Error ? reason.stack : 'Sem stack trace'
+  });
 });
