@@ -1,30 +1,44 @@
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../../lib/firebase.js";
+
+/**
+ * 1. OFFICIAL EVENT SCHEMA (namespace.entity.action)
+ * 
+ * Namespaces: ecosystem, organization, billing, musicscale
+ * Entities: member, settings, scale, song, rehearsal
+ * Actions: created, updated, deleted, invited, joined, opened
+ */
 export type EventAction = 
-  // Identity & Org
-  | 'user.login'
-  | 'user.signup'
-  | 'org.created'
-  | 'org.member_joined'
-  // Ministry Operations
-  | 'scale.created'
-  | 'scale.published'
-  | 'scale.confirmed'
-  | 'scale.declined'
-  | 'rehearsal.scheduled'
-  | 'rehearsal.confirmed'
-  | 'worship.started'
-  | 'worship.ended'
-  | 'volunteer.assigned'
-  // Music & Assets
-  | 'song.created'
-  | 'song.opened'
-  | 'resource.uploaded'
-  | 'ai.import_started'
-  | 'ai.import_success'
-  | 'ai.import_failed'
+  // Ecosystem / Identity
+  | 'ecosystem.user.login'
+  | 'ecosystem.user.signup'
+  
+  // Organization / Governance
+  | 'organization.tenant.created'
+  | 'organization.member.invited'
+  | 'organization.member.joined'
+  | 'organization.member.role_updated'
+  | 'organization.settings.updated'
+  | 'organization.audit_log.viewed'
+
   // Billing
-  | 'billing.checkout_started'
-  | 'billing.upgraded'
-  | string; // Keep extensible for dynamic features
+  | 'billing.checkout.started'
+  | 'billing.subscription.upgraded'
+  | 'billing.subscription.canceled'
+
+  // MusicScale Integration
+  | 'musicscale.scale.created'
+  | 'musicscale.scale.published'
+  | 'musicscale.scale.confirmed'
+  | 'musicscale.scale.declined'
+  | 'musicscale.rehearsal.scheduled'
+  | 'musicscale.rehearsal.attended'
+  | 'musicscale.song.created'
+  | 'musicscale.song.opened'
+  | 'musicscale.volunteer.assigned'
+
+  // Open Extensibility
+  | string;
 
 export interface EventBusPayload {
   organizationId: string;
@@ -32,17 +46,46 @@ export interface EventBusPayload {
   appSource: 'core' | 'musicscale' | 'cultoflow' | 'cells' | string;
   metadata?: Record<string, any>;
   targetEntityId?: string;
+  
+  // For Timeline / UI propagation
+  isPublicTimeline?: boolean;
+  title?: string;
+  description?: string;
 }
 
-export type EventMiddleware = (action: EventAction, payload: EventBusPayload) => Promise<boolean | void>;
+export type EventMiddleware = (action: EventAction, payload: EventBusPayload & { timestamp: number }) => Promise<boolean | void>;
 
 /**
- * Ecosystem Global Event Bus
- * Pub/Sub system to decouple app actions from Analytics, Timeline, and sync logic.
+ * ORGANIZATIONAL ACTIVITY GRAPH
+ * Persists high-level operations for timeline visualization
+ */
+const TimelineEngine: EventMiddleware = async (action, payload) => {
+  if (payload.isPublicTimeline && payload.organizationId) {
+    try {
+      const timelineRef = collection(db, `organizations/${payload.organizationId}/timeline`);
+      await addDoc(timelineRef, {
+        eventType: action,
+        actorUid: payload.userId,
+        appSource: payload.appSource,
+        targetId: payload.targetEntityId || null,
+        title: payload.title || action,
+        description: payload.description || '',
+        metadata: payload.metadata || {},
+        timestamp: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Failed to publish to unified timeline graph", error);
+    }
+  }
+};
+
+/**
+ * EVENT VALIDATOR & ECOSYSTEM EVENT BUS
+ * Central decoupled communication across all MillionsNest OS layers
  */
 class EcosystemEventBus {
-  private middlewares: EventMiddleware[] = [];
-  private listeners: Map<string, Set<(payload: EventBusPayload) => void>> = new Map();
+  private middlewares: EventMiddleware[] = [TimelineEngine];
+  private listeners: Map<string, Set<(payload: EventBusPayload & { timestamp: number }) => void>> = new Map();
   private static instance: EcosystemEventBus;
 
   private constructor() {}
@@ -54,50 +97,42 @@ class EcosystemEventBus {
     return EcosystemEventBus.instance;
   }
 
-  /**
-   * Register a middleware to intercept or process all events (e.g. Analytics Engine, Timeline Engine)
-   */
   public registerMiddleware(middleware: EventMiddleware) {
     this.middlewares.push(middleware);
   }
 
-  /**
-   * Subscribe to a specific event action
-   */
-  public subscribe(action: EventAction, callback: (payload: EventBusPayload) => void) {
+  public subscribe(action: EventAction, callback: (payload: EventBusPayload & { timestamp: number }) => void) {
     if (!this.listeners.has(action)) {
       this.listeners.set(action, new Set());
     }
     this.listeners.get(action)!.add(callback);
   }
 
-  /**
-   * Unsubscribe from a specific event action
-   */
-  public unsubscribe(action: EventAction, callback: (payload: EventBusPayload) => void) {
+  public unsubscribe(action: EventAction, callback: (payload: EventBusPayload & { timestamp: number }) => void) {
     if (this.listeners.has(action)) {
       this.listeners.get(action)!.delete(callback);
     }
   }
 
   /**
-   * Publish an event to the ecosystem
+   * AI Readiness / Event Integrity Validator
+   * Prepares and validates structured events logically before emission
    */
   public async publish(action: EventAction, payload: EventBusPayload) {
-    // Inject automatically if missing
-    const enrichedPayload = {
-      ...payload,
-      timestamp: Date.now()
-    };
+    if (!payload.organizationId && !action.startsWith('ecosystem.user') && !action.startsWith('system.')) {
+      console.warn(`[Event Integrity] Missing scope (organization) on event ${action}`);
+    }
 
-    // Run listeners synchronously
+    const enrichedPayload = { ...payload, timestamp: Date.now() };
+
+    // Standard local pub/sub
     if (this.listeners.has(action)) {
       this.listeners.get(action)!.forEach(fn => {
-        try { fn(enrichedPayload) } catch (e) { console.error('Listener error', e) }
+        try { fn(enrichedPayload) } catch (e) { console.error('Ecosystem event listener crash', e) }
       });
     }
 
-    // Run through middlewares concurrently
+    // Pass through architecture pipelines
     await Promise.allSettled(
       this.middlewares.map(mw =>
         Promise.resolve().then(() => mw(action, enrichedPayload))

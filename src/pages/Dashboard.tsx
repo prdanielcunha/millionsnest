@@ -12,7 +12,7 @@ import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, q
 import { db } from "../lib/firebase.js";
 import { getDefaultPermissions, normalizePermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 import { analytics } from "../lib/analytics.js";
-import { eventBus } from "../sdk/events.js";
+import { eventBus } from "../packages/events/index.js";
 import { toast } from 'react-hot-toast';
 
 import { EcosystemShell } from "../components/EcosystemShell.js";
@@ -386,9 +386,9 @@ export function Dashboard() {
         metadata: { type: 'addon', product: addonSuccess }
       });
 
-      eventBus.publish('billing.upgraded' as any, {
+      eventBus.publish('billing.subscription.upgraded' as any, {
         organizationId: profile?.organizationId || '',
-        actorUid: user?.uid || '',
+        userId: user?.uid || '',
         appSource: 'core',
         isPublicTimeline: true,
         title: 'Resource Add-on Adquirido',
@@ -411,9 +411,9 @@ export function Dashboard() {
         metadata: { type: 'subscription', sessionId }
       });
 
-      eventBus.publish('billing.upgraded' as any, {
+      eventBus.publish('billing.subscription.upgraded' as any, {
         organizationId: profile?.organizationId || '',
-        actorUid: user?.uid || '',
+        userId: user?.uid || '',
         appSource: 'core',
         isPublicTimeline: true,
         title: 'Assinatura Atualizada',

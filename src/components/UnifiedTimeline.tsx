@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase.js';
 import { useAuth } from '../contexts/AuthContext.js';
-import { Clock, CheckCircle2, Music, Users, ShieldAlert, ArrowRight } from 'lucide-react';
+import { Clock, CheckCircle2, Music, Users, ShieldAlert, Filter, CalendarDays, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { eventBus } from '../packages/events/index.js';
 
 interface TimelineEvent {
   id: string;
@@ -19,102 +20,137 @@ export function UnifiedTimeline() {
   const { profile } = useAuth();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'musicscale' | 'organization' | 'billing'>('all');
 
   useEffect(() => {
     if (!profile?.organizationId) return;
 
     const timelineRef = collection(db, `organizations/${profile.organizationId}/timeline`);
-    const q = query(timelineRef, orderBy('timestamp', 'desc'), limit(15));
+    const q = query(timelineRef, orderBy('timestamp', 'desc'), limit(50));
 
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TimelineEvent));
       setEvents(data);
       setLoading(false);
+      
+      // Update UI telemetry for operational tracking
+      eventBus.publish('ecosystem.timeline.viewed', { 
+        organizationId: profile.organizationId, 
+        userId: profile.id, 
+        appSource: 'core',
+        metadata: { loadedEventCount: data.length }
+      });
     });
 
     return () => unsub();
-  }, [profile?.organizationId]);
+  }, [profile?.organizationId, profile?.id]);
 
   const getEventIcon = (type: string) => {
-    if (type.includes('scale')) return <Clock className="w-3.5 h-3.5 text-[#2B85EB]" />;
-    if (type.includes('rehearsal')) return <Users className="w-3.5 h-3.5 text-[#A855F7]" />;
+    if (type.includes('scale') || type.includes('rehearsal')) return <CalendarDays className="w-3.5 h-3.5 text-[#2B85EB]" />;
+    if (type.includes('worship')) return <Users className="w-3.5 h-3.5 text-[#A855F7]" />;
     if (type.includes('music') || type.includes('song')) return <Music className="w-3.5 h-3.5 text-[#10B981]" />;
-    if (type.includes('billing') || type.includes('org')) return <ShieldAlert className="w-3.5 h-3.5 text-[#F59E0B]" />;
-    return <CheckCircle2 className="w-3.5 h-3.5 text-[#A0A7B5]" />;
+    if (type.includes('billing')) return <ShieldAlert className="w-3.5 h-3.5 text-[#F59E0B]" />;
+    if (type.includes('org') || type.includes('member')) return <Key className="w-3.5 h-3.5 text-[#A0A7B5]" />;
+    return <CheckCircle2 className="w-3.5 h-3.5 text-[#2B85EB]" />;
   };
 
   const getEventColorDot = (type: string) => {
-    if (type.includes('scale')) return 'bg-[#2B85EB]';
+    if (type.includes('scale') || type.includes('rehearsal')) return 'bg-[#2B85EB]';
     if (type.includes('music') || type.includes('song')) return 'bg-[#10B981]';
-    if (type.includes('rehearsal')) return 'bg-[#A855F7]';
+    if (type.includes('worship')) return 'bg-[#A855F7]';
     if (type.includes('billing')) return 'bg-[#F59E0B]';
-    return 'bg-[#A0A7B5]';
+    return 'bg-[#2B85EB]'; // Core ecosystem color
   };
+
+  const filteredEvents = useMemo(() => {
+    if (filter === 'all') return events;
+    return events.filter(e => e.eventType.startsWith(filter) || e.appSource === filter);
+  }, [events, filter]);
 
   if (loading) {
     return (
-      <div className="bg-[#0B0F19] rounded-[2rem] p-6 border border-white/5 opacity-50 flex items-center justify-center animate-pulse min-h-[300px]">
-        <span className="text-sm text-[#A0A7B5]">Carregando Timeline Operacional...</span>
+      <div className="bg-[#0B0F19] rounded-[2rem] p-6 border border-white/5 opacity-50 flex items-center justify-center animate-pulse min-h-[400px]">
+        <span className="text-sm font-medium tracking-tight text-[#A0A7B5] flex items-center gap-2"><Clock className="w-4 h-4 animate-spin"/> Carregando Timeline...</span>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 shadow-inner transition-all relative overflow-hidden flex flex-col min-h-[300px]">
+    <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 shadow-inner transition-all relative overflow-hidden flex flex-col min-h-[450px]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
       
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
-          <Clock className="w-5 h-5 text-[#A0A7B5]" /> Timeline Ministerial
-        </h3>
-        <span className="text-[10px] text-[#A0A7B5] font-mono tracking-widest uppercase flex items-center gap-1.5">
-          Live <div className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
-        </span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+        <div>
+           <h3 className="text-lg font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
+             <Clock className="w-5 h-5 text-[#A0A7B5]" /> Timeline Ministerial
+           </h3>
+           <p className="text-xs text-[#A0A7B5] mt-0.5">Memória operacional inteligente e em tempo real.</p>
+        </div>
+        
+        {/* Filters */}
+        <div className="flex items-center gap-2 bg-[#050505] p-1 rounded-xl border border-white/5">
+           {(['all', 'musicscale', 'organization'] as const).map(f => (
+             <button
+               key={f}
+               onClick={() => setFilter(f)}
+               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all capitalize ${filter === f ? 'bg-white/10 text-[#F5F7FA]' : 'text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
+             >
+               {f === 'all' ? 'Tudo' : f}
+             </button>
+           ))}
+        </div>
       </div>
       
-      <div className="flex-1 relative">
-        {events.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center space-y-3 opacity-60">
+      <div className="flex-1 relative overflow-y-auto no-scrollbar pb-10">
+        {filteredEvents.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-3 opacity-60 min-h-[200px]">
              <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center text-[#A0A7B5]">
-                <Clock className="w-5 h-5" />
+                <Filter className="w-5 h-5" />
              </div>
              <div>
-                <p className="text-sm font-medium text-[#F5F7FA]">Timeline Silenciosa</p>
-                <p className="text-xs text-[#A0A7B5] mt-1 max-w-[200px]">Os eventos do seu ecossistema aparecerão magicamente aqui.</p>
+                <p className="text-sm font-medium text-[#F5F7FA]">Nenhum evento encontrado</p>
+                <p className="text-xs text-[#A0A7B5] mt-1 max-w-[200px]">A memória da organização filtrada está vazia.</p>
              </div>
           </div>
         ) : (
-          <div className="space-y-5 relative">
-            <div className="absolute left-3 top-2 bottom-2 w-px bg-white/5" />
+          <div className="space-y-6 relative ml-2">
+            <div className="absolute left-[3px] top-2 bottom-2 w-px bg-white/5" />
             
-            <AnimatePresence>
-              {events.map((evt, idx) => (
+            <AnimatePresence mode="popLayout">
+              {filteredEvents.map((evt, idx) => (
                 <motion.div 
+                  layout
                   key={evt.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.2, delay: idx * 0.05 }}
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
                   className="relative pl-8 group cursor-default"
                 >
-                  <div className={`absolute left-[9px] top-1.5 w-1.5 h-1.5 rounded-full ${getEventColorDot(evt.eventType)} ring-4 ring-[#0B0F19] transition-transform group-hover:scale-150`} />
+                  <div className={`absolute left-0 top-1.5 w-2 h-2 rounded-full ${getEventColorDot(evt.eventType)} ring-4 ring-[#0B0F19] transition-transform group-hover:scale-150`} />
                   
-                  <div className="flex justify-between items-start gap-4">
-                    <div>
-                      <p className="text-sm font-medium text-[#F5F7FA] group-hover:text-white transition-colors">{evt.title}</p>
-                      <p className="text-xs text-[#A0A7B5] mt-0.5 line-clamp-2">{evt.description}</p>
+                  <div className="flex flex-col gap-1 bg-[#050505] p-3 rounded-xl border border-white/5 hover:border-white/10 transition-colors shadow-sm relative">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                           <span className="flex items-center justify-center w-5 h-5 rounded bg-white/5">
+                             {getEventIcon(evt.eventType)}
+                           </span>
+                           <p className="text-sm font-semibold text-[#F5F7FA]">{evt.title}</p>
+                        </div>
+                        <p className="text-xs text-[#A0A7B5] line-clamp-2 ml-7 leading-relaxed">{evt.description}</p>
+                      </div>
+                      <span className="text-[10px] text-[#A0A7B5] pt-1 font-mono shrink-0">
+                        {evt.timestamp ? (
+                           new Date(evt.timestamp.seconds * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                        ) : 'agora'}
+                      </span>
                     </div>
-                    <span className="text-[10px] text-[#6B7280] whitespace-nowrap pt-0.5 font-mono">
-                      {evt.timestamp ? (
-                         new Date(evt.timestamp.seconds * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                      ) : 'agora'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center gap-1.5 mt-2 opacity-50 group-hover:opacity-100 transition-opacity">
-                    <span className="flex items-center justify-center w-5 h-5 rounded bg-white/5">
-                       {getEventIcon(evt.eventType)}
-                    </span>
-                    <span className="text-[9px] uppercase font-bold text-[#A0A7B5] tracking-widest">{evt.appSource}</span>
+                    
+                    <div className="flex items-center gap-2 mt-1 ml-7 opacity-70">
+                      <span className="text-[9px] uppercase font-bold text-[#A0A7B5] tracking-widest bg-white/5 px-1.5 py-0.5 rounded shadow-sm">{evt.appSource}</span>
+                      <span className="text-[9px] uppercase font-bold text-[#6B7280] tracking-widest bg-white/5 px-1.5 py-0.5 rounded shadow-sm">{evt.eventType}</span>
+                    </div>
                   </div>
                 </motion.div>
               ))}
@@ -124,9 +160,7 @@ export function UnifiedTimeline() {
       </div>
       
       {/* Ghost gradient for long timelines */}
-      {events.length > 5 && (
-        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#0B0F19] to-transparent pointer-events-none" />
-      )}
+      <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#0B0F19] to-transparent pointer-events-none" />
     </div>
   );
 }
