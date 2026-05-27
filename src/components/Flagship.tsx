@@ -78,7 +78,7 @@ export function Flagship() {
         </motion.div>
 
         {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[300px]">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
           {/* Card 1: Escalas & Setlists */}
           <motion.div 
@@ -97,10 +97,12 @@ export function Flagship() {
             </div>
             
             {/* Visual element */}
-            <div className="w-full mt-2 flex-1 relative overflow-hidden flex justify-center items-start pt-2">
+            <div className="w-full mt-2 relative overflow-hidden flex justify-center pt-2 min-h-[200px] sm:min-h-[250px] md:min-h-[280px]">
                <div className="absolute inset-0 z-10 pointer-events-none bg-gradient-to-b from-transparent to-[#0B0F19]" />
-               <div className="w-[1024px] origin-top scale-[0.35] sm:scale-[0.5] md:scale-[0.55] lg:scale-[0.65] transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-2 group-hover:scale-[0.37] sm:group-hover:scale-[0.52] md:group-hover:scale-[0.57] lg:group-hover:scale-[0.67]">
-                 <EscalasMockup />
+               <div className="absolute inset-x-0 top-2 flex justify-center">
+                 <div className="w-[1024px] origin-top scale-[0.35] sm:scale-[0.5] md:scale-[0.55] lg:scale-[0.65] transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-2 group-hover:scale-[0.37] sm:group-hover:scale-[0.52] md:group-hover:scale-[0.57] lg:group-hover:scale-[0.67]">
+                   <EscalasMockup />
+                 </div>
                </div>
             </div>
           </motion.div>
@@ -145,34 +147,81 @@ export function Flagship() {
             </div>
           </motion.div>
 
-          {/* Card 4: Cifras Inteligentes */}
+          {/* Card 4: Biblioteca Viva MusicScale */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.3 }}
-            className="md:col-span-2 rounded-[2rem] bg-[#0B0F19] border border-white/5 p-8 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden group hover:border-white/10 transition-colors"
+            className="md:col-span-2 rounded-[2rem] bg-gradient-to-br from-[#0B0F19] to-[#060912] border border-[#2B85EB]/30 p-8 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden group hover:border-[#2B85EB]/60 hover:shadow-[0_0_50px_rgba(43,133,235,0.15)] transition-all duration-500 h-auto md:h-full"
           >
+             <div className="absolute top-0 right-0 w-64 h-64 bg-[#2B85EB]/5 blur-[80px] rounded-full pointer-events-none transform-gpu" />
+             <div className="absolute bottom-0 left-0 w-48 h-48 bg-[#2B85EB]/3 blur-[60px] rounded-full pointer-events-none transform-gpu" />
+
              <div className="flex-1 w-full relative z-10">
-               <div className="flex items-center gap-3 mb-2">
-                 <Database className="w-5 h-5 text-[#2B85EB]" />
-                 <h3 className="text-2xl font-semibold text-[#F5F7FA]">{t('flagship_feature1_title')}</h3>
+               <div className="flex items-center gap-3 mb-4">
+                 <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/30 flex items-center justify-center">
+                   <Database className="w-5 h-5 text-[#2B85EB]" />
+                 </div>
+                 <span className="text-[10px] font-bold text-[#2B85EB] uppercase tracking-widest bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-3 py-1 rounded-full">
+                   Acesso Premium
+                 </span>
                </div>
-               <p className="text-[#A0A7B5] font-normal mb-8">
+               <h3 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mb-3">
+                 {t('flagship_feature1_title')}
+               </h3>
+               <p className="text-[#A0A7B5] font-normal leading-relaxed text-sm md:text-base max-w-md">
                  <Trans i18nKey="landing:flagship_feature1_desc" components={{ 1: <strong /> }} />
                </p>
-               <div className="flex gap-4">
-                 <div className="flex flex-col gap-1">
-                    <div className="h-1.5 w-16 bg-[#2B85EB] rounded-full" />
-                    <div className="h-1.5 w-12 bg-white/10 rounded-full" />
+             </div>
+
+             {/* Live interactive-looking floating library mockup */}
+             <div className="flex-1 w-full h-[220px] relative flex items-center justify-center select-none mt-4 md:mt-0">
+               {/* Inner glow backdrop */}
+               <div className="absolute w-44 h-44 bg-[#2B85EB]/10 blur-[40px] rounded-full" />
+               
+               {/* Card A: Outer Back Floating Card */}
+               <div className="absolute left-2 sm:left-4 top-4 w-[170px] bg-[#0E1321]/80 border border-white/5 rounded-2xl p-4 shadow-xl transform -rotate-6 transition-transform duration-500 group-hover:-rotate-12 group-hover:-translate-x-2 backdrop-blur-md">
+                 <div className="flex items-center gap-2 mb-1.5">
+                   <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+                   <span className="text-[9px] text-[#10B981] font-bold uppercase tracking-wider">Acervo Ativo</span>
                  </div>
-                 <div className="flex flex-col gap-1 mt-4">
-                    <div className="h-1.5 w-14 bg-[#2B85EB] rounded-full" />
-                    <div className="h-1.5 w-20 bg-white/10 rounded-full" />
+                 <h4 className="text-xs font-semibold text-[#F5F7FA] truncate">Agnus Dei</h4>
+                 <p className="text-[9px] text-[#A0A7B5]">Michael W. Smith — G</p>
+                 <div className="flex gap-1 mt-2 text-[8px] font-mono text-[#2B85EB]">
+                   <span className="bg-[#2B85EB]/10 px-1 py-0.5 rounded font-bold">G</span>
+                   <span className="bg-[#2B85EB]/10 px-1 py-0.5 rounded font-bold">C9</span>
+                   <span className="bg-[#2B85EB]/10 px-1 py-0.5 rounded font-bold">Dsus</span>
                  </div>
                </div>
+
+               {/* Card B: Main Premium Floating Card */}
+               <div className="absolute right-2 sm:right-4 bottom-2 w-[210px] bg-[#121A2E]/95 border border-[#2B85EB]/30 rounded-2xl p-5 shadow-2xl transform rotate-3 transition-transform duration-500 group-hover:rotate-6 group-hover:translate-x-2 group-hover:-translate-y-1 backdrop-blur-md z-10">
+                 <div className="flex items-center justify-between mb-2.5">
+                   <span className="text-[8px] font-bold uppercase tracking-wider bg-[#2B85EB]/20 text-[#2B85EB] px-2 py-0.5 rounded border border-[#2B85EB]/30">
+                     Biblioteca Viva
+                   </span>
+                   <span className="text-[9px] text-[#A0A7B5] font-semibold">120 BPM</span>
+                 </div>
+                 <h4 className="text-base font-bold text-white truncate">Rei da Glória</h4>
+                 <p className="text-xs text-[#A0A7B5] mb-4">Worship — Tom: G</p>
+                 <div className="space-y-2">
+                   <div className="flex justify-between text-[11px] font-mono text-zinc-400">
+                     <span className="opacity-60">Intro:</span>
+                     <span className="text-[#2B85EB] font-bold">Em7 · C9 · G · D4</span>
+                   </div>
+                   <div className="h-[1px] bg-white/5 w-full" />
+                   <div className="flex justify-between text-[11px] font-mono text-zinc-400">
+                     <span className="opacity-60">Verso:</span>
+                     <span className="text-[#2B85EB] font-bold">G · D/F# · Em7</span>
+                   </div>
+                 </div>
+               </div>
+               
+               {/* Star burst particle graphics */}
+               <div className="absolute right-0 top-8 w-1.5 h-1.5 bg-[#2B85EB] rounded-full opacity-60 animate-ping" />
+               <div className="absolute left-12 bottom-4 w-1 h-1 bg-[#2B85EB] rounded-full opacity-40" />
              </div>
-             <LayoutGrid className="w-32 h-32 text-white/[0.03] absolute -bottom-8 -right-8 -rotate-12 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6" />
           </motion.div>
 
         </div>
