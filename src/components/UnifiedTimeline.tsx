@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { Clock, CheckCircle2, Music, Users, ShieldAlert, Filter, CalendarDays, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { eventBus } from '../packages/events/index.js';
+import { Shimmer } from '../packages/ui/shimmer.js';
+import { PremiumEmptyState } from '../packages/ui/empty-state.js';
 
 interface TimelineEvent {
   id: string;
@@ -69,9 +71,7 @@ export function UnifiedTimeline() {
 
   if (loading) {
     return (
-      <div className="bg-[#0B0F19] rounded-[2rem] p-6 border border-white/5 opacity-50 flex items-center justify-center animate-pulse min-h-[400px]">
-        <span className="text-sm font-medium tracking-tight text-[#A0A7B5] flex items-center gap-2"><Clock className="w-4 h-4 animate-spin"/> Carregando Timeline...</span>
-      </div>
+              <Shimmer className="w-full h-full min-h-[400px] rounded-[2rem]" />
     );
   }
 
@@ -79,7 +79,7 @@ export function UnifiedTimeline() {
     <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 shadow-inner transition-all relative overflow-hidden flex flex-col min-h-[450px]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
       
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4 relative z-10">
         <div>
            <h3 className="text-lg font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
              <Clock className="w-5 h-5 text-[#A0A7B5]" /> Timeline Ministerial
@@ -93,7 +93,7 @@ export function UnifiedTimeline() {
              <button
                key={f}
                onClick={() => setFilter(f)}
-               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all capitalize ${filter === f ? 'bg-white/10 text-[#F5F7FA]' : 'text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
+               className={`px-4 py-1.5 text-[11px] font-bold rounded-lg transition-all uppercase tracking-widest ${filter === f ? 'bg-white/10 text-[#F5F7FA] shadow-sm' : 'text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
              >
                {f === 'all' ? 'Tudo' : f}
              </button>
@@ -101,16 +101,14 @@ export function UnifiedTimeline() {
         </div>
       </div>
       
-      <div className="flex-1 relative overflow-y-auto no-scrollbar pb-10">
+      <div className="flex-1 relative overflow-y-auto no-scrollbar pb-10 z-10">
         {filteredEvents.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center space-y-3 opacity-60 min-h-[200px]">
-             <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center text-[#A0A7B5]">
-                <Filter className="w-5 h-5" />
-             </div>
-             <div>
-                <p className="text-sm font-medium text-[#F5F7FA]">Nenhum evento encontrado</p>
-                <p className="text-xs text-[#A0A7B5] mt-1 max-w-[200px]">A memória da organização filtrada está vazia.</p>
-             </div>
+          <div className="mt-8">
+            <PremiumEmptyState 
+              icon={<Filter className="w-8 h-8" />}
+              title="Memória Limpa"
+              description="Nenhuma atividade recente registrada neste escopo."
+            />
           </div>
         ) : (
           <div className="space-y-6 relative ml-2">

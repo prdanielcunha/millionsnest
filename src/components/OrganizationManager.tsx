@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Building2, Users, LayoutGrid, CreditCard, ShieldCheck, Settings, Check, X, Loader2, Link, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { PremiumEmptyState } from '../packages/ui/empty-state.js';
+import { framerTokens } from '../packages/ui/motion.js';
 
 type OrgTab = 'settings' | 'members' | 'apps' | 'roles' | 'billing' | 'audit';
 
@@ -310,7 +312,13 @@ export function OrganizationManager({
                          </div>
                       </div>
                    )) : (
-                      <p className="p-8 text-center text-sm font-medium text-[#A0A7B5]">Nenhuma atividade administrativa recente.</p>
+                      <div className="py-2">
+                        <PremiumEmptyState 
+                          icon={<ShieldCheck className="w-6 h-6" />}
+                          title="Auditoria Limpa"
+                          description="Nenhuma atividade administrativa recente na organização."
+                        />
+                      </div>
                    )}
                 </div>
              </motion.div>

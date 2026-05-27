@@ -13,8 +13,9 @@ import { db } from "../lib/firebase.js";
 import { getDefaultPermissions, normalizePermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 import { analytics } from "../lib/analytics.js";
 import { eventBus } from "../packages/events/index.js";
-import { toast } from 'react-hot-toast';
+import { feedback } from '../packages/ui/feedback.js';
 
+import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
 import { OrganizationManager } from "../components/OrganizationManager.js";
 import { UnifiedTimeline } from "../components/UnifiedTimeline.js";
@@ -48,27 +49,26 @@ export function Dashboard() {
   const handleLaunchEcosystemApp = async (app: EcosystemApp, permsMap: Record<string, boolean>) => {
     analytics.track('app_usage', { userId: user?.uid, organizationId: profile?.organizationId, app: app.id });
     if (!profile || !organization) {
-      toast.error('Erro de Sessão: Sessão do ecossistema inválida ou expirada.');
+      feedback.error('Erro de Sessão: Sessão do ecossistema inválida ou expirada.');
       return;
     }
     
     try {
       if (!organization?.enabledApps?.includes(app.id) && app.id !== 'musicscale') {
-         toast.error(`Módulo Indisponível: O aplicativo ${app.name} não está habilitado para a sua organização.`);
+         feedback.error(`Módulo Indisponível: O aplicativo ${app.name} não está habilitado para a sua organização.`);
          return;
       }
       
-      const toastId = toast.loading(`Iniciando Módulo: Estabelecendo handshake seguro com ${app.name}...`);
+      const toastId = feedback.loading(`Iniciando Módulo: Estabelecendo handshake seguro com ${app.name}...`);
       
       // Simulate slight delay for handshake feel
       await new Promise(resolve => setTimeout(resolve, 600));
       
       await ecosystemPlatform.launchModule(app.id, app.url, user, profile, organization, permsMap);
       
-      toast.dismiss(toastId);
-      toast.success(`Conexão Estabelecida: Contexto assinado injetado. Redirecionando...`);
+      feedback.dismiss(toastId);
     } catch (e: any) {
-      toast.error(`Falha de Protocolo: Falha ao injetar contexto do ecossistema: ${e.message}`);
+      feedback.error(`Falha de Protocolo: Falha ao injetar contexto do ecossistema: ${e.message}`);
     }
   };
 
@@ -761,9 +761,13 @@ export function Dashboard() {
                           </div>
                         </div>
                       )) : (
-                        <p className="text-sm text-[#A0A7B5] py-4 text-center border border-white/5 border-dashed rounded-xl">
-                          Nenhuma atividade recente registrada em logs.
-                        </p>
+                        <div className="py-2">
+                           <PremiumEmptyState 
+                             icon={<Check className="w-6 h-6" />}
+                             title="Sem Logs Recentes"
+                             description="Nenhuma atividade operacional registrada."
+                           />
+                        </div>
                       )}
                     </div>
                   </div>

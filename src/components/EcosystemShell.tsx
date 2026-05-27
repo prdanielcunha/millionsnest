@@ -9,6 +9,7 @@ import { eventBus } from '../packages/events/index.js';
 import { Link, useNavigate } from 'react-router-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
+import { framerTokens } from '../packages/ui/motion.js';
 
 interface EcosystemShellProps {
   children: ReactNode;
@@ -190,10 +191,7 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
                    <AnimatePresence>
                      {launcherOpen && (
                        <motion.div
-                         initial={{ opacity: 0, scale: 0.95, y: 5 }}
-                         animate={{ opacity: 1, scale: 1, y: 0 }}
-                         exit={{ opacity: 0, scale: 0.95, y: 5 }}
-                         transition={{ duration: 0.15, ease: "easeOut" }}
+                         {...framerTokens.scale}
                          className="absolute top-full mt-3 right-0 w-[340px] bg-[#050505]/95 backdrop-blur-2xl border border-white/10 shadow-[0_0_40px_rgba(0,0,0,1)] rounded-2xl p-2 origin-top-right z-50"
                        >
                          <div className="px-3 py-2 text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest border-b border-white/5 mb-2">
@@ -311,9 +309,15 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: "spring", damping: 20, stiffness: 100 }}
-                  className="w-20 h-20 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center text-[#F5F7FA] mb-6 shadow-2xl"
+                  className="w-20 h-20 bg-gradient-to-br from-white/5 to-white/[0.01] border border-white/10 rounded-2xl flex items-center justify-center text-[#F5F7FA] mb-6 shadow-2xl relative overflow-hidden"
                 >
-                  <LayoutGrid className="w-8 h-8 opacity-50" />
+                  <div className="absolute inset-0 bg-[#2B85EB]/10 blur-xl opacity-50" />
+                  <motion.div
+                     className="w-full h-1 bg-gradient-to-r from-transparent via-[#2B85EB] to-transparent absolute bottom-0"
+                     animate={{ x: ['-100%', '100%'] }}
+                     transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                  />
+                  <LayoutGrid className="w-8 h-8 opacity-50 relative z-10" />
                 </motion.div>
                 <motion.h2 
                   initial={{ y: 10, opacity: 0 }}
@@ -324,7 +328,7 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
                   Iniciando {launchingApp.name}
                 </motion.h2>
                 <div className="flex items-center gap-3 text-[#A0A7B5] text-sm font-medium">
-                  <Loader2 className="w-4 h-4 animate-spin text-[#2B85EB]" /> 
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#2B85EB] animate-pulse" />
                   Sincronizando contexto da organização...
                 </div>
              </div>
