@@ -71,4 +71,9 @@ Criar e padronizar as seguintes coleções principais no Firestore:
 - Controlar addons/ferramentas limitadas integradas à arquitetura base através de roles e planos na organização.
 - Não reescrever retro-compatibilidade base do Firebase.
 
+## 10. Product Direction Lock (INTOCÁVEL)
+- **Proibido criar funcionalidades fictícias:** Não invente módulos (ex: Gestão Financeira, Checkin Kids) ou recursos (ex: Chat corporativo, RH, colaboração real-time inexistente) que não existam ou não tenham sido aprovados. É EXTREMAMENTE proibida a inferência automática de roadmap ou geração de features comerciais sem instrução do Chief Product Officer.
+- **Brand & Pricing Lock System:** É ESTRITAMENTE PROIBIDO alterar copy (textos da interface, landing pages), reposicionamento da marca ou estruturas de pricing/planos sem autorização explícita. Não prometa o que não foi implementado.
+- **Linguagem Focada:** O sistema deve obrigatoriamente comunicar "excelência ministerial", "preparação fluida", "menos caos", "organização do louvor". Nunca use jargões como "ERP genérico de igreja", "gestão corporativa" ou "hub técnico". A comunicação deve permanecer humana, ministerial, elegante, limpa e premium (estilo Apple, Linear, Notion).
+
 **Violation of these constraints will result in breaking the current ecosystem architecture.**

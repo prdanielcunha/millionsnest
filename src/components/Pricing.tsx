@@ -183,7 +183,12 @@ export function Pricing() {
                 t('pricing_plan1_f2'),
                 t('pricing_plan1_f3'),
                 t('pricing_plan1_f4'),
-              ].map((item, i) => (
+                t('pricing_plan1_f5', { defaultValue: '' }),
+                t('pricing_plan1_f6', { defaultValue: '' }),
+                t('pricing_plan1_f7', { defaultValue: '' }),
+                t('pricing_plan1_f8', { defaultValue: '' }),
+                t('pricing_plan1_f9', { defaultValue: '' }),
+              ].filter(Boolean).map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#A0A7B5]">
                   <Check className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />
                   <span className="font-normal text-sm">{item}</span>
@@ -255,7 +260,10 @@ export function Pricing() {
                 t('pricing_plan2_f3'),
                 t('pricing_plan2_f4'),
                 t('pricing_plan2_f5'),
-              ].map((item, i) => (
+                t('pricing_plan2_f6', { defaultValue: '' }),
+                t('pricing_plan2_f7', { defaultValue: '' }),
+                t('pricing_plan2_f8', { defaultValue: '' }),
+              ].filter(Boolean).map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#F5F7FA]">
                   <Zap className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />
                   <span className="font-normal text-sm opacity-90">{item}</span>

@@ -339,19 +339,25 @@ export default function Checkout() {
                                <ul className="space-y-3">
                                    {isPro ? (
                                        <>
-                                         <FeatureItem text={t('pro_features.0', "Tudo do Starter")} />
-                                         <FeatureItem text={t('pro_features.1', "Pessoas ilimitadas")} />
-                                         <FeatureItem text={t('pro_features.2', "Biblioteca Viva MusicScale")} />
-                                         <FeatureItem text={t('pro_features.3', "Atualização constante do acervo")} />
-                                         <FeatureItem text={t('pro_features.4', "Prioridade em novos recursos")} />
+                                         <FeatureItem text="Tudo do Starter" />
+                                         <FeatureItem text="Pessoas ilimitadas por organização" />
+                                         <FeatureItem text="Acesso à Biblioteca Viva MusicScale" />
+                                         <FeatureItem text="Novas músicas adicionadas continuamente" />
+                                         <FeatureItem text="Atualização constante do acervo" />
+                                         <FeatureItem text="Experiência premium" />
+                                         <FeatureItem text="Prioridade em novos recursos" />
                                        </>
                                    ) : (
                                        <>
-                                         <FeatureItem text={t('star_features.0', "Músicas e Escalas ilimitadas")} />
-                                         <FeatureItem text={t('star_features.1', "Até 10 pessoas")} />
-                                         <FeatureItem text={t('star_features.2', "Compartilhamento de escalas")} />
-                                         <FeatureItem text={t('star_features.3', "Sincronização em nuvem")} />
-                                         <FeatureItem text={t('star_features.4', "Suporte padrão")} />
+                                         <FeatureItem text="Músicas ilimitadas" />
+                                         <FeatureItem text="Escalas ilimitadas" />
+                                         <FeatureItem text="Até 12 pessoas por organização" />
+                                         <FeatureItem text="Compartilhamento de escalas" />
+                                         <FeatureItem text="Organização por cultos e eventos" />
+                                         <FeatureItem text="Personalização básica" />
+                                         <FeatureItem text="Acesso mobile" />
+                                         <FeatureItem text="Sincronização em nuvem" />
+                                         <FeatureItem text="Suporte padrão" />
                                        </>
                                    )}
                                </ul>

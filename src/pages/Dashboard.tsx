@@ -696,7 +696,7 @@ export function Dashboard() {
                                 <Icon className="w-5 h-5" />
                               </div>
                               <span className={`px-2 py-1 text-[9px] font-bold rounded-md border uppercase tracking-widest shadow-sm ${isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 'bg-white/5 text-[#A0A7B5] border-white/10'}`}>
-                                {isInstalled ? 'Instalado' : app.category === 'beta' ? 'Próximamente' : 'Disponível'}
+                                {isInstalled ? 'Instalado' : app.category === 'beta' ? 'Em Breve' : 'Disponível'}
                               </span>
                             </div>
                             <h4 className="text-lg font-semibold text-[#F5F7FA] mb-1">{app.name}</h4>

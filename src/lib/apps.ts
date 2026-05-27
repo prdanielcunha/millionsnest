@@ -13,38 +13,12 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
   {
     id: 'musicscale',
     name: 'MusicScale',
-    description: 'Gestão inteligente de equipes, escalas e repertório para seu ministério de louvor.',
+    description: 'A excelência que seu ministério de louvor merece. Escalas, ensaios e repertório.',
     icon: 'Music',
-    url: 'https://musicscale.millionsnest.com',
+    url: window.location.origin + '/musicscale',
+    internalRoute: '/musicscale',
     category: 'core',
     requiredPlan: 'free',
-  },
-  {
-    id: 'people',
-    name: 'Membros & Células',
-    description: 'Acompanhamento pastoral, turmas, ensino e gestão de dados.',
-    icon: 'Users',
-    url: 'https://people.millionsnest.com',
-    category: 'beta',
-    requiredPlan: 'starter',
-  },
-  {
-    id: 'checkin',
-    name: 'Checkin Kids',
-    description: 'Segurança absoluta e agilidade no credenciamento infantil.',
-    icon: 'ShieldCheck',
-    url: 'https://kids.millionsnest.com',
-    category: 'beta',
-    requiredPlan: 'pro',
-  },
-  {
-    id: 'finance',
-    name: 'Gestão Financeira',
-    description: 'Tesouraria, recebimentos e relatórios contábeis da igreja local.',
-    icon: 'CreditCard',
-    url: 'https://finance.millionsnest.com',
-    category: 'beta',
-    requiredPlan: 'pro',
   }
 ];
 
