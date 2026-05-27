@@ -1,4 +1,3 @@
-import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.js';
 import './index.css';
@@ -15,7 +14,14 @@ if ('serviceWorker' in navigator) {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
     <App />
-  </StrictMode>,
 );
+
+window.onerror = function(message, source, lineno, colno, error) {
+  console.error("GLOBAL_ERROR_TRAP:", { message, source, lineno, colno, error });
+  return false;
+};
+
+window.addEventListener('unhandledrejection', function(event) {
+  console.error("GLOBAL_PROMISE_REJECTION:", event.reason);
+});
