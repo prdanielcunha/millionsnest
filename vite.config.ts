@@ -23,7 +23,8 @@ export default defineConfig(({mode}) => {
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('react') || id.includes('react-dom')) {
+              // Only put absolute core React libraries to prevent circular dependencies with wrappers
+              if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) {
                 return 'vendor-react';
               }
               if (id.includes('framer-motion') || id.includes('motion')) {

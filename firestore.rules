@@ -357,7 +357,7 @@ service cloud.firestore {
     // ==========================================
 
     match /analytics_events/{eventId} {
-      allow create: if isAuthenticated();
+      allow create: if true;
       allow read: if isSystemAdmin();
       allow update, delete: if false;
     }
