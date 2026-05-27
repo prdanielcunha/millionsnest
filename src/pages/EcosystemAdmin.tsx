@@ -4,6 +4,7 @@ import { db } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { EcosystemShell } from "../components/EcosystemShell.js";
 
 function ActivityIcon({ className }: { className?: string }) {
   return (
@@ -88,7 +89,7 @@ export function EcosystemAdmin() {
   );
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#F5F7FA]">
+    <EcosystemShell activeAppId="core">
       {/* Header */}
       <header className="border-b border-white/5 bg-[#0B0F19]">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center gap-4">
@@ -454,6 +455,6 @@ export function EcosystemAdmin() {
           </div>
         </div>
       </main>
-    </div>
+    </EcosystemShell>
   );
 }

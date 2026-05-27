@@ -1,11 +1,15 @@
 import { ROLE_KEYS, PERMISSION_KEYS } from "./constants.js";
 
 export interface AppPermissions {
+  [PERMISSION_KEYS.ORG_UPDATE_SETTINGS]: boolean;
   [PERMISSION_KEYS.ORG_MANAGE_MEMBERS]: boolean;
+  [PERMISSION_KEYS.ORG_INVITE_MEMBERS]: boolean;
   [PERMISSION_KEYS.ORG_MANAGE_ROLES]: boolean;
   [PERMISSION_KEYS.ORG_MANAGE_BILLING]: boolean;
-  [PERMISSION_KEYS.ORG_MANAGE_ORGANIZATION]: boolean;
+  [PERMISSION_KEYS.ORG_MANAGE_APPS]: boolean;
+  [PERMISSION_KEYS.ORG_VIEW_AUDIT]: boolean;
   [PERMISSION_KEYS.MUSIC_MANAGE_SONGS]: boolean;
+  [PERMISSION_KEYS.MUSIC_EDIT_SONGS]: boolean;
   [PERMISSION_KEYS.MUSIC_MANAGE_SCALES]: boolean;
   [PERMISSION_KEYS.MUSIC_MANAGE_TEAMS]: boolean;
   [key: string]: boolean;
@@ -18,45 +22,61 @@ export function getDefaultPermissions(role: string): AppPermissions {
   switch (role) {
     case 'owner':
       return {
-        'organization.manageMembers': true,
-        'organization.manageRoles': true,
-        'organization.manageBilling': true,
-        'organization.manageOrganization': true,
-        'musicScale.manageSongs': true,
-        'musicScale.manageScales': true,
-        'musicScale.manageTeams': true,
+        'organization.settings.update': true,
+        'organization.members.manage': true,
+        'organization.members.invite': true,
+        'organization.roles.manage': true,
+        'organization.billing.manage': true,
+        'organization.apps.manage': true,
+        'organization.audit.view': true,
+        'musicscale.songs.manage': true,
+        'musicscale.songs.edit': true,
+        'musicscale.scales.manage': true,
+        'musicscale.teams.manage': true,
       };
     case 'admin':
       return {
-        'organization.manageMembers': true,
-        'organization.manageRoles': true,
-        'organization.manageBilling': false,
-        'organization.manageOrganization': false,
-        'musicScale.manageSongs': true,
-        'musicScale.manageScales': true,
-        'musicScale.manageTeams': true,
+        'organization.settings.update': true,
+        'organization.members.manage': true,
+        'organization.members.invite': true,
+        'organization.roles.manage': false,
+        'organization.billing.manage': false,
+        'organization.apps.manage': false,
+        'organization.audit.view': true,
+        'musicscale.songs.manage': true,
+        'musicscale.songs.edit': true,
+        'musicscale.scales.manage': true,
+        'musicscale.teams.manage': true,
       };
     case 'secretary':
       return {
-        'organization.manageMembers': true,
-        'organization.manageRoles': false,
-        'organization.manageBilling': false,
-        'organization.manageOrganization': false,
-        'musicScale.manageSongs': true,
-        'musicScale.manageScales': true,
-        'musicScale.manageTeams': true,
+        'organization.settings.update': false,
+        'organization.members.manage': false,
+        'organization.members.invite': true,
+        'organization.roles.manage': false,
+        'organization.billing.manage': false,
+        'organization.apps.manage': false,
+        'organization.audit.view': false,
+        'musicscale.songs.manage': true,
+        'musicscale.songs.edit': true,
+        'musicscale.scales.manage': true,
+        'musicscale.teams.manage': true,
       };
     case 'member':
     case 'guest':
     default:
       return {
-        'organization.manageMembers': false,
-        'organization.manageRoles': false,
-        'organization.manageBilling': false,
-        'organization.manageOrganization': false,
-        'musicScale.manageSongs': false,
-        'musicScale.manageScales': false,
-        'musicScale.manageTeams': false,
+        'organization.settings.update': false,
+        'organization.members.manage': false,
+        'organization.members.invite': false,
+        'organization.roles.manage': false,
+        'organization.billing.manage': false,
+        'organization.apps.manage': false,
+        'organization.audit.view': false,
+        'musicscale.songs.manage': false,
+        'musicscale.songs.edit': false,
+        'musicscale.scales.manage': false,
+        'musicscale.teams.manage': false,
       };
   }
 }
@@ -69,16 +89,19 @@ export function normalizePermissions(permissions: any, role: string, version?: n
   
   const defaultPerms = getDefaultPermissions(role);
 
-  // If old version lacking version
+  // If old version lacking version or using old paths
   if (permissions && typeof permissions === 'object') {
-     // Overwrite namespaces with old boolean formats
-     if (permissions.manageMembers !== undefined) defaultPerms['organization.manageMembers'] = permissions.manageMembers;
-     if (permissions.manageRoles !== undefined) defaultPerms['organization.manageRoles'] = permissions.manageRoles;
-     if (permissions.manageBilling !== undefined) defaultPerms['organization.manageBilling'] = permissions.manageBilling;
-     if (permissions.manageOrganization !== undefined) defaultPerms['organization.manageOrganization'] = permissions.manageOrganization;
+     if (permissions['organization.manageMembers'] !== undefined) defaultPerms['organization.members.manage'] = permissions['organization.manageMembers'];
+     if (permissions['organization.manageRoles'] !== undefined) defaultPerms['organization.roles.manage'] = permissions['organization.manageRoles'];
+     if (permissions['organization.manageBilling'] !== undefined) defaultPerms['organization.billing.manage'] = permissions['organization.manageBilling'];
+     if (permissions['organization.manageOrganization'] !== undefined) defaultPerms['organization.settings.update'] = permissions['organization.manageOrganization'];
      
-     if (permissions.manageSongs !== undefined) defaultPerms['musicScale.manageSongs'] = permissions.manageSongs;
-     if (permissions.manageSchedules !== undefined) defaultPerms['musicScale.manageScales'] = permissions.manageSchedules;
+     if (permissions['musicScale.manageSongs'] !== undefined) {
+         defaultPerms['musicscale.songs.manage'] = permissions['musicScale.manageSongs'];
+         defaultPerms['musicscale.songs.edit'] = permissions['musicScale.manageSongs'];
+     }
+     if (permissions['musicScale.manageScales'] !== undefined) defaultPerms['musicscale.scales.manage'] = permissions['musicScale.manageScales'];
+     if (permissions['musicScale.manageTeams'] !== undefined) defaultPerms['musicscale.teams.manage'] = permissions['musicScale.manageTeams'];
   }
   
   if (role === 'owner') {

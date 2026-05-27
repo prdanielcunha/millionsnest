@@ -21,8 +21,12 @@ export function Login() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const org = params.get('org');
+    const role = params.get('role');
     if (org) {
       localStorage.setItem('invite_org_id', org);
+      if (role) {
+        localStorage.setItem('invite_role', role);
+      }
     }
     
     if (authLoading) return;

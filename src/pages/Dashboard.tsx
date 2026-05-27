@@ -15,6 +15,8 @@ import { analytics } from "../lib/analytics.js";
 import { eventBus } from "../sdk/events.js";
 import { toast } from 'react-hot-toast';
 
+import { EcosystemShell } from "../components/EcosystemShell.js";
+import { OrganizationManager } from "../components/OrganizationManager.js";
 import { UnifiedTimeline } from "../components/UnifiedTimeline.js";
 import { ECOSYSTEM_APPS, EcosystemApp } from "../lib/apps.js";
 import { ecosystemPlatform } from "../sdk/ecosystem.js";
@@ -46,17 +48,17 @@ export function Dashboard() {
   const handleLaunchEcosystemApp = async (app: EcosystemApp, permsMap: Record<string, boolean>) => {
     analytics.track('app_usage', { userId: user?.uid, organizationId: profile?.organizationId, app: app.id });
     if (!profile || !organization) {
-      toast.error('Erro de Sessão', 'Sessão do ecossistema inválida ou expirada.');
+      toast.error('Erro de Sessão: Sessão do ecossistema inválida ou expirada.');
       return;
     }
     
     try {
       if (!organization?.enabledApps?.includes(app.id) && app.id !== 'musicscale') {
-         toast.error('Módulo Indisponível', `O aplicativo ${app.name} não está habilitado para a sua organização.`);
+         toast.error(`Módulo Indisponível: O aplicativo ${app.name} não está habilitado para a sua organização.`);
          return;
       }
       
-      const toastId = toast.loading('Iniciando Módulo', `Estabelecendo handshake seguro com ${app.name}...`);
+      const toastId = toast.loading(`Iniciando Módulo: Estabelecendo handshake seguro com ${app.name}...`);
       
       // Simulate slight delay for handshake feel
       await new Promise(resolve => setTimeout(resolve, 600));
@@ -64,9 +66,9 @@ export function Dashboard() {
       await ecosystemPlatform.launchModule(app.id, app.url, user, profile, organization, permsMap);
       
       toast.dismiss(toastId);
-      toast.success('Conexão Estabelecida', `Contexto assinado injetado. Redirecionando...`);
+      toast.success(`Conexão Estabelecida: Contexto assinado injetado. Redirecionando...`);
     } catch (e: any) {
-      toast.error('Falha de Protocolo', `Falha ao injetar contexto do ecossistema: ${e.message}`);
+      toast.error(`Falha de Protocolo: Falha ao injetar contexto do ecossistema: ${e.message}`);
     }
   };
 
@@ -498,12 +500,11 @@ export function Dashboard() {
   const currentUserPerms = normalizePermissions(currentUserData?.permissions, currentUserData?.role || 'member', currentUserData?.permissionsVersion);
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#F5F7FA]">
+    <EcosystemShell activeAppId="core">
       <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-[#2B85EB]/5 blur-[150px] rounded-full pointer-events-none" />
-      <Navbar />
       
       {/* Secondary Navigation */}
-      <div className="bg-[#050505]/80 backdrop-blur-xl border-b border-white/5 pt-24 md:pt-32 px-6 sticky top-0 z-40">
+      <div className="bg-[#050505]/80 backdrop-blur-xl border-b border-white/5 pt-4 md:pt-6 px-6 sticky top-14 z-40">
         <div className="max-w-7xl mx-auto flex items-center gap-8 overflow-x-auto no-scrollbar">
           <button 
             onClick={() => setActiveTab("overview")}
@@ -511,7 +512,7 @@ export function Dashboard() {
           >
             Visão Geral
           </button>
-          {currentUserPerms['organization.manageOrganization'] && (
+          {currentUserPerms['organization.settings.update'] && (
             <button 
               onClick={() => setActiveTab("organization")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "organization" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
@@ -519,7 +520,7 @@ export function Dashboard() {
               Organização
             </button>
           )}
-          {currentUserPerms['organization.manageBilling'] && (
+          {currentUserPerms['organization.billing.manage'] && (
             <button 
               onClick={() => setActiveTab("billing")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
@@ -717,7 +718,7 @@ export function Dashboard() {
                                   {app.requiredPlan !== 'free' ? `Requer plano ${app.requiredPlan}` : 'Em breve'}
                                 </button>
                               )}
-                              {isInstalled && (profile?.systemRole === 'ceo' || currentUserPerms['organization.manageBilling']) && (
+                              {isInstalled && (profile?.systemRole === 'ceo' || currentUserPerms['organization.billing.manage']) && (
                                 <button
                                    onClick={() => setActiveTab('billing')}
                                    className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/10 transition-colors shrink-0"
@@ -773,7 +774,7 @@ export function Dashboard() {
                       <span className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-[#A0A7B5]" /> Equipe
                       </span>
-                      {currentUserPerms['organization.manageMembers'] && (
+                      {currentUserPerms['organization.members.manage'] && (
                         <button onClick={() => setActiveTab('organization')} className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB]">
                           Gerenciar
                         </button>
@@ -820,129 +821,27 @@ export function Dashboard() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
-              className="max-w-2xl"
+              className="max-w-6xl"
             >
-              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-8 border border-white/5 shadow-2xl">
-                <h2 className="text-xl font-semibold text-[#F5F7FA] flex items-center gap-3 mb-8 border-b border-white/5 pb-6">
-                   <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
-                    <Building2 className="w-4 h-4 text-[#A0A7B5]" />
-                  </span>
-                  Organização Central
-                </h2>
-
-                {organization ? (
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between pb-6 border-b border-white/5">
-                      <div className="flex-1">
-                        <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Nome da Organização</p>
-                        {isEditingOrg ? (
-                          <div className="flex items-center gap-2 mt-1">
-                            <input 
-                              title="Nome da Organização"
-                              type="text" 
-                              value={orgNameInput} 
-                              onChange={(e) => setOrgNameInput(e.target.value)} 
-                              className="bg-[#050505] border border-white/10 rounded-xl px-4 py-2 text-sm text-[#F5F7FA] outline-none focus:border-[#2B85EB] transition-colors w-full max-w-[250px]"
-                            />
-                            <button disabled={savingOrg} onClick={handleSaveOrg} className="p-2 bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl hover:bg-[#2B85EB]/20 transition-colors">
-                              {savingOrg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                            </button>
-                            <button disabled={savingOrg} onClick={() => { setIsEditingOrg(false); setOrgNameInput(organization.name); }} className="p-2 bg-white/5 text-[#A0A7B5] rounded-xl hover:bg-white/10 transition-colors">
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between">
-                            <p className="text-base font-semibold text-[#F5F7FA]">{organization.name}</p>
-                            <button onClick={() => setIsEditingOrg(true)} className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB]">Editar</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pb-6 border-b border-white/5">
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Status do Tenant</p>
-                        <p className="text-base font-semibold text-[#F5F7FA]">
-                          <span className={`inline-flex px-2 py-0.5 mt-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-md border border-white/10 uppercase tracking-widest shadow-sm ${organization?.subscriptionStatus === 'active' || organization?.subscriptionStatus === 'trialing' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' : ''}`}>
-                            {organization?.subscriptionStatus || 'Inativo'}
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-
-                    {currentUserPerms['organization.manageMembers'] && (
-                      <div className="flex flex-col gap-4 pb-6 border-b border-white/5">
-                        <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5]">Membros & Convites</p>
-                        
-                        {members.length > 0 && (
-                          <div className="flex flex-col gap-2 mb-4">
-                            {members.map(member => (
-                              <div key={member.id} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/5 rounded-xl">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB] font-bold text-xs uppercase">
-                                    {member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-sm font-semibold text-[#F5F7FA]">
-                                      {member.displayName || 'Usuário'} {member.id === user?.uid && '(Você)'}
-                                      <span className="ml-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
-                                        {{owner: 'Dono', admin: 'Administrador', secretary: 'Secretária', member: 'Membro', guest: 'Visitante'}[(member.role as string) || 'member'] || member.role || 'Membro'}
-                                      </span>
-                                    </span>
-                                    <span className="text-[10px] text-[#A0A7B5]">{member.email}</span>
-                                  </div>
-                                </div>
-                                {member.id !== user?.uid && currentUserPerms['organization.manageRoles'] && (
-                                  <div className="flex items-center gap-3">
-                                    <select
-                                      value={member.role || 'member'}
-                                      onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                                      className="bg-white/5 border border-white/10 text-[#F5F7FA] text-xs rounded-md px-2 py-1 outline-none focus:border-[#2B85EB]"
-                                    >
-                                      <option value="owner">Dono</option>
-                                      <option value="admin">Administrador</option>
-                                      <option value="secretary">Secretária</option>
-                                      <option value="member">Membro</option>
-                                      <option value="guest">Visitante</option>
-                                    </select>
-                                    <button className="text-xs text-[#EF4444] hover:text-[#FCA5A5] font-medium" onClick={() => alert("Remoção de membros em desenvolvimento.")}>Excluir</button>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-3">
-                          <button onClick={handleInviteWhatsapp} className="flex items-center gap-2 px-4 py-2 bg-[#10B981]/10 text-[#10B981] rounded-xl hover:bg-[#10B981]/20 transition-colors border border-[#10B981]/20 text-sm font-medium">
-                            <Link className="w-4 h-4" /> Whatsapp
-                          </button>
-                          <button onClick={handleCopyLink} className="flex items-center gap-2 px-4 py-2 bg-white/5 text-[#F5F7FA] rounded-xl hover:bg-white/10 transition-colors border border-white/10 text-sm font-medium">
-                            {copiedLink ? <Check className="w-4 h-4 text-[#10B981]" /> : <Copy className="w-4 h-4" />} Copiar Link
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">ID da Organização</p>
-                        <div className="mt-1 flex items-center gap-2">
-                          <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-2 py-1 rounded-md border border-white/5">{profile?.organizationId || user.uid}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-[#050505] border border-white/5 p-6 rounded-2xl">
-                    <p className="text-sm font-medium text-[#A0A7B5] mb-4">
-                      Você ainda não está vinculado a uma organização ou igreja ativa.
-                      Sua organização será criada automaticamente ao iniciar uma assinatura.
-                    </p>
-                  </div>
-                )}
-              </div>
+              <OrganizationManager 
+                organization={organization}
+                members={members}
+                currentUserPerms={currentUserPerms}
+                user={user}
+                profile={profile}
+                onSaveOrg={handleSaveOrg}
+                handleUpdateMemberRole={handleUpdateMemberRole}
+                isEditingOrg={isEditingOrg}
+                setIsEditingOrg={setIsEditingOrg}
+                orgNameInput={orgNameInput}
+                setOrgNameInput={setOrgNameInput}
+                savingOrg={savingOrg}
+                handleInviteWhatsapp={handleInviteWhatsapp}
+                handleCopyLink={handleCopyLink}
+                copiedLink={copiedLink}
+                auditLogs={auditLogs}
+                setActiveDashboardTab={setActiveTab}
+              />
             </motion.section>
           )}
 
@@ -1386,6 +1285,6 @@ export function Dashboard() {
           )}
         </AnimatePresence>
       </main>
-    </div>
+    </EcosystemShell>
   );
 }

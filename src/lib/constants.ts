@@ -1,4 +1,4 @@
-export const CURRENT_PERMISSIONS_VERSION = 1;
+export const CURRENT_PERMISSIONS_VERSION = 2;
 
 export const ROLE_KEYS = {
   OWNER: 'owner',
@@ -11,13 +11,17 @@ export const ROLE_KEYS = {
 export type RoleKey = typeof ROLE_KEYS[keyof typeof ROLE_KEYS];
 
 export const PERMISSION_KEYS = {
-  ORG_MANAGE_MEMBERS: 'organization.manageMembers',
-  ORG_MANAGE_ROLES: 'organization.manageRoles',
-  ORG_MANAGE_BILLING: 'organization.manageBilling',
-  ORG_MANAGE_ORGANIZATION: 'organization.manageOrganization',
-  MUSIC_MANAGE_SONGS: 'musicScale.manageSongs',
-  MUSIC_MANAGE_SCALES: 'musicScale.manageScales',
-  MUSIC_MANAGE_TEAMS: 'musicScale.manageTeams',
+  ORG_UPDATE_SETTINGS: 'organization.settings.update',
+  ORG_MANAGE_MEMBERS: 'organization.members.manage',
+  ORG_INVITE_MEMBERS: 'organization.members.invite',
+  ORG_MANAGE_ROLES: 'organization.roles.manage',
+  ORG_MANAGE_BILLING: 'organization.billing.manage',
+  ORG_MANAGE_APPS: 'organization.apps.manage',
+  ORG_VIEW_AUDIT: 'organization.audit.view',
+  MUSIC_MANAGE_SONGS: 'musicscale.songs.manage',
+  MUSIC_EDIT_SONGS: 'musicscale.songs.edit',
+  MUSIC_MANAGE_SCALES: 'musicscale.scales.manage',
+  MUSIC_MANAGE_TEAMS: 'musicscale.teams.manage',
 } as const;
 
 export type PermissionKey = typeof PERMISSION_KEYS[keyof typeof PERMISSION_KEYS];

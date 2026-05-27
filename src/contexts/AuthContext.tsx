@@ -92,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             // Check for pending invite logic if needed locally?
             const inviteOrgId = localStorage.getItem('invite_org_id');
+            const inviteRole = localStorage.getItem('invite_role') || 'member';
             let mergeData: any = { lastLoginAt: serverTimestamp() };
             
             // Auto-assign CEO role to specific email
@@ -112,9 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const memberData = {
                   uid: currentUser.uid,
                   organizationId: inviteOrgId,
-                  role: 'member', // pre-assigned as member by default
+                  role: inviteRole,
                   permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-                  permissions: getDefaultPermissions('member'),
+                  permissions: getDefaultPermissions(inviteRole),
                   createdAt: serverTimestamp()
                 };
                 await setDoc(orgMemberRef, memberData, { merge: true });
@@ -124,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               mergeData.organizationId = inviteOrgId;
               userData.organizationId = inviteOrgId;
               localStorage.removeItem('invite_org_id');
+              localStorage.removeItem('invite_role');
             }
 
             // Atualizar lastLoginAt e possível org
@@ -140,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             // Criar novo usuário
             const inviteOrgId = localStorage.getItem('invite_org_id');
+            const inviteRole = localStorage.getItem('invite_role') || 'member';
             const targetOrgId = inviteOrgId || currentUser.uid;
 
             const newProfile: Partial<UserProfile> = {
@@ -193,9 +196,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                const memberData = {
                  uid: currentUser.uid,
                  organizationId: targetOrgId,
-                 role: 'member', // standard invite role
+                 role: inviteRole,
                  permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-                 permissions: getDefaultPermissions('member'),
+                 permissions: getDefaultPermissions(inviteRole),
                  createdAt: serverTimestamp()
                };
                await setDoc(orgMemberRef, memberData, { merge: true });
@@ -204,6 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             if (inviteOrgId) {
                localStorage.removeItem('invite_org_id');
+               localStorage.removeItem('invite_role');
             }
 
             setProfile(newProfile as UserProfile);
