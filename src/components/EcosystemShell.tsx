@@ -1,6 +1,6 @@
-import React, { useState, useEffect, ReactNode } from 'react';
+import React, { useState, useEffect, ReactNode, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, LayoutGrid, LayoutDashboard, Building2, ChevronDown, Check, LogOut, ArrowRight, Loader2, User } from 'lucide-react';
+import { Search, LayoutGrid, LayoutDashboard, Building2, ChevronDown, Check, LogOut, ArrowRight, Loader2, User, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useOrganization } from '../contexts/OrganizationContext.js';
 import { ECOSYSTEM_APPS, EcosystemApp } from '../lib/apps.js';
@@ -8,6 +8,7 @@ import { ecosystemPlatform } from '../sdk/ecosystem.js';
 import { eventBus } from '../packages/events/index.js';
 import { Link, useNavigate } from 'react-router-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
+import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
 
 interface EcosystemShellProps {
   children: ReactNode;
@@ -28,11 +29,33 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [orgMenuOpen, setOrgMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   
   // Transition orchestrator state
   const [launchingApp, setLaunchingApp] = useState<EcosystemApp | null>(null);
+  
+  const [isDegraded, setIsDegraded] = useState(false);
 
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        setDiagnosticsOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    const checkDegraded = setInterval(() => {
+       setIsDegraded(window.navigator.onLine === false || (window as any)._mn_degraded_mode);
+    }, 5000);
+
+    return () => {
+       window.removeEventListener('keydown', handleKeyDown);
+       clearInterval(checkDegraded);
+    };
+  }, []);
 
   const handleLaunch = async (app: EcosystemApp) => {
     if (!profile || !organization) return;
@@ -129,6 +152,11 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
             <span className="text-[#A0A7B5]">Ecosystem</span>
             <span className="text-[#A0A7B5]">/</span>
             <span className="text-[#F5F7FA] bg-white/5 px-2 py-0.5 rounded-md border border-white/10">{activeApp.name}</span>
+            {isDegraded && (
+               <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded ml-2 border border-orange-500/20">
+                  <AlertTriangle className="w-3 h-3" /> Degraded
+               </span>
+            )}
           </div>
         </div>
 
@@ -307,6 +335,15 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
       <main className="flex-1 relative">
         {children}
       </main>
+
+      {/* Hidden Diagnostics Panel */}
+      <AnimatePresence>
+         {diagnosticsOpen && (
+            <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}>
+               <OperationalDiagnosticsUI onClose={() => setDiagnosticsOpen(false)} />
+            </motion.div>
+         )}
+      </AnimatePresence>
     </div>
   );
 }

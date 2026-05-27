@@ -1,6 +1,10 @@
 import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase.js';
 
+import { diagnosticsEngine } from '../packages/os/diagnostics.js';
+import { watchdog } from '../packages/os/watchdog.js';
+import { queueIntegrity } from '../packages/os/queue.js';
+
 export const ECOSYSTEM_PROTOCOL_VERSION = '1.0.0';
 export const ECOSYSTEM_SDK_VERSION = '1.2.0';
 
@@ -96,13 +100,11 @@ export class EcosystemPlatform {
     };
     this.diagnosticsLog = [log, ...this.diagnosticsLog].slice(0, 100);
     
-    if (status === 'ERROR') {
-      console.error(`[Ecosystem Protocol] ${action}: ${details}`);
-    } else if (status === 'WARN') {
-      console.warn(`[Ecosystem Protocol] ${action}: ${details}`);
-    } else {
-      console.log(`[Ecosystem Protocol] ${action}: ${details}`);
-    }
+    let severity: 'info' | 'warn' | 'error' | 'fatal' = 'info';
+    if (status === 'ERROR') severity = 'error';
+    if (status === 'WARN') severity = 'warn';
+
+    diagnosticsEngine.log(`[Protocol ${action}]: ${details}`, severity, module || 'OS_PROTOCOL_LAYER');
   }
 
   // OS Mode vs Module Mode
@@ -207,11 +209,19 @@ export class EcosystemPlatform {
 
       case 'MODULE_READY':
         if (this.isOS) {
+          watchdog.registerModule(message.appId);
+          watchdog.heartbeatReceived(message.appId);
           this.trace('Module Ready Handshake', 'SUCCESS', `Module ${message.appId} reported ready.`, message.appId);
           if (this.currentContext && sourceWindow) {
              sourceWindow.postMessage({ type: 'SESSION_SYNC', context: this.currentContext }, '*');
              this.trace('Module Context Injection', 'SUCCESS', `Injected signed context to module ${message.appId}`, message.appId);
           }
+        }
+        break;
+
+      case 'MODULE_HEARTBEAT' as any:
+        if (this.isOS) {
+           watchdog.heartbeatReceived((message as any).appId);
         }
         break;
     }

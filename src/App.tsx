@@ -13,8 +13,11 @@ import { SmartResume } from './components/SmartResume.js';
 import { telemetry } from './packages/telemetry/index.js';
 import { performanceEngine } from './packages/telemetry/performance.js';
 import { i18nEngine } from './packages/i18n/index.js';
+import { initializeOSHardening } from './packages/os/index.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { Toaster } from 'react-hot-toast';
+
+initializeOSHardening();
 
 const Home = lazy(() => import('./pages/Home.js').then(module => ({ default: module.Home })));
 const Terms = lazy(() => import('./pages/Terms.js').then(module => ({ default: module.Terms })));
