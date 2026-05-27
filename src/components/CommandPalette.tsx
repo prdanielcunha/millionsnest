@@ -6,10 +6,12 @@ import { useTranslation } from 'react-i18next';
 import { searchEngine, SearchResult, SearchContext } from '../packages/intelligence/search.js';
 import { eventBus } from '../packages/events/index.js';
 import { useAuth } from '../contexts/AuthContext.js';
+import { useOrganization } from '../contexts/OrganizationContext.js';
 import { haptics } from '../packages/ui/haptics.js';
 
 export function CommandPalette() {
   const { profile, user } = useAuth();
+  const { organization } = useOrganization();
   const { t } = useTranslation(['commandPalette']);
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -30,7 +32,7 @@ export function CommandPalette() {
   const currentContext: SearchContext = {
     orgId: profile?.organizationId || 'guest',
     activeApp: getActiveApp(),
-    enabledApps: profile?.enabledApps || ['musicscale', 'cultoflow', 'cells', 'core'], // Default fallback
+    enabledApps: organization?.enabledApps || [], 
   };
 
   // Listen for Cmd+K / Ctrl+K

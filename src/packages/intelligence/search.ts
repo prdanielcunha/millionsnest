@@ -81,15 +81,16 @@ export class UniversalSearchEngine {
       });
     }
 
-    if ('culto de domingo'.includes(searchTerm)) {
+    // CultoFlow isn't built yet, do not return its mock results unless it's in enabledApps
+    if (context.enabledApps?.includes('cultoflow') && 'culto de domingo'.includes(searchTerm)) {
       results.push({
         id: 'evt_01', type: 'scale', title: 'Culto de Domingo - Manhã', 
-        subtitle: '10/05/2026', appSource: 'cultoflow', routingDetails: '/scales/evt_01', 
+        subtitle: '10/05/2026', appSource: 'cultoflow', routingDetails: '#cultoflow', 
         relevanceScore: context.activeApp === 'cultoflow' ? 1.5 : 0.9
       });
     }
 
-    if ('abrir performance mode'.includes(searchTerm) && context.activeApp === 'musicscale') {
+    if (context.enabledApps?.includes('musicscale') && 'abrir performance mode'.includes(searchTerm) && context.activeApp === 'musicscale') {
       results.push({
          id: 'action_perf_mode', type: 'action', title: 'Abrir Performance Mode',
          subtitle: 'Contextual Action', appSource: 'musicscale', routingDetails: 'ACTION:PERFORMANCE_MODE',

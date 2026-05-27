@@ -14,6 +14,7 @@ import { telemetry } from './packages/telemetry/index.js';
 import { performanceEngine } from './packages/telemetry/performance.js';
 import { i18nEngine } from './packages/i18n/index.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
+import { Toaster } from 'react-hot-toast';
 
 const Home = lazy(() => import('./pages/Home.js').then(module => ({ default: module.Home })));
 const Terms = lazy(() => import('./pages/Terms.js').then(module => ({ default: module.Terms })));
@@ -59,6 +60,7 @@ export default function App() {
         <AuthProvider>
           <OrganizationProvider>
             <GlobalTelemetry />
+            <Toaster position="top-right" toastOptions={{ className: 'bg-[#0B0F19] text-white border border-white/10' }} />
             <BrowserRouter>
               <CommandPalette />
               <SmartResume />

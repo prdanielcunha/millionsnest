@@ -26,6 +26,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   logout: () => Promise<void>;
+  switchOrganization: (orgId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -33,6 +34,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   logout: async () => {},
+  switchOrganization: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -46,6 +48,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
   const [loading, setLoading] = useState(true);
+
+  const switchOrganization = async (orgId: string) => {
+    if (!user || !profile) return;
+    try {
+      const userRef = doc(db, "users", user.uid);
+      await setDoc(userRef, { organizationId: orgId }, { merge: true });
+      const updatedProfile = { ...profile, organizationId: orgId };
+      setProfile(updatedProfile);
+      localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
+      
+      // We must reload the page or tell OrganizationContext to refetch, changing profile.organizationId should trigger OrganizationContext's useEffect
+      
+      analytics.track('app_usage', {
+        userId: user.uid,
+        organizationId: orgId,
+        metadata: { action: 'switch_organization' }
+      });
+    } catch (e) {
+      console.error("Failed to switch organization", e);
+    }
+  };
 
   useEffect(() => {
     if (!auth) {
@@ -77,7 +100,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               userData.systemRole = 'ceo';
             }
 
-            if (inviteOrgId && !userData.organizationId) {
+            if (inviteOrgId) {
+              const currentOrgs = userData.organizations || [];
+              if (!currentOrgs.includes(inviteOrgId)) {
+                mergeData.organizations = [...currentOrgs, inviteOrgId];
+                userData.organizations = mergeData.organizations;
+                
+                // Add member doc to org
+                const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${inviteOrgId}`);
+                const newMemberRef = doc(db, `organizations/${inviteOrgId}/members`, currentUser.uid);
+                const memberData = {
+                  uid: currentUser.uid,
+                  organizationId: inviteOrgId,
+                  role: 'member', // pre-assigned as member by default
+                  permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+                  permissions: getDefaultPermissions('member'),
+                  createdAt: serverTimestamp()
+                };
+                await setDoc(orgMemberRef, memberData, { merge: true });
+                await setDoc(newMemberRef, memberData, { merge: true });
+              }
+              // Switch active org to the invited org
               mergeData.organizationId = inviteOrgId;
               userData.organizationId = inviteOrgId;
               localStorage.removeItem('invite_org_id');
@@ -143,6 +186,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                };
                await setDoc(orgMemberRef, memberData, { merge: true });
                await setDoc(newMemberRef, memberData, { merge: true });
+            } else {
+               // Invited new user logic (member)
+               const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${targetOrgId}`);
+               const newMemberRef = doc(db, `organizations/${targetOrgId}/members`, currentUser.uid);
+               const memberData = {
+                 uid: currentUser.uid,
+                 organizationId: targetOrgId,
+                 role: 'member', // standard invite role
+                 permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+                 permissions: getDefaultPermissions('member'),
+                 createdAt: serverTimestamp()
+               };
+               await setDoc(orgMemberRef, memberData, { merge: true });
+               await setDoc(newMemberRef, memberData, { merge: true });
             }
 
             if (inviteOrgId) {
@@ -183,7 +240,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     profile,
     loading,
-    logout
+    logout,
+    switchOrganization
   }), [user, profile, loading]);
 
   return (

@@ -152,13 +152,36 @@ class AnalyticsManager {
 
     try {
       const batch = writeBatch(db);
-      // Utilizing a root collection for all analytics events
-      const eventsRef = collection(db, "analytics_events");
+      // Group events by organizationId
+      const orgEvents: Record<string, typeof eventsToFlush> = {};
+      const rootEvents: typeof eventsToFlush = [];
 
       eventsToFlush.forEach(event => {
-        const newRef = doc(eventsRef);
-        batch.set(newRef, event);
+        if (event.organizationId && event.organizationId !== 'none') {
+           if (!orgEvents[event.organizationId]) orgEvents[event.organizationId] = [];
+           orgEvents[event.organizationId].push(event);
+        } else {
+           rootEvents.push(event);
+        }
       });
+
+      // Write organization-scoped events
+      for (const [orgId, evts] of Object.entries(orgEvents)) {
+        const orgEventsRef = collection(db, `organizations/${orgId}/analytics`);
+        evts.forEach(event => {
+          const newRef = doc(orgEventsRef);
+          batch.set(newRef, event);
+        });
+      }
+
+      // Write root events (fallback)
+      if (rootEvents.length > 0) {
+        const rootEventsRef = collection(db, "analytics_events");
+        rootEvents.forEach(event => {
+          const newRef = doc(rootEventsRef);
+          batch.set(newRef, event);
+        });
+      }
 
       await batch.commit();
     } catch (error) {

@@ -13,11 +13,16 @@ import { db } from "../lib/firebase.js";
 import { getDefaultPermissions, normalizePermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 import { analytics } from "../lib/analytics.js";
 import { eventBus } from "../sdk/events.js";
+import { toast } from 'react-hot-toast';
+
+import { UnifiedTimeline } from "../components/UnifiedTimeline.js";
+import { ECOSYSTEM_APPS, EcosystemApp } from "../lib/apps.js";
+import { ecosystemPlatform } from "../sdk/ecosystem.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
 export function Dashboard() {
-  const { user, profile, loading, logout } = useAuth();
+  const { user, profile, loading, logout, switchOrganization } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [subscription, setSubscription] = useState<any>(null);
@@ -37,6 +42,33 @@ export function Dashboard() {
 
   const [repairing, setRepairing] = useState(false);
   const [subscriptionRepairAvailable, setSubscriptionRepairAvailable] = useState(false);
+
+  const handleLaunchEcosystemApp = async (app: EcosystemApp, permsMap: Record<string, boolean>) => {
+    analytics.track('app_usage', { userId: user?.uid, organizationId: profile?.organizationId, app: app.id });
+    if (!profile || !organization) {
+      toast.error('Erro de Sessão', 'Sessão do ecossistema inválida ou expirada.');
+      return;
+    }
+    
+    try {
+      if (!organization?.enabledApps?.includes(app.id) && app.id !== 'musicscale') {
+         toast.error('Módulo Indisponível', `O aplicativo ${app.name} não está habilitado para a sua organização.`);
+         return;
+      }
+      
+      const toastId = toast.loading('Iniciando Módulo', `Estabelecendo handshake seguro com ${app.name}...`);
+      
+      // Simulate slight delay for handshake feel
+      await new Promise(resolve => setTimeout(resolve, 600));
+      
+      await ecosystemPlatform.launchModule(app.id, app.url, user, profile, organization, permsMap);
+      
+      toast.dismiss(toastId);
+      toast.success('Conexão Estabelecida', `Contexto assinado injetado. Redirecionando...`);
+    } catch (e: any) {
+      toast.error('Falha de Protocolo', `Falha ao injetar contexto do ecossistema: ${e.message}`);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -205,10 +237,18 @@ export function Dashboard() {
 
       // Fetch org members
       try {
-        const usersRef = collection(db, "users");
-        const q = query(usersRef, where("organizationId", "==", orgId));
-        const membersSnap = await getDocs(q);
-        const mems = membersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const membersRef = collection(db, `organizations/${orgId}/members`);
+        const membersSnap = await getDocs(membersRef);
+        
+        // Also fetch the user details to get displayName and email if they are not fully populated in member doc
+        const memsPromises = membersSnap.docs.map(async d => {
+           let data = d.data();
+           let userSnap = await getDoc(doc(db, "users", data.uid || d.id));
+           let userData = userSnap.exists() ? userSnap.data() : {};
+           return { id: d.id, ...data, ...userData };
+        });
+        
+        const mems = await Promise.all(memsPromises);
         setMembers(mems);
       } catch (err) {
         console.error("Erro ao buscar membros", err);
@@ -216,8 +256,8 @@ export function Dashboard() {
 
       // Fetch audit logs
       try {
-        const auditRef = collection(db, "audit_logs");
-        const auditQ = query(auditRef, where("organizationId", "==", orgId), limit(5));
+        const auditRef = collection(db, `organizations/${orgId}/audit_logs`);
+        const auditQ = query(auditRef, limit(5));
         const auditSnap = await getDocs(auditQ);
         const audits = auditSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         // sort descending since we can't do orderby with where in firestore without index unless we do it client side for now just sort by timestamp
@@ -520,13 +560,34 @@ export function Dashboard() {
                 {profile?.displayName?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
               </div>
             )}
-            <div>
-              <h1 className="text-2xl md:text-3xl font-semibold text-[#F5F7FA] tracking-tight">
-                Olá, {profile?.displayName?.split(' ')[0] || user.email?.split('@')[0]}
-              </h1>
-              <p className="text-[#A0A7B5] text-sm md:text-base mt-1">
-                Gerencie seus aplicativos e conexões do ecossistema MillionsNest.
-              </p>
+            <div className="flex-1 flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl md:text-3xl font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
+                  Olá, {profile?.displayName?.split(' ')[0] || user.email?.split('@')[0]}
+                  
+                  {/* Org Switcher for Users with Multiple Orgs */}
+                  {profile?.organizations && profile.organizations.length > 1 && (
+                    <div className="relative inline-block ml-4">
+                       <select 
+                         value={profile.organizationId}
+                         onChange={(e) => {
+                            switchOrganization(e.target.value).then(() => {
+                               window.location.reload();
+                            });
+                         }}
+                         className="appearance-none bg-white/5 border border-white/10 hover:border-white/20 text-sm rounded-xl px-3 py-1.5 outline-none cursor-pointer text-[#A0A7B5] transition-all"
+                       >
+                         {profile.organizations.map(org => (
+                           <option key={org} value={org} className="bg-[#0B0F19] text-[#F5F7FA]">Org ID: {org.substring(0,6)}...</option>
+                         ))}
+                       </select>
+                    </div>
+                  )}
+                </h1>
+                <p className="text-[#A0A7B5] text-sm md:text-base mt-1">
+                  Gerencie seus aplicativos e conexões do ecossistema MillionsNest.
+                </p>
+              </div>
             </div>
           </motion.div>
         </header>
@@ -605,91 +666,69 @@ export function Dashboard() {
                      </div>
                   </div>
 
-                      {/* Upcoming Activities / Empty State for Now */}
-                  <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 shadow-inner transition-all relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    
-                    <h3 className="text-lg font-semibold text-[#F5F7FA] tracking-tight mb-4 flex items-center gap-2">
-                      <Clock className="w-5 h-5 text-[#2B85EB]" /> Timeline Ministerial
-                    </h3>
-                    
-                    <div className="space-y-4 relative">
-                      <div className="absolute left-2.5 top-2 bottom-2 w-px bg-white/5" />
-                      
-                      {/* Timeline Items (Mocked for presentation until Graph is fed) */}
-                      <div className="relative pl-8">
-                        <div className="absolute left-[5px] top-1.5 w-2 h-2 rounded-full bg-[#10B981] ring-4 ring-[#0B0F19]" />
-                        <p className="text-sm font-medium text-[#F5F7FA]">Escala de Domingo Confirmada</p>
-                        <p className="text-xs text-[#A0A7B5] mt-0.5">Equipe de Louvor • <span className="text-[#10B981] font-medium">Você aceitou</span> • Há 2 horas</p>
-                      </div>
-
-                      <div className="relative pl-8">
-                        <div className="absolute left-[5px] top-1.5 w-2 h-2 rounded-full bg-[#2B85EB] ring-4 ring-[#0B0F19]" />
-                        <p className="text-sm font-medium text-[#F5F7FA]">Novo Integrante: Mateus Costa</p>
-                        <p className="text-xs text-[#A0A7B5] mt-0.5">Adicionado como Baixista • Há 1 dia</p>
-                      </div>
-
-                      <div className="relative pl-8">
-                        <div className="absolute left-[5px] top-1.5 w-2 h-2 rounded-full bg-white/20 ring-4 ring-[#0B0F19]" />
-                        <p className="text-sm font-medium text-[#F5F7FA]">Assinatura Renovada</p>
-                        <p className="text-xs text-[#A0A7B5] mt-0.5">Sistema Central • Há 3 dias</p>
-                      </div>
-                    </div>
-                  </div>
+                  {/* Timeline Ministerial */}
+                  <UnifiedTimeline />
 
                   {/* Active Ecosystem Apps */}
                   <div>
                     <div className="flex items-center justify-between mb-6">
                       <h3 className="text-lg font-semibold text-[#F5F7FA] flex items-center gap-2">
                         <LayoutGrid className="w-5 h-5 text-[#A0A7B5]" />
-                        Aplicativos Ecossistema
+                        Catálogo de Aplicativos
                       </h3>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* MusicScale Module */}
-                      <div className="bg-[#050505] rounded-3xl p-5 border border-white/10 shadow-lg flex flex-col transition-all hover:border-[#2B85EB]/30 relative overflow-hidden group">
-                        <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="w-12 h-12 bg-[#2B85EB]/10 rounded-xl flex items-center justify-center border border-[#2B85EB]/20">
-                            <Music className="w-5 h-5 text-[#2B85EB]" />
+                      {ECOSYSTEM_APPS.map(app => {
+                        const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && hasMusicScaleAccess);
+                        // Map internal icon string to lucide icons
+                        const Icon = app.icon === 'Music' ? Music : 
+                                     app.icon === 'Users' ? Users : 
+                                     app.icon === 'ShieldCheck' ? ShieldCheck : 
+                                     app.icon === 'CreditCard' ? CreditCard : LayoutGrid;
+
+                        return (
+                          <div key={app.id} className="bg-[#050505] rounded-3xl p-5 border border-white/10 shadow-lg flex flex-col transition-all hover:border-white/20 relative overflow-hidden group">
+                            {isInstalled && <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />}
+                            <div className="flex items-start justify-between mb-4">
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${isInstalled ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 text-[#2B85EB]' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
+                                <Icon className="w-5 h-5" />
+                              </div>
+                              <span className={`px-2 py-1 text-[9px] font-bold rounded-md border uppercase tracking-widest shadow-sm ${isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 'bg-white/5 text-[#A0A7B5] border-white/10'}`}>
+                                {isInstalled ? 'Instalado' : app.category === 'beta' ? 'Próximamente' : 'Disponível'}
+                              </span>
+                            </div>
+                            <h4 className="text-lg font-semibold text-[#F5F7FA] mb-1">{app.name}</h4>
+                            <p className="text-[#A0A7B5] text-xs leading-relaxed mb-6 flex-1">{app.description}</p>
+                            
+                            <div className="flex items-center gap-3">
+                              {isInstalled ? (
+                                <button
+                                  onClick={() => handleLaunchEcosystemApp(app, currentUserPerms)}
+                                  className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95"
+                                >
+                                  Abrir App <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              ) : (
+                                <button
+                                  disabled
+                                  className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed border border-white/5"
+                                >
+                                  {app.requiredPlan !== 'free' ? `Requer plano ${app.requiredPlan}` : 'Em breve'}
+                                </button>
+                              )}
+                              {isInstalled && (profile?.systemRole === 'ceo' || currentUserPerms['organization.manageBilling']) && (
+                                <button
+                                   onClick={() => setActiveTab('billing')}
+                                   className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/10 transition-colors shrink-0"
+                                >
+                                   <Settings className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <span className="px-2 py-1 bg-white/5 text-[#A0A7B5] text-[9px] font-bold rounded-md border border-white/10 uppercase tracking-widest shadow-sm">
-                            Ativo
-                          </span>
-                        </div>
-                        <h4 className="text-lg font-semibold text-[#F5F7FA] mb-1">MusicScale</h4>
-                        <p className="text-[#A0A7B5] text-xs leading-relaxed mb-6 flex-1">Gestão inteligente de equipes, escalas e repertório para seu ministério de louvor.</p>
-                        
-                        <div className="flex items-center gap-3">
-                          <a 
-                            href="https://musicscale.millionsnest.com" 
-                            target="_blank" rel="noopener noreferrer"
-                            onClick={() => analytics.track('app_usage', { userId: user?.uid, organizationId: profile?.organizationId, app: 'musicscale' })}
-                            className="flex-1 py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95"
-                          >
-                            Abrir <ArrowRight className="w-3.5 h-3.5" />
-                          </a>
-                          {(profile?.systemRole === 'ceo' || currentUserPerms['organization.manageBilling']) && (
-                            <button
-                               onClick={() => setActiveTab('billing')}
-                               className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/10 transition-colors"
-                            >
-                               <Settings className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* CultoFlow Placeholder */}
-                      <div className="bg-[#050505] rounded-3xl p-5 border border-white/5 border-dashed flex flex-col items-center justify-center text-center group transition-all hover:bg-[#0B0F19]/50 hover:border-white/10 relative overflow-hidden">
-                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center border border-white/5 mb-4 text-[#A0A7B5]">
-                          <Plus className="w-5 h-5" />
-                        </div>
-                        <h4 className="text-sm font-semibold text-[#A0A7B5] mb-1">Adicionar App</h4>
-                        <p className="text-[#A0A7B5]/60 text-[11px] leading-relaxed max-w-[180px]">Catálogo de novos aplicativos será liberado nas próximas atualizações.</p>
-                      </div>
-
+                        );
+                      })}
                     </div>
                   </div>
 

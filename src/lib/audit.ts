@@ -13,7 +13,11 @@ interface AuditLogPayload {
 
 export async function createAuditLog(payload: AuditLogPayload) {
   try {
-    await addDoc(collection(db, "audit_logs"), {
+    const colRef = payload.organizationId 
+      ? collection(db, `organizations/${payload.organizationId}/audit_logs`)
+      : collection(db, "system_audit_logs");
+      
+    await addDoc(colRef, {
       ...payload,
       timestamp: serverTimestamp(),
     });
