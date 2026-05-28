@@ -585,6 +585,50 @@ async function startServer() {
     }
   });
 
+  app.post('/api/ecosystem/create-handoff', express.json(), async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      
+      const { appId, orgId } = req.body;
+      if (appId !== 'musicscale') {
+        return res.status(400).json({ error: 'Invalid app' });
+      }
+
+      if (!db) return res.status(500).json({ error: 'Database not initialized' });
+      
+      const orgDoc = await db.collection('organizations').doc(orgId).get();
+      if (!orgDoc.exists) {
+        return res.status(404).json({ error: 'Organization not found' });
+      }
+
+      const subDoc = await db.collection('subscriptions').doc(orgId).get();
+      if (!subDoc.exists || !['active', 'trialing'].includes(subDoc.data()?.status)) {
+        return res.status(403).json({ error: 'Access denied: Subscription missing' });
+      }
+
+      const customToken = await admin.auth().createCustomToken(decoded.uid, {
+        orgId,
+        appId: appId,
+      });
+
+      return res.json({
+        customToken,
+        orgId,
+        uid: decoded.uid,
+        expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes
+      });
+    } catch (e: any) {
+      console.error('[API Handoff]', e);
+      return res.status(500).json({ error: 'Internal Error' });
+    }
+  });
+
   // Forçar sincronização com Stripe
   app.post('/api/v1/billing/sync', async (req, res) => {
     try {

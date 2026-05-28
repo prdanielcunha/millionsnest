@@ -268,6 +268,11 @@ export class EcosystemPlatform {
       .filter(([_, value]) => value)
       .map(([key]) => key);
 
+    const installedApps = [...(currentOrg.enabledApps || [])];
+    if (!installedApps.includes('musicscale') && (currentOrg.subscriptionPlan !== 'free' || profile?.systemRole === 'ceo')) {
+        installedApps.push('musicscale');
+    }
+
     return {
       appId,
       protocol: {
@@ -290,7 +295,7 @@ export class EcosystemPlatform {
       },
       permissions,
       locale: navigator.language || 'pt-BR',
-      installedApps: currentOrg.enabledApps || []
+      installedApps: installedApps
     };
   }
 

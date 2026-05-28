@@ -1,4 +1,4 @@
-import { ecosystemPlatform } from '../sdk/ecosystem.js';
+import { auth } from '../lib/firebase.js';
 import { ECOSYSTEM_APPS } from './apps.js';
 
 export async function openEcosystemModule(
@@ -10,7 +10,7 @@ export async function openEcosystemModule(
 ) {
   if (!user || !organization || !profile) {
     console.error('[EcosystemLaunch] Missing required data', { hasUser: !!user, hasOrg: !!organization, hasProfile: !!profile });
-    alert("Não foi possível iniciar o MusicScale agora. Verifique sua sessão.");
+    alert("Não foi possível iniciar o aplicativo agora. Verifique sua sessão.");
     return;
   }
 
@@ -21,10 +21,40 @@ export async function openEcosystemModule(
      return;
   }
 
-  console.debug('[EcosystemLaunch] Starting module launch', { moduleKey, uid: user.uid, orgId: organization.id });
+  console.debug('[EcosystemLaunch] Starting module handoff launch', { moduleKey, uid: user.uid, orgId: organization.id });
   
   try {
-     await ecosystemPlatform.launchModule(app.id, app.url, user, profile, organization, currentUserPerms || {});
+     const idToken = await auth.currentUser!.getIdToken();
+     const response = await fetch('/api/ecosystem/create-handoff', {
+         method: 'POST',
+         headers: {
+             'Content-Type': 'application/json',
+             'Authorization': `Bearer ${idToken}`
+         },
+         body: JSON.stringify({ appId: moduleKey, orgId: organization.id })
+     });
+     
+     if (!response.ok) {
+         const errorData = await response.json();
+         throw new Error(errorData.error || 'Falha ao obter contexto de handoff');
+     }
+     
+     const handoff = await response.json();
+     
+     const context = {
+         appId: moduleKey,
+         orgId: handoff.orgId,
+         userId: handoff.uid,
+         customToken: handoff.customToken,
+         expiresAt: handoff.expiresAt,
+         protocolVersion: '1.0.0'
+     };
+     
+     const encodedContext = btoa(JSON.stringify(context));
+     const url = new URL(app.url);
+     url.searchParams.set('ecosystem_ctx', encodedContext);
+     
+     window.location.assign(url.toString());
   } catch (e: any) {
     console.error('[EcosystemLaunch] Failed to launch', e);
     alert(`Não foi possível iniciar o ${app.name} agora: ${e.message || 'Erro desconhecido'}`);
