@@ -562,19 +562,11 @@ export function Dashboard() {
        setIsInviteModalOpen(true);
        setActiveTab("organization"); // Switch to team/org view
     };
-    const handleOpenMusicScale = async () => {
-       const app = ECOSYSTEM_APPS.find(a => a.id === 'musicscale');
-       if (app && user && profile && organization && currentUserPerms) {
-          await openEcosystemModule(app.id, user, profile, organization, currentUserPerms);
-       }
-    };
     eventBus.subscribe('action.contextual.invite_member', handleInviteAction);
-    eventBus.subscribe('action.contextual.open_musicscale', handleOpenMusicScale);
     return () => {
        eventBus.unsubscribe('action.contextual.invite_member', handleInviteAction);
-       eventBus.unsubscribe('action.contextual.open_musicscale', handleOpenMusicScale);
     };
-  }, [user, profile, organization, currentUserPerms]);
+  }, []);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -705,8 +697,21 @@ export function Dashboard() {
   const currentUserData = members.find(m => m.id === user?.uid);
   const currentUserPerms = normalizePermissions(currentUserData?.permissions, currentUserData?.role || 'member', currentUserData?.permissionsVersion);
 
+  const breadcrumbs = [];
+  if (activeTab === 'overview') {
+    breadcrumbs.push({ label: 'Visão Geral' });
+  } else if (activeTab === 'organization') {
+    breadcrumbs.push({ label: 'Organização', path: '/dashboard/organization' });
+    if (tab === 'team' || subTab === 'members') breadcrumbs.push({ label: 'Equipe' });
+    else breadcrumbs.push({ label: 'Ajustes' });
+  } else if (activeTab === 'billing') {
+    breadcrumbs.push({ label: 'Faturamento' });
+  } else if (activeTab === 'account') {
+    breadcrumbs.push({ label: 'Minha Conta' });
+  }
+
   return (
-    <EcosystemShell activeAppId="core">
+    <EcosystemShell activeAppId="core" breadcrumbList={breadcrumbs}>
       <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-[#2B85EB]/5 blur-[150px] rounded-full pointer-events-none" />
       
       {/* Secondary Navigation */}

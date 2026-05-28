@@ -1,6 +1,6 @@
 import React, { useState, useEffect, ReactNode, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, LayoutGrid, LayoutDashboard, Building2, ChevronDown, Check, LogOut, ArrowRight, Loader2, User, AlertTriangle } from 'lucide-react';
+import { Search, LayoutGrid, LayoutDashboard, Building2, ChevronDown, Check, LogOut, ArrowRight, Loader2, User, AlertTriangle, Music, Calendar, Users, QrCode } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useOrganization } from '../contexts/OrganizationContext.js';
 import { ECOSYSTEM_APPS, EcosystemApp } from '../lib/apps.js';
@@ -15,9 +15,10 @@ import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 interface EcosystemShellProps {
   children: ReactNode;
   activeAppId?: string; // e.g., 'core', 'musicscale'
+  breadcrumbList?: { label: string; path?: string }[];
 }
 
-export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShellProps) {
+export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList }: EcosystemShellProps) {
   const { user, profile, logout, switchOrganization } = useAuth();
   
   let organization: any = null;
@@ -53,11 +54,19 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
        setIsDegraded(window.navigator.onLine === false || (window as any)._mn_degraded_mode);
     }, 5000);
 
+    const handleOpenMusicScale = () => {
+      const app = ECOSYSTEM_APPS.find(a => a.id === 'musicscale');
+      if (app) handleLaunch(app);
+    };
+
+    eventBus.subscribe('action.contextual.open_musicscale', handleOpenMusicScale);
+
     return () => {
        window.removeEventListener('keydown', handleKeyDown);
        clearInterval(checkDegraded);
+       eventBus.unsubscribe('action.contextual.open_musicscale', handleOpenMusicScale);
     };
-  }, []);
+  }, [user, profile, organization, currentUserPerms]);
 
   const handleLaunch = async (app: EcosystemApp) => {
     if (!profile || !organization) return;
@@ -153,9 +162,25 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
           <div className="hidden md:flex border-l border-white/10 h-4 mx-1" />
           
           <div className="hidden md:flex items-center gap-1.5 text-xs font-semibold px-2">
-            <span className="text-[#A0A7B5]">Ecosystem</span>
+            <span className="text-[#A0A7B5] hover:text-[#F5F7FA] cursor-pointer transition-colors" onClick={() => navigate('/dashboard')}>Ecosystem</span>
             <span className="text-[#A0A7B5]">/</span>
-            <span className="text-[#F5F7FA] bg-white/5 px-2 py-0.5 rounded-md border border-white/10">{activeApp.name}</span>
+            <span className={`px-2 py-0.5 rounded-md border text-[#F5F7FA] ${!breadcrumbList || breadcrumbList.length === 0 ? 'bg-white/5 border-white/10' : 'bg-transparent border-transparent cursor-pointer hover:bg-white/5 transition-colors'} `} onClick={() => (!breadcrumbList || breadcrumbList.length === 0) ? null : navigate('/dashboard')}>
+              {activeApp.name}
+            </span>
+            {breadcrumbList && breadcrumbList.map((crumb, idx) => (
+              <React.Fragment key={idx}>
+                <span className="text-[#A0A7B5]">•</span>
+                {crumb.path ? (
+                  <span className="text-[#A0A7B5] hover:text-[#F5F7FA] cursor-pointer transition-colors" onClick={() => navigate(crumb.path!)}>
+                    {crumb.label}
+                  </span>
+                ) : (
+                  <span className="text-[#F5F7FA] bg-white/5 px-2 py-0.5 rounded-md border border-white/10">
+                    {crumb.label}
+                  </span>
+                )}
+              </React.Fragment>
+            ))}
             {isDegraded && (
                <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded ml-2 border border-orange-500/20">
                   <AlertTriangle className="w-3 h-3" /> Degraded
@@ -218,21 +243,32 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
                                const isGlobalAdmin = profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin';
                                const hasMusicScalePlan = organization?.subscriptionPlan && organization?.subscriptionPlan !== 'free';
                                const hasAccess = profile?.products?.includes('musicscale') || isGlobalAdmin || hasMusicScalePlan;
-                               const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && hasAccess);
+                               
+                               const isSoon = app.category === 'beta' || app.url === '#';
+                               const isInstalled = !isSoon && (organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && hasAccess));
                                const isActiveApp = activeAppId === app.id;
                                
                                return (
                                  <button
                                    key={app.id}
-                                   disabled={!isInstalled && !isActiveApp}
-                                   onClick={() => handleLaunch(app)}
-                                   className={`flex flex-col items-center justify-center p-3 rounded-xl gap-2 transition-all relative ${!isInstalled && !isActiveApp ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/5'} ${isActiveApp ? 'bg-white/5' : ''}`}
+                                   disabled={(!isInstalled && !isActiveApp) || isSoon}
+                                   onClick={() => !isSoon && handleLaunch(app)}
+                                   className={`flex flex-col items-center justify-center p-3 rounded-xl gap-2 transition-all relative ${(!isInstalled && !isActiveApp) || isSoon ? 'opacity-40 cursor-not-allowed group' : 'hover:bg-white/5'} ${isActiveApp ? 'bg-white/5' : ''}`}
                                  >
                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isActiveApp ? 'bg-transparent border-transparent text-[#F5F7FA]' : isInstalled ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 text-[#2B85EB]' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
-                                     {/* Render generic icon based on class if needed, here just fallback for ui mapping */}
-                                     {app.id === 'musicscale' ? <LayoutGrid className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5" />}
+                                     {app.icon === 'Music' && <Music className="w-5 h-5" />}
+                                     {app.icon === 'Calendar' && <Calendar className="w-5 h-5" />}
+                                     {app.icon === 'Users' && <Users className="w-5 h-5" />}
+                                     {app.icon === 'QrCode' && <QrCode className="w-5 h-5" />}
+                                     {!['Music', 'Calendar', 'Users', 'QrCode'].includes(app.icon) && <LayoutGrid className="w-5 h-5" />}
                                    </div>
                                    <span className={`text-[10px] font-semibold text-center ${isActiveApp ? 'text-[#F5F7FA]' : 'text-[#A0A7B5]'}`}>{app.name}</span>
+                                   
+                                   {isSoon && (
+                                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[#050505]/80 rounded-xl">
+                                       <span className="text-[9px] font-bold uppercase tracking-widest text-white">Soon</span>
+                                     </div>
+                                   )}
                                  </button>
                                );
                             })}

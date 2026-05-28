@@ -60,8 +60,8 @@ export class UniversalSearchEngine {
 
     if (activeApp === 'cells' && enabledApps.includes('cells')) {
        actions.unshift(
-        { id: 'action_cell_meeting', type: 'cell', title: 'Registrar Encontro', subtitle: 'CellSync', appSource: 'cells', routingDetails: '/cells/meeting/new', relevanceScore: 2 },
-        { id: 'action_cell_create', type: 'cell', title: 'Nova Célula', subtitle: 'CellSync', appSource: 'cells', routingDetails: '/cells/new', relevanceScore: 2 }
+        { id: 'action_cell_meeting', type: 'cell', title: 'Registrar Encontro', subtitle: 'Pequenos Grupos', appSource: 'cells', routingDetails: '/cells/meeting/new', relevanceScore: 2 },
+        { id: 'action_cell_create', type: 'cell', title: 'Nova Célula', subtitle: 'Pequenos Grupos', appSource: 'cells', routingDetails: '/cells/new', relevanceScore: 2 }
       );
     } else if (activeApp === 'cultoflow' && enabledApps.includes('cultoflow')) {
        actions.unshift(

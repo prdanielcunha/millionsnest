@@ -19,6 +19,36 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     internalRoute: undefined,
     category: 'core',
     requiredPlan: 'free',
+  },
+  {
+    id: 'services',
+    name: 'Cultos e Escalas',
+    description: 'Planejamento e coordenação completa da liturgia, direção e equipes voluntárias.',
+    icon: 'Calendar',
+    url: '#',
+    internalRoute: undefined,
+    category: 'beta',
+    requiredPlan: 'starter',
+  },
+  {
+    id: 'cells',
+    name: 'Células e Pequenos Grupos',
+    description: 'Gerenciamento estratégico para células e relatórios sobre a saúde pastoral.',
+    icon: 'Users',
+    url: '#',
+    internalRoute: undefined,
+    category: 'beta',
+    requiredPlan: 'starter',
+  },
+  {
+    id: 'members',
+    name: 'Membros e Visitantes',
+    description: 'Experiência de check-in, mapeamento de novos visitantes e relatórios precisos.',
+    icon: 'QrCode',
+    url: '#',
+    internalRoute: undefined,
+    category: 'beta',
+    requiredPlan: 'pro',
   }
 ];
 

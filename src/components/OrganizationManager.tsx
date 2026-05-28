@@ -314,7 +314,11 @@ export function OrganizationManager({
                    <div className="flex items-center gap-3">
                       <button onClick={() => {
                         import('../packages/events/index.js').then(({ eventBus }) => {
-                          eventBus.publish('action.contextual.open_musicscale', {});
+                          eventBus.publish('action.contextual.open_musicscale', {
+                             organizationId: organization?.id || '',
+                             userId: user?.uid || '',
+                             appSource: 'core'
+                          } as any);
                         });
                       }} className="px-5 py-2 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold text-sm hover:bg-white transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)]">
                          Abrir App

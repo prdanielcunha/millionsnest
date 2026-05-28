@@ -22,7 +22,7 @@ export const RegisteredEvents = {
   WORSHIP_ENDED: 'worship.ended',
   VOLUNTEER_ASSIGNED: 'volunteer.assigned',
 
-  // Cells & Small Groups (CellSync)
+  // Cells & Small Groups (Pequenos Grupos)
   CELL_MEETING_SCHEDULED: 'cell.meeting_scheduled',
   CELL_MEETING_COMPLETED: 'cell.meeting_completed',
   MEMBER_CHECKIN: 'member.checkin',
