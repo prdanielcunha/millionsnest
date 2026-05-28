@@ -1,0 +1,16 @@
+{
+  "name": "MillionsNest",
+  "short_name": "MillionsNest",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "/MillionsNest_Black.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -9,17 +9,17 @@ type LogoProps = {
 };
 
 export function MillionsNestLogo({ variant = 'light', className = '', loading, decoding }: LogoProps) {
-  const src = variant === 'dark'
-    ? '/MillionsNest_Black.png'
-    : '/logo02.png';
+  const src = '/MillionsNest_Black.png';
 
   return (
-    <img
-      src={src}
-      alt="MillionsNest Logo"
-      loading={loading}
-      decoding={decoding}
-      className={cn('object-contain', className)}
-    />
+    <div className={cn("bg-white p-1.5 rounded-lg flex items-center justify-center shadow-sm", className)}>
+      <img
+        src={src}
+        alt="MillionsNest Logo"
+        loading={loading}
+        decoding={decoding}
+        className="h-full w-auto object-contain"
+      />
+    </div>
   );
 }
