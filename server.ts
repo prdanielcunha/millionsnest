@@ -504,7 +504,7 @@ async function startServer() {
       if (!slug || slug.trim() === '') return res.status(400).json({ error: 'Slug is required' });
 
       let qs = await db.collection('organizations').where('slug', '==', slug).limit(1).get();
-      let orgDoc = qs.empty ? null : qs.docs[0];
+      let orgDoc: any = qs.empty ? null : qs.docs[0];
 
       if (!orgDoc) {
          // Check redirects
@@ -587,6 +587,77 @@ async function startServer() {
     }
   });
 
+  app.get('/api/admin/organizations', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Token de autenticação ausente.' });
+      }
+      
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token', message: 'Falha na validação.' });
+      }
+
+      const userRef = await db!.collection('users').doc(decodedToken.uid).get();
+      if (!userRef.exists) return res.status(403).json({ error: 'Forbidden' });
+      const userData = userRef.data();
+      if (userData?.systemRole !== 'ceo' && userData?.systemRole !== 'admin') {
+         return res.status(403).json({ error: 'Acesso restrito' });
+      }
+
+      const orgsQuery = await db!.collection('organizations').orderBy('createdAt', 'desc').limit(200).get();
+      const organizations = orgsQuery.docs.map(doc => ({
+         id: doc.id,
+         name: doc.data().name || 'Sem nome',
+         slug: doc.data().slug || null,
+         ownerUid: doc.data().ownerUid || null,
+         subscriptionStatus: doc.data().subscriptionStatus || 'none'
+      }));
+
+      return res.json({ organizations });
+    } catch (err) {
+      console.error('[API Admin Orgs]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.get('/api/admin/organizations/:orgId/members', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      
+      const token = authHeader.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+
+      const userSnap = await db!.collection('users').doc(decodedToken.uid).get();
+      const userData = userSnap.data();
+      if (userData?.systemRole !== 'ceo' && userData?.systemRole !== 'admin') {
+         return res.status(403).json({ error: 'Acesso restrito' });
+      }
+
+      const { orgId } = req.params;
+      const membersSnap = await db!.collection(`organizations/${orgId}/members`).get();
+      
+      const members = await Promise.all(membersSnap.docs.map(async doc => {
+        const data = doc.data();
+        let uData = {};
+        try {
+          const userDoc = await db!.collection('users').doc(doc.id).get();
+          if (userDoc.exists) uData = userDoc.data() || {};
+        } catch (e) {}
+        return { id: doc.id, ...data, ...uData };
+      }));
+
+      return res.json({ members });
+    } catch (err) {
+      console.error('[API Admin Org Members]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
   app.get('/api/slug/check', async (req, res) => {
       try {
           const { slug, orgId } = req.query;

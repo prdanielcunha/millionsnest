@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext.js';
-import { Building2, Users, LayoutGrid, Check, Server, Shield, Sparkles, MapPin, ChevronRight, User, X, Loader2 } from 'lucide-react';
+import { Building2, Users, LayoutGrid, Check, Server, Shield, Sparkles, MapPin, ChevronRight, User, X, Loader2, Link } from 'lucide-react';
 import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
 import { ECOSYSTEM_APPS } from '../lib/apps.js';
 import { addDoc, collection } from 'firebase/firestore';

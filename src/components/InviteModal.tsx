@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Copy, Check, MessageCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
@@ -7,22 +7,44 @@ import { useOrganization } from '../contexts/OrganizationContext.js';
 interface InviteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  handleCreateInvite: (role: string, method: 'whatsapp' | 'copy') => Promise<void>;
+  handleCreateInvite: (role: string, method: 'whatsapp' | 'copy', email?: string, overrideOrgId?: string) => Promise<void>;
   loading?: boolean;
 }
 
 export function InviteModal({ isOpen, onClose, handleCreateInvite, loading = false }: InviteModalProps) {
   const [role, setRole] = useState('member');
+  const [email, setEmail] = useState('');
+  const [overrideOrgId, setOverrideOrgId] = useState('');
+  const [adminOrgs, setAdminOrgs] = useState<any[]>([]);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  
   const [copiedLink, setCopiedLink] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   
-  const canInvite = profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin' || 
+  const canInvite = profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin' || 
                     profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin';
+
+  useEffect(() => {
+    if (isOpen && (profile?.systemRole === 'ceo' || profile?.systemRole === 'admin')) {
+      setLoadingOrgs(true);
+      user?.getIdToken().then(token => {
+        fetch('/api/admin/organizations', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        .then(res => res.json())
+        .then(data => {
+           if (Array.isArray(data)) setAdminOrgs(data);
+        })
+        .catch(console.error)
+        .finally(() => setLoadingOrgs(false));
+      });
+    }
+  }, [isOpen, profile, user]);
 
   const onCopy = async () => {
     setIsGenerating(true);
-    await handleCreateInvite(role, 'copy');
+    await handleCreateInvite(role, 'copy', email.trim() || undefined, overrideOrgId || undefined);
     setIsGenerating(false);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -30,7 +52,7 @@ export function InviteModal({ isOpen, onClose, handleCreateInvite, loading = fal
 
   const onWhatsApp = async () => {
     setIsGenerating(true);
-    await handleCreateInvite(role, 'whatsapp');
+    await handleCreateInvite(role, 'whatsapp', email.trim() || undefined, overrideOrgId || undefined);
     setIsGenerating(false);
   };
 
@@ -54,7 +76,7 @@ export function InviteModal({ isOpen, onClose, handleCreateInvite, loading = fal
             className="relative w-full max-w-md bg-[#0B0F19] border border-white/10 rounded-3xl shadow-2xl overflow-hidden p-6"
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-[#F5F7FA]">Convidar Membro</h2>
+              <h2 className="text-xl font-bold text-[#F5F7FA]">Criar Link de Acesso</h2>
               <button 
                 onClick={onClose}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-[#A0A7B5] transition-colors"
@@ -79,6 +101,46 @@ export function InviteModal({ isOpen, onClose, handleCreateInvite, loading = fal
               </div>
             ) : (
               <div className="space-y-6">
+                 {profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' ? (
+                   <div className="space-y-4">
+                     <p className="text-[#A0A7B5] text-xs px-2 -mt-2">
+                       Você está criando um convite como administrador global. Escolha abaixo para qual organização deseja enviar este convite.
+                     </p>
+                     <div>
+                       <label className="block text-sm font-medium text-[#A0A7B5] mb-2">Organização Alvo</label>
+                       {loadingOrgs ? (
+                          <div className="w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-[#F5F7FA] opacity-50 flex items-center">
+                             Carregando organizações...
+                          </div>
+                       ) : (
+                          <select
+                            value={overrideOrgId}
+                            onChange={(e) => setOverrideOrgId(e.target.value)}
+                            className="w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-[#F5F7FA] focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all outline-none"
+                          >
+                            <option value="">(Usar organização atual do Dashboard)</option>
+                            {adminOrgs.map((org: any) => (
+                               <option key={org.id} value={org.id}>
+                                  {org.name} ({org.id.substring(0,6)}...)
+                               </option>
+                            ))}
+                          </select>
+                       )}
+                     </div>
+                   </div>
+                 ) : null}
+                 
+                <div>
+                  <label className="block text-sm font-medium text-[#A0A7B5] mb-2">E-mail do convidado <span className="text-[#A0A7B5]/50 text-xs">(Opcional)</span></label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="email@exemplo.com"
+                    className="w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-[#F5F7FA] focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all outline-none placeholder:text-white/20"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-[#A0A7B5] mb-2">Função Inicial</label>
                   <select

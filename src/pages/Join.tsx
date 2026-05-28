@@ -121,9 +121,13 @@ export function Join() {
          }
       }
 
-      // Mark invite as accepted
+      // Mark invite as accepted or update usage
+      const newUsedCount = (invite.usedCount || 0) + 1;
+      const maxUses = invite.maxUses || 1;
+      
       await updateDoc(inviteDoc.ref, {
-        status: 'accepted',
+        usedCount: newUsedCount,
+        status: newUsedCount >= maxUses ? 'accepted' : 'pending',
         acceptedBy: user!.uid,
         acceptedAt: serverTimestamp()
       });

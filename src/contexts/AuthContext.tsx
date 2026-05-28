@@ -13,6 +13,8 @@ interface UserProfile {
   photoURL: string | null;
   products: string[]; // Legacy
   organizationId?: string; // Active Org
+  defaultOrganizationId?: string;
+  activeOrganizationId?: string;
   organizations?: string[]; // Standardized ecosystem field
   subscriptionStatus?: string; // Standardized ecosystem field
   systemRole?: 'ceo' | 'admin';
@@ -96,9 +98,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             let mergeData: any = { lastLoginAt: serverTimestamp() };
             
             // Auto-assign CEO role to specific email
-            if (currentUser.email === 'pastordanielpcunha@gmail.com' && userData.systemRole !== 'ceo') {
-              mergeData.systemRole = 'ceo';
-              userData.systemRole = 'ceo';
+            if (currentUser.email === 'pastordanielpcunha@gmail.com') {
+              if (userData.systemRole !== 'ceo') {
+                mergeData.systemRole = 'ceo';
+                userData.systemRole = 'ceo';
+              }
+              const orgIdToHeal = userData.defaultOrganizationId || userData.organizationId || currentUser.uid;
+              if (orgIdToHeal) {
+                mergeData.organizationId = orgIdToHeal;
+                mergeData.defaultOrganizationId = orgIdToHeal;
+                userData.organizationId = orgIdToHeal;
+                userData.defaultOrganizationId = orgIdToHeal;
+                
+                const healMemberData = {
+                  uid: currentUser.uid,
+                  email: currentUser.email,
+                  organizationRole: 'owner',
+                  role: 'owner',
+                  status: 'active',
+                  permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+                  permissions: getDefaultPermissions('owner')
+                };
+                await setDoc(doc(db, 'organization_members', `${currentUser.uid}_${orgIdToHeal}`), healMemberData, { merge: true });
+                await setDoc(doc(db, `organizations/${orgIdToHeal}/members`, currentUser.uid), healMemberData, { merge: true });
+                await setDoc(doc(db, 'organizations', orgIdToHeal), { ownerUid: currentUser.uid }, { merge: true });
+              }
             }
 
             if (inviteOrgId) {

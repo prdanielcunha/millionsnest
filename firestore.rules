@@ -114,7 +114,7 @@ service cloud.firestore {
     // ==========================================
 
     match /users/{userId} {
-      allow read: if isAuthenticated() && (userId == request.auth.uid || ('organizationId' in resource.data && checkOrgAccess(resource.data.organizationId)));
+      allow read: if isAuthenticated() && (userId == request.auth.uid || isSystemAdmin() || ('organizationId' in resource.data && checkOrgAccess(resource.data.organizationId)));
       allow create: if isAuthenticated() && userId == request.auth.uid;
       allow update: if isAuthenticated() && (isOwner(userId) || (resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId)));
       allow delete: if isAuthenticated() && resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId);
@@ -130,6 +130,7 @@ service cloud.firestore {
 
     match /organizations/{orgId} {
       allow read: if isAuthenticated() && (
+        isSystemAdmin() ||
         (resource != null && resource.data.ownerUid == request.auth.uid) ||
         (resource != null && resource.data.ownerId == request.auth.uid) ||
         (resource != null && resource.data.owner_user_id == request.auth.uid) ||
@@ -168,7 +169,7 @@ service cloud.firestore {
         allow read: if isAuthenticated(); 
         allow list: if isAuthenticated();
         // Only admins can create updates
-        allow create, update, delete: if isAuthenticated() && isOrgAdmin(orgId);
+        allow create, update, delete: if isAuthenticated() && (isOrgAdmin(orgId) || isSystemAdmin());
       }
 
       // Generic match for all apps inside the organization (e.g. /organizations/{orgId}/musicscale/songs/{songId})
@@ -210,6 +211,7 @@ service cloud.firestore {
     match /subscriptions/{userId} {
       allow read, list: if isAuthenticated() && (
         checkOrgAccess(userId) || 
+        isSystemAdmin() ||
         (resource != null && 'organizationId' in resource.data && checkOrgAccess(resource.data.organizationId)) ||
         (resource != null && 'userId' in resource.data && resource.data.userId == request.auth.uid) ||
         (resource == null)

@@ -31,10 +31,26 @@ export function OrganizationManager({
   auditLogs,
   setActiveDashboardTab,
   initialTab,
-  onOpenInviteModal
+  onOpenInviteModal,
+  adminSelectedOrgId,
+  setAdminSelectedOrgId
 }: any) {
   const [activeTab, setActiveTabInternal] = useState<OrgTab>((initialTab as OrgTab) || 'settings');
   const [slugStatus, setSlugStatus] = useState<string | null>(null);
+  const [adminOrgs, setAdminOrgs] = useState<any[]>([]);
+  const isGlobalAdmin = profile?.systemRole === 'ceo' || profile?.systemRole === 'admin';
+
+  useEffect(() => {
+    if (isGlobalAdmin) {
+       user.getIdToken().then((token: string) => {
+         fetch('/api/admin/organizations', {
+            headers: { 'Authorization': `Bearer ${token}` }
+         }).then(res => res.json()).then(data => {
+            if (data.organizations) setAdminOrgs(data.organizations);
+         }).catch(console.error);
+       });
+    }
+  }, [isGlobalAdmin, user]);
 
   // Auto-generate slug when typing name if slug is empty or it was auto-generated
   useEffect(() => {
@@ -100,7 +116,36 @@ export function OrganizationManager({
   const visibleTabs = TABS.filter(t => t.perms.some(p => currentUserPerms[p] || profile?.systemRole === 'ceo' || profile?.systemRole === 'admin'));
 
   return (
-    <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 lg:p-8 border border-white/5 shadow-2xl flex flex-col md:flex-row gap-8">
+    <div className="flex flex-col gap-6">
+      {isGlobalAdmin && (
+        <div className="bg-[#2B85EB]/10 border border-[#2B85EB]/20 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+             <ShieldCheck className="w-5 h-5 text-[#2B85EB]" />
+             <div>
+                <p className="text-sm font-bold text-[#F5F7FA]">Administração Global (Modo CEO)</p>
+                <p className="text-[11px] text-[#A0A7B5]">Você tem permissão para gerenciar as configurações do ecossistema.</p>
+             </div>
+          </div>
+          <select
+            value={adminSelectedOrgId || profile?.organizationId || ''}
+            onChange={(e) => {
+               if (e.target.value === profile?.organizationId) {
+                  setAdminSelectedOrgId(null);
+               } else {
+                  setAdminSelectedOrgId(e.target.value);
+               }
+            }}
+            className="bg-[#050505] text-[#F5F7FA] text-sm rounded-xl px-4 py-2.5 border border-white/10 outline-none w-full sm:w-auto min-w-[250px]"
+          >
+             <option value={profile?.organizationId || ''}>Sua Organização ({organization?.name})</option>
+             {adminOrgs.filter(o => o.id !== profile?.organizationId).map(org => (
+               <option key={org.id} value={org.id}>{org.name} {org.slug ? `(${org.slug})` : ''}</option>
+             ))}
+          </select>
+        </div>
+      )}
+
+      <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 lg:p-8 border border-white/5 shadow-2xl flex flex-col md:flex-row gap-8">
       {/* Sidebar Navigation */}
       <aside className="w-full md:w-64 shrink-0 flex flex-col gap-2">
         <h2 className="text-xl font-semibold text-[#F5F7FA] flex items-center gap-3 mb-6 px-4">
@@ -458,6 +503,7 @@ export function OrganizationManager({
 
         </AnimatePresence>
       </div>
+    </div>
     </div>
   );
 }

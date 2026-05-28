@@ -158,6 +158,11 @@ export function Dashboard() {
   const [addonsData, setAddonsData] = useState<any[]>([]);
   const [isAnnual, setIsAnnual] = useState(true);
 
+  const [adminSelectedOrgId, setAdminSelectedOrgId] = useState<string | null>(null);
+  const activeContextOrgId = (profile?.systemRole === 'ceo' || profile?.systemRole === 'admin') && adminSelectedOrgId 
+    ? adminSelectedOrgId 
+    : (profile?.organizationId || user?.uid);
+
   const openBillingPortal = async () => {
     if (!user) return;
     try {
@@ -215,95 +220,192 @@ export function Dashboard() {
         }
       }
 
-      // Org is usually 1:1 right now (orgId === user.uid)
-      const orgId = profile?.organizationId || user.uid;
+      // Org is usually 1:1 right now
+      const orgId = activeContextOrgId;
 
-      const subRef = doc(db, "subscriptions", orgId);
-      const subSnap = await getDoc(subRef);
-      
-      if (subSnap.exists()) {
-         const data = subSnap.data();
-         setSubscription(data);
-         // If trialing, we check Stripe one more time silently to see if it moved to active
-         if (data.status === 'trialing' && !forceSync) {
-           fetch('/api/v1/billing/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: user.uid })
-           }).then(r => r.json()).then(res => {
-              if (res.stripeStatus === 'active') {
-                console.log("[Dashboard] Stripe confirmed active status via background sync.");
-                fetchSubscriptionAndOrg(false);
-              }
-           }).catch(err => console.debug("[Dashboard] Background check ignored."));
-         }
-      } else {
-         setSubscription(null);
-         // If user is logged in but has no sub doc, check for inconsistency
-         if (!forceSync) {
-           console.log("[Dashboard] No sub doc found, checking if repair is available...");
-           try {
-             const token = await user.getIdToken();
-             const checkRes = await fetch('/api/repair/check', {
-               headers: { 'Authorization': `Bearer ${token}` }
-             });
-             const checkData = await checkRes.json();
-             if (checkData.requiresRepair) {
-               setSubscriptionRepairAvailable(true);
-               console.warn("🚨 [MILLIONSNEST_SYNC] DOCUMENTO NÃO ENCONTRADO mas Stripe possui assinatura. Repair sugerido.");
-             }
-           } catch (e) {
-             console.error("[Dashboard] Repair check failed", e);
-           }
-         }
-      }
-
-      // Org is usually 1:1 right now (orgId === user.uid)
-      const orgRef = doc(db, "organizations", orgId);
-      const orgSnap = await getDoc(orgRef);
-      if (orgSnap.exists()) {
-        setOrganization({ id: orgSnap.id, ...orgSnap.data() });
-      } else {
-        setOrganization(null);
-      }
-
-      // Fetch org members
       try {
-        const membersRef = collection(db, `organizations/${orgId}/members`);
-        const membersSnap = await getDocs(membersRef);
+        const subRef = doc(db, "subscriptions", orgId);
+        const subSnap = await getDoc(subRef);
         
-        // Also fetch the user details to get displayName and email if they are not fully populated in member doc
-        const memsPromises = membersSnap.docs.map(async (d): Promise<any> => {
-           let data = d.data();
-           let userSnap = await getDoc(doc(db, "users", data.uid || d.id));
-           let userData = userSnap.exists() ? userSnap.data() : {};
-           return { id: d.id, ...data, ...userData };
-        });
+        if (subSnap.exists()) {
+           const data = subSnap.data();
+           setSubscription(data);
+           // If trialing, we check Stripe one more time silently to see if it moved to active
+           if (data.status === 'trialing' && !forceSync) {
+             fetch('/api/v1/billing/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.uid })
+             }).then(r => r.json()).then(res => {
+                if (res.stripeStatus === 'active') {
+                  console.log("[Dashboard] Stripe confirmed active status via background sync.");
+                  fetchSubscriptionAndOrg(false);
+                }
+             }).catch(err => console.debug("[Dashboard] Background check ignored."));
+           }
+        } else {
+           setSubscription(null);
+           // If user is logged in but has no sub doc, check for inconsistency
+           if (!forceSync) {
+             console.log("[Dashboard] No sub doc found, checking if repair is available...");
+             try {
+               const token = await user.getIdToken();
+               const checkRes = await fetch('/api/repair/check', {
+                 headers: { 'Authorization': `Bearer ${token}` }
+               });
+               const checkData = await checkRes.json();
+               if (checkData.requiresRepair) {
+                 setSubscriptionRepairAvailable(true);
+                 console.warn("🚨 [MILLIONSNEST_SYNC] DOCUMENTO NÃO ENCONTRADO mas Stripe possui assinatura. Repair sugerido.");
+               }
+             } catch (e) {
+               console.error("[Dashboard] Repair check failed", e);
+             }
+           }
+        }
+      } catch (err: any) {
+         console.warn("[Dashboard] Could not fetch subscription (possibly rules/permissions issue):", err);
+         setSubscription(null);
+      }
+
+      // Org is usually 1:1 right now (orgId === user.uid)
+      let currentOrgData: any = null;
+      let currentMembers: any[] = [];
+
+      try {
+        const orgRef = doc(db, "organizations", orgId);
+        const orgSnap = await getDoc(orgRef);
         
-        const mems = await Promise.all(memsPromises);
-        
-        // If current user is not in the list but they own the organization, add them virtually
-        if (!mems.find(m => m.id === user.uid) && orgSnap.data()?.ownerUid === user.uid) {
-           const currentUserSnap = await getDoc(doc(db, "users", user.uid));
-           const currentUserProfile = currentUserSnap.exists() ? currentUserSnap.data() : {};
-           mems.push({
-             id: user.uid,
-             uid: user.uid,
-             role: 'owner',
-             ...currentUserProfile
+        if (orgSnap.exists()) {
+          currentOrgData = { id: orgSnap.id, ...orgSnap.data() };
+          setOrganization(currentOrgData);
+
+          // Fetch org members
+          try {
+            const membersRef = collection(db, `organizations/${orgId}/members`);
+            const membersSnap = await getDocs(membersRef);
+            
+            // Also fetch the user details to get displayName and email if they are not fully populated in member doc
+            const memsPromises = membersSnap.docs.map(async (d): Promise<any> => {
+               let data = d.data();
+               let userData = {};
+               try {
+                 let userSnap = await getDoc(doc(db, "users", data.uid || d.id));
+                 if (userSnap.exists()) userData = userSnap.data();
+               } catch (userErr: any) {
+                 console.warn("Could not fetch user details, fallback to member data:", userErr);
+               }
+               return { id: d.id, ...data, ...userData };
+            });
+            
+            currentMembers = await Promise.all(memsPromises);
+          } catch (memErr) {
+            console.warn("Could not fetch members via client SDK:", memErr);
+            if (isCEO) {
+              const token = await user.getIdToken();
+              const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (memRes.ok) {
+                const { members: adminMembers } = await memRes.json();
+                currentMembers = adminMembers;
+              }
+            }
+          }
+        } else if (isCEO) {
+           // Try server API for org data
+           const token = await user.getIdToken();
+           const res = await fetch(`/api/admin/organizations`, {
+              headers: { 'Authorization': `Bearer ${token}` }
            });
-           
-           // Also fix the structural issue in background
-           setDoc(doc(db, `organizations/${orgId}/members`, user.uid), {
-             uid: user.uid,
-             role: 'owner',
-             addedAt: new Date()
-           }, { merge: true }).catch(console.error);
+           if (res.ok) {
+             const { organizations: adminOrgs } = await res.json();
+             const found = adminOrgs.find((o: any) => o.id === orgId);
+             if (found) {
+               currentOrgData = found;
+               setOrganization(found);
+               // Also fetch members via server
+               const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
+                  headers: { 'Authorization': `Bearer ${token}` }
+               });
+               if (memRes.ok) {
+                  const { members: adminMembers } = await memRes.json();
+                  currentMembers = adminMembers;
+               }
+             }
+           }
+        }
+      } catch (err: any) {
+        console.warn("[Dashboard] Client fetch failed for org data:", err);
+        if (isCEO) {
+           // Fallback to server API
+           try {
+              const token = await user.getIdToken();
+              const res = await fetch(`/api/admin/organizations`, {
+                 headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (res.ok) {
+                const { organizations: adminOrgs } = await res.json();
+                const found = adminOrgs.find((o: any) => o.id === orgId);
+                if (found) {
+                  currentOrgData = found;
+                  setOrganization(found);
+                  // Also fetch members via server
+                  const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                  });
+                  if (memRes.ok) {
+                    const { members: adminMembers } = await memRes.json();
+                    currentMembers = adminMembers;
+                  }
+                }
+              }
+           } catch (fallbackErr) {
+              console.error("[Dashboard] Fallback CEO fetch failed:", fallbackErr);
+           }
+        }
+      }
+
+      if (currentMembers.length > 0) {
+        // If current user is not in the list but they own the organization, add them virtually
+        let currentUserMem = currentMembers.find(m => m.id === user.uid);
+        const isOwnerUid = currentOrgData?.ownerUid === user.uid;
+
+        if (currentUserMem && isOwnerUid && currentUserMem.role !== 'owner') {
+            currentUserMem.role = 'owner';
+            setDoc(doc(db, `organizations/${orgId}/members`, user.uid), { role: 'owner', organizationRole: 'owner' }, { merge: true }).catch(console.error);
+        } else if (!currentUserMem && isOwnerUid) {
+            const currentUserSnap = await getDoc(doc(db, "users", user.uid));
+            const currentUserProfile = currentUserSnap.exists() ? currentUserSnap.data() : {};
+            currentMembers.push({
+              id: user.uid,
+              uid: user.uid,
+              role: 'owner',
+              ...currentUserProfile
+            });
+            
+            // Also fix the structural issue in background
+            setDoc(doc(db, `organizations/${orgId}/members`, user.uid), {
+              uid: user.uid,
+              role: 'owner',
+              organizationRole: 'owner',
+              addedAt: new Date()
+            }, { merge: true }).catch(console.error);
         }
         
-        setMembers(mems);
-      } catch (err) {
-        console.error("Erro ao buscar membros", err);
+        // Also ensure pastordanielpcunha@gmail.com is owner if they are looking at their own org
+        if (user.email === 'pastordanielpcunha@gmail.com' && currentOrgData?.id === (profile?.organizationId || user.uid)) {
+            let danielMem = currentMembers.find(m => m.id === user.uid);
+            if (danielMem && danielMem.role !== 'owner') {
+              danielMem.role = 'owner';
+              setDoc(doc(db, `organizations/${orgId}/members`, user.uid), { role: 'owner', organizationRole: 'owner' }, { merge: true }).catch(console.error);
+              setDoc(doc(db, 'organizations', orgId), { ownerUid: user.uid }, { merge: true }).catch(console.error);
+            }
+        }
+        
+        setMembers(currentMembers);
+      } else {
+        setMembers([]);
       }
 
       // Fetch pending invites
@@ -362,7 +464,7 @@ export function Dashboard() {
     if (!user || !orgNameInput.trim()) return;
     setSavingOrg(true);
     try {
-      const orgId = profile?.organizationId || user.uid;
+      const orgId = activeContextOrgId;
       const token = await user.getIdToken();
       const res = await fetch('/api/user/organization', {
         method: 'POST',
@@ -431,7 +533,7 @@ export function Dashboard() {
       await updateDoc(userRef, { role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION });
       
       // update in organization_members collection (legacy compat)
-      const orgId = profile?.organizationId || user?.uid;
+      const orgId = activeContextOrgId;
       const memberOrgRef = doc(db, "organization_members", `${memberId}_${orgId}`);
       await setDoc(memberOrgRef, { role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION }, { merge: true });
       
@@ -478,7 +580,7 @@ export function Dashboard() {
          }
       }
 
-      const orgId = profile?.organizationId || user?.uid;
+      const orgId = activeContextOrgId;
       
       // Remove from new architecture
       await deleteDoc(doc(db, `organizations/${orgId}/members`, memberId));
@@ -509,9 +611,9 @@ export function Dashboard() {
     }
   };
 
-  const handleCreateInvite = async (role: string, method: 'whatsapp' | 'copy') => {
+  const handleCreateInvite = async (role: string, method: 'whatsapp' | 'copy', email?: string, overrideOrgId?: string) => {
     try {
-      const orgId = profile?.organizationId || user?.uid;
+      const orgId = overrideOrgId || activeContextOrgId;
       const inviteId = Math.random().toString(36).substring(2, 10);
       const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       
@@ -521,11 +623,16 @@ export function Dashboard() {
         organizationId: orgId,
         organizationName: organization?.name || 'Organização',
         tokenHash: token,
+        invitedEmail: email || null,
         role,
         status: 'pending',
+        type: email ? 'email' : 'link',
         createdBy: user?.uid,
+        createdBySystemRole: profile?.systemRole || null,
         createdAt: serverTimestamp(),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        maxUses: 1,
+        usedCount: 0
       });
       
       const link = `${window.location.origin}/join/${orgId}?token=${token}`;
@@ -548,7 +655,7 @@ export function Dashboard() {
 
   const handleRevokeInvite = async (inviteId: string) => {
     try {
-      const orgId = profile?.organizationId || user?.uid;
+      const orgId = activeContextOrgId;
       const inviteRef = doc(db, `organizations/${orgId}/invites`, inviteId);
       await updateDoc(inviteRef, {
         status: 'revoked',
@@ -631,6 +738,9 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchSubscriptionAndOrg();
+  }, [user, activeContextOrgId]);
+
+  useEffect(() => {
     fetch('/api/v1/billing/products')
       .then(res => res.json())
       .then(data => {
@@ -699,8 +809,12 @@ export function Dashboard() {
     navigate('/checkout');
   };
 
+  const isCEO = profile?.systemRole === 'ceo';
   const currentUserData = members.find(m => m.id === user?.uid);
-  const currentUserPerms = normalizePermissions(currentUserData?.permissions, currentUserData?.role || 'member', currentUserData?.permissionsVersion);
+  const displayRole = isCEO ? 'owner' : (currentUserData?.role || 'member');
+  const currentUserPerms = isCEO
+    ? normalizePermissions(undefined, 'owner', undefined)
+    : normalizePermissions(currentUserData?.permissions, currentUserData?.role || 'member', currentUserData?.permissionsVersion);
 
   const breadcrumbs = [];
   if (activeTab === 'overview') {
@@ -728,7 +842,7 @@ export function Dashboard() {
           >
             Visão Geral
           </button>
-          {currentUserPerms['organization.settings.update'] && (
+          {(currentUserPerms['organization.settings.update'] || profile?.systemRole === 'ceo' || profile?.systemRole === 'admin') && (
             <button 
               onClick={() => setActiveTab("organization")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "organization" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
@@ -807,12 +921,12 @@ export function Dashboard() {
                 <div className="flex flex-wrap items-center gap-3 mt-2">
                   <div className="flex items-center gap-2">
                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-white/10 text-[#F5F7FA] border border-white/10">
-                       {currentUserData?.role === 'owner' ? 'Dono' : currentUserData?.role === 'admin' ? 'Administrador' : currentUserData?.role === 'leader' ? 'Líder' : 'Membro'}
+                       {displayRole === 'owner' ? 'Dono' : displayRole === 'admin' ? 'Administrador' : displayRole === 'leader' ? 'Líder' : 'Membro'}
                      </span>
                      
                      {profile?.systemRole === 'ceo' && (
                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                         Staff
+                         CEO
                        </span>
                      )}
                   </div>
@@ -1028,7 +1142,7 @@ export function Dashboard() {
                       <span className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-[#A0A7B5]" /> Equipe
                       </span>
-                      {currentUserPerms['organization.members.manage'] && (
+                      {(currentUserPerms['organization.members.manage'] || profile?.systemRole === 'ceo' || profile?.systemRole === 'admin') && (
                         <button onClick={() => setActiveTab('organization')} className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB]">
                           Gerenciar
                         </button>
@@ -1089,6 +1203,8 @@ export function Dashboard() {
                 handleRemoveMember={handleRemoveMember}
                 isEditingOrg={isEditingOrg}
                 setIsEditingOrg={setIsEditingOrg}
+                adminSelectedOrgId={adminSelectedOrgId}
+                setAdminSelectedOrgId={setAdminSelectedOrgId}
                 orgNameInput={orgNameInput}
                 setOrgNameInput={setOrgNameInput}
                 orgSlugInput={orgSlugInput}
