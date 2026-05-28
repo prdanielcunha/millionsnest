@@ -100,7 +100,15 @@ export function OrganizationPublicPage() {
           }
           return;
         }
+
         const orgData = await orgRes.json();
+        
+        // Auto redirect to new slug if it was a legacy/redirect slug
+        if (orgData.slug && orgData.slug !== slug) {
+           navigate(`/${orgData.slug}`, { replace: true });
+           return;
+        }
+
         setOrg(orgData);
 
         const memRes = await fetch(`/api/public/organizations/${orgData.id}/members`);

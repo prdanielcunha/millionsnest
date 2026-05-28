@@ -503,12 +503,25 @@ async function startServer() {
       const slug = req.params.slug;
       if (!slug || slug.trim() === '') return res.status(400).json({ error: 'Slug is required' });
 
-      const qs = await db.collection('organizations').where('slug', '==', slug).limit(1).get();
-      if (qs.empty) {
+      let qs = await db.collection('organizations').where('slug', '==', slug).limit(1).get();
+      let orgDoc = qs.empty ? null : qs.docs[0];
+
+      if (!orgDoc) {
+         // Check redirects
+         const redirectDoc = await db.collection('organizationSlugRedirects').doc(slug).get();
+         if (redirectDoc.exists) {
+            const redirectData = redirectDoc.data();
+            if (redirectData?.organizationId) {
+               orgDoc = await db.collection('organizations').doc(redirectData.organizationId).get();
+               if (!orgDoc.exists) orgDoc = null;
+            }
+         }
+      }
+
+      if (!orgDoc) {
         return res.status(404).json({ error: 'Organization not found' });
       }
 
-      const orgDoc = qs.docs[0];
       const data = orgDoc.data();
 
       return res.json({
@@ -572,6 +585,50 @@ async function startServer() {
       console.error('[API Public Members]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
+  });
+
+  app.get('/api/slug/check', async (req, res) => {
+      try {
+          const { slug, orgId } = req.query;
+          if (!slug || typeof slug !== 'string') {
+              return res.status(400).json({ error: 'Slug is required' });
+          }
+
+          const RESERVED_PUBLIC_ROUTES = [
+             'login', 'dashboard', 'pricing', 'checkout', 'invite', 'join', 
+             'start', 'admin', 'api', 'support', 'billing', 'apps', 'settings',
+             'termos-de-uso', 'politica-de-privacidade', 'politicas-de-reembolso', 'politicas-de-cancelamento',
+             'upgrade', 'org', 'organizations', 'musicscale', 'millionsnest', 'api'
+          ];
+          
+          if (RESERVED_PUBLIC_ROUTES.includes(slug)) {
+              return res.json({ available: false, reason: 'reserved' });
+          }
+
+          const indexDoc = await db.collection('organizationSlugs').doc(slug).get();
+          if (indexDoc.exists) {
+              const data = indexDoc.data();
+              if (data?.organizationId === orgId) {
+                 return res.json({ available: true, reason: 'current_org' });
+              }
+              return res.json({ available: false, reason: 'taken' });
+          }
+
+          // Fallback to legacy organizations search
+          const qs = await db.collection('organizations').where('slug', '==', slug).get();
+          if (!qs.empty) {
+              const existingDoc = qs.docs[0];
+              if (existingDoc.id === orgId) {
+                  return res.json({ available: true, reason: 'current_org' }); // already belongs to this org
+              }
+              return res.json({ available: false, reason: 'taken' });
+          }
+          
+          return res.json({ available: true });
+      } catch (err: any) {
+          console.error('[API Slug Check]', err);
+          return res.status(500).json({ error: 'Internal Server Error' });
+      }
   });
 
   // Novo endpoint de acesso robusto com suporte a Multi-Org
@@ -1545,7 +1602,13 @@ async function startServer() {
         updateData.ownerId = uid;
       }
 
+      let oldSlug: string | null = null;
       if (slug !== undefined) {
+         const orgDocRes = await admin.firestore().collection('organizations').doc(orgId).get();
+         if (orgDocRes.exists) {
+            oldSlug = orgDocRes.data()?.slug || null;
+         }
+
          if (!slug || slug.trim() === '') {
             updateData.slug = null;
          } else {
@@ -1558,25 +1621,54 @@ async function startServer() {
               'login', 'dashboard', 'pricing', 'checkout', 'invite', 'join', 
               'start', 'admin', 'api', 'support', 'billing', 'apps', 'settings',
               'termos-de-uso', 'politica-de-privacidade', 'politicas-de-reembolso', 'politicas-de-cancelamento',
-              'upgrade'
+              'upgrade', 'org', 'organizations', 'musicscale', 'millionsnest', 'api'
             ];
 
             if (RESERVED_PUBLIC_ROUTES.includes(slug)) {
                return res.status(400).json({ error: 'Palavra reservada, escolha outra.' });
             }
 
-            const slugQuery = await admin.firestore().collection('organizations').where('slug', '==', slug).get();
-            if (!slugQuery.empty) {
-               const existingDoc = slugQuery.docs[0];
-               if (existingDoc.id !== orgId) {
-                  return res.status(400).json({ error: 'Este link já está em uso.' });
-               }
+            // Transaction-like constraint using a dedicated collection index
+            const indexRef = admin.firestore().collection('organizationSlugs').doc(slug);
+            const indexDoc = await indexRef.get();
+            if (indexDoc.exists) {
+                const existingData = indexDoc.data();
+                if (existingData?.organizationId !== orgId) {
+                    return res.status(400).json({ error: 'Este link já está em uso.' });
+                }
+            } else {
+                // Not in index, double check organizations just in case legacy data exists
+                const slugQuery = await admin.firestore().collection('organizations').where('slug', '==', slug).get();
+                if (!slugQuery.empty) {
+                   const existingDoc = slugQuery.docs[0];
+                   if (existingDoc.id !== orgId) {
+                      return res.status(400).json({ error: 'Este link já está em uso (legado).' });
+                   }
+                }
             }
             updateData.slug = slug;
          }
       }
 
       batch.set(admin.firestore().collection('organizations').doc(orgId), updateData, { merge: true });
+      
+      if (slug !== undefined && updateData.slug) {
+          batch.set(admin.firestore().collection('organizationSlugs').doc(updateData.slug), {
+              organizationId: orgId,
+              createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+      }
+
+      if (oldSlug && slug !== undefined && updateData.slug !== oldSlug) {
+         batch.set(admin.firestore().collection('organizationSlugRedirects').doc(oldSlug), {
+             organizationId: orgId,
+             currentSlug: updateData.slug,
+             createdAt: admin.firestore.FieldValue.serverTimestamp()
+         });
+         // Also we should free up the old slug in the organizationSlugs index, or keep it reserved.
+         // Let's delete the old index document so another org can use it, but keeping the redirect.
+         batch.delete(admin.firestore().collection('organizationSlugs').doc(oldSlug));
+      }
 
       if (name) {
         batch.set(admin.firestore().collection('organization_members').doc(`${uid}_${orgId}`), {

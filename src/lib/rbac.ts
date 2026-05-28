@@ -39,7 +39,7 @@ export function getDefaultPermissions(role: string): AppPermissions {
         'organization.settings.update': true,
         'organization.members.manage': true,
         'organization.members.invite': true,
-        'organization.roles.manage': false,
+        'organization.roles.manage': true,
         'organization.billing.manage': false,
         'organization.apps.manage': false,
         'organization.audit.view': true,

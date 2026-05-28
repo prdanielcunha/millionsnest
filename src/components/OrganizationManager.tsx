@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Building2, Users, LayoutGrid, CreditCard, ShieldCheck, Settings, Check, X, Loader2, Link, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PremiumEmptyState } from '../packages/ui/empty-state.js';
 import { framerTokens } from '../packages/ui/motion.js';
+import { normalizeSlug } from '../lib/slug.js';
 
 type OrgTab = 'settings' | 'members' | 'apps' | 'roles' | 'billing' | 'audit';
 
@@ -33,6 +34,48 @@ export function OrganizationManager({
   onOpenInviteModal
 }: any) {
   const [activeTab, setActiveTabInternal] = useState<OrgTab>((initialTab as OrgTab) || 'settings');
+  const [slugStatus, setSlugStatus] = useState<string | null>(null);
+
+  // Auto-generate slug when typing name if slug is empty or it was auto-generated
+  useEffect(() => {
+     if (isEditingOrg && orgNameInput) {
+        if (!orgSlugInput || (organization && orgSlugInput === normalizeSlug(organization.name))) {
+           setOrgSlugInput(normalizeSlug(orgNameInput));
+        }
+     }
+  }, [orgNameInput, isEditingOrg]);
+
+  // Check slug availability when it changes
+  useEffect(() => {
+     if (!isEditingOrg || !orgSlugInput || orgSlugInput.trim().length === 0) {
+        setSlugStatus(null);
+        return;
+     }
+     
+     if (organization && orgSlugInput === organization.slug) {
+        setSlugStatus('current_org');
+        return;
+     }
+
+     const checkSlug = async () => {
+        setSlugStatus('checking');
+        try {
+           const res = await fetch(`/api/slug/check?slug=${encodeURIComponent(orgSlugInput)}&orgId=${organization?.id || ''}`);
+           const data = await res.json();
+           if (data.available) {
+              setSlugStatus('available');
+           } else {
+              setSlugStatus(data.reason || 'taken'); // 'taken', 'reserved', 'current_org'
+           }
+        } catch (e) {
+           console.error(e);
+           setSlugStatus(null);
+        }
+     };
+
+     const timeoutId = setTimeout(checkSlug, 500); // debounce check
+     return () => clearTimeout(timeoutId);
+  }, [orgSlugInput, isEditingOrg, organization]);
 
   React.useEffect(() => {
     if (initialTab && initialTab !== activeTab) {
@@ -144,22 +187,29 @@ export function OrganizationManager({
                          <p className="text-xs font-semibold text-[#A0A7B5] mb-1.5 flex justify-between">
                             <span>Slug (URL Público)</span>
                             {organization?.slug && !isEditingOrg && (
-                               <span className="flex items-center gap-3">
-                                   <button onClick={() => { navigator.clipboard.writeText(`https://millionsnest.com/${organization.slug}`); alert('Link copiado!'); }} className="text-[#A0A7B5] hover:text-white flex items-center gap-1 font-normal"><Copy className="w-3 h-3" /> Copiar</button>
-                                   <a href={`/${organization.slug}`} target="_blank" rel="noopener noreferrer" className="text-[#2B85EB] font-normal hover:text-white flex items-center gap-1"><Link className="w-3 h-3" /> Abrir</a>
+                               <span className="flex items-center gap-2">
+                                   <button onClick={() => { navigator.clipboard.writeText(`https://millionsnest.com/${organization.slug}`); alert('Link copiado!'); }} className="text-[#A0A7B5] hover:text-white flex items-center gap-1.5 font-normal px-2 py-1 rounded-md hover:bg-white/5 transition-colors"><Copy className="w-3.5 h-3.5" /> Copiar</button>
+                                   <a href={`/${organization.slug}`} target="_blank" rel="noopener noreferrer" className="bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-[10px] font-bold rounded-md px-2.5 py-1 flex items-center gap-1.5 uppercase tracking-widest shadow-sm hover:bg-[#2B85EB]/20 transition-colors"><Link className="w-3.5 h-3.5" /> Ver Página</a>
                                </span>
                             )}
                          </p>
-                         <div className={`flex items-center gap-2 bg-[#050505] border border-white/5 rounded-xl px-4 py-3 ${isEditingOrg ? '' : 'opacity-70'}`}>
+                         <div className={`flex items-center gap-2 bg-[#050505] border ${isEditingOrg ? (orgSlugInput.trim().length > 0 && slugStatus === 'available' ? 'border-[#10B981]' : (orgSlugInput.trim().length > 0 && slugStatus !== 'checking' ? 'border-[#EF4444]' : 'border-white/10')) : 'border-white/5'} rounded-xl px-4 py-3 ${isEditingOrg ? '' : 'opacity-70'} relative transition-colors`}>
                            <span className="text-sm text-[#A0A7B5]">millionsnest.com/</span>
                            {isEditingOrg ? (
-                             <input 
-                               type="text" 
-                               value={orgSlugInput}
-                               onChange={(e) => setOrgSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                               placeholder="sua-organizacao"
-                               className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1"
-                             />
+                             <>
+                               <input 
+                                 type="text" 
+                                 value={orgSlugInput}
+                                 onChange={(e) => setOrgSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                                 placeholder="sua-organizacao"
+                                 className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1"
+                               />
+                               {slugStatus === 'checking' && <Loader2 className="w-4 h-4 text-[#A0A7B5] animate-spin shrink-0" />}
+                               {slugStatus === 'available' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#10B981] shrink-0 bg-[#10B981]/10 px-2 py-1 rounded">Disponível</span>}
+                               {slugStatus === 'taken' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#EF4444] shrink-0 bg-[#EF4444]/10 px-2 py-1 rounded">Em uso</span>}
+                               {slugStatus === 'reserved' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#EF4444] shrink-0 bg-[#EF4444]/10 px-2 py-1 rounded">Reservado</span>}
+                               {slugStatus === 'current_org' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#2B85EB] shrink-0 bg-[#2B85EB]/10 px-2 py-1 rounded">Seu Slug</span>}
+                             </>
                            ) : (
                              <input 
                                type="text" 
@@ -170,6 +220,11 @@ export function OrganizationManager({
                              />
                            )}
                          </div>
+                         {isEditingOrg && organization?.slug && orgSlugInput !== organization.slug && orgSlugInput.trim().length > 0 && (
+                            <p className="text-[11px] text-[#A0A7B5] mt-2 flex items-center gap-1.5 bg-[#2B85EB]/10 p-2 rounded-lg border border-[#2B85EB]/20">
+                               <ShieldCheck className="w-3 h-3 text-[#2B85EB]" /> Links antigos continuarão funcionando com redirecionamento automático.
+                            </p>
+                         )}
                        </div>
                      </div>
                   </div>

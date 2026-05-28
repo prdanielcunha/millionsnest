@@ -856,6 +856,16 @@ export function Dashboard() {
                        </div>
                        
                        <div className="flex items-center gap-3">
+                         {organization?.slug && (
+                            <a 
+                               href={`/${organization.slug}`} 
+                               target="_blank" 
+                               rel="noopener noreferrer"
+                               className="px-3 py-1.5 bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-[10px] font-bold rounded-full flex items-center gap-1.5 uppercase tracking-widest shadow-sm hover:bg-[#2B85EB]/20 transition-colors"
+                            >
+                               <Link className="w-3.5 h-3.5" /> Site
+                            </a>
+                         )}
                          {isTrialing ? (
                            <span className="px-3 py-1 bg-[#F59E0B]/10 text-[#F59E0B] text-[10px] font-bold rounded-full border border-[#F59E0B]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
                              <Clock className="w-3.5 h-3.5" /> Trial Ativo
