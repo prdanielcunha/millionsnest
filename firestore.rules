@@ -164,6 +164,13 @@ service cloud.firestore {
         );
       }
 
+      match /invites/{inviteId} {
+        allow read: if isAuthenticated(); 
+        allow list: if isAuthenticated();
+        // Only admins can create updates
+        allow create, update, delete: if isAuthenticated() && isOrgAdmin(orgId);
+      }
+
       // Generic match for all apps inside the organization (e.g. /organizations/{orgId}/musicscale/songs/{songId})
       match /{app}/{document=**} {
         allow read: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);

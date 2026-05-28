@@ -48,6 +48,20 @@ export function getDefaultPermissions(role: string): AppPermissions {
         'musicscale.scales.manage': true,
         'musicscale.teams.manage': true,
       };
+    case 'leader':
+      return {
+        'organization.settings.update': false,
+        'organization.members.manage': false,
+        'organization.members.invite': false,
+        'organization.roles.manage': false,
+        'organization.billing.manage': false,
+        'organization.apps.manage': false,
+        'organization.audit.view': false,
+        'musicscale.songs.manage': false,
+        'musicscale.songs.edit': true, // Operacional, minimal but not admin
+        'musicscale.scales.manage': true,
+        'musicscale.teams.manage': true,
+      };
     case 'secretary':
       return {
         'organization.settings.update': false,

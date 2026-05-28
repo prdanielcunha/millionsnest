@@ -10,22 +10,38 @@ export function OrganizationManager({
   organization, 
   members, 
   currentUserPerms, 
+  currentUserRole,
   user,
   profile,
   onSaveOrg,
   handleUpdateMemberRole,
+  handleRemoveMember,
   isEditingOrg,
   setIsEditingOrg,
   orgNameInput,
   setOrgNameInput,
   savingOrg,
-  handleInviteWhatsapp,
-  handleCopyLink,
+  handleCreateInvite,
+  handleRevokeInvite,
+  pendingInvites = [],
   copiedLink,
   auditLogs,
-  setActiveDashboardTab
+  setActiveDashboardTab,
+  initialTab,
+  onOpenInviteModal
 }: any) {
-  const [activeTab, setActiveTab] = useState<OrgTab>('settings');
+  const [activeTab, setActiveTabInternal] = useState<OrgTab>((initialTab as OrgTab) || 'settings');
+
+  React.useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTabInternal(initialTab as OrgTab);
+    }
+  }, [initialTab]);
+
+  const setActiveTab = (tab: OrgTab) => {
+    setActiveTabInternal(tab);
+    // Option to push to history
+  }
 
   const TABS = [
     { id: 'settings', label: 'Ajustes', icon: Settings, perms: ['organization.settings.update'] },
@@ -80,69 +96,70 @@ export function OrganizationManager({
               <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Ajustes da Organização</h3>
               
               <div className="space-y-6 max-w-xl">
-                 <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                    <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Perfil Principal</p>
-                    
-                    <div className="flex items-start gap-5">
-                       <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-2xl text-[#F5F7FA]">
-                         {organization?.logo ? <img src={organization.logo} className="w-full h-full rounded-xl object-cover" /> : organization?.name?.charAt(0) || 'O'}
-                       </div>
-                       <div className="flex-1">
-                          <p className="text-xs font-semibold text-[#F5F7FA] mb-1.5">Mudar Logotipo</p>
-                          <div className="flex items-center gap-2">
-                             <input type="file" className="text-xs text-[#A0A7B5] file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-white/10 file:text-[#F5F7FA] hover:file:bg-white/20 transition-all cursor-pointer" />
-                          </div>
-                       </div>
-                    </div>
-                    
-                    <div className="mt-6">
-                      <p className="text-xs font-semibold text-[#A0A7B5] mb-2">Nome Oficial</p>
-                      {isEditingOrg ? (
-                        <div className="flex items-center gap-2">
-                          <input 
-                            title="Nome"
-                            type="text" 
-                            value={orgNameInput} 
-                            onChange={(e) => setOrgNameInput(e.target.value)} 
-                            className="bg-[#0B0F19] border border-white/10 rounded-xl px-4 py-2 text-sm text-[#F5F7FA] outline-none focus:border-[#2B85EB] transition-colors w-full"
-                          />
-                          <button disabled={savingOrg} onClick={onSaveOrg} className="p-2 bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl">
-                            {savingOrg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                          </button>
-                          <button disabled={savingOrg} onClick={() => { setIsEditingOrg(false); setOrgNameInput(organization.name); }} className="p-2 bg-white/5 text-[#A0A7B5] rounded-xl hover:bg-white/10 transition-colors">
-                            <X className="w-4 h-4" />
-                          </button>
+                  <div className="bg-transparent p-0 rounded-none border-none">
+                     <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Perfil Principal</p>
+                     
+                     <div className="flex items-start gap-5 bg-[#050505] p-5 rounded-2xl border border-white/5 mb-6">
+                        <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-2xl text-[#F5F7FA]">
+                          {organization?.logo ? <img src={organization.logo} className="w-full h-full rounded-xl object-cover" /> : organization?.name?.charAt(0) || 'O'}
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-between bg-[#0B0F19] border border-white/10 rounded-xl px-4 py-2">
-                          <p className="text-sm font-medium text-[#F5F7FA]">{organization?.name}</p>
-                          <button onClick={() => setIsEditingOrg(true)} className="text-xs font-medium text-[#2B85EB]">Editar</button>
+                        <div className="flex-1">
+                           <p className="text-xs font-semibold text-[#F5F7FA] mb-1.5">Mudar Logotipo</p>
+                           <div className="flex items-center gap-2">
+                              <input type="file" className="text-xs text-[#A0A7B5] file:mr-4 file:py-1.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/5 file:text-[#F5F7FA] hover:file:bg-white/10 transition-all cursor-pointer" />
+                           </div>
                         </div>
-                      )}
-                    </div>
+                     </div>
+                     
+                     <div className="space-y-4">
+                       <div>
+                         <p className="text-xs font-semibold text-[#A0A7B5] mb-1.5">Nome Oficial</p>
+                         {isEditingOrg ? (
+                           <div className="flex items-center gap-2">
+                             <input 
+                               title="Nome"
+                               type="text" 
+                               value={orgNameInput} 
+                               onChange={(e) => setOrgNameInput(e.target.value)} 
+                               className="bg-[#050505] border border-white/10 rounded-xl px-4 py-2 text-sm text-[#F5F7FA] outline-none focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all w-full"
+                             />
+                             <button disabled={savingOrg} onClick={onSaveOrg} className="p-2.5 bg-[#2B85EB] hover:bg-[#2B85EB]/80 text-white rounded-xl transition-colors">
+                               {savingOrg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                             </button>
+                             <button disabled={savingOrg} onClick={() => { setIsEditingOrg(false); setOrgNameInput(organization.name); }} className="p-2.5 bg-white/5 text-[#A0A7B5] rounded-xl hover:bg-white/10 transition-colors">
+                               <X className="w-4 h-4" />
+                             </button>
+                           </div>
+                         ) : (
+                           <div className="flex items-center justify-between bg-[#050505] border border-white/5 rounded-xl px-4 py-3">
+                             <p className="text-sm font-medium text-[#F5F7FA]">{organization?.name}</p>
+                             <button onClick={() => setIsEditingOrg(true)} className="text-xs font-medium bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg text-[#F5F7FA] transition-colors">Editar</button>
+                           </div>
+                         )}
+                       </div>
 
-                    <div className="mt-4">
-                      <p className="text-xs font-semibold text-[#A0A7B5] mb-2">Slug (URL Público)</p>
-                      <div className="flex items-center gap-2 bg-[#0B0F19] border border-white/10 rounded-xl px-4 py-2">
-                        <span className="text-sm text-[#A0A7B5]">nest.app/</span>
-                        <input 
-                           type="text" 
-                           value={organization?.slug || ''}
-                           placeholder="sua-organizacao"
-                           className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1"
-                           disabled
-                        />
-                      </div>
-                      <p className="text-[10px] text-[#A0A7B5] mt-2">Em breve: defina um slug amigável para acessos públicos.</p>
-                    </div>
-                 </div>
-                 
-                 <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                    <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Identificador Único</p>
-                    <div className="flex items-center justify-between">
-                       <span className="text-xs font-mono text-[#A0A7B5] bg-[#0B0F19] px-3 py-1.5 rounded-lg border border-white/5 select-all">{organization?.id || user.uid}</span>
-                    </div>
-                 </div>
+                       <div>
+                         <p className="text-xs font-semibold text-[#A0A7B5] mb-1.5">Slug (URL Público)</p>
+                         <div className="flex items-center gap-2 bg-[#050505] border border-white/5 rounded-xl px-4 py-3 opacity-70">
+                           <span className="text-sm text-[#A0A7B5]">nest.app/</span>
+                           <input 
+                              type="text" 
+                              value={organization?.slug || ''}
+                              placeholder="sua-organizacao"
+                              className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1"
+                              disabled
+                           />
+                         </div>
+                       </div>
+                     </div>
+                  </div>
+                  
+                  <div className="bg-transparent pt-6 border-t border-white/5">
+                     <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Identificador Único</p>
+                     <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-3 py-2 rounded-xl border border-white/5 select-all">{organization?.id || user.uid}</span>
+                     </div>
+                  </div>
               </div>
             </motion.div>
           )}
@@ -152,35 +169,13 @@ export function OrganizationManager({
                <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                  <h3 className="text-lg font-semibold text-[#F5F7FA]">Membros & Convites</h3>
                  
-                 <div className="flex items-center gap-3 bg-[#050505] p-1.5 rounded-xl border border-white/5">
-                    <select
-                      id="invite-role"
-                      className="bg-transparent text-[#F5F7FA] text-xs font-medium pl-2 outline-none border-r border-white/10 pr-2 py-1"
-                    >
-                      <option value="member">Membro Padrão</option>
-                      <option value="admin">Administrador</option>
-                      <option value="secretary">Operador</option>
-                      <option value="guest">Visitante</option>
-                    </select>
-                    <button onClick={() => {
-                        const role = (document.getElementById('invite-role') as HTMLSelectElement).value;
-                        const orgId = profile?.organizationId || user?.uid;
-                        const link = `${window.location.origin}/login?org=${orgId}&role=${role}`;
-                        const text = encodeURIComponent(`Olá! Quero te convidar para acessar nossa organização no ecossistema MillionsNest.\n\nAcesse: ${link}`);
-                        window.open(`https://wa.me/?text=${text}`, '_blank');
-                    }} className="flex items-center gap-2 px-3 py-1.5 bg-[#10B981]/10 text-[#10B981] rounded-lg hover:bg-[#10B981]/20 transition-colors border border-[#10B981]/20 text-xs font-medium">
-                      <Link className="w-3.5 h-3.5" /> Invite
-                    </button>
-                    <button onClick={() => {
-                        const role = (document.getElementById('invite-role') as HTMLSelectElement).value;
-                        const orgId = profile?.organizationId || user?.uid;
-                        const link = `${window.location.origin}/login?org=${orgId}&role=${role}`;
-                        navigator.clipboard.writeText(link);
-                        handleCopyLink();
-                    }} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 text-[#F5F7FA] rounded-lg hover:bg-white/10 transition-colors border border-white/10 text-xs font-medium">
-                      {copiedLink ? <Check className="w-3.5 h-3.5 text-[#10B981]" /> : <Copy className="w-3.5 h-3.5" />} {copiedLink ? 'Copiado!' : 'Copiar'}
-                    </button>
-                 </div>
+                 {(currentUserRole === 'owner' || currentUserRole === 'admin' || profile?.systemRole === 'ceo') && (
+                   <div className="flex items-center gap-3">
+                     <button onClick={onOpenInviteModal} className="flex items-center gap-2 px-4 py-2 bg-[#F5F7FA] text-[#050505] rounded-xl hover:bg-white transition-colors text-sm font-semibold shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                       Convidar Membro
+                     </button>
+                   </div>
+                 )}
                </div>
                
                <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
@@ -203,23 +198,71 @@ export function OrganizationManager({
                           <select
                             value={member.role || 'member'}
                             onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                            className="bg-[#0B0F19] border border-white/10 text-[#F5F7FA] text-xs font-medium rounded-lg px-3 py-1.5 outline-none focus:border-[#2B85EB]"
+                            disabled={
+                               // Cannot edit yourself if you are an owner, it could break org access until someone else is owner
+                               (member.id === user?.uid && member.role === 'owner') ||
+                               // Admins cannot change owner role
+                               (member.role === 'owner' && currentUserRole !== 'owner' && profile?.systemRole !== 'ceo' && profile?.systemRole !== 'global_admin')
+                            }
+                            className={`bg-[#0B0F19] border border-white/10 text-[#F5F7FA] text-xs font-medium rounded-lg px-3 py-1.5 outline-none focus:border-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
-                            <option value="owner">Dono (Owner)</option>
+                            {(currentUserRole === 'owner' || profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin' || member.role === 'owner') && <option value="owner">Dono (Owner)</option>}
                             <option value="admin">Administrador</option>
+                            <option value="leader">Líder</option>
                             <option value="secretary">Operador / Secretaria</option>
                             <option value="member">Membro Padrão</option>
                             <option value="guest">Visitante (Leitura)</option>
                           </select>
+                          
+                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || profile?.systemRole === 'ceo') && (
+                            <button
+                               onClick={() => handleRemoveMember(member.id)}
+                               disabled={member.role === 'owner' && (currentUserRole !== 'owner' && profile?.systemRole !== 'ceo')}
+                               className="text-xs text-red-500/70 hover:text-red-500 font-medium px-2 py-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                               {member.id === user?.uid ? 'Sair' : 'Remover'}
+                            </button>
+                          )}
                         </div>
                       ) : (
                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
-                            {{owner: 'Dono', admin: 'Admin', secretary: 'Operador', member: 'Membro', guest: 'Visitante'}[(member.role as string) || 'member'] || member.role || 'Membro'}
+                            {{owner: 'Dono', admin: 'Admin', leader: 'Líder', secretary: 'Operador', member: 'Membro', guest: 'Visitante'}[(member.role as string) || 'member'] || member.role || 'Membro'}
                          </span>
                       )}
                     </div>
                   ))}
                </div>
+
+               {pendingInvites && pendingInvites.length > 0 && (
+                 <div className="mt-8">
+                   <h4 className="text-sm font-semibold text-[#A0A7B5] mb-4 uppercase tracking-wider">Convites Pendentes</h4>
+                   <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
+                     {pendingInvites.map((invite: any, i: number) => {
+                       const isExpired = invite.status === 'pending' && invite.expiresAt && invite.expiresAt.toMillis && invite.expiresAt.toMillis() < Date.now();
+                       const isOld = invite.status === 'pending' && invite.createdAt && invite.createdAt.toMillis && (Date.now() - invite.createdAt.toMillis() > 7 * 24 * 60 * 60 * 1000);
+                       const showAsExpired = isExpired || isOld;
+                       return (
+                       <div key={invite.id} className={`flex items-center justify-between p-4 ${i !== pendingInvites.length - 1 ? 'border-b border-white/5' : ''}`}>
+                         <div className="flex items-center gap-3">
+                           <div className="flex flex-col">
+                             <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
+                               Status: <span className={showAsExpired ? "text-red-400" : "text-[#10B981]"}>{showAsExpired ? 'Expirado' : 'Aguardando'}</span>
+                             </span>
+                             <span className="text-xs text-[#A0A7B5]">Função: {{owner: 'Dono', admin: 'Admin', leader: 'Líder', secretary: 'Operador', member: 'Membro', guest: 'Visitante'}[(invite.role as string) || 'member'] || invite.role || 'Membro'}</span>
+                           </div>
+                         </div>
+                         
+                         {(currentUserRole === 'owner' || currentUserRole === 'admin' || profile?.systemRole === 'ceo') && (
+                           <button onClick={() => handleRevokeInvite(invite.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 rounded-lg">
+                             Revogar
+                           </button>
+                         )}
+                       </div>
+                       );
+                     })}
+                   </div>
+                 </div>
+               )}
             </motion.div>
           )}
 
@@ -255,20 +298,30 @@ export function OrganizationManager({
 
           {activeTab === 'apps' && (
              <motion.div key="apps" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Apps & Módulos Instalados</h3>
+                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Aplicativos & Ad-ons</h3>
+                <p className="text-sm text-[#A0A7B5] mb-6">Gerencie os módulos ativados na sua organização.</p>
                 
-                <div className="bg-[#050505] rounded-2xl border border-white/5 p-4 flex items-center justify-between mb-4">
-                   <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB]">
-                         <LayoutGrid className="w-5 h-5" />
+                <div className="bg-[#050505] rounded-2xl border border-white/5 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                   <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB] shadow-[0_0_15px_rgba(43,133,235,0.1)]">
+                         <LayoutGrid className="w-6 h-6" />
                       </div>
                       <div>
-                         <p className="text-sm font-semibold text-[#F5F7FA]">MusicScale - Flagship</p>
-                         <p className="text-xs text-[#A0A7B5]">Módulo original do ecossistema</p>
+                         <p className="font-semibold text-[#F5F7FA]">MusicScale <span className="text-[10px] ml-2 font-bold uppercase tracking-widest bg-[#10B981]/10 text-[#10B981] rounded px-1.5 py-0.5 border border-[#10B981]/20">Instalado</span></p>
+                         <p className="text-sm text-[#A0A7B5]">Módulo original do ecossistema</p>
                       </div>
                    </div>
                    <div className="flex items-center gap-3">
-                      <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest bg-[#10B981]/10 text-[#10B981] rounded-md border border-[#10B981]/20">Instalado</span>
+                      <button onClick={() => {
+                        import('../packages/events/index.js').then(({ eventBus }) => {
+                          eventBus.publish('action.contextual.open_musicscale', {});
+                        });
+                      }} className="px-5 py-2 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold text-sm hover:bg-white transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                         Abrir App
+                      </button>
+                      <button className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/5 text-[#A0A7B5] hover:bg-white/10 transition-colors border border-white/10">
+                         <Settings className="w-4 h-4" />
+                      </button>
                    </div>
                 </div>
                 

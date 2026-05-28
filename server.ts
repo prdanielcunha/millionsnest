@@ -599,6 +599,10 @@ async function startServer() {
       if (appId !== 'musicscale') {
         return res.status(400).json({ error: 'Invalid app' });
       }
+      
+      if (!orgId || typeof orgId !== 'string') {
+        return res.status(400).json({ error: 'Missing or invalid orgId' });
+      }
 
       if (!db) return res.status(500).json({ error: 'Database not initialized' });
       
@@ -606,9 +610,13 @@ async function startServer() {
       if (!orgDoc.exists) {
         return res.status(404).json({ error: 'Organization not found' });
       }
+      
+      const userDoc = await db.collection('users').doc(decoded.uid).get();
+      const systemRole = userDoc.data()?.systemRole;
+      const isGlobalAdmin = systemRole === 'ceo' || systemRole === 'global_admin';
 
       const subDoc = await db.collection('subscriptions').doc(orgId).get();
-      if (!subDoc.exists || !['active', 'trialing'].includes(subDoc.data()?.status)) {
+      if (!isGlobalAdmin && (!subDoc.exists || !['active', 'trialing'].includes(subDoc.data()?.status))) {
         return res.status(403).json({ error: 'Access denied: Subscription missing' });
       }
 

@@ -10,6 +10,7 @@ import { useOrganization } from '../contexts/OrganizationContext.js';
 import { eventBus } from '../packages/events/index.js';
 import { ECOSYSTEM_APPS, EcosystemApp } from '../lib/apps.js';
 import { ecosystemPlatform } from '../sdk/ecosystem.js';
+import { MillionsNestLogo } from './MillionsNestLogo.js';
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -63,7 +64,7 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
-          <img src="/logo02.png" alt="MillionsNest Logo" className="h-10 md:h-12 w-auto object-contain transition-transform group-hover:scale-105" />
+          <MillionsNestLogo className="h-10 md:h-12 w-auto transition-transform group-hover:scale-105" />
           <span className="font-semibold text-lg tracking-tight text-[#F5F7FA]">MillionsNest</span>
         </Link>
 

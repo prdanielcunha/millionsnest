@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext.js";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useLocation } from "react-router-dom";
 import { 
   Music, ArrowRight, Settings, ExternalLink, ShieldCheck, 
   CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight, Building2,
@@ -19,6 +19,7 @@ import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
 import { OrganizationManager } from "../components/OrganizationManager.js";
+import { InviteModal } from "../components/InviteModal.js";
 import { UnifiedTimeline } from "../components/UnifiedTimeline.js";
 import { ECOSYSTEM_APPS, EcosystemApp } from "../lib/apps.js";
 import { ecosystemPlatform } from "../sdk/ecosystem.js";
@@ -28,7 +29,35 @@ type Tab = "overview" | "organization" | "account" | "billing";
 export function Dashboard() {
   const { user, profile, loading, logout, switchOrganization } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const { tab, subTab } = useParams();
+  
+  // Mapping specific routes to internal tabs
+  let initialTab: Tab = "overview";
+  if (tab === "organization" || tab === "team") initialTab = "organization";
+  else if (tab === "billing") initialTab = "billing";
+  else if (tab === "account") initialTab = "account";
+  else if (tab === "apps") initialTab = "overview";
+
+  const [activeTab, setActiveTabInternal] = useState<Tab>(initialTab);
+  
+  // Custom setter to update URL
+  const setActiveTab = (newTab: Tab) => {
+    setActiveTabInternal(newTab);
+    navigate(`/dashboard/${newTab}`);
+  };
+
+  useEffect(() => {
+    if (tab && initialTab !== activeTab) {
+      setActiveTabInternal(initialTab);
+    }
+    
+    if (tab === 'apps') {
+      setTimeout(() => {
+        document.getElementById('apps-catalog')?.scrollIntoView({ behavior: 'smooth' });
+      }, 300);
+    }
+  }, [tab]);
+
   const [subscription, setSubscription] = useState<any>(null);
   const [organization, setOrganization] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
@@ -43,6 +72,7 @@ export function Dashboard() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileNameInput, setProfileNameInput] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [configAppModal, setConfigAppModal] = useState<EcosystemApp | null>(null);
 
   const [repairing, setRepairing] = useState(false);
   const [subscriptionRepairAvailable, setSubscriptionRepairAvailable] = useState(false);
@@ -59,7 +89,14 @@ export function Dashboard() {
        return;
     }
     
-    await openEcosystemModule(app.id, user, profile, organization, permsMap);
+    // Mostrando feedback enquanto processa o handoff
+    const toastId = feedback.loading(`Iniciando ${app.name}...`);
+    try {
+      await openEcosystemModule(app.id, user, profile, organization, permsMap);
+      feedback.dismiss(toastId);
+    } catch (e: any) {
+      feedback.error(`Erro ao abrir: ${e.message || 'Falha ao iniciar módulo.'}`);
+    }
   };
 
   useEffect(() => {
@@ -101,7 +138,9 @@ export function Dashboard() {
 
   // Invite Link states
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   const [prices, setPrices] = useState({ 
@@ -222,7 +261,7 @@ export function Dashboard() {
       const orgRef = doc(db, "organizations", orgId);
       const orgSnap = await getDoc(orgRef);
       if (orgSnap.exists()) {
-        setOrganization(orgSnap.data());
+        setOrganization({ id: orgSnap.id, ...orgSnap.data() });
       } else {
         setOrganization(null);
       }
@@ -233,7 +272,7 @@ export function Dashboard() {
         const membersSnap = await getDocs(membersRef);
         
         // Also fetch the user details to get displayName and email if they are not fully populated in member doc
-        const memsPromises = membersSnap.docs.map(async d => {
+        const memsPromises = membersSnap.docs.map(async (d): Promise<any> => {
            let data = d.data();
            let userSnap = await getDoc(doc(db, "users", data.uid || d.id));
            let userData = userSnap.exists() ? userSnap.data() : {};
@@ -241,9 +280,40 @@ export function Dashboard() {
         });
         
         const mems = await Promise.all(memsPromises);
+        
+        // If current user is not in the list but they own the organization, add them virtually
+        if (!mems.find(m => m.id === user.uid) && orgSnap.data()?.ownerUid === user.uid) {
+           const currentUserSnap = await getDoc(doc(db, "users", user.uid));
+           const currentUserProfile = currentUserSnap.exists() ? currentUserSnap.data() : {};
+           mems.push({
+             id: user.uid,
+             uid: user.uid,
+             role: 'owner',
+             ...currentUserProfile
+           });
+           
+           // Also fix the structural issue in background
+           setDoc(doc(db, `organizations/${orgId}/members`, user.uid), {
+             uid: user.uid,
+             role: 'owner',
+             addedAt: new Date()
+           }, { merge: true }).catch(console.error);
+        }
+        
         setMembers(mems);
       } catch (err) {
         console.error("Erro ao buscar membros", err);
+      }
+
+      // Fetch pending invites
+      try {
+        const invitesRef = collection(db, `organizations/${orgId}/invites`);
+        const invitesQ = query(invitesRef, where('status', '==', 'pending'));
+        const invitesSnap = await getDocs(invitesQ);
+        const invs = invitesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setPendingInvites(invs);
+      } catch (err) {
+        console.error("Erro ao buscar convites", err);
       }
 
       // Fetch audit logs
@@ -326,40 +396,185 @@ export function Dashboard() {
 
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
     try {
+      const targetMember = members.find(m => m.id === memberId);
+      if (!targetMember) return;
+
+      const isTargetOwner = targetMember.role === 'owner';
+      const isDowngradingOwner = isTargetOwner && newRole !== 'owner';
+      
+      if (isDowngradingOwner) {
+         // Check if they are the last owner
+         const ownersCount = members.filter(m => m.role === 'owner').length;
+         if (ownersCount <= 1) {
+            alert("Ação negada: A organização precisa ter pelo menos um dono. Promova outro membro a dono antes de alterar sua própria função.");
+            return;
+         }
+      }
+
+      // If making someone an owner, verify multiple owners logic
+      if (newRole === 'owner') {
+         if (profile?.organizationRole !== 'owner' && profile?.systemRole !== 'ceo' && profile?.systemRole !== 'global_admin') {
+            alert("Acesso negado: Apenas um dono atual pode promover outro membro a dono.");
+            return;
+         }
+      }
+
       const perms = getDefaultPermissions(newRole);
 
       // update in users collection
       const userRef = doc(db, "users", memberId);
       await updateDoc(userRef, { role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION });
       
-      // update in organization_members collection
+      // update in organization_members collection (legacy compat)
       const orgId = profile?.organizationId || user?.uid;
       const memberOrgRef = doc(db, "organization_members", `${memberId}_${orgId}`);
-      await updateDoc(memberOrgRef, { role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION });
+      await setDoc(memberOrgRef, { role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION }, { merge: true });
+      
+      // update in new architecture: organizations/{orgId}/members/{uid}
+      const newMemberRef = doc(db, `organizations/${orgId}/members`, memberId);
+      await setDoc(newMemberRef, { 
+        role: newRole, 
+        permissions: perms, 
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION 
+      }, { merge: true });
       
       setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION } : m));
     } catch (e) {
       console.error("Erro ao atualizar função", e);
-      alert("Erro ao atualizar função do membro.");
+      alert("Houve um problema ao tentar atualizar a função do membro. Verifique suas permissões.");
     }
   };
 
-  const handleInviteWhatsapp = () => {
-    const orgId = profile?.organizationId || user?.uid;
-    const link = `${window.location.origin}/login?org=${orgId}`;
-    const text = encodeURIComponent(`Olá! Quero te convidar para acessar nossa organização no ecossistema MillionsNest.\n\nAcesse: ${link}`);
-    window.open(`https://wa.me/?text=${text}`, '_blank');
-    analytics.track('invite_sent', { userId: user?.uid, organizationId: orgId, metadata: { method: 'whatsapp' } });
+  const handleRemoveMember = async (memberId: string) => {
+    try {
+      const targetMember = members.find(m => m.id === memberId);
+      if (!targetMember) return;
+
+      if (targetMember.role === 'owner') {
+         if (profile?.organizationRole !== 'owner' && profile?.systemRole !== 'ceo' && profile?.systemRole !== 'global_admin') {
+            alert("Ação negada: Somente o dono ou o suporte global pode remover um dono da organização.");
+            return;
+         }
+
+         const ownersCount = members.filter(m => m.role === 'owner').length;
+         if (ownersCount <= 1) {
+            alert("Ação negada: Não é possível remover o único dono da organização. Transfira a posse antes.");
+            return;
+         }
+      }
+
+      if (memberId === user?.uid) {
+         if (!confirm("Tem certeza que deseja sair desta organização? Você perderá acesso aos módulos.")) {
+            return;
+         }
+      } else {
+         if (!confirm(`Remover ${targetMember.displayName || 'este usuário'} da organização?`)) {
+            return;
+         }
+      }
+
+      const orgId = profile?.organizationId || user?.uid;
+      
+      // Remove from new architecture
+      await deleteDoc(doc(db, `organizations/${orgId}/members`, memberId));
+      
+      // Also clean legacy
+      await deleteDoc(doc(db, "organization_members", `${memberId}_${orgId}`));
+
+      // Also remove org from user's array
+      const userRef = doc(db, "users", memberId);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+         const userData = userSnap.data();
+         if (userData.organizations) {
+            const orgs = userData.organizations.filter((id: string) => id !== orgId);
+            await updateDoc(userRef, { organizations: orgs });
+         }
+      }
+
+      setMembers(prev => prev.filter(m => m.id !== memberId));
+      
+      if (memberId === user?.uid) {
+         // User removed themselves, redirect or clear org
+         window.location.href = '/dashboard';
+      }
+    } catch (e) {
+      console.error("Erro ao remover membro", e);
+      alert("Houve um problema ao remover o membro. Verifique suas permissões.");
+    }
   };
 
-  const handleCopyLink = () => {
-    const orgId = profile?.organizationId || user?.uid;
-    const link = `${window.location.origin}/login?org=${orgId}`;
-    navigator.clipboard.writeText(link);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-    analytics.track('invite_sent', { userId: user?.uid, organizationId: orgId, metadata: { method: 'copy_link' } });
+  const handleCreateInvite = async (role: string, method: 'whatsapp' | 'copy') => {
+    try {
+      const orgId = profile?.organizationId || user?.uid;
+      const inviteId = Math.random().toString(36).substring(2, 10);
+      const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      
+      const inviteRef = doc(db, `organizations/${orgId}/invites`, inviteId);
+      await setDoc(inviteRef, {
+        id: inviteId,
+        organizationId: orgId,
+        organizationName: organization?.name || 'Organização',
+        tokenHash: token,
+        role,
+        status: 'pending',
+        createdBy: user?.uid,
+        createdAt: serverTimestamp(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      });
+      
+      const link = `${window.location.origin}/join/${orgId}?token=${token}`;
+      
+      if (method === 'whatsapp') {
+        const text = encodeURIComponent(`Você foi convidado para entrar na organização ${organization?.name || 'Nossa Organização'} na MillionsNest.\n\nAcesse: ${link}`);
+        window.open(`https://wa.me/?text=${text}`, '_blank');
+        analytics.track('invite_sent', { userId: user?.uid, organizationId: orgId, metadata: { method: 'whatsapp', role } });
+      } else {
+        await navigator.clipboard.writeText(link);
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 2000);
+        analytics.track('invite_link_copied', { userId: user?.uid, organizationId: orgId, metadata: { role } });
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao gerar convite.");
+    }
   };
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    try {
+      const orgId = profile?.organizationId || user?.uid;
+      const inviteRef = doc(db, `organizations/${orgId}/invites`, inviteId);
+      await updateDoc(inviteRef, {
+        status: 'revoked',
+        revokedAt: serverTimestamp(),
+        revokedBy: user?.uid
+      });
+      setPendingInvites(prev => prev.filter(i => i.id !== inviteId));
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao revogar convite.");
+    }
+  };
+
+  useEffect(() => {
+    const handleInviteAction = () => {
+       setIsInviteModalOpen(true);
+       setActiveTab("organization"); // Switch to team/org view
+    };
+    const handleOpenMusicScale = async () => {
+       const app = ECOSYSTEM_APPS.find(a => a.id === 'musicscale');
+       if (app && user && profile && organization && currentUserPerms) {
+          await openEcosystemModule(app.id, user, profile, organization, currentUserPerms);
+       }
+    };
+    eventBus.subscribe('action.contextual.invite_member', handleInviteAction);
+    eventBus.subscribe('action.contextual.open_musicscale', handleOpenMusicScale);
+    return () => {
+       eventBus.unsubscribe('action.contextual.invite_member', handleInviteAction);
+       eventBus.unsubscribe('action.contextual.open_musicscale', handleOpenMusicScale);
+    };
+  }, [user, profile, organization, currentUserPerms]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -467,11 +682,12 @@ export function Dashboard() {
     return <Navigate to="/login" replace />;
   }
 
-  const hasMusicScaleAccess = profile?.products?.includes("musicscale") || false;
   const isTrialing = subscription?.status === "trialing";
   const isActive = subscription?.status === "active";
   const isCanceled = subscription?.status === "canceled";
   const hasValidSubscription = isActive || isTrialing;
+  const isGlobalAdmin = profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin';
+  const hasMusicScaleAccess = profile?.products?.includes("musicscale") || hasValidSubscription || isGlobalAdmin || false;
   const showMusicScaleCard = hasMusicScaleAccess || subscription != null;
 
   const formattedRenewal = subscription?.currentPeriodEnd 
@@ -553,31 +769,48 @@ export function Dashboard() {
             )}
             <div className="flex-1 flex items-center justify-between">
               <div>
-                <h1 className="text-2xl md:text-3xl font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
-                  Olá, {profile?.displayName?.split(' ')[0] || user.email?.split('@')[0]}
-                  
-                  {/* Org Switcher for Users with Multiple Orgs */}
-                  {profile?.organizations && profile.organizations.length > 1 && (
-                    <div className="relative inline-block ml-4">
-                       <select 
-                         value={profile.organizationId}
-                         onChange={(e) => {
-                            switchOrganization(e.target.value).then(() => {
-                               window.location.reload();
-                            });
-                         }}
-                         className="appearance-none bg-white/5 border border-white/10 hover:border-white/20 text-sm rounded-xl px-3 py-1.5 outline-none cursor-pointer text-[#A0A7B5] transition-all"
-                       >
-                         {profile.organizations.map(org => (
-                           <option key={org} value={org} className="bg-[#0B0F19] text-[#F5F7FA]">Org ID: {org.substring(0,6)}...</option>
-                         ))}
-                       </select>
-                    </div>
-                  )}
-                </h1>
-                <p className="text-[#A0A7B5] text-sm md:text-base mt-1">
-                  Gerencie seus aplicativos e conexões do ecossistema MillionsNest.
-                </p>
+                <div className="flex items-center gap-3 flex-wrap mb-1">
+                  <h1 className="text-2xl md:text-3xl font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
+                    Olá, {profile?.displayName?.split(' ')[0] || user.email?.split('@')[0]}
+                    
+                    {/* Org Switcher for Users with Multiple Orgs */}
+                    {profile?.organizations && profile.organizations.length > 1 && (
+                      <div className="relative inline-block ml-4">
+                         <select 
+                           value={profile.organizationId}
+                           onChange={(e) => {
+                              switchOrganization(e.target.value).then(() => {
+                                 window.location.reload();
+                              });
+                           }}
+                           className="appearance-none bg-white/5 border border-white/10 hover:border-white/20 text-sm rounded-xl px-3 py-1.5 outline-none cursor-pointer text-[#A0A7B5] transition-all"
+                         >
+                           {profile.organizations.map(org => (
+                             <option key={org} value={org} className="bg-[#0B0F19] text-[#F5F7FA]">Org ID: {org.substring(0,6)}...</option>
+                           ))}
+                         </select>
+                      </div>
+                    )}
+                  </h1>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-3 mt-2">
+                  <div className="flex items-center gap-2">
+                     <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-white/10 text-[#F5F7FA] border border-white/10">
+                       {currentUserData?.role === 'owner' ? 'Dono' : currentUserData?.role === 'admin' ? 'Administrador' : currentUserData?.role === 'leader' ? 'Líder' : 'Membro'}
+                     </span>
+                     
+                     {profile?.systemRole === 'ceo' && (
+                       <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                         Staff
+                       </span>
+                     )}
+                  </div>
+                  <div className="hidden md:block w-px h-4 bg-white/10" />
+                  <p className="text-[#A0A7B5] text-sm">
+                    Painel Central do Sistema
+                  </p>
+                </div>
               </div>
             </div>
           </motion.div>
@@ -661,7 +894,7 @@ export function Dashboard() {
                   <UnifiedTimeline />
 
                   {/* Active Ecosystem Apps */}
-                  <div>
+                  <div id="apps-catalog">
                     <div className="flex items-center justify-between mb-6">
                       <h3 className="text-lg font-semibold text-[#F5F7FA] flex items-center gap-2">
                         <LayoutGrid className="w-5 h-5 text-[#A0A7B5]" />
@@ -680,8 +913,8 @@ export function Dashboard() {
 
                         return (
                           <div key={app.id} className="bg-[#050505] rounded-3xl p-5 border border-white/10 shadow-lg flex flex-col transition-all hover:border-white/20 relative overflow-hidden group">
-                            {isInstalled && <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />}
-                            <div className="flex items-start justify-between mb-4">
+                            {isInstalled && <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-0" />}
+                            <div className="relative z-10 flex items-start justify-between mb-4">
                               <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${isInstalled ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 text-[#2B85EB]' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
                                 <Icon className="w-5 h-5" />
                               </div>
@@ -692,7 +925,7 @@ export function Dashboard() {
                             <h4 className="text-lg font-semibold text-[#F5F7FA] mb-1">{app.name}</h4>
                             <p className="text-[#A0A7B5] text-xs leading-relaxed mb-6 flex-1">{app.description}</p>
                             
-                            <div className="flex items-center gap-3">
+                            <div className="relative z-10 flex items-center gap-3">
                               {isInstalled ? (
                                 <button
                                   onClick={() => handleLaunchEcosystemApp(app, currentUserPerms)}
@@ -717,7 +950,7 @@ export function Dashboard() {
                               )}
                               {isInstalled && (profile?.systemRole === 'ceo' || currentUserPerms['organization.billing.manage']) && (
                                 <button
-                                   onClick={() => setActiveTab('billing')}
+                                   onClick={() => setConfigAppModal(app)}
                                    className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/10 transition-colors shrink-0"
                                 >
                                    <Settings className="w-4 h-4" />
@@ -828,20 +1061,25 @@ export function Dashboard() {
                 organization={organization}
                 members={members}
                 currentUserPerms={currentUserPerms}
+                currentUserRole={currentUserData?.role || 'member'}
                 user={user}
                 profile={profile}
                 onSaveOrg={handleSaveOrg}
                 handleUpdateMemberRole={handleUpdateMemberRole}
+                handleRemoveMember={handleRemoveMember}
                 isEditingOrg={isEditingOrg}
                 setIsEditingOrg={setIsEditingOrg}
                 orgNameInput={orgNameInput}
                 setOrgNameInput={setOrgNameInput}
                 savingOrg={savingOrg}
-                handleInviteWhatsapp={handleInviteWhatsapp}
-                handleCopyLink={handleCopyLink}
+                handleCreateInvite={handleCreateInvite}
+                handleRevokeInvite={handleRevokeInvite}
+                onOpenInviteModal={() => setIsInviteModalOpen(true)}
+                pendingInvites={pendingInvites}
                 copiedLink={copiedLink}
                 auditLogs={auditLogs}
                 setActiveDashboardTab={setActiveTab}
+                initialTab={tab === 'team' ? 'members' : subTab}
               />
             </motion.section>
           )}
@@ -1286,6 +1524,77 @@ export function Dashboard() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* App Config Modal */}
+      <AnimatePresence>
+        {configAppModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-[#050505] border border-white/10 rounded-2xl p-6 shadow-2xl relative"
+            >
+              <button
+                onClick={() => setConfigAppModal(null)}
+                className="absolute top-4 right-4 text-[#A0A7B5] hover:text-white transition-colors"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] flex items-center justify-center">
+                  <LayoutGrid className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white">{configAppModal.name}</h3>
+                  <p className="text-sm text-[#A0A7B5]">Módulo Instalado</p>
+                </div>
+              </div>
+              
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
+                <div className="flex justify-between mb-2">
+                  <span className="text-sm text-[#A0A7B5]">Status</span>
+                  <span className="text-sm font-semibold text-emerald-400">Ativo</span>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-sm text-[#A0A7B5]">Plano</span>
+                  <span className="text-sm font-semibold text-white uppercase">{subscription?.plan || 'Free'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-[#A0A7B5]">Organização</span>
+                  <span className="text-sm font-semibold text-white">{organization?.name}</span>
+                </div>
+              </div>
+              
+              <p className="text-xs text-[#A0A7B5] mb-6 text-center">
+                Painel de configurações avançadas estará disponível em breve.
+              </p>
+              
+              <button
+                onClick={() => {
+                  setConfigAppModal(null);
+                  handleLaunchEcosystemApp(configAppModal, currentUserPerms);
+                }}
+                className="w-full py-3 bg-[#F5F7FA] text-[#050505] rounded-xl text-sm font-semibold hover:bg-white transition-colors"
+              >
+                Abrir {configAppModal.name}
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <InviteModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        handleCreateInvite={handleCreateInvite}
+      />
     </EcosystemShell>
   );
 }

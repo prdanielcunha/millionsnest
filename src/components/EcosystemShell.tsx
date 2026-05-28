@@ -92,11 +92,11 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
   return (
     <div className="min-h-screen bg-[#050505] text-[#F5F7FA] font-sans flex flex-col">
       {/* Ecosystem Topbar - Persistent & OS-like */}
-      <header className="h-14 border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between px-4 lg:px-6">
+      <header className="h-14 border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between px-4 lg:px-6 gap-2 md:gap-4 w-full">
         
         {/* Left: Ecosystem Identity & Context */}
-        <div className="flex items-center gap-3 w-1/3">
-          <Link to="/" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors">
+        <div className="flex items-center gap-2 md:gap-3 shrink-0 min-w-0">
+          <Link to="/" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors shrink-0">
             <svg className="w-5 h-5 text-[#F5F7FA]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
               <polyline points="9 22 9 12 15 12 15 22"></polyline>
@@ -105,10 +105,10 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
           
           <div className="hidden md:flex border-l border-white/10 h-4 mx-1" />
 
-          <div className="relative group">
+          <div className="relative group shrink-0 min-w-0">
             <button 
               onClick={() => setOrgMenuOpen(!orgMenuOpen)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors min-w-0"
             >
               <div className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center border border-white/10 shrink-0">
                 <Building2 className="w-3.5 h-3.5 text-[#F5F7FA]" />
@@ -165,19 +165,19 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
         </div>
 
         {/* Center: Search / OS Commands */}
-        <div className="flex-1 flex justify-center max-w-md w-full mx-4">
+        <div className="flex-1 flex justify-center max-w-md w-full min-w-0">
           <button 
             onClick={openSearch}
-            className="flex-1 flex items-center gap-2 px-3 py-1.5 bg-[#0B0F19] border border-white/10 hover:border-white/20 hover:bg-white/[0.02] rounded-lg transition-all text-[#A0A7B5] shadow-sm group"
+            className="w-full flex items-center gap-2 px-3 py-1.5 bg-[#0B0F19] border border-white/10 hover:border-white/20 hover:bg-white/[0.02] rounded-lg transition-all text-[#A0A7B5] shadow-sm group min-w-0"
           >
-            <Search className="w-3.5 h-3.5 group-hover:text-[#F5F7FA] transition-colors" />
-            <span className="text-sm font-medium flex-1 text-left">Buscar no ecossistema...</span>
-            <kbd className="hidden md:inline-flex items-center gap-1 text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md font-mono font-bold tracking-wider">⌘K</kbd>
+            <Search className="w-3.5 h-3.5 group-hover:text-[#F5F7FA] transition-colors shrink-0" />
+            <span className="text-sm font-medium flex-1 text-left truncate">Buscar...</span>
+            <kbd className="hidden lg:inline-flex items-center gap-1 text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md font-mono font-bold tracking-wider shrink-0">⌘K</kbd>
           </button>
         </div>
 
         {/* Right: Actions, Launcher, Profile */}
-        <div className="flex items-center justify-end gap-2 w-1/3">
+        <div className="flex items-center justify-end gap-1 md:gap-2 shrink-0">
           
           {/* Main App Launcher */}
           <Tooltip.Provider delayDuration={200}>
@@ -215,7 +215,10 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
 
                             {ECOSYSTEM_APPS.map(app => {
                                // Safe check in case organization is not loaded yet
-                               const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && profile?.products?.includes('musicscale'));
+                               const isGlobalAdmin = profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin';
+                               const hasMusicScalePlan = organization?.subscriptionPlan && organization?.subscriptionPlan !== 'free';
+                               const hasAccess = profile?.products?.includes('musicscale') || isGlobalAdmin || hasMusicScalePlan;
+                               const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && hasAccess);
                                const isActiveApp = activeAppId === app.id;
                                
                                return (

@@ -15,7 +15,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     name: 'MusicScale',
     description: 'A excelência que seu ministério de louvor merece. Escalas, ensaios e repertório.',
     icon: 'Music',
-    url: (import.meta.env.VITE_MUSICSCALE_APP_URL || 'https://musicscale.millionsnest.com') + '/start',
+    url: import.meta.env.VITE_MUSICSCALE_APP_URL || 'https://musicscale.millionsnest.com/start',
     internalRoute: undefined,
     category: 'core',
     requiredPlan: 'free',

@@ -25,6 +25,7 @@ const Privacy = lazy(() => import('./pages/Privacy.js').then(module => ({ defaul
 const Refunds = lazy(() => import('./pages/Refunds.js').then(module => ({ default: module.Refunds })));
 const Cancellation = lazy(() => import('./pages/Cancellation.js').then(module => ({ default: module.Cancellation })));
 const Login = lazy(() => import('./pages/Login.js').then(module => ({ default: module.Login })));
+const Join = lazy(() => import('./pages/Join.js').then(module => ({ default: module.Join })));
 const Dashboard = lazy(() => import('./pages/Dashboard.js').then(module => ({ default: module.Dashboard })));
 const Checkout = lazy(() => import('./pages/Checkout.js'));
 const AdminDebug = lazy(() => import('./pages/AdminDebug.js'));
@@ -71,7 +72,10 @@ export default function App() {
                 <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/join/:orgId" element={<Join />} />
                 <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/dashboard/:tab" element={<Dashboard />} />
+                <Route path="/dashboard/:tab/:subTab" element={<Dashboard />} />
                 <Route path="/admin/debug/organization" element={<AdminDebug />} />
                 <Route path="/admin/ecosystem" element={<EcosystemAdmin />} />
                 <Route path="/upgrade" element={<Checkout />} />

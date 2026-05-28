@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext.js";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { MillionsNestLogo } from "../components/MillionsNestLogo.js";
 
 export function Login() {
   const { user, profile, loading: authLoading } = useAuth();
@@ -32,6 +33,14 @@ export function Login() {
     if (authLoading) return;
     
     if (user && profile) {
+      // Check for invite redirect first
+      const inviteRedirect = sessionStorage.getItem('mn_invite_redirect');
+      if (inviteRedirect) {
+        // Keep it in session to be picked up by Join, but navigate there first
+        navigate(inviteRedirect);
+        return;
+      }
+      
       // UX Optimized: Check if user was trying to buy something before login
       const purchaseIntent = sessionStorage.getItem('purchase_intent');
       if (purchaseIntent) {
@@ -110,7 +119,7 @@ export function Login() {
         <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none rounded-[2rem]" />
         
         <div className="flex justify-center mb-10">
-          <img src="/logo02.png" alt="MillionsNest Logo" className="h-12 w-auto opacity-100" />
+          <MillionsNestLogo className="h-12 w-auto opacity-100" />
         </div>
         
         <h2 className="text-2xl font-semibold text-[#F5F7FA] text-center tracking-tight mb-2">

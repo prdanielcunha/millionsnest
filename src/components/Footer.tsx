@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { MillionsNestLogo } from './MillionsNestLogo.js';
 
 export function Footer() {
   const { t } = useTranslation(['landing']);
@@ -9,7 +10,7 @@ export function Footer() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-12 mb-16">
           <div className="sm:col-span-2 md:col-span-1 lg:col-span-2">
             <Link to="/" className="flex items-center gap-3 mb-6">
-              <img src="/logo02.png" alt="MillionsNest Logo" loading="lazy" decoding="async" className="h-8 md:h-10 w-auto object-contain opacity-90 hover:opacity-100 transition-opacity" />
+              <MillionsNestLogo loading="lazy" decoding="async" className="h-8 md:h-10 w-auto opacity-90 hover:opacity-100 transition-opacity" />
               <span className="font-semibold text-lg tracking-tight text-[#F5F7FA]">MillionsNest</span>
             </Link>
             <p className="text-sm font-normal text-[#A0A7B5] max-w-sm leading-relaxed">

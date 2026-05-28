@@ -39,16 +39,26 @@ export class UniversalSearchEngine {
     const { activeApp, enabledApps = [] } = context;
 
     // Base actions
-    actions.push({
-      id: 'action_invite', type: 'person', title: 'Convidar Voluntário', subtitle: 'Core', appSource: 'core', routingDetails: '/team/invite', relevanceScore: 1
-    });
+    actions.push(
+      { id: 'action_invite', type: 'action', title: 'Convidar membro para a organização', subtitle: 'Organização', appSource: 'core', routingDetails: 'ACTION:invite_member', relevanceScore: 1 },
+      { id: 'action_manage_org', type: 'action', title: 'Gerenciar organização', subtitle: 'Configurações', appSource: 'core', routingDetails: '/dashboard/organization', relevanceScore: 0.9 },
+      { id: 'action_manage_team', type: 'action', title: 'Gerenciar equipe', subtitle: 'Configurações', appSource: 'core', routingDetails: '/dashboard/team', relevanceScore: 0.9 },
+      { id: 'action_manage_billing', type: 'action', title: 'Gerenciar assinatura', subtitle: 'Faturamento', appSource: 'core', routingDetails: '/dashboard/billing', relevanceScore: 0.8 },
+      { id: 'action_open_catalog', type: 'action', title: 'Abrir catálogo de aplicativos', subtitle: 'Dashboard', appSource: 'core', routingDetails: '/dashboard/apps', relevanceScore: 0.9 }
+    );
 
     if (activeApp === 'musicscale' && enabledApps.includes('musicscale')) {
       actions.unshift(
         { id: 'action_song', type: 'song', title: 'Adicionar Música ao Repertório', subtitle: 'MusicScale', appSource: 'musicscale', routingDetails: '/songs/new', relevanceScore: 2 },
         { id: 'action_scale', type: 'scale', title: 'Criar Nova Escala', subtitle: 'MusicScale', appSource: 'musicscale', routingDetails: '/scales/new', relevanceScore: 2 }
       );
-    } else if (activeApp === 'cells' && enabledApps.includes('cells')) {
+    } else if (enabledApps.includes('musicscale')) {
+      actions.push(
+        { id: 'action_open_musicscale', type: 'action', title: 'Abrir MusicScale', subtitle: 'Aplicativos', appSource: 'musicscale', routingDetails: 'ACTION:open_musicscale', relevanceScore: 0.95 }
+      );
+    }
+
+    if (activeApp === 'cells' && enabledApps.includes('cells')) {
        actions.unshift(
         { id: 'action_cell_meeting', type: 'cell', title: 'Registrar Encontro', subtitle: 'CellSync', appSource: 'cells', routingDetails: '/cells/meeting/new', relevanceScore: 2 },
         { id: 'action_cell_create', type: 'cell', title: 'Nova Célula', subtitle: 'CellSync', appSource: 'cells', routingDetails: '/cells/new', relevanceScore: 2 }
@@ -56,7 +66,7 @@ export class UniversalSearchEngine {
     } else if (activeApp === 'cultoflow' && enabledApps.includes('cultoflow')) {
        actions.unshift(
         { id: 'action_cultoflow_plan', type: 'scale', title: 'Planejar Culto', subtitle: 'CultoFlow', appSource: 'cultoflow', routingDetails: '/cultos/new', relevanceScore: 2 },
-        { id: 'action_cultoflow_role', type: 'person', title: 'Escalar Voluntário', subtitle: 'CultoFlow', appSource: 'cultoflow', routingDetails: '/cultos/roster', relevanceScore: 2 }
+        { id: 'action_cultoflow_role', type: 'person', title: 'Escalar Membro', subtitle: 'CultoFlow', appSource: 'cultoflow', routingDetails: '/cultos/roster', relevanceScore: 2 }
       );
     }
 
