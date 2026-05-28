@@ -710,6 +710,13 @@ export function Dashboard() {
                                 >
                                   Abrir App <ArrowRight className="w-3.5 h-3.5" />
                                 </button>
+                              ) : app.id === 'musicscale' ? (
+                                <button
+                                  onClick={() => window.location.href = '/checkout?plan=musicscale_starter_monthly'}
+                                  className="flex-1 py-2.5 bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-[#2B85EB]/20 hover:bg-[#2B85EB]/20 transition-colors"
+                                >
+                                  Obter MusicScale
+                                </button>
                               ) : (
                                 <button
                                   disabled

@@ -172,9 +172,12 @@ export function Navbar() {
           ) : (
             <>
               <Link to="/login" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:login', 'Entrar')}</Link>
-              <Link to="/login" className="text-sm font-medium px-5 py-2.5 rounded-lg bg-[#F5F7FA] text-[#050505] hover:bg-white transition-all shadow-sm hover:shadow active:scale-95">
+              <button onClick={() => {
+                sessionStorage.setItem('purchase_intent', 'musicscale_starter_monthly');
+                navigate('/login');
+              }} className="text-sm font-medium px-5 py-2.5 rounded-lg bg-[#F5F7FA] text-[#050505] hover:bg-white transition-all shadow-sm hover:shadow active:scale-95">
                 {t('common:free_trial', 'Teste grátis')}
-              </Link>
+              </button>
             </>
           )}
         </div>
@@ -226,7 +229,11 @@ export function Navbar() {
             ) : (
                <>
                 <Link to="/login" className="text-lg font-medium text-[#A0A7B5] hover:text-white" onClick={() => setMobileMenuOpen(false)}>{t('common:login', 'Entrar')}</Link>
-                <Link to="/login" className="text-lg font-medium bg-[#F5F7FA] text-[#050505] hover:bg-white text-center py-3 rounded-lg" onClick={() => setMobileMenuOpen(false)}>{t('common:free_trial_full', 'Teste Grátis de 7 Dias')}</Link>
+                <button onClick={() => { 
+                  sessionStorage.setItem('purchase_intent', 'musicscale_starter_monthly');
+                  setMobileMenuOpen(false);
+                  navigate('/login');
+                }} className="text-lg font-medium w-full bg-[#F5F7FA] text-[#050505] hover:bg-white text-center py-3 rounded-lg">{t('common:free_trial_full', 'Teste Grátis de 7 Dias')}</button>
                </>
             )}
           </motion.div>
