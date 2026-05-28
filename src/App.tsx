@@ -30,6 +30,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard.js').then(module => ({ de
 const Checkout = lazy(() => import('./pages/Checkout.js'));
 const AdminDebug = lazy(() => import('./pages/AdminDebug.js'));
 const EcosystemAdmin = lazy(() => import('./pages/EcosystemAdmin.js').then(module => ({ default: module.EcosystemAdmin })));
+const OrganizationPublicPage = lazy(() => import('./pages/OrganizationPublicPage.js').then(module => ({ default: module.OrganizationPublicPage })));
 
 function LoadingFallback() {
   return (
@@ -84,6 +85,7 @@ export default function App() {
                 <Route path="/politica-de-privacidade" element={<Privacy />} />
                 <Route path="/politicas-de-reembolso" element={<Refunds />} />
                 <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
+                <Route path="/:slug" element={<OrganizationPublicPage />} />
               </Routes>
             </Suspense>
           </BrowserRouter>

@@ -20,6 +20,8 @@ export function OrganizationManager({
   setIsEditingOrg,
   orgNameInput,
   setOrgNameInput,
+  orgSlugInput,
+  setOrgSlugInput,
   savingOrg,
   handleCreateInvite,
   handleRevokeInvite,
@@ -139,16 +141,34 @@ export function OrganizationManager({
                        </div>
 
                        <div>
-                         <p className="text-xs font-semibold text-[#A0A7B5] mb-1.5">Slug (URL Público)</p>
-                         <div className="flex items-center gap-2 bg-[#050505] border border-white/5 rounded-xl px-4 py-3 opacity-70">
-                           <span className="text-sm text-[#A0A7B5]">nest.app/</span>
-                           <input 
-                              type="text" 
-                              value={organization?.slug || ''}
-                              placeholder="sua-organizacao"
-                              className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1"
-                              disabled
-                           />
+                         <p className="text-xs font-semibold text-[#A0A7B5] mb-1.5 flex justify-between">
+                            <span>Slug (URL Público)</span>
+                            {organization?.slug && !isEditingOrg && (
+                               <span className="flex items-center gap-3">
+                                   <button onClick={() => { navigator.clipboard.writeText(`https://millionsnest.com/${organization.slug}`); alert('Link copiado!'); }} className="text-[#A0A7B5] hover:text-white flex items-center gap-1 font-normal"><Copy className="w-3 h-3" /> Copiar</button>
+                                   <a href={`/${organization.slug}`} target="_blank" rel="noopener noreferrer" className="text-[#2B85EB] font-normal hover:text-white flex items-center gap-1"><Link className="w-3 h-3" /> Abrir</a>
+                               </span>
+                            )}
+                         </p>
+                         <div className={`flex items-center gap-2 bg-[#050505] border border-white/5 rounded-xl px-4 py-3 ${isEditingOrg ? '' : 'opacity-70'}`}>
+                           <span className="text-sm text-[#A0A7B5]">millionsnest.com/</span>
+                           {isEditingOrg ? (
+                             <input 
+                               type="text" 
+                               value={orgSlugInput}
+                               onChange={(e) => setOrgSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                               placeholder="sua-organizacao"
+                               className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1"
+                             />
+                           ) : (
+                             <input 
+                               type="text" 
+                               value={organization?.slug || ''}
+                               placeholder="sua-organizacao"
+                               className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1"
+                               disabled
+                             />
+                           )}
                          </div>
                        </div>
                      </div>

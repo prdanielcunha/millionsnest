@@ -66,6 +66,7 @@ export function Dashboard() {
   // Organization Edit States
   const [isEditingOrg, setIsEditingOrg] = useState(false);
   const [orgNameInput, setOrgNameInput] = useState("");
+  const [orgSlugInput, setOrgSlugInput] = useState("");
   const [savingOrg, setSavingOrg] = useState(false);
   
   // Profile Edit States
@@ -346,6 +347,9 @@ export function Dashboard() {
     if (organization?.name) {
       setOrgNameInput(organization.name);
     }
+    if (organization?.slug) {
+      setOrgSlugInput(organization.slug);
+    }
   }, [organization]);
 
   useEffect(() => {
@@ -366,14 +370,15 @@ export function Dashboard() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ orgId, name: orgNameInput })
+        body: JSON.stringify({ orgId, name: orgNameInput, slug: orgSlugInput })
       });
-      if (!res.ok) throw new Error('Failed to save');
-      setOrganization({ ...organization, name: orgNameInput });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save');
+      setOrganization({ ...organization, name: orgNameInput, slug: orgSlugInput });
       setIsEditingOrg(false);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Erro ao salvar organização.");
+      alert(`Erro ao salvar organização: ${e.message}`);
     } finally {
       setSavingOrg(false);
     }
@@ -1076,6 +1081,8 @@ export function Dashboard() {
                 setIsEditingOrg={setIsEditingOrg}
                 orgNameInput={orgNameInput}
                 setOrgNameInput={setOrgNameInput}
+                orgSlugInput={orgSlugInput}
+                setOrgSlugInput={setOrgSlugInput}
                 savingOrg={savingOrg}
                 handleCreateInvite={handleCreateInvite}
                 handleRevokeInvite={handleRevokeInvite}

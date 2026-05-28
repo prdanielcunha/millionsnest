@@ -496,6 +496,84 @@ async function startServer() {
   // Outras rotas da API usam JSON
   app.use(express.json());
 
+  // --- ENDPOINTS PÚBLICOS DE ORGANIZAÇÃO ---
+  app.get('/api/public/organizations/by-slug/:slug', async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: 'Database not initialized' });
+      const slug = req.params.slug;
+      if (!slug || slug.trim() === '') return res.status(400).json({ error: 'Slug is required' });
+
+      const qs = await db.collection('organizations').where('slug', '==', slug).limit(1).get();
+      if (qs.empty) {
+        return res.status(404).json({ error: 'Organization not found' });
+      }
+
+      const orgDoc = qs.docs[0];
+      const data = orgDoc.data();
+
+      return res.json({
+        id: orgDoc.id,
+        name: data.name,
+        slug: data.slug,
+        logo: data.logo || null,
+        description: data.description || null,
+        city: data.city || null,
+        state: data.state || null,
+        enabledApps: data.enabledApps || [],
+        createdAt: data.createdAt ? data.createdAt.toDate() : null
+      });
+    } catch (err: any) {
+      console.error('[API Public Org]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.get('/api/public/organizations/:orgId/members', async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: 'Database not initialized' });
+      const orgId = req.params.orgId;
+      if (!orgId) return res.status(400).json({ error: 'Organization ID is required' });
+
+      const membersMap = new Map<string, any>();
+
+      // 1. Busca da collection nova: organizations/{orgId}/members
+      const qs1 = await db.collection('organizations').doc(orgId).collection('members').get();
+      qs1.docs.forEach(doc => {
+        const m = doc.data();
+        membersMap.set(doc.id, {
+          uid: m.uid || doc.id,
+          displayName: m.displayName || m.name || 'Membro',
+          photoURL: m.photoURL || m.avatar || null,
+          role: m.role || 'member'
+        });
+      });
+
+      // 2. Busca da collection legada: organization_members
+      const qs2 = await db.collection('organization_members').where('organizationId', '==', orgId).get();
+      for (const doc of qs2.docs) {
+        const m = doc.data();
+        const mUid = m.uid || m.user_id;
+        if (mUid && !membersMap.has(mUid)) {
+           // We might need to fetch the user's name and photo from the users collection
+           const userDoc = await db.collection('users').doc(mUid).get();
+           const uData = userDoc.exists ? userDoc.data() : {};
+           
+           membersMap.set(mUid, {
+             uid: mUid,
+             displayName: m.displayName || m.name || uData?.displayName || uData?.name || 'Membro',
+             photoURL: m.photoURL || m.avatar || uData?.photoURL || uData?.avatar || null,
+             role: m.role || 'member'
+           });
+        }
+      }
+
+      return res.json({ members: Array.from(membersMap.values()) });
+    } catch (err: any) {
+      console.error('[API Public Members]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
   // Novo endpoint de acesso robusto com suporte a Multi-Org
   app.get('/api/access', async (req, res) => {
     try {
@@ -1436,9 +1514,9 @@ async function startServer() {
 
   app.post('/api/user/organization', express.json(), async (req, res) => {
     try {
-      const { orgId, name } = req.body;
-      if (!orgId || !name) {
-        res.status(400).json({ error: 'Missing orgId or name' });
+      const { orgId, name, slug } = req.body;
+      if (!orgId) {
+        res.status(400).json({ error: 'Missing orgId' });
         return;
       }
       const authHeader = req.headers.authorization;
@@ -1456,26 +1534,64 @@ async function startServer() {
 
       const uid = decodedToken.uid;
       const batch = admin.firestore().batch();
-
-      batch.set(admin.firestore().collection('organizations').doc(orgId), { 
-        name, 
-        ownerUid: uid,
-        ownerId: uid,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp() 
-      }, { merge: true });
-
-      batch.set(admin.firestore().collection('organization_members').doc(`${uid}_${orgId}`), {
-        uid: uid,
-        organizationId: orgId,
-        role: 'owner',
-        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-        permissions: getDefaultPermissions('owner')
-      }, { merge: true });
-
-      batch.set(admin.firestore().collection('users').doc(uid), {
-        organizationRole: 'owner',
+      
+      const updateData: any = {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      };
+
+      if (name) {
+        updateData.name = name;
+        updateData.ownerUid = uid;
+        updateData.ownerId = uid;
+      }
+
+      if (slug !== undefined) {
+         if (!slug || slug.trim() === '') {
+            updateData.slug = null;
+         } else {
+            const slugRegex = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+            if (!slugRegex.test(slug) || slug.includes('--')) {
+                return res.status(400).json({ error: 'Formato de link inválido.' });
+            }
+
+            const RESERVED_PUBLIC_ROUTES = [
+              'login', 'dashboard', 'pricing', 'checkout', 'invite', 'join', 
+              'start', 'admin', 'api', 'support', 'billing', 'apps', 'settings',
+              'termos-de-uso', 'politica-de-privacidade', 'politicas-de-reembolso', 'politicas-de-cancelamento',
+              'upgrade'
+            ];
+
+            if (RESERVED_PUBLIC_ROUTES.includes(slug)) {
+               return res.status(400).json({ error: 'Palavra reservada, escolha outra.' });
+            }
+
+            const slugQuery = await admin.firestore().collection('organizations').where('slug', '==', slug).get();
+            if (!slugQuery.empty) {
+               const existingDoc = slugQuery.docs[0];
+               if (existingDoc.id !== orgId) {
+                  return res.status(400).json({ error: 'Este link já está em uso.' });
+               }
+            }
+            updateData.slug = slug;
+         }
+      }
+
+      batch.set(admin.firestore().collection('organizations').doc(orgId), updateData, { merge: true });
+
+      if (name) {
+        batch.set(admin.firestore().collection('organization_members').doc(`${uid}_${orgId}`), {
+          uid: uid,
+          organizationId: orgId,
+          role: 'owner',
+          permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+          permissions: getDefaultPermissions('owner')
+        }, { merge: true });
+
+        batch.set(admin.firestore().collection('users').doc(uid), {
+          organizationRole: 'owner',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
 
       await batch.commit();
 
