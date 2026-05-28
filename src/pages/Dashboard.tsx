@@ -14,6 +14,7 @@ import { getDefaultPermissions, normalizePermissions, CURRENT_PERMISSIONS_VERSIO
 import { analytics } from "../lib/analytics.js";
 import { eventBus } from "../packages/events/index.js";
 import { feedback } from '../packages/ui/feedback.js';
+import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
@@ -53,23 +54,12 @@ export function Dashboard() {
       return;
     }
     
-    try {
-      if (!organization?.enabledApps?.includes(app.id) && app.id !== 'musicscale') {
-         feedback.error(`Módulo Indisponível: O aplicativo ${app.name} não está habilitado para a sua organização.`);
-         return;
-      }
-      
-      const toastId = feedback.loading(`Iniciando Módulo: Estabelecendo handshake seguro com ${app.name}...`);
-      
-      // Simulate slight delay for handshake feel
-      await new Promise(resolve => setTimeout(resolve, 600));
-      
-      await ecosystemPlatform.launchModule(app.id, app.url, user, profile, organization, permsMap);
-      
-      feedback.dismiss(toastId);
-    } catch (e: any) {
-      feedback.error(`Falha de Protocolo: Falha ao injetar contexto do ecossistema: ${e.message}`);
+    if (!organization?.enabledApps?.includes(app.id) && app.id !== 'musicscale') {
+       feedback.error(`Módulo Indisponível: O aplicativo ${app.name} não está habilitado para a sua organização.`);
+       return;
     }
+    
+    await openEcosystemModule(app.id, user, profile, organization, permsMap);
   };
 
   useEffect(() => {

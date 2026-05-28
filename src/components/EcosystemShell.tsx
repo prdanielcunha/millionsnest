@@ -10,6 +10,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
 import { framerTokens } from '../packages/ui/motion.js';
+import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 
 interface EcosystemShellProps {
   children: ReactNode;
@@ -71,15 +72,8 @@ export function EcosystemShell({ children, activeAppId = 'core' }: EcosystemShel
 
     setLaunchingApp(app);
     
-    // Simulate orchestration loading context
-    setTimeout(async () => {
-      try {
-        await ecosystemPlatform.launchModule(app.id, app.url, user, profile, organization, currentUserPerms);
-      } catch (e: any) {
-        console.error(e);
-      }
-      setLaunchingApp(null);
-    }, 1200);
+    await openEcosystemModule(app.id, user, profile, organization, currentUserPerms);
+    setLaunchingApp(null);
   };
 
   const openSearch = () => {

@@ -263,7 +263,8 @@ export class EcosystemPlatform {
 
     const token = await this.generateEcosystemToken(appId, currentOrg.id, user.uid);
     
-    const permissions = Object.entries(currentUserPerms)
+    const safeCapabilities = currentUserPerms ?? {};
+    const permissions = Object.entries(safeCapabilities)
       .filter(([_, value]) => value)
       .map(([key]) => key);
 
