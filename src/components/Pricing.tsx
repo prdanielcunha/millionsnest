@@ -16,14 +16,16 @@ export function Pricing() {
   const [addonsData, setAddonsData] = useState<any[]>([]);
   
   const [prices, setPrices] = useState({
-    starter_monthly: 0,
-    starter_annual: 0,
-    pro_monthly: 0,
-    pro_annual: 0,
-    setup_premium: 0,
-    training_express: 0,
-    worship_100: 0,
-    music_pack_10: 0
+    starter_monthly: 19.90,
+    starter_annual: 191.04,
+    advanced_monthly: 29.90,
+    advanced_annual: 287.04,
+    pro_monthly: 34.90,
+    pro_annual: 335.04,
+    setup_premium: 54.90,
+    training_express: 29.90,
+    worship_100: 97.00,
+    music_pack_10: 29.90
   });
 
   useEffect(() => {
@@ -39,11 +41,15 @@ export function Pricing() {
            // Extract plans (strictly by lookupKey)
            const starterMonthly = data.plans?.find((p: any) => p.lookupKey === 'musicscale_starter_monthly');
            const starterAnnual = data.plans?.find((p: any) => p.lookupKey === 'musicscale_starter_yearly');
+           const advancedMonthly = data.plans?.find((p: any) => p.lookupKey === 'musicscale_advanced_monthly');
+           const advancedAnnual = data.plans?.find((p: any) => p.lookupKey === 'musicscale_advanced_yearly');
            const proMonthly = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_monthly');
            const proAnnual = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_yearly');
            
            if (starterMonthly) newPrices.starter_monthly = starterMonthly.price;
            if (starterAnnual) newPrices.starter_annual = starterAnnual.price;
+           if (advancedMonthly) newPrices.advanced_monthly = advancedMonthly.price;
+           if (advancedAnnual) newPrices.advanced_annual = advancedAnnual.price;
            if (proMonthly) newPrices.pro_monthly = proMonthly.price;
            if (proAnnual) newPrices.pro_annual = proAnnual.price;
            
@@ -122,9 +128,12 @@ export function Pricing() {
               </button>
               <button 
                 onClick={() => setIsAnnual(true)}
-                className={`relative z-10 px-6 py-2.5 text-sm font-semibold rounded-lg transition-colors ${isAnnual ? 'text-[#050505]' : 'text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
+                className={`relative z-10 px-6 py-2.5 text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 ${isAnnual ? 'text-[#050505]' : 'text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
               >
                 {t('pricing_yearly_tab', 'Anual')}
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider ${isAnnual ? 'bg-[#2B85EB]/20 text-[#050505]' : 'bg-[#2B85EB]/10 text-[#2B85EB] border border-[#2B85EB]/20'}`}>
+                  -20%
+                </span>
               </button>
               <div 
                 className="absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-[#F5F7FA] rounded-lg transition-transform duration-300 ease-in-out"
@@ -134,25 +143,25 @@ export function Pricing() {
           </motion.div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto relative mb-32">
+        <div className="grid md:grid-cols-3 gap-6 max-w-7xl mx-auto relative mb-32">
           {/* STARTER */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="bg-[#0B0F19] rounded-[2rem] p-6 md:p-10 border border-white/5 relative z-10 flex flex-col h-full hover:border-white/10 transition-colors"
+            className="bg-[#0B0F19] rounded-[2rem] p-6 md:p-8 border border-white/5 relative z-10 flex flex-col h-full hover:border-white/10 transition-colors"
           >
-              <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">{t('pricing_plan1_name')}</h3>
+            <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">Starter</h3>
             <p className="text-[#A0A7B5] text-sm mb-6 min-h-[60px]">
-              {t('pricing_plan1_desc')}
+              Para ministérios que querem começar a organizar o louvor com simplicidade.
             </p>
             
             <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
-                 R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
+              <span className="text-4xl font-semibold text-[#F5F7FA] tracking-tight">
+                 R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "19,90"}
               </span>
-              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">{t('pricing_period')}</span>
+              <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
             
             <div className="mt-2 mb-6">
@@ -162,33 +171,96 @@ export function Pricing() {
             </div>
             
             {isAnnual ? (
-              <div className="flex items-center gap-2 md:gap-3 mb-6 text-xs md:text-sm font-medium">
+              <div className="flex items-center gap-2 mb-6 text-xs font-medium">
                  {prices.starter_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.starter_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-                 {prices.starter_monthly > 0 && prices.starter_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">{(100 - (prices.starter_annual / (prices.starter_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
+                 {prices.starter_monthly > 0 && prices.starter_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.starter_annual / (prices.starter_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
               </div>
             ) : (
-              <div className="h-5 md:h-6 mb-6" />
+              <div className="h-5 mb-6" />
             )}
             
             <button 
               onClick={() => handlePurchase(isAnnual ? 'musicscale_starter_yearly' : 'musicscale_starter_monthly')}
-              className="w-full py-4 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block select-none"
+              className="w-full py-3.5 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold text-sm hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block select-none"
             >
-              {t('pricing_plan1_cta')}
+              Começar no Starter
             </button>
+            <p className="text-[10px] text-center text-[#A0A7B5]/60 mb-6 -mt-4 uppercase tracking-widest">Ideal para começar</p>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5">
               {[
-                t('pricing_plan1_f1'),
-                t('pricing_plan1_f2'),
-                t('pricing_plan1_f3'),
-                t('pricing_plan1_f4'),
-                t('pricing_plan1_f5', { defaultValue: '' }),
-                t('pricing_plan1_f6', { defaultValue: '' }),
-                t('pricing_plan1_f7', { defaultValue: '' }),
-                t('pricing_plan1_f8', { defaultValue: '' }),
-                t('pricing_plan1_f9', { defaultValue: '' }),
-              ].filter(Boolean).map((item, i) => (
+                'Até 10 usuários por organização',
+                'Escalas ilimitadas',
+                'Músicas ilimitadas',
+                'Cadastro de letras, cifras, tom e BPM',
+                'Compartilhamento de escalas',
+                'Organização por cultos e eventos',
+                'Acesso pelo celular, tablet e computador',
+                'Sincronização em nuvem',
+                'Suporte padrão'
+              ].map((item, i) => (
+                <li key={i} className="flex items-start gap-3 text-[#A0A7B5]">
+                  <Check className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />
+                  <span className="font-normal text-sm">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+
+          {/* ADVANCED */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.15 }}
+            className="bg-[#0B0F19] rounded-[2rem] p-6 md:p-8 border border-white/5 relative z-10 flex flex-col h-full hover:border-white/10 transition-colors"
+          >
+            <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">Advanced</h3>
+            <p className="text-[#A0A7B5] text-sm mb-6 min-h-[60px]">
+              Para ministérios em crescimento que precisam de mais controle e repertório.
+            </p>
+            
+            <div className="flex items-baseline gap-1 mb-1">
+              <span className="text-4xl font-semibold text-[#F5F7FA] tracking-tight">
+                 R$ {prices.advanced_monthly > 0 ? (isAnnual ? (prices.advanced_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.advanced_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "29,90"}
+              </span>
+              <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
+            </div>
+            
+            <div className="mt-2 mb-6">
+               <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB]/10 text-[#2B85EB] rounded-md border border-[#2B85EB]/20">
+                 {t('pricing_free_trial', '7 dias grátis')}
+               </span>
+            </div>
+            
+            {isAnnual && prices.advanced_monthly > 0 ? (
+              <div className="flex items-center gap-2 mb-6 text-xs font-medium">
+                 {prices.advanced_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.advanced_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                 {prices.advanced_monthly > 0 && prices.advanced_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.advanced_annual / (prices.advanced_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
+              </div>
+            ) : (
+              <div className="h-5 mb-6" />
+            )}
+            
+            <button 
+              onClick={() => handlePurchase(isAnnual ? 'musicscale_advanced_yearly' : 'musicscale_advanced_monthly')}
+              className="w-full py-3.5 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold text-sm hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block select-none"
+            >
+              Escolher Advanced
+            </button>
+            <p className="text-[10px] text-center text-[#A0A7B5]/60 mb-6 -mt-4 uppercase tracking-widest">Para equipes em crescimento</p>
+            
+            <ul className="space-y-4 flex-1 pt-6 border-t border-white/5">
+              {[
+                'Tudo do Starter',
+                'Até 20 usuários por organização',
+                'Biblioteca Viva limitada',
+                '20 importações da Biblioteca Viva /mês',
+                'Histórico completo de repertório',
+                'Recursos intermediários de organização',
+                'Personalização avançada de repertório',
+                'Suporte prioritário básico'
+              ].map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#A0A7B5]">
                   <Check className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />
                   <span className="font-normal text-sm">{item}</span>
@@ -203,32 +275,26 @@ export function Pricing() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="bg-[#050505] rounded-[2rem] p-6 md:p-10 border border-[#2B85EB]/30 relative z-10 flex flex-col h-full premium-shadow"
+            className="bg-[#050505] rounded-[2rem] p-6 md:p-8 border-2 border-[#2B85EB]/50 relative z-10 flex flex-col h-full premium-shadow transform md:-translate-y-4 shadow-[0_0_40px_rgba(43,133,235,0.15)]"
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/5 to-transparent pointer-events-none rounded-[2rem]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/10 to-transparent pointer-events-none rounded-[2rem]" />
             
-            {plansData?.find(p => p.lookupKey === 'musicscale_pro_monthly')?.featured && (
-              <div className="absolute top-4 right-4 md:top-6 md:right-8">
-                <div className="bg-[#2B85EB] text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-widest flex items-center gap-1">
-                  <Star className="w-3 h-3" /> {t('pricing_popular')}
-                </div>
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-max">
+              <div className="bg-[#2B85EB] text-white text-[10px] font-bold px-4 py-1.5 rounded-full shadow-lg uppercase tracking-widest flex items-center gap-1.5 border border-white/10">
+                <Star className="w-3 h-3" /> ⭐ Mais Escolhido
               </div>
-            )}
-
-            <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-4 md:mt-0">{t('pricing_plan2_name')}</h3>
-            <p className="text-[#A0A7B5] text-sm mb-4 min-h-[60px] relative z-10">
-              {t('pricing_plan2_desc')}
-            </p>
-            <div className="bg-[#2B85EB]/10 border border-[#2B85EB]/20 rounded-xl p-4 mb-6 relative z-10">
-              <h4 className="text-[#2B85EB] font-bold text-[11px] md:text-xs mb-1.5 uppercase tracking-widest break-words leading-tight">{t('pricing_lib_title', 'Biblioteca Viva MusicScale')}</h4>
-              <p className="text-[#A0A7B5] text-[11px] md:text-xs leading-relaxed">{t('pricing_lib_desc', 'Acesso contínuo ao acervo atualizado do MusicScale, com novas músicas adicionadas regularmente para sua equipe ter o melhor repertório.')}</p>
             </div>
+
+            <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-6 mt-4">Pro</h3>
+            <p className="text-[#A0A7B5] text-sm mb-4 min-h-[60px] relative z-10">
+              Para ministérios que querem a experiência completa do MusicScale.
+            </p>
             
             <div className="flex items-baseline gap-1 mb-1 relative z-10">
-              <span className="text-4xl md:text-5xl font-semibold text-[#F5F7FA] tracking-tight">
-                 R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
+              <span className="text-4xl font-semibold text-[#F5F7FA] tracking-tight">
+                 R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "34,90"}
               </span>
-              <span className="text-[#A0A7B5] font-normal text-sm md:text-base">{t('pricing_period')}</span>
+              <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
 
             <div className="mt-2 mb-6 relative z-10">
@@ -238,32 +304,40 @@ export function Pricing() {
             </div>
             
             {isAnnual ? (
-              <div className="flex items-center gap-2 md:gap-3 mb-6 text-xs md:text-sm font-medium relative z-10">
+              <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
                  {prices.pro_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.pro_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-                 {prices.pro_monthly > 0 && prices.pro_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] md:text-xs">{(100 - (prices.pro_annual / (prices.pro_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
+                 {prices.pro_monthly > 0 && prices.pro_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.pro_annual / (prices.pro_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
               </div>
             ) : (
-              <div className="h-5 md:h-6 mb-6 relative z-10" />
+              <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
+                 <span className="text-[#A0A7B5]/50 line-through">R$ 39,90</span>
+                 <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-widest">Lançamento</span>
+              </div>
             )}
             
             <button 
               onClick={() => handlePurchase(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
-              className="w-full py-4 px-3 md:px-6 rounded-xl bg-gradient-to-r from-[#2B85EB]/80 to-[#2B85EB] text-[#F5F7FA] border border-[#2B85EB] text-center font-semibold text-sm md:text-base hover:from-[#2B85EB] hover:to-[#4ca4ff] transition-all shadow-[0_0_20px_rgba(43,133,235,0.2)] hover:shadow-[0_0_30px_rgba(43,133,235,0.4)] active:scale-95 mt-2 mb-8 block relative z-10 select-none"
+              className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#2B85EB]/90 to-[#2B85EB] text-[#F5F7FA] border border-[#2B85EB] text-center font-bold text-sm hover:from-[#2B85EB] hover:to-[#4ca4ff] transition-all shadow-[0_0_20px_rgba(43,133,235,0.3)] hover:shadow-[0_0_30px_rgba(43,133,235,0.5)] active:scale-95 mt-2 mb-8 block relative z-10 select-none"
             >
-              {t('pricing_plan2_cta')}
+              Começar com o Pro
             </button>
+            <p className="text-[10px] text-center text-[#2B85EB] mb-6 -mt-4 uppercase tracking-widest relative z-10 font-bold">Experiência completa</p>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5 relative z-10">
               {[
-                t('pricing_plan2_f1'),
-                t('pricing_plan2_f2'),
-                t('pricing_plan2_f3'),
-                t('pricing_plan2_f4'),
-                t('pricing_plan2_f5'),
-                t('pricing_plan2_f6', { defaultValue: '' }),
-                t('pricing_plan2_f7', { defaultValue: '' }),
-                t('pricing_plan2_f8', { defaultValue: '' }),
-              ].filter(Boolean).map((item, i) => (
+                'Tudo do Advanced',
+                'Usuários ilimitados por organização',
+                'Biblioteca Viva completa',
+                'Importações ilimitadas da Biblioteca',
+                'Importação inteligente de músicas (IA)',
+                'Estruturação automática (letra, tom, BPM)',
+                'Sugestões inteligentes para repertório e escalas',
+                'Clonagem de escalas em um toque',
+                'Recursos futuros premium inclusos',
+                'Prioridade em novos recursos',
+                'Suporte prioritário',
+                'Experiência premium completa'
+              ].map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#F5F7FA]">
                   <Zap className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />
                   <span className="font-normal text-sm opacity-90">{item}</span>
@@ -271,6 +345,58 @@ export function Pricing() {
               ))}
             </ul>
           </motion.div>
+        </div>
+
+        {/* COMPARAÇÃO DETALHADA */}
+        <div className="max-w-5xl mx-auto mt-20 pt-20 border-t border-white/5 relative z-10 hidden md:block">
+          <div className="text-center max-w-2xl mx-auto mb-16">
+            <h3 className="text-2xl md:text-3xl font-semibold tracking-tight text-[#F5F7FA] mb-4">
+              Compare os Planos
+            </h3>
+            <p className="text-[#A0A7B5] text-base">
+              Veja em detalhes as diferenças estruturais de cada plano.
+            </p>
+          </div>
+          
+          <div className="overflow-x-auto rounded-3xl border border-white/10 bg-[#0B0F19]/50 backdrop-blur-md">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-white/10 relative">
+                  <th className="py-5 px-6 text-[#A0A7B5] font-semibold w-2/5 text-xs uppercase tracking-widest">Recursos Principais</th>
+                  <th className="py-5 px-6 text-[#A0A7B5] font-semibold text-center text-xs uppercase tracking-widest border-l border-white/5">Starter</th>
+                  <th className="py-5 px-6 text-[#A0A7B5] font-semibold text-center text-xs uppercase tracking-widest border-l border-white/5">Advanced</th>
+                  <th className="py-5 px-6 text-[#2B85EB] font-semibold text-center text-xs uppercase tracking-widest bg-[#2B85EB]/5 border-l border-white/5 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/10 to-transparent pointer-events-none" />
+                    Pro
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 text-sm">
+                {[
+                  { name: 'Pessoas por organização', s: 'Até 10', a: 'Até 20', p: 'Ilimitado' },
+                  { name: 'Músicas e Escalas', s: 'Ilimitadas', a: 'Ilimitadas', p: 'Ilimitadas' },
+                  { name: 'Letras, Cifras, Tom e BPM', s: 'Sim', a: 'Sim', p: 'Sim' },
+                  { name: 'Biblioteca Viva', s: 'Não', a: 'Limitada', p: 'Completa' },
+                  { name: 'Importações da Biblioteca', s: 'Nenhuma', a: '20/mês', p: 'Ilimitadas' },
+                  { name: 'Histórico de repertório', s: 'Básico', a: 'Completo', p: 'Completo' },
+                  { name: 'Importação inteligente com IA', s: 'Não', a: 'Não', p: 'Sim' },
+                  { name: 'Sugestões Inteligentes (IA)', s: 'Não', a: 'Não', p: 'Sim' },
+                  { name: 'Clonagem de escalas em um toque', s: 'Não', a: 'Não', p: 'Sim' },
+                  { name: 'Acesso prioritário a novos recursos', s: 'Não', a: 'Não', p: 'Sim' },
+                  { name: 'Suporte', s: 'Padrão', a: 'Básico Prioritário', p: 'Prioridade Alta' },
+                ].map((row, i) => (
+                  <tr key={i} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="py-4 px-6 text-[#F5F7FA] font-medium">{row.name}</td>
+                    <td className="py-4 px-6 text-[#A0A7B5] text-center text-xs border-l border-white/5">{row.s}</td>
+                    <td className="py-4 px-6 text-[#A0A7B5] text-center text-xs border-l border-white/5">{row.a}</td>
+                    <td className="py-4 px-6 text-[#F5F7FA] text-center font-medium bg-[#2B85EB]/[0.02] text-xs border-l border-white/5 relative">
+                      {row.p === 'Sim' ? <Check className="w-4 h-4 mx-auto text-[#2B85EB]" /> : row.p === 'Não' ? <span className="text-white/20">-</span> : row.p}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* PREMIUM SERVICES */}
@@ -414,6 +540,14 @@ export function Pricing() {
             </motion.div>
 
           </div>
+        </div>
+
+        {/* CONCLUSÃO */}
+        <div className="max-w-3xl mx-auto mt-32 text-center relative z-10 pb-16">
+           <h3 className="text-xl md:text-2xl font-light tracking-tight text-[#F5F7FA] mb-4">
+             MusicScale ajuda sua equipe a chegar mais preparada, mais alinhada, e mais livre para focar no que realmente importa: <span className="font-semibold text-white">o ministério.</span>
+           </h3>
+           <p className="text-[#A0A7B5] text-sm">Organização de ministério de louvor elevada à excelência.</p>
         </div>
 
       </div>

@@ -26,6 +26,16 @@ service cloud.firestore {
       let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
       let orgData = orgDoc != null ? orgDoc.data : null;
 
+      let orgAppAccess =
+        (orgData != null && 'apps' in orgData && 'musicscale' in orgData.apps)
+        ? orgData.apps.musicscale.access
+        : false;
+
+      let orgAppStatus =
+        (orgData != null && 'apps' in orgData && 'musicscale' in orgData.apps)
+        ? orgData.apps.musicscale.status
+        : null;
+
       let orgActive = orgData != null && (
         orgData.subscription_status == 'active' ||
         orgData.subscription_status == 'trialing' ||
@@ -33,7 +43,10 @@ service cloud.firestore {
         orgData.subscriptionStatus == 'trialing' ||
         orgData.status == 'active' ||
         orgData.status == 'trialing' ||
-        orgData.plan == 'pro'
+        orgData.plan == 'pro' ||
+        orgAppAccess == true ||
+        orgAppStatus == 'active' ||
+        orgAppStatus == 'trialing'
       );
 
       let subDoc = get(/databases/$(database)/documents/subscriptions/$(orgId));

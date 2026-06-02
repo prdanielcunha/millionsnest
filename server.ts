@@ -6,6 +6,13 @@ import admin from 'firebase-admin';
 import path from 'path';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
+import { 
+  MUSIC_SCALE_PLANS, 
+  priceIdToMusicScalePlan, 
+  normalizeMusicScalePlan,
+  resolveMusicScaleEntitlements,
+  calculateOccupiedSlots
+} from './src/lib/musicScalePlans.js';
 
 dotenv.config();
 
@@ -59,6 +66,199 @@ function getDb() {
     if (error.stack) console.error(error.stack);
   }
   return db;
+}
+
+/**
+ * Calculates occupied slots for an organization.
+ * Counts active/invited members and valid pending invites.
+ */
+export async function getActiveAndReservedMemberCount(orgId: string): Promise<number> {
+  const dbInstance = getDb();
+  if (!dbInstance) return 0;
+
+  // 1. Fetch members
+  const membersSnap = await dbInstance.collection('organizations').doc(orgId).collection('members').get();
+  const members = membersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+  // 2. Fetch pending invites
+  const invitesSnap = await dbInstance.collection('organizations').doc(orgId).collection('invites').where('status', '==', 'pending').get();
+  const invites = invitesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+  return calculateOccupiedSlots(members, invites);
+}
+
+/**
+ * Verifies if an organization has slot capacity to add a new member.
+ */
+export async function canAddOrganizationMember(orgId: string): Promise<{ allowed: boolean; current: number; limit: number; planName: string }> {
+  try {
+    const dbInstance = getDb();
+    if (!dbInstance) {
+      return { allowed: true, current: 0, limit: -1, planName: 'starter' };
+    }
+
+    // Load subscription and organization doc
+    const subDoc = await dbInstance.collection('subscriptions').doc(orgId).get();
+    const subscription = subDoc.exists ? subDoc.data() : null;
+
+    const orgDoc = await dbInstance.collection('organizations').doc(orgId).get();
+    const organization = orgDoc.exists ? orgDoc.data() : null;
+
+    const entitlements = resolveMusicScaleEntitlements({ subscription, organization });
+    const limit = entitlements?.limits?.users ?? 10;
+
+    if (limit === -1) {
+      return { allowed: true, current: 0, limit: -1, planName: entitlements.name };
+    }
+
+    const current = await getActiveAndReservedMemberCount(orgId);
+    return {
+      allowed: current < limit,
+      current,
+      limit,
+      planName: entitlements.name
+    };
+  } catch (err) {
+    console.error('[canAddOrganizationMember] Error:', err);
+    return { allowed: true, current: 0, limit: -1, planName: 'starter' }; // Default safe fallback
+  }
+}
+
+/**
+ * Throws an error if adding a member exceeds capacity.
+ */
+export async function assertCanAddOrganizationMember(orgId: string): Promise<void> {
+  const check = await canAddOrganizationMember(orgId);
+  if (!check.allowed) {
+    throw new Error(`Limite de usuários excedido! O plano atual (${check.planName}) permite no máximo ${check.limit} usuários, e a organização já possui ${check.current} vagas ocupadas.`);
+  }
+}
+
+/**
+ * Gets current month usage count for a given operation type (e.g., library_import)
+ */
+export async function getCurrentMonthUsage(orgId: string, type: string): Promise<number> {
+  const dbInstance = getDb();
+  if (!dbInstance) return 0;
+
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const monthId = `${year}-${month}`; // e.g. "2026-06"
+
+  const docId = `${monthId}_${type}`;
+  const docRef = dbInstance.collection('organizations').doc(orgId).collection('musicscale').doc('usage').collection('monthly').doc(docId);
+  const docSnap = await docRef.get();
+  
+  if (docSnap.exists) {
+    return docSnap.data()?.count ?? 0;
+  }
+  
+  // Try alternative flat path if nested path doesn't exist
+  const altRef = dbInstance.collection('organizations').doc(orgId).collection('musicscale_usage').doc(docId);
+  const altSnap = await altRef.get();
+  if (altSnap.exists) {
+    return altSnap.data()?.count ?? 0;
+  }
+
+  return 0;
+}
+
+/**
+ * Increments current month usage count for a given operation type and stores in both paths for compatibility
+ */
+export async function incrementMonthUsage(orgId: string, type: string, incrementBy: number = 1): Promise<number> {
+  const dbInstance = getDb();
+  if (!dbInstance) return 0;
+
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const monthId = `${year}-${month}`; // e.g. "2026-06"
+
+  const docId = `${monthId}_${type}`;
+  
+  // Nested path
+  const docRef = dbInstance.collection('organizations').doc(orgId).collection('musicscale').doc('usage').collection('monthly').doc(docId);
+  
+  // Flat fallback path
+  const altRef = dbInstance.collection('organizations').doc(orgId).collection('musicscale_usage').doc(docId);
+
+  let newCount = incrementBy;
+  
+  await dbInstance.runTransaction(async (transaction) => {
+    const docSnap = await transaction.get(docRef);
+    if (docSnap.exists) {
+      newCount = (docSnap.data()?.count ?? 0) + incrementBy;
+    }
+    
+    transaction.set(docRef, {
+      monthId,
+      type,
+      count: newCount,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    transaction.set(altRef, {
+      monthId,
+      type,
+      count: newCount,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  });
+
+  return newCount;
+}
+
+/**
+ * Verifies if an organization has capacity for a monthly operation (e.g., library_import)
+ */
+export async function canPerformOperation(orgId: string, type: string): Promise<{ allowed: boolean; current: number; limit: number; planName: string }> {
+  try {
+    const dbInstance = getDb();
+    if (!dbInstance) {
+      return { allowed: true, current: 0, limit: -1, planName: 'starter' };
+    }
+
+    // Load subscription and organization doc
+    const subDoc = await dbInstance.collection('subscriptions').doc(orgId).get();
+    const subscription = subDoc.exists ? subDoc.data() : null;
+
+    const orgDoc = await dbInstance.collection('organizations').doc(orgId).get();
+    const organization = orgDoc.exists ? orgDoc.data() : null;
+
+    const entitlements = resolveMusicScaleEntitlements({ subscription, organization });
+    
+    let limit = -1;
+    if (type === 'library_import') {
+      limit = entitlements?.limits?.libraryImportsPerMonth ?? 0;
+    }
+
+    if (limit === -1) {
+      return { allowed: true, current: 0, limit: -1, planName: entitlements.name };
+    }
+
+    const current = await getCurrentMonthUsage(orgId, type);
+    return {
+      allowed: current < limit,
+      current,
+      limit,
+      planName: entitlements.name
+    };
+  } catch (err) {
+    console.error('[canPerformOperation] Error:', err);
+    return { allowed: true, current: 0, limit: -1, planName: 'starter' };
+  }
+}
+
+/**
+ * Throws an error if the operational limit has been reached
+ */
+export async function assertCanPerformOperation(orgId: string, type: string): Promise<void> {
+  const check = await canPerformOperation(orgId, type);
+  if (!check.allowed) {
+    throw new Error(`Limite mensal excedido! O plano atual (${check.planName}) permite no máximo ${check.limit} operações do tipo "${type}" por mês, e a organização já consumiu ${check.current}.`);
+  }
 }
 
 import compression from 'compression';
@@ -282,12 +482,37 @@ async function startServer() {
           const trialEnd = (subscription as any).trial_end ? admin.firestore.Timestamp.fromMillis((subscription as any).trial_end * 1000) : null;
           const hasAccess = ['active', 'trialing'].includes(subscription.status);
 
+          const priceId = subscription.items?.data?.[0]?.price?.id || null;
+          const resolvedPlan = priceIdToMusicScalePlan(priceId) || normalizeMusicScalePlan(plan);
+          const planDetails = MUSIC_SCALE_PLANS[resolvedPlan];
+          const cancelAtPeriodEnd = subscription.cancel_at_period_end || false;
+
           // 1. Organization
           batch.set(db.collection('organizations').doc(orgId), {
             name: `Organização de ${session.customer_email || userId}`,
             ownerUid: userId,
             ownerId: userId,
-            plan: plan,
+            plan: resolvedPlan,
+            subscriptionPlan: resolvedPlan,
+            subscriptionStatus: subscription.status,
+            enabledApps: admin.firestore.FieldValue.arrayUnion('musicscale'),
+            
+            // Nested app cache object
+            'apps.musicscale.access': hasAccess,
+            'apps.musicscale.status': subscription.status,
+            'apps.musicscale.plan': resolvedPlan,
+            'apps.musicscale.features': planDetails.features,
+            'apps.musicscale.limits': planDetails.limits,
+            'apps.musicscale.supportTier': planDetails.features.supportTier,
+            'apps.musicscale.currentPeriodEnd': currentPeriodEnd,
+            'apps.musicscale.trialEndsAt': trialEnd,
+            'apps.musicscale.updatedAt': admin.firestore.FieldValue.serverTimestamp(),
+            'apps.musicscale.planUpdatedAt': admin.firestore.FieldValue.serverTimestamp(),
+            
+            // Local Cache Invalidation Version and Timestamp
+            planUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            entitlementsVersion: 2,
+            
             lastStripeEventTs: eventCreatedTs,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
@@ -303,19 +528,26 @@ async function startServer() {
 
           // 3. Subscription
           const subPayload = {
-            schemaVersion: 1,
+            schemaVersion: 2,
             organizationId: orgId,
+            app: 'musicscale',
             status: subscription.status,
-            plan: plan,
+            plan: resolvedPlan,
+            priceId: priceId,
             stripeCustomerId: customerId,
             stripeSubscriptionId: subscriptionId,
-            currentPeriodEnd: currentPeriodEnd,
+            trial_period_days: 7,
             trialEndsAt: trialEnd,
-            lastStripeEventTs: eventCreatedTs,
+            currentPeriodEnd: currentPeriodEnd,
+            cancelAtPeriodEnd: cancelAtPeriodEnd,
+            limits: planDetails.limits,
             features: {
               globalLibrary: hasAccess,
-              musicScale: hasAccess
+              musicScale: hasAccess,
+              ...planDetails.features
             },
+            supportTier: planDetails.features.supportTier,
+            lastStripeEventTs: eventCreatedTs,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           };
           
@@ -361,6 +593,7 @@ async function startServer() {
           let customerId: string;
           let currentPeriodEndTs: number;
           let trialEndTs: number | null;
+          let stripeSubObj: any = null;
 
           let discountApplied = false;
           let couponId = null;
@@ -374,6 +607,7 @@ async function startServer() {
             const sub = await stripe.subscriptions.retrieve(subscriptionId, {
               expand: ['discount', 'discount.promotion_code', 'discount.coupon']
             });
+            stripeSubObj = sub;
             status = sub.status;
             customerId = sub.customer as string;
             currentPeriodEndTs = (sub as any).current_period_end;
@@ -387,6 +621,7 @@ async function startServer() {
             }
           } else {
             const sub = event.data.object as Stripe.Subscription;
+            stripeSubObj = sub;
             subscriptionId = sub.id;
             status = sub.status;
             customerId = sub.customer as string;
@@ -437,24 +672,58 @@ async function startServer() {
                  const userDocSnap = await db.collection('users').doc(userId).get();
                  const orgId = (userDocSnap.exists && userDocSnap.data()?.organizationId) ? userDocSnap.data()?.organizationId : userId;
 
+                 const priceId = stripeSubObj?.items?.data?.[0]?.price?.id || docData.priceId || null;
+                 const metadataPlan = stripeSubObj?.metadata?.plan || docData.plan || 'starter';
+                 const resolvedPlan = priceIdToMusicScalePlan(priceId) || normalizeMusicScalePlan(metadataPlan);
+                 const planDetails = MUSIC_SCALE_PLANS[resolvedPlan];
+                 const cancelAtPeriodEnd = stripeSubObj?.cancel_at_period_end || false;
+
                  batch.set(doc.ref, {
                     status: status,
+                    plan: resolvedPlan,
+                    priceId: priceId,
                     currentPeriodEnd: currentPeriodEnd,
                     trialEndsAt: trialEnd,
-                    lastStripeEventTs: eventCreatedTs,
+                    cancelAtPeriodEnd: cancelAtPeriodEnd,
+                    limits: planDetails.limits,
                     features: {
                       globalLibrary: hasAccess,
-                      musicScale: hasAccess
+                      musicScale: hasAccess,
+                      ...planDetails.features
                     },
+                    supportTier: planDetails.features.supportTier,
+                    lastStripeEventTs: eventCreatedTs,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                  }, { merge: true });
                  
                  console.log('[STRIPE_WEBHOOK_DEBUG_PAYLOAD]', {
                    path: `subscriptions/${doc.id}`,
-                   hasAccess
+                   hasAccess,
+                   resolvedPlan
                  });
                  
                  batch.set(db.collection('organizations').doc(orgId), {
+                    plan: resolvedPlan,
+                    subscriptionPlan: resolvedPlan,
+                    subscriptionStatus: status,
+                    enabledApps: admin.firestore.FieldValue.arrayUnion('musicscale'),
+                    
+                    // Nested app cache object
+                    'apps.musicscale.access': hasAccess,
+                    'apps.musicscale.status': status,
+                    'apps.musicscale.plan': resolvedPlan,
+                    'apps.musicscale.features': planDetails.features,
+                    'apps.musicscale.limits': planDetails.limits,
+                    'apps.musicscale.supportTier': planDetails.features.supportTier,
+                    'apps.musicscale.currentPeriodEnd': currentPeriodEnd,
+                    'apps.musicscale.trialEndsAt': trialEnd,
+                    'apps.musicscale.updatedAt': admin.firestore.FieldValue.serverTimestamp(),
+                    'apps.musicscale.planUpdatedAt': admin.firestore.FieldValue.serverTimestamp(),
+                    
+                    // Invalidation & Cache Versioning
+                    planUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    entitlementsVersion: 2,
+
                     lastStripeEventTs: eventCreatedTs,
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                  }, { merge: true });
@@ -658,6 +927,162 @@ async function startServer() {
       return res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+
+  app.get('/api/v1/organizations/:orgId/limits', async (req, res) => {
+    try {
+      const { orgId } = req.params;
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Token de autenticação ausente.' });
+      }
+
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token', message: 'Falha na validação do token.' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) return res.status(500).json({ error: 'Database not initialized' });
+
+      // Verificação de associação multi-tenant ou admin de sistema
+      let hasAccess = false;
+      const userSnap = await dbInstance.collection('users').doc(decodedToken.uid).get();
+      const userData = userSnap.data();
+      if (userData?.systemRole === 'ceo' || userData?.systemRole === 'admin') {
+        hasAccess = true;
+      } else {
+        const memberSnap = await dbInstance.collection('organizations').doc(orgId).collection('members').doc(decodedToken.uid).get();
+        if (memberSnap.exists) {
+          hasAccess = true;
+        } else {
+          const legacyMemberSnap = await dbInstance.collection('organization_members').doc(`${decodedToken.uid}_${orgId}`).get();
+          if (legacyMemberSnap.exists) {
+            hasAccess = true;
+          }
+        }
+      }
+
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Você não tem acesso a esta organização.' });
+      }
+
+      // Fetch limits
+      const subDoc = await dbInstance.collection('subscriptions').doc(orgId).get();
+      const subscription = subDoc.exists ? subDoc.data() : null;
+
+      const orgDoc = await dbInstance.collection('organizations').doc(orgId).get();
+      const organization = orgDoc.exists ? orgDoc.data() : null;
+
+      const entitlements = resolveMusicScaleEntitlements({ subscription, organization });
+      
+      const maxUsersLimit = entitlements?.limits?.users ?? 10;
+      const occupiedSlots = await getActiveAndReservedMemberCount(orgId);
+
+      const maxImportsLimit = entitlements?.limits?.libraryImportsPerMonth ?? 0;
+      const currentImportsCount = await getCurrentMonthUsage(orgId, 'library_import');
+
+      return res.json({
+        success: true,
+        plan: {
+          id: entitlements.id,
+          name: entitlements.name,
+          priceMonthly: entitlements.priceMonthly,
+          limits: {
+            users: maxUsersLimit,
+            libraryImportsPerMonth: maxImportsLimit
+          },
+          features: entitlements.features
+        },
+        usage: {
+          users: {
+            current: occupiedSlots,
+            limit: maxUsersLimit,
+            allowed: maxUsersLimit === -1 || occupiedSlots < maxUsersLimit
+          },
+          library_import: {
+            current: currentImportsCount,
+            limit: maxImportsLimit,
+            allowed: maxImportsLimit === -1 || currentImportsCount < maxImportsLimit
+          }
+        }
+      });
+    } catch (err: any) {
+      console.error('[API Limits]', err);
+      return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+  });
+
+  app.post('/api/v1/organizations/:orgId/musicscale/usage/increment', express.json(), async (req, res) => {
+    try {
+      const { orgId } = req.params;
+      const { type, incrementBy = 1 } = req.body;
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Token de autenticação ausente.' });
+      }
+
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token', message: 'Falha na validação do token.' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) return res.status(500).json({ error: 'Database not initialized' });
+
+      // Verificação de associação multi-tenant ou admin de sistema
+      let hasAccess = false;
+      const userSnap = await dbInstance.collection('users').doc(decodedToken.uid).get();
+      const userData = userSnap.data();
+      if (userData?.systemRole === 'ceo' || userData?.systemRole === 'admin') {
+        hasAccess = true;
+      } else {
+        const memberSnap = await dbInstance.collection('organizations').doc(orgId).collection('members').doc(decodedToken.uid).get();
+        if (memberSnap.exists) {
+          hasAccess = true;
+        } else {
+          const legacyMemberSnap = await dbInstance.collection('organization_members').doc(`${decodedToken.uid}_${orgId}`).get();
+          if (legacyMemberSnap.exists) {
+            hasAccess = true;
+          }
+        }
+      }
+
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Você não tem acesso a esta organização.' });
+      }
+
+      if (!type) {
+        return res.status(400).json({ error: 'Missing type' });
+      }
+
+      // Assert operation limits
+      try {
+        await assertCanPerformOperation(orgId, type);
+      } catch (err: any) {
+        return res.status(403).json({ error: 'Limit Exceeded', message: err.message });
+      }
+
+      // Increment
+      const newCount = await incrementMonthUsage(orgId, type, incrementBy);
+
+      return res.json({
+        success: true,
+        type,
+        monthId: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+        newCount
+      });
+    } catch (err: any) {
+      console.error('[API Increment Usage]', err);
+      return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+  });
+
   app.get('/api/slug/check', async (req, res) => {
       try {
           const { slug, orgId } = req.query;

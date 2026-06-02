@@ -9,9 +9,22 @@ interface InviteModalProps {
   onClose: () => void;
   handleCreateInvite: (role: string, method: 'whatsapp' | 'copy', email?: string, overrideOrgId?: string) => Promise<void>;
   loading?: boolean;
+  isAtLimit?: boolean;
+  occupiedSlots?: number;
+  maxUsersLimit?: number;
+  onUpgradeClick?: () => void;
 }
 
-export function InviteModal({ isOpen, onClose, handleCreateInvite, loading = false }: InviteModalProps) {
+export function InviteModal({ 
+  isOpen, 
+  onClose, 
+  handleCreateInvite, 
+  loading = false,
+  isAtLimit = false,
+  occupiedSlots = 0,
+  maxUsersLimit = 10,
+  onUpgradeClick
+}: InviteModalProps) {
   const [role, setRole] = useState('member');
   const [email, setEmail] = useState('');
   const [overrideOrgId, setOverrideOrgId] = useState('');
@@ -85,7 +98,35 @@ export function InviteModal({ isOpen, onClose, handleCreateInvite, loading = fal
               </button>
             </div>
 
-            {!canInvite ? (
+            {isAtLimit ? (
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 mb-4 animate-pulse">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <h3 className="text-[#F5F7FA] font-medium mb-2">Limite de Membros Atingido</h3>
+                <p className="text-[#A0A7B5] text-sm mb-6 px-4">
+                  Sua organização está utilizando todas as <strong>{occupiedSlots}/{maxUsersLimit}</strong> vagas disponíveis no seu plano atual.
+                </p>
+                
+                <div className="flex flex-col gap-3 w-full px-4">
+                  <button 
+                    onClick={() => {
+                      onUpgradeClick?.();
+                      onClose();
+                    }}
+                    className="w-full py-3 bg-[#2B85EB] hover:bg-[#2B85EB]/90 text-white rounded-xl transition-colors font-semibold text-sm shadow-lg shadow-[#2B85EB]/20"
+                  >
+                    Fazer Upgrade de Plano
+                  </button>
+                  <button 
+                    onClick={onClose}
+                    className="w-full py-3 bg-white/5 hover:bg-white/10 text-[#F5F7FA] rounded-xl transition-colors font-medium text-sm"
+                  >
+                    Voltar
+                  </button>
+                </div>
+              </div>
+            ) : !canInvite ? (
               <div className="flex flex-col items-center justify-center py-6 text-center">
                 <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 mb-4">
                   <AlertCircle className="w-6 h-6" />

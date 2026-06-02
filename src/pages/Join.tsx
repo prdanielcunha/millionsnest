@@ -6,6 +6,7 @@ import { db } from '../lib/firebase.js';
 import { motion } from 'framer-motion';
 import { Loader2, CheckCircle2, XCircle, ArrowRight } from 'lucide-react';
 import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
+import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from '../lib/musicScalePlans.js';
 
 export function Join() {
   const { orgId } = useParams();
@@ -80,6 +81,36 @@ export function Join() {
         setStatus('already_member');
         setTimeout(() => navigate('/dashboard'), 2000);
         return;
+      }
+
+      // Enforce user limits client-side securely during admission
+      const membersRefAll = collection(db, `organizations/${orgId}/members`);
+      const membersSnapAll = await getDocs(membersRefAll);
+      const currentOrgMembers = membersSnapAll.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const invitesRefAll = collection(db, `organizations/${orgId}/invites`);
+      const invitesQAll = query(invitesRefAll, where('status', '==', 'pending'));
+      const invitesSnapAll = await getDocs(invitesQAll);
+      const currentOrgInvites = invitesSnapAll.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const orgRef = doc(db, 'organizations', orgId);
+      const orgSnap = await getDoc(orgRef);
+      const orgData = orgSnap.exists() ? orgSnap.data() : null;
+
+      const subRef = doc(db, 'subscriptions', orgId);
+      const subSnap = await getDoc(subRef);
+      const subData = subSnap.exists() ? subSnap.data() : null;
+
+      const entitlements = resolveMusicScaleEntitlements({ subscription: subData, organization: orgData });
+      const maxUsersLimit = entitlements?.limits?.users ?? 10;
+
+      if (maxUsersLimit !== -1) {
+        const slotsOccupied = calculateOccupiedSlots(currentOrgMembers, currentOrgInvites);
+        if (slotsOccupied >= maxUsersLimit) {
+          setStatus('error');
+          setErrorMessage(`Limite de usuários excedido! A organização "${orgData?.name || 'Musica'}" atingiu o limite de ${maxUsersLimit} usuários permitidos pelo atual plano (${entitlements.name}). A admissão de novos integrantes está temporariamente bloqueada. Solicite ao administrador global que realize o upgrade de plano da organização.`);
+          return;
+        }
       }
 
       // Add user to organization

@@ -3,6 +3,11 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { useAuth } from "./AuthContext.js";
 import { withTimeout } from "../lib/utils.js";
+import { 
+  MUSIC_SCALE_PLANS, 
+  resolveMusicScalePlan, 
+  MusicScalePlan 
+} from "../lib/musicScalePlans.js";
 
 interface Organization {
   id: string;
@@ -13,6 +18,15 @@ interface Organization {
   subscriptionPlan: string;
   subscriptionStatus: string;
   createdAt: any;
+  apps?: {
+    musicscale?: {
+      plan?: string;
+      access?: boolean;
+      status?: string;
+      features?: any;
+      limits?: any;
+    };
+  };
 }
 
 interface MemberPermissions {
@@ -30,6 +44,8 @@ interface OrganizationContextType {
   memberRole: MemberRole | null;
   loadingOrg: boolean;
   hasPermission: (permissionName: string) => boolean;
+  musicScalePlan: MusicScalePlan;
+  musicScaleEntitlements: any;
 }
 
 const OrganizationContext = createContext<OrganizationContextType>({
@@ -37,6 +53,8 @@ const OrganizationContext = createContext<OrganizationContextType>({
   memberRole: null,
   loadingOrg: true,
   hasPermission: () => false,
+  musicScalePlan: 'starter',
+  musicScaleEntitlements: MUSIC_SCALE_PLANS.starter,
 });
 
 export function OrganizationProvider({ children }: { children: ReactNode }) {
@@ -54,6 +72,8 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
   const [organization, setOrganization] = useState<Organization | null>(cachedContext?.organization || null);
   const [memberRole, setMemberRole] = useState<MemberRole | null>(cachedContext?.memberRole || null);
+  const [musicScalePlan, setMusicScalePlan] = useState<MusicScalePlan>(cachedContext?.musicScalePlan || 'starter');
+  const [musicScaleEntitlements, setMusicScaleEntitlements] = useState<any>(cachedContext?.musicScaleEntitlements || MUSIC_SCALE_PLANS.starter);
   const [loadingOrg, setLoadingOrg] = useState(!cachedContext);
 
   useEffect(() => {
@@ -66,6 +86,8 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         if (active) {
           setOrganization(null);
           setMemberRole(null);
+          setMusicScalePlan('starter');
+          setMusicScaleEntitlements(MUSIC_SCALE_PLANS.starter);
           setLoadingOrg(false);
           localStorage.removeItem('mn_org_context');
         }
@@ -100,12 +122,34 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        // Fetch subscription details if any for the prioritized gate chain resolution
+        let currentSub = null;
+        try {
+          const subRef = doc(db, "subscriptions", orgId);
+          const subSnap = await withTimeout(getDoc(subRef), 8000, "Firestore timeout loading sub");
+          if (subSnap.exists()) {
+            currentSub = subSnap.data();
+          }
+        } catch (e) {
+          console.warn("Silent recovery: subscriptions not loaded or lacked permission", e);
+        }
+
+        const resolvedPlan = resolveMusicScalePlan({
+          subscription: currentSub,
+          organization: currentOrg
+        });
+        const resolvedEntitlements = MUSIC_SCALE_PLANS[resolvedPlan];
+
         if (active) {
           setOrganization(currentOrg);
           setMemberRole(roleData);
+          setMusicScalePlan(resolvedPlan);
+          setMusicScaleEntitlements(resolvedEntitlements);
           localStorage.setItem('mn_org_context', JSON.stringify({
             organization: currentOrg,
-            memberRole: roleData
+            memberRole: roleData,
+            musicScalePlan: resolvedPlan,
+            musicScaleEntitlements: resolvedEntitlements
           }));
         }
       } catch (error) {
@@ -137,8 +181,10 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     organization,
     memberRole,
     loadingOrg,
-    hasPermission
-  }), [organization, memberRole, loadingOrg, hasPermission]);
+    hasPermission,
+    musicScalePlan,
+    musicScaleEntitlements
+  }), [organization, memberRole, loadingOrg, hasPermission, musicScalePlan, musicScaleEntitlements]);
 
   return (
     <OrganizationContext.Provider value={contextValue}>

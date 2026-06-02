@@ -15,6 +15,7 @@ import { analytics } from "../lib/analytics.js";
 import { eventBus } from "../packages/events/index.js";
 import { feedback } from '../packages/ui/feedback.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
+import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from "../lib/musicScalePlans.js";
 
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
@@ -147,6 +148,8 @@ export function Dashboard() {
   const [prices, setPrices] = useState({ 
     starter_monthly: 0,
     starter_annual: 0,
+    advanced_monthly: 0,
+    advanced_annual: 0,
     pro_monthly: 0, 
     pro_annual: 0,
     setup_premium: 0,
@@ -614,6 +617,17 @@ export function Dashboard() {
   const handleCreateInvite = async (role: string, method: 'whatsapp' | 'copy', email?: string, overrideOrgId?: string) => {
     try {
       const orgId = overrideOrgId || activeContextOrgId;
+      
+      // Enforce user limits client-side securely
+      const entitlements = resolveMusicScaleEntitlements({ subscription, organization });
+      const maxUsersLimit = entitlements?.limits?.users ?? 10;
+      const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
+      
+      if (maxUsersLimit !== -1 && occupiedSlots >= maxUsersLimit) {
+        alert(`Limite de usuários atingido! Sua organização está utilizando ${occupiedSlots} de ${maxUsersLimit} vagas disponíveis no plano atual (${entitlements.name}). Faça o upgrade do seu plano para liberar mais vagas.`);
+        return;
+      }
+
       const inviteId = Math.random().toString(36).substring(2, 10);
       const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       
@@ -753,11 +767,15 @@ export function Dashboard() {
            // Extract plans (strictly by lookupKey)
            const starterMonthly = data.plans?.find((p: any) => p.lookupKey === 'musicscale_starter_monthly');
            const starterAnnual = data.plans?.find((p: any) => p.lookupKey === 'musicscale_starter_yearly');
+            const advancedMonthly = data.plans?.find((p: any) => p.lookupKey === 'musicscale_advanced_monthly');
+            const advancedAnnual = data.plans?.find((p: any) => p.lookupKey === 'musicscale_advanced_yearly');
            const proMonthly = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_monthly');
            const proAnnual = data.plans?.find((p: any) => p.lookupKey === 'musicscale_pro_yearly');
            
            if (starterMonthly) newPrices.starter_monthly = starterMonthly.price;
            if (starterAnnual) newPrices.starter_annual = starterAnnual.price;
+            if (advancedMonthly) newPrices.advanced_monthly = advancedMonthly.price;
+            if (advancedAnnual) newPrices.advanced_annual = advancedAnnual.price;
            if (proMonthly) newPrices.pro_monthly = proMonthly.price;
            if (proAnnual) newPrices.pro_annual = proAnnual.price;
            
@@ -1001,7 +1019,17 @@ export function Dashboard() {
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
                              <Users className="w-3.5 h-3.5" /> Membros
                           </p>
-                          <p className="text-2xl font-semibold text-[#F5F7FA]">{members.length}</p>
+                          {(() => {
+                            const entitlements = resolveMusicScaleEntitlements({ subscription, organization });
+                            const maxUsersLimit = entitlements?.limits?.users ?? 10;
+                            const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
+                            const limitStr = maxUsersLimit === -1 ? 'Ilimitado' : maxUsersLimit;
+                            return (
+                              <p className="text-2xl font-semibold text-[#F5F7FA]">
+                                {occupiedSlots}<span className="text-xs text-[#A0A7B5] ml-1">/ {limitStr}</span>
+                              </p>
+                            );
+                          })()}
                         </div>
                         <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
@@ -1013,7 +1041,7 @@ export function Dashboard() {
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
                              <ListMusic className="w-3.5 h-3.5" /> Plano Atual
                           </p>
-                          <p className="text-sm font-semibold text-[#F5F7FA] mt-1 capitalize">{subscription?.tier || organization?.subscriptionPlan || 'Gratuito'}</p>
+                          <p className="text-sm font-semibold text-[#F5F7FA] mt-1 capitalize">{subscription?.plan || subscription?.tier || organization?.subscriptionPlan || 'Gratuito'}</p>
                         </div>
                         <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
@@ -1331,7 +1359,7 @@ export function Dashboard() {
                       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
                         <div>
                            <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Plano Atual</p>
-                           <h3 className="text-xl font-semibold text-[#F5F7FA]">{subscription?.plan === 'annual' ? 'Anual' : 'Mensal'} - MusicScale</h3>
+                           <h3 className="text-xl font-semibold text-[#F5F7FA] capitalize">{subscription?.plan || 'Mensal'} - MusicScale</h3>
                         </div>
                         <div className="text-left md:text-right">
                            <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Status</p>
@@ -1420,72 +1448,17 @@ export function Dashboard() {
                        </div>
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-6">
-                      {/* PRO */}
-                      <div className="bg-[#050505] rounded-[2rem] p-6 border border-[#2B85EB]/30 relative flex flex-col premium-shadow group">
-                        <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/5 to-transparent pointer-events-none rounded-[2rem]" />
-                        {plansData?.find(p => p.lookupKey === 'musicscale_pro_monthly')?.featured && (
-                          <div className="absolute top-4 right-4 md:right-6">
-                            <div className="bg-[#2B85EB] text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-widest flex items-center gap-1">
-                              <Star className="w-3 h-3" /> Popular
-                            </div>
-                          </div>
-                        )}
-
-                        <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-4 md:mt-0">Pro</h3>
-                        <p className="text-[#A0A7B5] text-[11px] md:text-xs mb-4 min-h-[40px] relative z-10">
-                          Para ministérios que desejam crescimento e acesso contínuo aos recursos premium do MusicScale.
-                        </p>
-                        
-                        <div className="flex items-baseline gap-1 mb-1 relative z-10">
-                          <span className="text-3xl md:text-4xl font-semibold text-[#F5F7FA] tracking-tight">
-                            R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
-                          </span>
-                          <span className="text-[#A0A7B5] font-normal text-xs md:text-sm">/mês</span>
-                        </div>
-                        
-                        {isAnnual ? (
-                          <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
-                             {prices.pro_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.pro_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-                             {prices.pro_monthly > 0 && prices.pro_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.pro_annual / (prices.pro_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
-                          </div>
-                        ) : (
-                          <div className="h-5 md:h-6 mb-6 relative z-10" />
-                        )}
-                        
-                        <button 
-                          onClick={() => handleSubscribe(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
-                          disabled={checkoutLoading}
-                          className="w-full py-3.5 px-4 rounded-xl bg-[#F5F7FA] text-[#050505] text-center font-semibold text-sm hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 mb-6 block relative z-10"
-                        >
-                          {checkoutLoading ? "Processando..." : "Assinar MusicScale Pro"}
-                        </button>
-                        
-                        <ul className="space-y-3 flex-1 pt-4 border-t border-white/5 relative z-10">
-                          {[
-                            "Pessoas ilimitadas",
-                            "Músicas e escalas ilimitadas",
-                            "Acesso à Biblioteca Viva",
-                            "Novas músicas continuamente"
-                          ].map((item, i) => (
-                            <li key={i} className="flex items-start gap-2 text-[#F5F7FA]">
-                              <Zap className="w-3.5 h-3.5 text-[#2B85EB] flex-shrink-0 mt-0.5" />
-                              <span className="font-normal text-xs opacity-90">{item}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
+                    <div className="grid md:grid-cols-3 gap-6">
                       {/* STARTER */}
                       <div className="bg-[#0B0F19] rounded-[2rem] p-6 border border-white/5 relative flex flex-col hover:border-white/10 transition-colors">
                         <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">Starter</h3>
                         <p className="text-[#A0A7B5] text-[11px] md:text-xs mb-4 min-h-[40px]">
-                          Ideal para equipes que desejam organizar o ministério com excelência, sem recursos pro.
+                          Ideal para pequenas equipes que desejam começar a organizar o ministério com excelência.
                         </p>
                         
                         <div className="flex items-baseline gap-1 mb-1">
                           <span className="text-3xl md:text-4xl font-semibold text-[#F5F7FA] tracking-tight">
-                            R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "..."}
+                            R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "19,90"}
                           </span>
                           <span className="text-[#A0A7B5] font-normal text-xs md:text-sm">/mês</span>
                         </div>
@@ -1509,14 +1482,128 @@ export function Dashboard() {
                         
                         <ul className="space-y-3 flex-1 pt-4 border-t border-white/5">
                           {[
-                            "Músicas e escalas ilimitadas",
                             "Até 10 pessoas por organização",
-                            "Sincronização em nuvem",
-                            "Suporte padrão"
+                            "Músicas e escalas ilimitadas",
+                            "Campos de músicas essenciais",
+                            "Sincronização em nuvem segura",
+                            "Compartilhamento público de escalas",
+                            "Suporte básico por e-mail"
                           ].map((item, i) => (
                             <li key={i} className="flex items-start gap-2 text-[#A0A7B5]">
                               <Check className="w-3.5 h-3.5 text-[#2B85EB] flex-shrink-0 mt-0.5" />
                               <span className="font-normal text-xs">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* ADVANCED */}
+                      <div className="bg-[#0B0F19] rounded-[2rem] p-6 border border-white/10 relative flex flex-col hover:border-white/20 transition-all group">
+                        <div className="absolute top-4 right-4 md:right-6">
+                          <span className="text-[9px] font-bold text-[#F5F7FA] bg-white/10 border border-white/10 px-2.5 py-1 rounded-full uppercase tracking-widest">
+                            Recomendado
+                          </span>
+                        </div>
+
+                        <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest mt-4 md:mt-0">Advanced</h3>
+                        <p className="text-[#A0A7B5] text-[11px] md:text-xs mb-4 min-h-[40px]">
+                          Para ministérios estruturados com equipe em expansão e acesso à biblioteca.
+                        </p>
+                        
+                        <div className="flex items-baseline gap-1 mb-1">
+                          <span className="text-3xl md:text-4xl font-semibold text-[#F5F7FA] tracking-tight">
+                            R$ {prices.advanced_monthly > 0 ? (isAnnual ? (prices.advanced_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.advanced_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "29,90"}
+                          </span>
+                          <span className="text-[#A0A7B5] font-normal text-xs md:text-sm">/mês</span>
+                        </div>
+                        
+                        {isAnnual ? (
+                          <div className="flex items-center gap-2 mb-6 text-xs font-medium">
+                            {prices.advanced_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.advanced_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                            {prices.advanced_monthly > 0 && prices.advanced_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.advanced_annual / (prices.advanced_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
+                          </div>
+                        ) : (
+                          <div className="h-5 md:h-6 mb-6" />
+                        )}
+                        
+                        <button 
+                          onClick={() => handleSubscribe(isAnnual ? 'musicscale_advanced_yearly' : 'musicscale_advanced_monthly')}
+                          disabled={checkoutLoading}
+                          className="w-full py-3.5 px-4 rounded-xl bg-white/10 border border-white/10 text-[#F5F7FA] text-center font-semibold text-sm hover:bg-white/20 transition-all shadow-sm active:scale-95 mb-6 block"
+                        >
+                          {checkoutLoading ? "Processando..." : "Assinar MusicScale Advanced"}
+                        </button>
+                        
+                        <ul className="space-y-3 flex-1 pt-4 border-t border-white/5">
+                          {[
+                            "Até 20 pessoas por organização",
+                            "Músicas e escalas ilimitadas",
+                            "Acesso limitado à Biblioteca Viva",
+                            "Até 20 importações por mês",
+                            "Personalização avançada de repertório",
+                            "Histórico completo de alterações",
+                            "Suporte prioritário básico (resposta até 24h)"
+                          ].map((item, i) => (
+                            <li key={i} className="flex items-start gap-2 text-[#F5F7FA]">
+                              <Check className="w-3.5 h-3.5 text-[#2B85EB] flex-shrink-0 mt-0.5" />
+                              <span className="font-normal text-xs opacity-90">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* PRO */}
+                      <div className="bg-[#050505] rounded-[2rem] p-6 border border-[#2B85EB]/35 relative flex flex-col premium-shadow group">
+                        <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/5 to-transparent pointer-events-none rounded-[2rem]" />
+                        <div className="absolute top-4 right-4 md:right-6">
+                          <div className="bg-[#2B85EB] text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-widest flex items-center gap-1">
+                            <Star className="w-3 h-3 text-white fill-white" /> Popular
+                          </div>
+                        </div>
+
+                        <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-4 md:mt-0">Pro</h3>
+                        <p className="text-[#A0A7B5] text-[11px] md:text-xs mb-4 min-h-[40px] relative z-10">
+                          Para ministérios grandes e exigentes que buscam poder absoluto, automações e IA.
+                        </p>
+                        
+                        <div className="flex items-baseline gap-1 mb-1 relative z-10">
+                          <span className="text-3xl md:text-4xl font-semibold text-[#F5F7FA] tracking-tight">
+                            R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "34,90"}
+                          </span>
+                          <span className="text-[#A0A7B5] font-normal text-xs md:text-sm">/mês</span>
+                        </div>
+                        
+                        {isAnnual ? (
+                          <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
+                             {prices.pro_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.pro_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                             {prices.pro_monthly > 0 && prices.pro_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.pro_annual / (prices.pro_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
+                          </div>
+                        ) : (
+                          <div className="h-5 md:h-6 mb-6 relative z-10" />
+                        )}
+                        
+                        <button 
+                          onClick={() => handleSubscribe(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
+                          disabled={checkoutLoading}
+                          className="w-full py-3.5 px-4 rounded-xl bg-[#F5F7FA] text-[#050505] text-center font-semibold text-sm hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 mb-6 block relative z-10"
+                        >
+                          {checkoutLoading ? "Processando..." : "Assinar MusicScale Pro"}
+                        </button>
+                        
+                        <ul className="space-y-3 flex-1 pt-4 border-t border-white/5 relative z-10">
+                          {[
+                            "Pessoas organizacionais ILIMITADAS",
+                            "Músicas e escalas ilimitadas",
+                            "Biblioteca Viva Completa ILIMITADA",
+                            "Importações inteligentes via IA",
+                            "Estruturação e sugestões por IA",
+                            "Clonagem instantânea de escalas",
+                            "Acesso prioritário a novos recursos",
+                            "Suporte prioritário"
+                          ].map((item, i) => (
+                            <li key={i} className="flex items-start gap-2 text-[#F5F7FA]">
+                              <Zap className="w-3.5 h-3.5 text-[#2B85EB] flex-shrink-0 mt-0.5" />
+                              <span className="font-normal text-xs opacity-90">{item}</span>
                             </li>
                           ))}
                         </ul>
@@ -1728,11 +1815,24 @@ export function Dashboard() {
           </motion.div>
         )}
       </AnimatePresence>
-      <InviteModal
-        isOpen={isInviteModalOpen}
-        onClose={() => setIsInviteModalOpen(false)}
-        handleCreateInvite={handleCreateInvite}
-      />
+      {(() => {
+        const entitlements = resolveMusicScaleEntitlements({ subscription, organization });
+        const maxUsersLimit = entitlements?.limits?.users ?? 10;
+        const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
+        const isAtLimit = maxUsersLimit !== -1 && occupiedSlots >= maxUsersLimit;
+
+        return (
+          <InviteModal
+            isOpen={isInviteModalOpen}
+            onClose={() => setIsInviteModalOpen(false)}
+            handleCreateInvite={handleCreateInvite}
+            isAtLimit={isAtLimit}
+            occupiedSlots={occupiedSlots}
+            maxUsersLimit={maxUsersLimit}
+            onUpgradeClick={() => setActiveTab("billing")}
+          />
+        );
+      })()}
     </EcosystemShell>
   );
 }

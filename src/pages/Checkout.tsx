@@ -236,8 +236,13 @@ export default function Checkout() {
     );
   }
 
-  // Tiers sorting: Starter then Pro
-  const sortedPlans = [...availablePlans].sort((a, b) => (a.tier === 'pro' ? 1 : -1));
+  // Tiers sorting: Starter, Advanced, then Pro
+  const sortedPlans = [...availablePlans].sort((a, b) => {
+    const order: Record<string, number> = { starter: 1, advanced: 2, pro: 3 };
+    const oA = order[a.tier || ''] || 99;
+    const oB = order[b.tier || ''] || 99;
+    return oA - oB;
+  });
 
   return (
     <div className="min-h-screen bg-[#0B0D11] text-[#F5F7FA] font-sans selection:bg-[#2B85EB]/30 overflow-x-hidden">
@@ -265,7 +270,7 @@ export default function Checkout() {
             <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-[#2B85EB]/5 rounded-full blur-[150px] pointer-events-none" />
 
             {/* LEFT COLUMN: Plans & Addons */}
-            <div className="flex flex-col gap-12 relative z-10 w-full max-w-3xl mx-auto lg:mx-0">
+            <div className="flex flex-col gap-12 relative z-10 w-full max-w-4xl mx-auto lg:mx-0">
                 {/* Header */}
                 <div className="space-y-4">
                     <h1 className="text-4xl lg:text-5xl font-semibold tracking-tight text-white leading-tight">
@@ -298,16 +303,18 @@ export default function Checkout() {
                 </div>
 
                 {/* Unified Plan Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 pb-4">
                    {sortedPlans.map(plan => {
                        const isSelected = selectedPlanLookup === plan.lookupKey;
                        const isPro = plan.tier === 'pro';
+                       const isAdvanced = plan.tier === 'advanced';
+                       const isStarter = plan.tier === 'starter';
                        
                        return (
                            <div 
                                key={plan.id}
                                onClick={() => plan.lookupKey && setSelectedPlanLookup(plan.lookupKey)}
-                               className={`group relative p-8 rounded-3xl cursor-pointer transition-all duration-300 border ${isSelected ? 'bg-[#181C25] border-[#2B85EB]/50 shadow-[0_0_40px_-10px_rgba(43,133,235,0.2)]' : 'bg-[#101217] border-white/5 hover:border-white/20 hover:bg-[#13151A]'}`}
+                               className={`group relative p-6 rounded-3xl cursor-pointer transition-all duration-300 border ${isSelected ? 'bg-[#181C25] border-[#2B85EB]/50 shadow-[0_0_40px_-10px_rgba(43,133,235,0.2)]' : 'bg-[#101217] border-white/5 hover:border-white/20 hover:bg-[#13151A]'}`}
                            >
                                {isSelected && (
                                    <div className="absolute top-0 left-0 w-full h-full rounded-3xl border-2 border-[#2B85EB]/20 pointer-events-none" />
@@ -321,8 +328,8 @@ export default function Checkout() {
                                
                                <div className="flex justify-between items-start mb-6">
                                    <div>
-                                       <h3 className="text-2xl font-medium text-white mb-1">{plan.name}</h3>
-                                       <p className="text-[#A0A7B5] text-sm font-light">{plan.description || (isPro ? t('pro_desc', "Para ministérios que desejam mais liberdade, crescimento e acesso contínuo aos recursos premium do MusicScale.") : t('starter_desc', "Ideal para equipes e igrejas que desejam organizar o ministério de louvor com simplicidade e excelência."))}</p>
+                                       <h3 className="text-xl md:text-2xl font-medium text-white mb-1">{plan.name}</h3>
+                                       <p className="text-[#A0A7B5] text-xs font-light">{plan.description || (isPro ? "Para ministérios que desejam a experiência premium completa." : isAdvanced ? "Para ministérios em crescimento." : "Ideal para começar com simplicidade.")}</p>
                                    </div>
                                    <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#2B85EB] border-[#2B85EB]' : 'border-white/20 group-hover:border-white/40'}`}>
                                        {isSelected && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
@@ -336,25 +343,29 @@ export default function Checkout() {
                                    </div>
                                </div>
 
-                               <ul className="space-y-3">
+                               <ul className="space-y-3 mt-2">
                                    {isPro ? (
                                        <>
+                                         <FeatureItem text="Tudo do Advanced" />
+                                         <FeatureItem text="Usuários ilimitados" />
+                                         <FeatureItem text="Importações ilimitadas" />
+                                         <FeatureItem text="Importação de Músicas com IA" />
+                                         <FeatureItem text="Sugestões Inteligentes" />
+                                         <FeatureItem text="Suporte prioritário" />
+                                       </>
+                                   ) : isAdvanced ? (
+                                       <>
                                          <FeatureItem text="Tudo do Starter" />
-                                         <FeatureItem text="Pessoas ilimitadas por organização" />
-                                         <FeatureItem text="Acesso à Biblioteca Viva MusicScale" />
-                                         <FeatureItem text="Novas músicas adicionadas continuamente" />
-                                         <FeatureItem text="Atualização constante do acervo" />
-                                         <FeatureItem text="Experiência premium" />
-                                         <FeatureItem text="Prioridade em novos recursos" />
+                                         <FeatureItem text="Até 20 usuários" />
+                                         <FeatureItem text="Biblioteca Viva limitada" />
+                                         <FeatureItem text="Histórico completo" />
+                                         <FeatureItem text="Suporte prioritário básico" />
                                        </>
                                    ) : (
                                        <>
                                          <FeatureItem text="Músicas ilimitadas" />
                                          <FeatureItem text="Escalas ilimitadas" />
-                                         <FeatureItem text="Até 12 pessoas por organização" />
-                                         <FeatureItem text="Compartilhamento de escalas" />
-                                         <FeatureItem text="Organização por cultos e eventos" />
-                                         <FeatureItem text="Personalização básica" />
+                                         <FeatureItem text="Até 10 pessoas" />
                                          <FeatureItem text="Acesso mobile" />
                                          <FeatureItem text="Sincronização em nuvem" />
                                          <FeatureItem text="Suporte padrão" />

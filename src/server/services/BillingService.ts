@@ -38,13 +38,17 @@ export class BillingService {
     if (this.isMock) {
       console.log('[BillingService] Returning mock data without Stripe keys');
       // Mock dinâmico simulando metadatas estruturadas
-      plans.push(this.createMockProduct('price_monthly_mock', 'musicscale_pro_monthly', 'Pro (Mensal)', 29.90, 'month', 'plan', 'pro', 'musicscale'));
-      plans.push(this.createMockProduct('price_annual_mock', 'musicscale_pro_yearly', 'Pro (Anual)', 287.04, 'year', 'plan', 'pro', 'musicscale'));
+      plans.push(this.createMockProduct('price_starter_monthly_mock', 'musicscale_starter_monthly', 'Starter (Mensal)', 19.90, 'month', 'plan', 'starter', 'musicscale'));
+      plans.push(this.createMockProduct('price_starter_annual_mock', 'musicscale_starter_yearly', 'Starter (Anual)', 191.04, 'year', 'plan', 'starter', 'musicscale'));
+      plans.push(this.createMockProduct('price_advanced_monthly_mock', 'musicscale_advanced_monthly', 'Advanced (Mensal)', 29.90, 'month', 'plan', 'advanced', 'musicscale'));
+      plans.push(this.createMockProduct('price_advanced_annual_mock', 'musicscale_advanced_yearly', 'Advanced (Anual)', 287.04, 'year', 'plan', 'advanced', 'musicscale'));
+      plans.push(this.createMockProduct('price_pro_monthly_mock', 'musicscale_pro_monthly', 'Pro (Mensal)', 34.90, 'month', 'plan', 'pro', 'musicscale'));
+      plans.push(this.createMockProduct('price_pro_annual_mock', 'musicscale_pro_yearly', 'Pro (Anual)', 335.04, 'year', 'plan', 'pro', 'musicscale'));
       
       addons.push(this.createMockProduct('price_setup_mock', 'musicscale_setup_premium', 'Setup Premium', 54.90, 'one_time', 'addon', 'setup_premium', 'musicscale'));
       addons.push(this.createMockProduct('price_training_mock', 'musicscale_training_express', 'Treinamento Express', 29.90, 'one_time', 'addon', 'training_express', 'musicscale'));
-      addons.push(this.createMockProduct('price_worship_mock', 'musicscale_worship_100', 'Acervo Inicial Worship', 39.90, 'one_time', 'content_pack', 'worship_100', 'musicscale'));
-      addons.push(this.createMockProduct('price_music_mock', 'musicscale_music_pack_10', 'Music Pack +10', 14.90, 'one_time', 'addon', 'music_pack_10', 'musicscale'));
+      addons.push(this.createMockProduct('price_worship_mock', 'musicscale_worship_100', 'Acervo Inicial Worship', 97.00, 'one_time', 'content_pack', 'worship_100', 'musicscale'));
+      addons.push(this.createMockProduct('price_music_mock', 'musicscale_music_pack_10', 'Music Pack +10', 29.90, 'one_time', 'addon', 'music_pack_10', 'musicscale'));
       
       this.cachedProducts = { plans, addons, timestamp: Date.now() };
       return { plans, addons };
@@ -95,10 +99,27 @@ export class BillingService {
       });
 
       const envIdToLookupKey: Record<string, string> = {};
-      const envStarterMonthly = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY;
-      const envStarterAnnual = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY;
-      const envProMonthly = process.env.STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
-      const envProAnnual = process.env.STRIPE_PRICE_MUSICSCALE_PRO_YEARLY || process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
+      const isUSD = (process.env.MUSICSCALE_DEFAULT_CURRENCY || '').toLowerCase() === 'usd';
+      const proActivePrice = process.env.MUSICSCALE_PRO_ACTIVE_PRICE || 'launch';
+      
+      const envStarterMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY;
+      const envStarterAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY;
+      
+      const envAdvancedMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY;
+      const envAdvancedAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY;
+      
+      let envProMonthly, envProAnnual;
+      
+      if (proActivePrice === 'standard') {
+        envProMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY;
+        envProAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY;
+      } else {
+        envProMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY;
+        envProAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY;
+      }
+      
+      envProMonthly = envProMonthly || process.env.STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
+      envProAnnual = envProAnnual || process.env.STRIPE_PRICE_MUSICSCALE_PRO_YEARLY || process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
       
       const envSetupPremium = process.env.STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM || process.env.STRIPE_PRICE_SETUP_PREMIUM;
       const envTrainingExpress = process.env.STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS || process.env.STRIPE_PRICE_TRAINING_EXPRESS;
@@ -107,6 +128,8 @@ export class BillingService {
 
       if (envStarterMonthly) envIdToLookupKey[envStarterMonthly] = 'musicscale_starter_monthly';
       if (envStarterAnnual) envIdToLookupKey[envStarterAnnual] = 'musicscale_starter_yearly';
+      if (envAdvancedMonthly) envIdToLookupKey[envAdvancedMonthly] = 'musicscale_advanced_monthly';
+      if (envAdvancedAnnual) envIdToLookupKey[envAdvancedAnnual] = 'musicscale_advanced_yearly';
       if (envProMonthly) envIdToLookupKey[envProMonthly] = 'musicscale_pro_monthly';
       if (envProAnnual) envIdToLookupKey[envProAnnual] = 'musicscale_pro_yearly';
       if (envSetupPremium) envIdToLookupKey[envSetupPremium] = 'musicscale_setup_premium';
@@ -159,13 +182,32 @@ export class BillingService {
         let finalLookupKey = lookupKey || `fallback_${price.id}`;
         
         if (invalidConfiguration) {
-           const envStarterMonthly = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY;
-           const envStarterAnnual = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY;
-           const envProMonthly = process.env.STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
-           const envProAnnual = process.env.STRIPE_PRICE_MUSICSCALE_PRO_YEARLY || process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
+           const isUSD = (process.env.MUSICSCALE_DEFAULT_CURRENCY || '').toLowerCase() === 'usd';
+           const proActivePrice = process.env.MUSICSCALE_PRO_ACTIVE_PRICE || 'launch';
+           
+           const envStarterMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY;
+           const envStarterAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY;
+           
+           const envAdvancedMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY;
+           const envAdvancedAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY;
+           
+           let envProMonthly, envProAnnual;
+           
+           if (proActivePrice === 'standard') {
+             envProMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY;
+             envProAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY;
+           } else {
+             envProMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY;
+             envProAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY;
+           }
+           
+           envProMonthly = envProMonthly || process.env.STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
+           envProAnnual = envProAnnual || process.env.STRIPE_PRICE_MUSICSCALE_PRO_YEARLY || process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
            
            if (price.id === envStarterMonthly) featureFallback = 'starter_monthly';
            if (price.id === envStarterAnnual) featureFallback = 'starter_yearly';
+           if (price.id === envAdvancedMonthly) featureFallback = 'advanced_monthly';
+           if (price.id === envAdvancedAnnual) featureFallback = 'advanced_yearly';
            if (price.id === envProMonthly) featureFallback = 'pro_monthly';
            if (price.id === envProAnnual) featureFallback = 'pro_yearly';
            if (price.id === (process.env.STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM || process.env.STRIPE_PRICE_SETUP_PREMIUM)) featureFallback = 'setup_premium';
@@ -259,10 +301,27 @@ export class BillingService {
       });
 
       const envIdToLookupKey: Record<string, string> = {};
-      const envStarterMonthly = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY;
-      const envStarterAnnual = process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY;
-      const envProMonthly = process.env.STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
-      const envProAnnual = process.env.STRIPE_PRICE_MUSICSCALE_PRO_YEARLY || process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
+      const isUSD = (process.env.MUSICSCALE_DEFAULT_CURRENCY || '').toLowerCase() === 'usd';
+      const proActivePrice = process.env.MUSICSCALE_PRO_ACTIVE_PRICE || 'launch';
+      
+      const envStarterMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY;
+      const envStarterAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY;
+      
+      const envAdvancedMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY;
+      const envAdvancedAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY;
+      
+      let envProMonthly, envProAnnual;
+      
+      if (proActivePrice === 'standard') {
+        envProMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY;
+        envProAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY;
+      } else {
+        envProMonthly = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY;
+        envProAnnual = isUSD ? process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY_USD : process.env.STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY;
+      }
+      
+      envProMonthly = envProMonthly || process.env.STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || process.env.STRIPE_PRICE_MONTHLY;
+      envProAnnual = envProAnnual || process.env.STRIPE_PRICE_MUSICSCALE_PRO_YEARLY || process.env.STRIPE_PRICE_ID_ANNUAL || process.env.STRIPE_PRICE_ANNUAL;
       
       const envSetupPremium = process.env.STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM || process.env.STRIPE_PRICE_SETUP_PREMIUM;
       const envTrainingExpress = process.env.STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS || process.env.STRIPE_PRICE_TRAINING_EXPRESS;
@@ -271,6 +330,8 @@ export class BillingService {
 
       if (envStarterMonthly) envIdToLookupKey[envStarterMonthly] = 'musicscale_starter_monthly';
       if (envStarterAnnual) envIdToLookupKey[envStarterAnnual] = 'musicscale_starter_yearly';
+      if (envAdvancedMonthly) envIdToLookupKey[envAdvancedMonthly] = 'musicscale_advanced_monthly';
+      if (envAdvancedAnnual) envIdToLookupKey[envAdvancedAnnual] = 'musicscale_advanced_yearly';
       if (envProMonthly) envIdToLookupKey[envProMonthly] = 'musicscale_pro_monthly';
       if (envProAnnual) envIdToLookupKey[envProAnnual] = 'musicscale_pro_yearly';
       if (envSetupPremium) envIdToLookupKey[envSetupPremium] = 'musicscale_setup_premium';

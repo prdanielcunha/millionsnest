@@ -13,7 +13,8 @@ export interface PlanFeatures {
 // Plan definitions based on current products (example setup)
 export const PLAN_FEATURES: PlanFeatures = {
   free: [],
-  starter: ['ai_import'],
+  starter: [],
+  advanced: ['analytics'],
   pro: ['ai_import', 'multitrack', 'analytics', 'premium_theme']
 };
 
