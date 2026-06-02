@@ -206,17 +206,30 @@ function getEnvVar(name: string): string | undefined {
 export function priceIdToMusicScalePlan(priceId: string | null | undefined): MusicScalePlan {
   if (!priceId) return 'starter';
 
-  const starterMonthly = getEnvVar('STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY');
-  const starterAnnual = getEnvVar('STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY');
+  const isUSD = (getEnvVar('MUSICSCALE_DEFAULT_CURRENCY') || '').toLowerCase() === 'usd';
+  const proActivePrice = getEnvVar('MUSICSCALE_PRO_ACTIVE_PRICE') || 'launch';
 
-  const advancedMonthly = getEnvVar('STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY');
-  const advancedAnnual = getEnvVar('STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY');
+  const starterMonthly = isUSD ? getEnvVar('STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY_USD') : getEnvVar('STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY');
+  const starterAnnual = isUSD ? getEnvVar('STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY_USD') : getEnvVar('STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY');
 
-  const proMonthly =
+  const advancedMonthly = isUSD ? getEnvVar('STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY_USD') : getEnvVar('STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY');
+  const advancedAnnual = isUSD ? getEnvVar('STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY_USD') : getEnvVar('STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY');
+
+  let proMonthly, proAnnual;
+  
+  if (proActivePrice === 'standard') {
+    proMonthly = isUSD ? getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY_USD') : getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY');
+    proAnnual = isUSD ? getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY_USD') : getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY');
+  } else {
+    proMonthly = isUSD ? getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY_USD') : getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY');
+    proAnnual = isUSD ? getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY_USD') : getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY');
+  }
+
+  proMonthly = proMonthly ||
     getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY') ||
     getEnvVar('STRIPE_PRICE_ID_MONTHLY') ||
     getEnvVar('STRIPE_PRICE_MONTHLY');
-  const proAnnual =
+  proAnnual = proAnnual ||
     getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_YEARLY') ||
     getEnvVar('STRIPE_PRICE_ID_ANNUAL') ||
     getEnvVar('STRIPE_PRICE_ANNUAL');
@@ -230,6 +243,37 @@ export function priceIdToMusicScalePlan(priceId: string | null | undefined): Mus
   if ((proMonthly && priceId === proMonthly) || (proAnnual && priceId === proAnnual)) {
     return 'pro';
   }
+
+  // Check all variations to cover fallback/migrations safely
+  const allStripeLookups = [
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY_USD'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY_USD'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY')
+  ];
+  if (allStripeLookups.includes(priceId)) return 'starter';
+
+  const allAdvancedLookups = [
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY_USD'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY_USD'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY')
+  ];
+  if (allAdvancedLookups.includes(priceId)) return 'advanced';
+
+  const allProLookups = [
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY_USD'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY_USD'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY_USD'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY_USD'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY'),
+    getEnvVar('STRIPE_PRICE_MUSICSCALE_PRO_YEARLY')
+  ];
+  if (allProLookups.includes(priceId)) return 'pro';
 
   // Fallback checks using string pattern matching (excellent for development or mock systems)
   const idLower = priceId.toLowerCase();
