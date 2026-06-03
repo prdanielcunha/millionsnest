@@ -17,7 +17,7 @@ interface UserProfile {
   activeOrganizationId?: string;
   organizations?: string[]; // Standardized ecosystem field
   subscriptionStatus?: string; // Standardized ecosystem field
-  systemRole?: 'ceo' | 'admin';
+  systemRole?: 'ceo' | 'admin' | 'global_admin' | 'user';
   lastLoginAt: any;
   createdAt: any;
   updatedAt?: any;

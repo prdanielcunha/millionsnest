@@ -1,5 +1,7 @@
 import { auth } from '../lib/firebase.js';
 import { ECOSYSTEM_APPS } from './apps.js';
+import { resolveUserRoleDisplay } from './roleResolver.js';
+import { isGlobalPrivilegedUser } from './permissionService.js';
 
 export async function openEcosystemModule(
   moduleKey: string,
@@ -41,12 +43,34 @@ export async function openEcosystemModule(
      
      const handoff = await response.json();
      
+     const roleDisplay = resolveUserRoleDisplay({
+       userProfile: profile,
+       organizationMember: { role: currentUserPerms?.owner ? 'owner' : (currentUserPerms?.admin ? 'admin' : 'member') } // approximate org role from perms if actual role not passed
+     });
+
      const context = {
          appId: moduleKey,
          orgId: handoff.orgId,
          userId: handoff.uid,
          customToken: handoff.customToken,
          expiresAt: handoff.expiresAt,
+         user: {
+           uid: user.uid,
+           email: user.email,
+           displayName: user.displayName,
+           systemRole: profile.systemRole || 'user',
+           roleDisplay
+         },
+         organization: {
+           id: organization.id,
+           name: organization.name,
+           organizationRole: roleDisplay.organizationRole
+         },
+         capabilities: {
+           isGlobalPrivilegedUser: isGlobalPrivilegedUser(profile),
+           canBypassBilling: isGlobalPrivilegedUser(profile),
+           canUseAllFeatures: isGlobalPrivilegedUser(profile)
+         },
          protocolVersion: '1.0.0'
      };
      

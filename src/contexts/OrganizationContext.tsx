@@ -3,6 +3,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { useAuth } from "./AuthContext.js";
 import { withTimeout } from "../lib/utils.js";
+import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
 import { 
   MUSIC_SCALE_PLANS, 
   resolveMusicScalePlan, 
@@ -168,14 +169,14 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
   const hasPermission = useCallback((permissionName: string) => {
     // If the user is a global 'ceo', they might bypass some checks globally or within the org
-    if (profile?.systemRole === 'ceo' || profile?.systemRole === 'admin') {
+    if (isGlobalPrivilegedUser(profile)) {
       return true;
     }
     
     // Otherwise fallback to memberRole permissions
     if (!memberRole?.permissions) return false;
     return !!memberRole.permissions[permissionName];
-  }, [profile?.systemRole, memberRole?.permissions]);
+  }, [profile, memberRole?.permissions]);
 
   const contextValue = useMemo(() => ({
     organization,

@@ -7,6 +7,7 @@ import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
 import { ECOSYSTEM_APPS } from '../lib/apps.js';
 import { addDoc, collection } from 'firebase/firestore';
 import { db } from '../lib/firebase.js';
+import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 
 interface PublicOrg {
   id: string;
@@ -43,7 +44,8 @@ export function OrganizationPublicPage() {
   // Check if current user is part of this org
   const isMember = profile?.organizationId === org?.id || profile?.organizations?.includes(org?.id || '');
   const userRole = isMember ? profile?.organizationRole || 'member' : null;
-  const isAdmin = userRole === 'owner' || userRole === 'admin' || profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin';
+  const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+  const isAdmin = userRole === 'owner' || userRole === 'admin' || isGlobalAdmin;
 
   const handleGenerateInvite = async () => {
      if (!isAdmin || !org) return;

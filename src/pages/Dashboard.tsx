@@ -17,6 +17,7 @@ import { feedback } from '../packages/ui/feedback.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from "../lib/musicScalePlans.js";
 import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
+import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
 
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
@@ -892,7 +893,10 @@ export function Dashboard() {
   };
 
   const currentUserData = members.find(m => m.id === user?.uid);
-  const displayRole = isGlobalAdmin ? 'owner' : (currentUserData?.role || 'member');
+  const resolvedRole = resolveUserRoleDisplay({
+    userProfile: profile,
+    organizationMember: currentUserData
+  });
   const currentUserPerms = isGlobalAdmin
     ? normalizePermissions(undefined, 'owner', undefined)
     : normalizePermissions(currentUserData?.permissions, currentUserData?.role || 'member', currentUserData?.permissionsVersion);
@@ -1001,15 +1005,31 @@ export function Dashboard() {
                 
                 <div className="flex flex-wrap items-center gap-3 mt-2">
                   <div className="flex items-center gap-2">
-                     <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-white/10 text-[#F5F7FA] border border-white/10">
-                       {displayRole === 'owner' ? 'Dono' : displayRole === 'admin' ? 'Administrador' : displayRole === 'leader' ? 'Líder' : 'Membro'}
-                     </span>
-                     
-                     {isGlobalAdmin && (
-                       <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                         {profile?.systemRole === 'ceo' ? 'CEO' : 'Admin Global'}
-                       </span>
-                     )}
+                     {resolvedRole.badges.map((badge, idx) => {
+                       let bgClass = "bg-white/10";
+                       let textClass = "text-[#F5F7FA]";
+                       let borderClass = "border-white/10";
+                       
+                       if (badge.tone === 'gold') {
+                         bgClass = "bg-yellow-500/10";
+                         textClass = "text-yellow-400";
+                         borderClass = "border-yellow-500/20";
+                       } else if (badge.tone === 'blue') {
+                         bgClass = "bg-blue-500/10";
+                         textClass = "text-blue-400";
+                         borderClass = "border-blue-500/20";
+                       } else if (badge.tone === 'purple') {
+                         bgClass = "bg-purple-500/10";
+                         textClass = "text-purple-400";
+                         borderClass = "border-purple-500/20";
+                       }
+                       
+                       return (
+                         <span key={idx} className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${bgClass} ${textClass} border ${borderClass}`}>
+                           {badge.label}
+                         </span>
+                       );
+                     })}
                   </div>
                   <div className="hidden md:block w-px h-4 bg-white/10" />
                   <p className="text-[#A0A7B5] text-sm">

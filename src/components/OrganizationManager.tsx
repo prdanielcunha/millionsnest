@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { PremiumEmptyState } from '../packages/ui/empty-state.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { normalizeSlug } from '../lib/slug.js';
+import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 
 type OrgTab = 'settings' | 'members' | 'apps' | 'roles' | 'billing' | 'audit';
 
@@ -38,7 +39,7 @@ export function OrganizationManager({
   const [activeTab, setActiveTabInternal] = useState<OrgTab>((initialTab as OrgTab) || 'settings');
   const [slugStatus, setSlugStatus] = useState<string | null>(null);
   const [adminOrgs, setAdminOrgs] = useState<any[]>([]);
-  const isGlobalAdmin = profile?.systemRole === 'ceo' || profile?.systemRole === 'admin';
+  const isGlobalAdmin = isGlobalPrivilegedUser(profile);
 
   useEffect(() => {
     if (isGlobalAdmin) {
@@ -113,7 +114,7 @@ export function OrganizationManager({
     { id: 'audit', label: 'Auditoria e Logs', icon: Settings, perms: ['organization.audit.view'] }
   ];
 
-  const visibleTabs = TABS.filter(t => t.perms.some(p => currentUserPerms[p] || profile?.systemRole === 'ceo' || profile?.systemRole === 'admin'));
+  const visibleTabs = TABS.filter(t => t.perms.some(p => currentUserPerms[p] || isGlobalAdmin));
 
   return (
     <div className="flex flex-col gap-6">
@@ -289,7 +290,7 @@ export function OrganizationManager({
                <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                  <h3 className="text-lg font-semibold text-[#F5F7FA]">Membros & Convites</h3>
                  
-                 {(currentUserRole === 'owner' || currentUserRole === 'admin' || profile?.systemRole === 'ceo') && (
+                 {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
                    <div className="flex items-center gap-3">
                      <button onClick={onOpenInviteModal} className="flex items-center gap-2 px-4 py-2 bg-[#F5F7FA] text-[#050505] rounded-xl hover:bg-white transition-colors text-sm font-semibold shadow-[0_0_20px_rgba(255,255,255,0.1)]">
                        Convidar Membro
@@ -322,11 +323,11 @@ export function OrganizationManager({
                                // Cannot edit yourself if you are an owner, it could break org access until someone else is owner
                                (member.id === user?.uid && member.role === 'owner') ||
                                // Admins cannot change owner role
-                               (member.role === 'owner' && currentUserRole !== 'owner' && profile?.systemRole !== 'ceo' && profile?.systemRole !== 'global_admin')
+                               (member.role === 'owner' && currentUserRole !== 'owner' && !isGlobalAdmin)
                             }
                             className={`bg-[#0B0F19] border border-white/10 text-[#F5F7FA] text-xs font-medium rounded-lg px-3 py-1.5 outline-none focus:border-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
-                            {(currentUserRole === 'owner' || profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin' || member.role === 'owner') && <option value="owner">Dono (Owner)</option>}
+                            {(currentUserRole === 'owner' || isGlobalAdmin || member.role === 'owner') && <option value="owner">Dono (Owner)</option>}
                             <option value="admin">Administrador</option>
                             <option value="leader">Líder</option>
                             <option value="secretary">Operador / Secretaria</option>
@@ -334,10 +335,10 @@ export function OrganizationManager({
                             <option value="guest">Visitante (Leitura)</option>
                           </select>
                           
-                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || profile?.systemRole === 'ceo') && (
+                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
                             <button
                                onClick={() => handleRemoveMember(member.id)}
-                               disabled={member.role === 'owner' && (currentUserRole !== 'owner' && profile?.systemRole !== 'ceo')}
+                               disabled={member.role === 'owner' && (currentUserRole !== 'owner' && !isGlobalAdmin)}
                                className="text-xs text-red-500/70 hover:text-red-500 font-medium px-2 py-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                                {member.id === user?.uid ? 'Sair' : 'Remover'}
@@ -372,7 +373,7 @@ export function OrganizationManager({
                            </div>
                          </div>
                          
-                         {(currentUserRole === 'owner' || currentUserRole === 'admin' || profile?.systemRole === 'ceo') && (
+                         {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
                            <button onClick={() => handleRevokeInvite(invite.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 rounded-lg">
                              Revogar
                            </button>
