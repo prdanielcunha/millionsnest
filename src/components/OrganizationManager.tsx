@@ -5,6 +5,7 @@ import { PremiumEmptyState } from '../packages/ui/empty-state.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { normalizeSlug } from '../lib/slug.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
+import { canChangeOrganizationRole } from '../lib/roleResolver.js';
 
 type OrgTab = 'settings' | 'members' | 'apps' | 'roles' | 'billing' | 'audit';
 
@@ -320,19 +321,22 @@ export function OrganizationManager({
                             value={member.role || 'member'}
                             onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
                             disabled={
-                               // Cannot edit yourself if you are an owner, it could break org access until someone else is owner
-                               (member.id === user?.uid && member.role === 'owner') ||
-                               // Admins cannot change owner role
-                               (member.role === 'owner' && currentUserRole !== 'owner' && !isGlobalAdmin)
+                               // Se não puder alterar o cargo do alvo para o mesmo cargo atual, então não pode editá-lo
+                               !canChangeOrganizationRole(currentUserRole, member.role, member.role, member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed
                             }
                             className={`bg-[#0B0F19] border border-white/10 text-[#F5F7FA] text-xs font-medium rounded-lg px-3 py-1.5 outline-none focus:border-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
-                            {(currentUserRole === 'owner' || isGlobalAdmin || member.role === 'owner') && <option value="owner">Dono (Owner)</option>}
-                            <option value="admin">Administrador</option>
-                            <option value="leader">Líder</option>
-                            <option value="secretary">Operador / Secretaria</option>
-                            <option value="member">Membro Padrão</option>
-                            <option value="guest">Visitante (Leitura)</option>
+                            {canChangeOrganizationRole(currentUserRole, member.role, 'owner', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="owner">Dono (Owner)</option>}
+                            {canChangeOrganizationRole(currentUserRole, member.role, 'admin', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="admin">Administrador</option>}
+                            {canChangeOrganizationRole(currentUserRole, member.role, 'leader', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="leader">Líder</option>}
+                            {canChangeOrganizationRole(currentUserRole, member.role, 'secretary', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="secretary">Operador / Secretaria</option>}
+                            {canChangeOrganizationRole(currentUserRole, member.role, 'member', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="member">Membro Padrão</option>}
+                            {canChangeOrganizationRole(currentUserRole, member.role, 'guest', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="guest">Visitante (Leitura)</option>}
+                            
+                            {/* Se nenhuma permissão acima der certo, mas for impossível renderizar vazio e manter o select, renderizamos a opcao atual desabilitada */}
+                            {!canChangeOrganizationRole(currentUserRole, member.role, member.role, member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && 
+                               <option value={member.role}>{member.role}</option>
+                            }
                           </select>
                           
                           {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (

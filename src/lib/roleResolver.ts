@@ -1,6 +1,126 @@
 export type SystemRole = 'ceo' | 'admin' | 'global_admin' | 'user';
 export type OrganizationRole = 'owner' | 'admin' | 'leader' | 'member';
 
+export const SYSTEM_ROLE_RANK: Record<string, number> = {
+  user: 0,
+  admin: 80,
+  global_admin: 80,
+  ceo: 100,
+};
+
+export const ORG_ROLE_RANK: Record<string, number> = {
+  guest: 5,
+  member: 10,
+  secretary: 20,
+  leader: 30,
+  admin: 70,
+  owner: 100,
+};
+
+export function canChangeSystemRole(
+  actorRole: string | undefined | null,
+  targetRole: string | undefined | null,
+  newRole: string | undefined | null,
+  isSelfDemotion: boolean = false,
+  activeCeosCount: number = 0
+): { allowed: boolean; message?: string } {
+  const actorRank = SYSTEM_ROLE_RANK[actorRole || 'user'] || 0;
+  const targetRank = SYSTEM_ROLE_RANK[targetRole || 'user'] || 0;
+  const newRank = SYSTEM_ROLE_RANK[newRole || 'user'] || 0;
+
+  if (actorRank === 0) {
+    return { allowed: false, message: 'Você não tem permissão para alterar cargos globais.' };
+  }
+
+  // CEO rules
+  if (actorRank === 100) {
+    if (isSelfDemotion) {
+       if (activeCeosCount <= 1) {
+          return { allowed: false, message: 'Não é possível remover o último CEO do ecossistema.' };
+       }
+       return { allowed: true };
+    }
+    if (targetRank === 100) {
+       return { allowed: false, message: 'Você não pode rebaixar, remover ou alterar o cargo de outro CEO do ecossistema.' };
+    }
+    return { allowed: true };
+  }
+
+  // Admin rules
+  if (actorRank === 80) {
+    if (newRank > actorRank) {
+       return { allowed: false, message: 'Você não pode conceder um cargo acima do seu nível de acesso.' };
+    }
+    if (targetRank >= actorRank && !isSelfDemotion) {
+       return { allowed: false, message: 'Você não pode alterar o cargo de um usuário com o mesmo ou maior nível de acesso.' };
+    }
+    return { allowed: true };
+  }
+
+  return { allowed: false, message: 'Acesso negado.' };
+}
+
+export function canChangeOrganizationRole(
+  actorRole: string | undefined | null,
+  targetRole: string | undefined | null,
+  newRole: string | undefined | null,
+  isSelfDemotion: boolean = false,
+  activeOwnersCount: number = 0,
+  isGlobalAdmin: boolean = false
+): { allowed: boolean; message?: string } {
+  if (isGlobalAdmin) {
+    return { allowed: true };
+  }
+
+  const actorRank = ORG_ROLE_RANK[actorRole || 'member'] || 0;
+  const targetRank = ORG_ROLE_RANK[targetRole || 'member'] || 0;
+  const newRank = ORG_ROLE_RANK[newRole || 'member'] || 0;
+
+  if (actorRank < 70) {
+    return { allowed: false, message: 'Você não tem permissão para gerenciar funções neste nível.' };
+  }
+
+  // Owner rules
+  if (actorRank === 100) {
+    if (isSelfDemotion) {
+       if (activeOwnersCount <= 1) {
+          return { allowed: false, message: 'Não é possível remover o último dono da organização.' };
+       }
+       return { allowed: true };
+    }
+    if (targetRank === 100) {
+       return { allowed: false, message: 'Você não pode rebaixar ou alterar outro dono. Apenas o próprio usuário pode se rebaixar.' };
+    }
+    return { allowed: true };
+  }
+
+  // Admin rules
+  if (actorRank === 70) {
+    if (newRank >= 100) {
+       return { allowed: false, message: 'Você não pode conceder ou alterar um cargo acima do seu nível na organização.' };
+    }
+    if (targetRank >= 70 && !isSelfDemotion) {
+       return { allowed: false, message: 'Você não pode alterar outro administrador ou dono. Apenas donos podem alterar administradores.' };
+    }
+    return { allowed: true };
+  }
+
+  return { allowed: false, message: 'Acesso negado.' };
+}
+
+export function canAssignSystemRole(actor: { systemRole?: string | null } | null | undefined, targetRole: string): boolean {
+  const actorRank = SYSTEM_ROLE_RANK[actor?.systemRole || 'user'] || 0;
+  const targetRank = SYSTEM_ROLE_RANK[targetRole || 'user'] || 0;
+  return actorRank >= targetRank && actorRank > 0;
+}
+
+export function canAssignOrganizationRole(actorMember: { role?: string } | null | undefined, targetRole: string, isGlobalAdmin: boolean = false): boolean {
+  if (isGlobalAdmin) return true;
+  const actorRank = ORG_ROLE_RANK[actorMember?.role || 'member'] || 0;
+  const targetRank = ORG_ROLE_RANK[targetRole || 'member'] || 0;
+  return actorRank >= targetRank && actorRank >= 70;
+}
+
 export type ResolvedUserRoleDisplay = {
   primaryRoleLabel: string;
   secondaryRoleLabel?: string;

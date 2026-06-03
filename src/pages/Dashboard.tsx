@@ -536,59 +536,27 @@ export function Dashboard() {
     try {
       const targetMember = members.find(m => m.id === memberId);
       if (!targetMember) return;
+      if (!user) return;
 
-      const isTargetOwner = targetMember.role === 'owner';
-      const isDowngradingOwner = isTargetOwner && newRole !== 'owner';
+      const token = await user.getIdToken();
+      const orgId = activeContextOrgId;
       
-      if (isDowngradingOwner) {
-         // Check if they are the last owner
-         const ownersCount = members.filter(m => m.role === 'owner').length;
-         if (ownersCount <= 1) {
-            alert("Ação negada: A organização precisa ter pelo menos um dono. Promova outro membro a dono antes de alterar sua própria função.");
-            return;
-         }
-      }
+      const res = await fetch(`/api/organizations/${orgId}/members/${memberId}/role`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ newRole })
+      });
 
-      // If making someone an owner, verify multiple owners logic
-      if (newRole === 'owner') {
-         if (profile?.organizationRole !== 'owner' && !isGlobalAdmin) {
-            alert("Acesso negado: Apenas um dono atual pode promover outro membro a dono.");
-            return;
-         }
+      if (!res.ok) {
+        const errorData = await res.json();
+        alert(`Erro: ${errorData.error}`);
+        return;
       }
 
       const perms = getDefaultPermissions(newRole);
-
-      // update in users collection
-      const userRef = doc(db, "users", memberId);
-      await updateDoc(userRef, { role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION });
-      
-      // update in organization_members collection (legacy compat)
-      const orgId = activeContextOrgId;
-      const memberOrgRef = doc(db, "organization_members", `${memberId}_${orgId}`);
-      await setDoc(memberOrgRef, { role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION }, { merge: true });
-      
-      // update in new architecture: organizations/{orgId}/members/{uid}
-      const newMemberRef = doc(db, `organizations/${orgId}/members`, memberId);
-      await setDoc(newMemberRef, { 
-        role: newRole, 
-        permissions: perms, 
-        permissionsVersion: CURRENT_PERMISSIONS_VERSION 
-      }, { merge: true });
-      
-      if (isGlobalAdmin && profile?.organizationRole !== 'owner') {
-        createAuditLog({
-           actorUid: user!.uid,
-           actorEmail: user!.email || '',
-           actorSystemRole: profile?.systemRole,
-           action: 'admin_updated_member_role',
-           targetOrganizationId: orgId,
-           targetUserId: memberId,
-           metadata: { newRole },
-           source: 'global_admin'
-        });
-      }
-
       setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION } : m));
     } catch (e) {
       console.error("Erro ao atualizar função", e);

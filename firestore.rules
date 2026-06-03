@@ -120,7 +120,13 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated() && (userId == request.auth.uid || isSystemAdmin() || ('organizationId' in resource.data && checkOrgAccess(resource.data.organizationId)));
       allow create: if isAuthenticated() && (userId == request.auth.uid || isSystemAdmin() || hasOrgContext(incoming()));
-      allow update: if isAuthenticated() && (isOwner(userId) || isSystemAdmin() || (resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId)));
+      allow update: if isAuthenticated() && (
+        isSystemAdmin() ||
+        (
+          (isOwner(userId) || (resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId))) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['systemRole', 'lifetimeAccess', 'capabilities', 'globalRole'])
+        )
+      );
       allow delete: if isAuthenticated() && (isSystemAdmin() || (resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId)));
     }
 

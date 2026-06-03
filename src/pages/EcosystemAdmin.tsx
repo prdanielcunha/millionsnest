@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext.js";
 import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EcosystemShell } from "../components/EcosystemShell.js";
+import { canChangeSystemRole } from "../lib/roleResolver.js";
 
 function ActivityIcon({ className }: { className?: string }) {
   return (
@@ -26,7 +27,7 @@ function ActivityIcon({ className }: { className?: string }) {
 }
 
 export function EcosystemAdmin() {
-  const { profile, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const navigate = useNavigate();
   const [users, setUsers] = useState<any[]>([]);
   const [organizations, setOrganizations] = useState<any[]>([]);
@@ -65,9 +66,24 @@ export function EcosystemAdmin() {
     if (!window.confirm(`Tem certeza que deseja atualizar o nível de acesso deste usuário?`)) return;
     
     try {
-      await updateDoc(doc(db, "users", userId), {
-        systemRole: newRole === 'user' ? null : newRole
+      if (!user) return;
+      const token = await user.getIdToken();
+      
+      const res = await fetch(`/api/admin/users/${userId}/role`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ newRole })
       });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        alert(`Erro: ${errorData.error}`);
+        return;
+      }
+      
       await loadEcosystemData();
     } catch (err) {
       console.error("Error updating role:", err);
@@ -191,15 +207,39 @@ export function EcosystemAdmin() {
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          {profile?.systemRole === 'ceo' && user.id !== profile.uid && (
+                          {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin') && user.id !== profile.uid && (
                             <select
                               value={user.systemRole || 'user'}
                               onChange={(e) => handleUpdateRole(user.id, user.systemRole, e.target.value)}
-                              className="bg-[#050505] border border-white/10 rounded-lg px-2 py-1 text-xs text-[#F5F7FA] focus:outline-none"
+                              disabled={
+                                !canChangeSystemRole(
+                                  profile?.systemRole,
+                                  user.systemRole,
+                                  user.systemRole,
+                                  user.id === profile?.uid,
+                                  users.filter(u => u.systemRole === 'ceo').length
+                                ).allowed
+                              }
+                              className="bg-[#050505] border border-white/10 rounded-lg px-2 py-1 text-xs text-[#F5F7FA] focus:outline-none disabled:opacity-50"
                             >
-                              <option value="user">Remover Acesso Global</option>
-                              <option value="admin">Tornar Admin Global</option>
-                              <option value="ceo">Tornar CEO</option>
+                              {canChangeSystemRole(profile?.systemRole, user.systemRole, 'user', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                                <option value="user">Remover Acesso Global</option>
+                              )}
+                              {canChangeSystemRole(profile?.systemRole, user.systemRole, 'admin', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                                <option value="admin">Tornar Admin Global</option>
+                              )}
+                              {canChangeSystemRole(profile?.systemRole, user.systemRole, 'ceo', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                                <option value="ceo">Tornar CEO</option>
+                              )}
+                              
+                              {/* Fallback description option when disabled */}
+                              {!canChangeSystemRole(profile?.systemRole, user.systemRole, 'user', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
+                               !canChangeSystemRole(profile?.systemRole, user.systemRole, 'admin', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
+                               !canChangeSystemRole(profile?.systemRole, user.systemRole, 'ceo', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                                <option value={user.systemRole || 'user'}>
+                                  {user.systemRole === 'ceo' ? 'CEO' : user.systemRole === 'admin' || user.systemRole === 'global_admin' ? 'Admin Global' : 'Usuário Padrão'}
+                                </option>
+                              )}
                             </select>
                           )}
                         </td>
