@@ -11,6 +11,7 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
+import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 
 interface EcosystemShellProps {
   children: ReactNode;
@@ -240,7 +241,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
 
                             {ECOSYSTEM_APPS.map(app => {
                                // Safe check in case organization is not loaded yet
-                               const isGlobalAdmin = profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin';
+                               const isGlobalAdmin = isGlobalPrivilegedUser(profile);
                                const hasMusicScalePlan = organization?.subscriptionPlan && organization?.subscriptionPlan !== 'free';
                                const hasAccess = profile?.products?.includes('musicscale') || isGlobalAdmin || hasMusicScalePlan;
                                

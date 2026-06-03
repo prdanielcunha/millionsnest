@@ -16,6 +16,8 @@ import { eventBus } from "../packages/events/index.js";
 import { feedback } from '../packages/ui/feedback.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from "../lib/musicScalePlans.js";
+import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
+import { createAuditLog } from "../lib/audit.js";
 
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
@@ -94,6 +96,17 @@ export function Dashboard() {
     // Mostrando feedback enquanto processa o handoff
     const toastId = feedback.loading(`Iniciando ${app.name}...`);
     try {
+      if (isGlobalAdmin && profile?.organizationRole !== 'owner') {
+         createAuditLog({
+           actorUid: user!.uid,
+           actorEmail: user!.email || '',
+           actorSystemRole: profile?.systemRole,
+           action: 'admin_bypassed_app_launch',
+           targetOrganizationId: activeContextOrgId,
+           appKey: app.id,
+           source: 'global_admin'
+         });
+      }
       await openEcosystemModule(app.id, user, profile, organization, permsMap);
       feedback.dismiss(toastId);
     } catch (e: any) {
@@ -162,9 +175,23 @@ export function Dashboard() {
   const [isAnnual, setIsAnnual] = useState(true);
 
   const [adminSelectedOrgId, setAdminSelectedOrgId] = useState<string | null>(null);
-  const activeContextOrgId = (profile?.systemRole === 'ceo' || profile?.systemRole === 'admin') && adminSelectedOrgId 
+  const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+  const activeContextOrgId = isGlobalAdmin && adminSelectedOrgId 
     ? adminSelectedOrgId 
     : (profile?.organizationId || user?.uid);
+
+  useEffect(() => {
+    if (isGlobalAdmin && adminSelectedOrgId && user) {
+       createAuditLog({
+         actorUid: user.uid,
+         actorEmail: user.email || '',
+         actorSystemRole: profile?.systemRole,
+         action: 'admin_accessed_organization',
+         targetOrganizationId: adminSelectedOrgId,
+         source: 'global_admin'
+       });
+    }
+  }, [adminSelectedOrgId, isGlobalAdmin, user?.uid]);
 
   const openBillingPortal = async () => {
     if (!user) return;
@@ -304,7 +331,7 @@ export function Dashboard() {
             currentMembers = await Promise.all(memsPromises);
           } catch (memErr) {
             console.warn("Could not fetch members via client SDK:", memErr);
-            if (isCEO) {
+            if (isGlobalAdmin) {
               const token = await user.getIdToken();
               const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -315,7 +342,7 @@ export function Dashboard() {
               }
             }
           }
-        } else if (isCEO) {
+        } else if (isGlobalAdmin) {
            // Try server API for org data
            const token = await user.getIdToken();
            const res = await fetch(`/api/admin/organizations`, {
@@ -340,7 +367,7 @@ export function Dashboard() {
         }
       } catch (err: any) {
         console.warn("[Dashboard] Client fetch failed for org data:", err);
-        if (isCEO) {
+        if (isGlobalAdmin) {
            // Fallback to server API
            try {
               const token = await user.getIdToken();
@@ -523,7 +550,7 @@ export function Dashboard() {
 
       // If making someone an owner, verify multiple owners logic
       if (newRole === 'owner') {
-         if (profile?.organizationRole !== 'owner' && profile?.systemRole !== 'ceo' && profile?.systemRole !== 'global_admin') {
+         if (profile?.organizationRole !== 'owner' && !isGlobalAdmin) {
             alert("Acesso negado: Apenas um dono atual pode promover outro membro a dono.");
             return;
          }
@@ -548,6 +575,19 @@ export function Dashboard() {
         permissionsVersion: CURRENT_PERMISSIONS_VERSION 
       }, { merge: true });
       
+      if (isGlobalAdmin && profile?.organizationRole !== 'owner') {
+        createAuditLog({
+           actorUid: user!.uid,
+           actorEmail: user!.email || '',
+           actorSystemRole: profile?.systemRole,
+           action: 'admin_updated_member_role',
+           targetOrganizationId: orgId,
+           targetUserId: memberId,
+           metadata: { newRole },
+           source: 'global_admin'
+        });
+      }
+
       setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION } : m));
     } catch (e) {
       console.error("Erro ao atualizar função", e);
@@ -561,7 +601,7 @@ export function Dashboard() {
       if (!targetMember) return;
 
       if (targetMember.role === 'owner') {
-         if (profile?.organizationRole !== 'owner' && profile?.systemRole !== 'ceo' && profile?.systemRole !== 'global_admin') {
+         if (profile?.organizationRole !== 'owner' && !isGlobalAdmin) {
             alert("Ação negada: Somente o dono ou o suporte global pode remover um dono da organização.");
             return;
          }
@@ -603,6 +643,19 @@ export function Dashboard() {
       }
 
       setMembers(prev => prev.filter(m => m.id !== memberId));
+
+      if (isGlobalAdmin && profile?.organizationRole !== 'owner') {
+        createAuditLog({
+           actorUid: user!.uid,
+           actorEmail: user!.email || '',
+           actorSystemRole: profile?.systemRole,
+           action: 'admin_removed_member',
+           targetOrganizationId: orgId,
+           targetUserId: memberId,
+           metadata: { removedRole: targetMember.role },
+           source: 'global_admin'
+        });
+      }
       
       if (memberId === user?.uid) {
          // User removed themselves, redirect or clear org
@@ -619,7 +672,7 @@ export function Dashboard() {
       const orgId = overrideOrgId || activeContextOrgId;
       
       // Enforce user limits client-side securely
-      const entitlements = resolveMusicScaleEntitlements({ subscription, organization });
+      const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
       const maxUsersLimit = entitlements?.limits?.users ?? 10;
       const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
       
@@ -660,6 +713,18 @@ export function Dashboard() {
         setCopiedLink(true);
         setTimeout(() => setCopiedLink(false), 2000);
         analytics.track('invite_link_copied', { userId: user?.uid, organizationId: orgId, metadata: { role } });
+      }
+
+      if (isGlobalAdmin && profile?.organizationRole !== 'owner') {
+        createAuditLog({
+           actorUid: user!.uid,
+           actorEmail: user!.email || '',
+           actorSystemRole: profile?.systemRole,
+           action: 'admin_created_invite',
+           targetOrganizationId: orgId,
+           metadata: { role, method },
+           source: 'global_admin'
+        });
       }
     } catch (e) {
       console.error(e);
@@ -810,8 +875,7 @@ export function Dashboard() {
   const isTrialing = subscription?.status === "trialing";
   const isActive = subscription?.status === "active";
   const isCanceled = subscription?.status === "canceled";
-  const hasValidSubscription = isActive || isTrialing;
-  const isGlobalAdmin = profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin';
+  const hasValidSubscription = isActive || isTrialing || isGlobalAdmin;
   const hasMusicScaleAccess = profile?.products?.includes("musicscale") || hasValidSubscription || isGlobalAdmin || false;
   const showMusicScaleCard = hasMusicScaleAccess || subscription != null;
 
@@ -827,10 +891,9 @@ export function Dashboard() {
     navigate('/checkout');
   };
 
-  const isCEO = profile?.systemRole === 'ceo';
   const currentUserData = members.find(m => m.id === user?.uid);
-  const displayRole = isCEO ? 'owner' : (currentUserData?.role || 'member');
-  const currentUserPerms = isCEO
+  const displayRole = isGlobalAdmin ? 'owner' : (currentUserData?.role || 'member');
+  const currentUserPerms = isGlobalAdmin
     ? normalizePermissions(undefined, 'owner', undefined)
     : normalizePermissions(currentUserData?.permissions, currentUserData?.role || 'member', currentUserData?.permissionsVersion);
 
@@ -860,7 +923,7 @@ export function Dashboard() {
           >
             Visão Geral
           </button>
-          {(currentUserPerms['organization.settings.update'] || profile?.systemRole === 'ceo' || profile?.systemRole === 'admin') && (
+          {(currentUserPerms['organization.settings.update'] || isGlobalAdmin) && (
             <button 
               onClick={() => setActiveTab("organization")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "organization" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
@@ -883,7 +946,7 @@ export function Dashboard() {
             Minha Conta
           </button>
           
-          {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin') && (
+          {isGlobalAdmin && (
             <button 
               onClick={() => navigate("/admin/ecosystem")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap border-transparent text-[#2B85EB] hover:text-[#3B95FB] flex items-center gap-2`}
@@ -942,9 +1005,9 @@ export function Dashboard() {
                        {displayRole === 'owner' ? 'Dono' : displayRole === 'admin' ? 'Administrador' : displayRole === 'leader' ? 'Líder' : 'Membro'}
                      </span>
                      
-                     {profile?.systemRole === 'ceo' && (
+                     {isGlobalAdmin && (
                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                         CEO
+                         {profile?.systemRole === 'ceo' ? 'CEO' : 'Admin Global'}
                        </span>
                      )}
                   </div>
@@ -1020,7 +1083,7 @@ export function Dashboard() {
                              <Users className="w-3.5 h-3.5" /> Membros
                           </p>
                           {(() => {
-                            const entitlements = resolveMusicScaleEntitlements({ subscription, organization });
+                            const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
                             const maxUsersLimit = entitlements?.limits?.users ?? 10;
                             const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
                             const limitStr = maxUsersLimit === -1 ? 'Ilimitado' : maxUsersLimit;
@@ -1110,7 +1173,7 @@ export function Dashboard() {
                                   {app.requiredPlan !== 'free' ? `Requer plano ${app.requiredPlan}` : 'Em breve'}
                                 </button>
                               )}
-                              {isInstalled && (profile?.systemRole === 'ceo' || currentUserPerms['organization.billing.manage']) && (
+                              {isInstalled && (isGlobalAdmin || currentUserPerms['organization.billing.manage']) && (
                                 <button
                                    onClick={() => setConfigAppModal(app)}
                                    className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/10 transition-colors shrink-0"
@@ -1170,7 +1233,7 @@ export function Dashboard() {
                       <span className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-[#A0A7B5]" /> Equipe
                       </span>
-                      {(currentUserPerms['organization.members.manage'] || profile?.systemRole === 'ceo' || profile?.systemRole === 'admin') && (
+                      {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
                         <button onClick={() => setActiveTab('organization')} className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB]">
                           Gerenciar
                         </button>
@@ -1816,7 +1879,7 @@ export function Dashboard() {
         )}
       </AnimatePresence>
       {(() => {
-        const entitlements = resolveMusicScaleEntitlements({ subscription, organization });
+        const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
         const maxUsersLimit = entitlements?.limits?.users ?? 10;
         const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
         const isAtLimit = maxUsersLimit !== -1 && occupiedSlots >= maxUsersLimit;

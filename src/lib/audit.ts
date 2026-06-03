@@ -1,24 +1,31 @@
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase.js";
 
-interface AuditLogPayload {
+export interface AuditLogPayload {
   actorUid: string;
+  actorEmail?: string;
   actorRole?: string;
+  actorSystemRole?: string;
   action: string;
   targetId?: string;
-  organizationId: string;
+  targetUserId?: string;
+  targetOrganizationId?: string;
+  organizationId?: string;
+  appKey?: string;
   app?: string;
   metadata?: any;
+  source?: string;
 }
 
 export async function createAuditLog(payload: AuditLogPayload) {
   try {
-    const colRef = payload.organizationId 
-      ? collection(db, `organizations/${payload.organizationId}/audit_logs`)
+    const colRef = payload.organizationId || payload.targetOrganizationId
+      ? collection(db, `organizations/${payload.organizationId || payload.targetOrganizationId}/audit_logs`)
       : collection(db, "system_audit_logs");
       
     await addDoc(colRef, {
       ...payload,
+      createdAt: serverTimestamp(),
       timestamp: serverTimestamp(),
     });
   } catch (error) {

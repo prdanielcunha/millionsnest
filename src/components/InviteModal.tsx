@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Copy, Check, MessageCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useOrganization } from '../contexts/OrganizationContext.js';
+import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 
 interface InviteModalProps {
   isOpen: boolean;
@@ -35,11 +36,12 @@ export function InviteModal({
   const [isGenerating, setIsGenerating] = useState(false);
   const { profile, user } = useAuth();
   
-  const canInvite = profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin' || 
+  const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+  const canInvite = isGlobalAdmin || 
                     profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin';
 
   useEffect(() => {
-    if (isOpen && (profile?.systemRole === 'ceo' || profile?.systemRole === 'admin')) {
+    if (isOpen && isGlobalAdmin) {
       setLoadingOrgs(true);
       user?.getIdToken().then(token => {
         fetch('/api/admin/organizations', {
@@ -142,7 +144,7 @@ export function InviteModal({
               </div>
             ) : (
               <div className="space-y-6">
-                 {profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' ? (
+                 {isGlobalAdmin ? (
                    <div className="space-y-4">
                      <p className="text-[#A0A7B5] text-xs px-2 -mt-2">
                        Você está criando um convite como administrador global. Escolha abaixo para qual organização deseja enviar este convite.

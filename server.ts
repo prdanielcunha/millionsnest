@@ -213,11 +213,17 @@ export async function incrementMonthUsage(orgId: string, type: string, increment
 /**
  * Verifies if an organization has capacity for a monthly operation (e.g., library_import)
  */
-export async function canPerformOperation(orgId: string, type: string): Promise<{ allowed: boolean; current: number; limit: number; planName: string }> {
+export async function canPerformOperation(orgId: string, type: string, uid?: string): Promise<{ allowed: boolean; current: number; limit: number; planName: string }> {
   try {
     const dbInstance = getDb();
     if (!dbInstance) {
       return { allowed: true, current: 0, limit: -1, planName: 'starter' };
+    }
+
+    let userProfile = null;
+    if (uid) {
+      const userDoc = await dbInstance.collection('users').doc(uid).get();
+      userProfile = userDoc.exists ? userDoc.data() : null;
     }
 
     // Load subscription and organization doc
@@ -227,7 +233,7 @@ export async function canPerformOperation(orgId: string, type: string): Promise<
     const orgDoc = await dbInstance.collection('organizations').doc(orgId).get();
     const organization = orgDoc.exists ? orgDoc.data() : null;
 
-    const entitlements = resolveMusicScaleEntitlements({ subscription, organization });
+    const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile });
     
     let limit = -1;
     if (type === 'library_import') {
@@ -254,8 +260,8 @@ export async function canPerformOperation(orgId: string, type: string): Promise<
 /**
  * Throws an error if the operational limit has been reached
  */
-export async function assertCanPerformOperation(orgId: string, type: string): Promise<void> {
-  const check = await canPerformOperation(orgId, type);
+export async function assertCanPerformOperation(orgId: string, type: string, uid?: string): Promise<void> {
+  const check = await canPerformOperation(orgId, type, uid);
   if (!check.allowed) {
     throw new Error(`Limite mensal excedido! O plano atual (${check.planName}) permite no máximo ${check.limit} operações do tipo "${type}" por mês, e a organização já consumiu ${check.current}.`);
   }
@@ -874,7 +880,7 @@ async function startServer() {
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       if (!userRef.exists) return res.status(403).json({ error: 'Forbidden' });
       const userData = userRef.data();
-      if (userData?.systemRole !== 'ceo' && userData?.systemRole !== 'admin') {
+      if (userData?.systemRole !== 'ceo' && userData?.systemRole !== 'admin' && userData?.systemRole !== 'global_admin') {
          return res.status(403).json({ error: 'Acesso restrito' });
       }
 
@@ -904,7 +910,7 @@ async function startServer() {
 
       const userSnap = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userSnap.data();
-      if (userData?.systemRole !== 'ceo' && userData?.systemRole !== 'admin') {
+      if (userData?.systemRole !== 'ceo' && userData?.systemRole !== 'admin' && userData?.systemRole !== 'global_admin') {
          return res.status(403).json({ error: 'Acesso restrito' });
       }
 
@@ -951,7 +957,7 @@ async function startServer() {
       let hasAccess = false;
       const userSnap = await dbInstance.collection('users').doc(decodedToken.uid).get();
       const userData = userSnap.data();
-      if (userData?.systemRole === 'ceo' || userData?.systemRole === 'admin') {
+      if (userData?.systemRole === 'ceo' || userData?.systemRole === 'admin' || userData?.systemRole === 'global_admin') {
         hasAccess = true;
       } else {
         const memberSnap = await dbInstance.collection('organizations').doc(orgId).collection('members').doc(decodedToken.uid).get();
@@ -1039,7 +1045,7 @@ async function startServer() {
       let hasAccess = false;
       const userSnap = await dbInstance.collection('users').doc(decodedToken.uid).get();
       const userData = userSnap.data();
-      if (userData?.systemRole === 'ceo' || userData?.systemRole === 'admin') {
+      if (userData?.systemRole === 'ceo' || userData?.systemRole === 'admin' || userData?.systemRole === 'global_admin') {
         hasAccess = true;
       } else {
         const memberSnap = await dbInstance.collection('organizations').doc(orgId).collection('members').doc(decodedToken.uid).get();
@@ -1063,7 +1069,7 @@ async function startServer() {
 
       // Assert operation limits
       try {
-        await assertCanPerformOperation(orgId, type);
+        await assertCanPerformOperation(orgId, type, decodedToken.uid);
       } catch (err: any) {
         return res.status(403).json({ error: 'Limit Exceeded', message: err.message });
       }
@@ -1244,7 +1250,7 @@ async function startServer() {
       
       const userDoc = await db.collection('users').doc(decoded.uid).get();
       const systemRole = userDoc.data()?.systemRole;
-      const isGlobalAdmin = systemRole === 'ceo' || systemRole === 'global_admin';
+      const isGlobalAdmin = systemRole === 'ceo' || systemRole === 'admin' || systemRole === 'global_admin';
 
       const subDoc = await db.collection('subscriptions').doc(orgId).get();
       if (!isGlobalAdmin && (!subDoc.exists || !['active', 'trialing'].includes(subDoc.data()?.status))) {

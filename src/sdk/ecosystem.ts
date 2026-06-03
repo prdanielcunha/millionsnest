@@ -4,6 +4,7 @@ import { db } from '../lib/firebase.js';
 import { diagnosticsEngine } from '../packages/os/diagnostics.js';
 import { watchdog } from '../packages/os/watchdog.js';
 import { queueIntegrity } from '../packages/os/queue.js';
+import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 
 export const ECOSYSTEM_PROTOCOL_VERSION = '1.0.0';
 export const ECOSYSTEM_SDK_VERSION = '1.2.0';
@@ -269,7 +270,7 @@ export class EcosystemPlatform {
       .map(([key]) => key);
 
     const installedApps = [...(currentOrg.enabledApps || [])];
-    if (!installedApps.includes('musicscale') && (currentOrg.subscriptionPlan !== 'free' || profile?.systemRole === 'ceo')) {
+    if (!installedApps.includes('musicscale') && (currentOrg.subscriptionPlan !== 'free' || isGlobalPrivilegedUser(profile))) {
         installedApps.push('musicscale');
     }
 

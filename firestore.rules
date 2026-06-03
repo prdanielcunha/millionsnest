@@ -52,7 +52,7 @@ service cloud.firestore {
         ('apps' in userData && 'musicscale' in userData.apps && 'access' in userData.apps.musicscale && userData.apps.musicscale.access == true)
       );
 
-      return orgActive || subActive || userActive;
+      return orgActive || subActive || userActive || isSystemAdmin();
     }
 
     function checkOrgAccess(orgId) {
@@ -64,7 +64,7 @@ service cloud.firestore {
         ('ownerUserId' in orgDoc.data && orgDoc.data.ownerUserId == request.auth.uid)
       );
       
-      return (checkMemberExists(orgId) || orgId == request.auth.uid || isOwner);
+      return (checkMemberExists(orgId) || orgId == request.auth.uid || isOwner || isSystemAdmin());
     }
 
     function hasOrgContext(data) {
@@ -78,12 +78,12 @@ service cloud.firestore {
 
     function isOrgAdmin(orgId) {
       let role = getMemberRole(orgId);
-      return role == 'admin' || role == 'owner' || orgId == request.auth.uid;
+      return role == 'admin' || role == 'owner' || orgId == request.auth.uid || isSystemAdmin();
     }
 
     function isOrgOwner(orgId) {
       let role = getMemberRole(orgId);
-      return role == 'owner' || orgId == request.auth.uid;
+      return role == 'owner' || orgId == request.auth.uid || isSystemAdmin();
     }
 
     function getMemberPermissions(orgId) {
@@ -109,7 +109,7 @@ service cloud.firestore {
     function isSystemAdmin() {
       let userDoc = isAuthenticated() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
       let emailMatched = request.auth != null && 'email' in request.auth.token && (request.auth.token.email == 'pastordanielpcunha@gmail.com' || request.auth.token.email == 'danielcunhapastor@gmail.com');
-      let roleMatched = userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'admin');
+      let roleMatched = userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'admin' || userDoc.data.systemRole == 'global_admin');
       return emailMatched || roleMatched;
     }
 
@@ -378,11 +378,7 @@ service cloud.firestore {
 
     match /globalSongs/{id} {
       allow read: if isAuthenticated() && (isSystemAdmin() || hasGlobalLibraryFeature());
-      allow write: if isAuthenticated() && (
-        isSystemAdmin() || 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('systemRole', '') == 'ceo' || 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('systemRole', '') == 'admin'
-      );
+      allow write: if isAuthenticated() && isSystemAdmin();
     }
 
     match /songSubmissions/{id} {

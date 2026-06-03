@@ -1,6 +1,8 @@
 // Canonical source of truth for MusicScale plans, features, and limits
 // Aligned with the MillionsNest Eco-system Architecture
 
+import { isGlobalPrivilegedUser } from './permissionService.js';
+
 export type MusicScalePlan = 'starter' | 'advanced' | 'pro';
 
 export interface PlanLimits {
@@ -335,7 +337,11 @@ export function resolveMusicScalePlan(options: {
 export function resolveMusicScaleEntitlements(options: {
   subscription?: any;
   organization?: any;
+  userProfile?: any;
 }) {
+  if (options.userProfile && isGlobalPrivilegedUser(options.userProfile)) {
+    return MUSIC_SCALE_PLANS['pro'];
+  }
   const plan = resolveMusicScalePlan(options);
   return MUSIC_SCALE_PLANS[plan];
 }
