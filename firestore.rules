@@ -27,44 +27,41 @@ service cloud.firestore {
       let subDoc = get(/databases/$(database)/documents/subscriptions/$(orgId));
       let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
 
-      return (orgDoc != null && (
-        orgDoc.data.get('subscription_status', '') == 'active' ||
-        orgDoc.data.get('subscription_status', '') == 'trialing' ||
-        orgDoc.data.get('subscriptionStatus', '') == 'active' ||
-        orgDoc.data.get('subscriptionStatus', '') == 'trialing' ||
-        orgDoc.data.get('status', '') == 'active' ||
-        orgDoc.data.get('status', '') == 'trialing' ||
-        orgDoc.data.get('plan', '') == 'pro'
-      )) || (subDoc != null && (
-        subDoc.data.get('status', '') == 'active' || 
-        subDoc.data.get('status', '') == 'trialing' || 
-        subDoc.data.get('status', '') == 'pro'
-      )) || (userDoc != null && (
-        userDoc.data.get('status', '') == 'active' ||
-        userDoc.data.get('status', '') == 'trialing' ||
-        userDoc.data.get('status', '') == 'pro' ||
-        userDoc.data.get('subscription_status', '') == 'active' ||
-        userDoc.data.get('subscription_status', '') == 'trialing' ||
-        userDoc.data.get('subscription_status', '') == 'pro' ||
-        userDoc.data.get('subscriptionStatus', '') == 'active' ||
-        userDoc.data.get('subscriptionStatus', '') == 'trialing' ||
-        userDoc.data.get('subscriptionStatus', '') == 'pro' ||
-        userDoc.data.get('plan', '') == 'pro' ||
-        userDoc.data.get('access', false) == true ||
-        userDoc.data.get('apps', {}).get('musicscale', {}).get('status', '') == 'active' ||
-        userDoc.data.get('apps', {}).get('musicscale', {}).get('status', '') == 'trialing' ||
-        userDoc.data.get('apps', {}).get('musicscale', {}).get('status', '') == 'pro' ||
-        userDoc.data.get('apps', {}).get('musicscale', {}).get('access', false) == true
-      ));
+      let orgData = orgDoc != null ? orgDoc.data : null;
+      let subData = subDoc != null ? subDoc.data : null;
+      let userData = userDoc != null ? userDoc.data : null;
+
+      let orgActive = orgData != null && (
+        ('subscription_status' in orgData && (orgData.subscription_status == 'active' || orgData.subscription_status == 'trialing')) ||
+        ('subscriptionStatus' in orgData && (orgData.subscriptionStatus == 'active' || orgData.subscriptionStatus == 'trialing')) ||
+        ('status' in orgData && (orgData.status == 'active' || orgData.status == 'trialing')) ||
+        ('plan' in orgData && orgData.plan == 'pro')
+      );
+
+      let subActive = subData != null && (
+        ('status' in subData && (subData.status == 'active' || subData.status == 'trialing' || subData.status == 'pro'))
+      );
+
+      let userActive = userData != null && (
+        ('status' in userData && (userData.status == 'active' || userData.status == 'trialing' || userData.status == 'pro')) ||
+        ('subscription_status' in userData && (userData.subscription_status == 'active' || userData.subscription_status == 'trialing' || userData.subscription_status == 'pro')) ||
+        ('subscriptionStatus' in userData && (userData.subscriptionStatus == 'active' || userData.subscriptionStatus == 'trialing' || userData.subscriptionStatus == 'pro')) ||
+        ('plan' in userData && userData.plan == 'pro') ||
+        ('access' in userData && userData.access == true) ||
+        ('apps' in userData && 'musicscale' in userData.apps && 'status' in userData.apps.musicscale && (userData.apps.musicscale.status == 'active' || userData.apps.musicscale.status == 'trialing' || userData.apps.musicscale.status == 'pro')) ||
+        ('apps' in userData && 'musicscale' in userData.apps && 'access' in userData.apps.musicscale && userData.apps.musicscale.access == true)
+      );
+
+      return orgActive || subActive || userActive;
     }
 
     function checkOrgAccess(orgId) {
       let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
       let isOwner = orgDoc != null && (
-        orgDoc.data.get('ownerUid', '') == request.auth.uid || 
-        orgDoc.data.get('ownerId', '') == request.auth.uid || 
-        orgDoc.data.get('owner_user_id', '') == request.auth.uid ||
-        orgDoc.data.get('ownerUserId', '') == request.auth.uid
+        ('ownerUid' in orgDoc.data && orgDoc.data.ownerUid == request.auth.uid) || 
+        ('ownerId' in orgDoc.data && orgDoc.data.ownerId == request.auth.uid) || 
+        ('owner_user_id' in orgDoc.data && orgDoc.data.owner_user_id == request.auth.uid) ||
+        ('ownerUserId' in orgDoc.data && orgDoc.data.ownerUserId == request.auth.uid)
       );
       
       return (checkMemberExists(orgId) || orgId == request.auth.uid || isOwner);
@@ -75,13 +72,8 @@ service cloud.firestore {
     }
     
     function getMemberRole(orgId) {
-       return exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid))
-         ? get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('role', null)
-         : (exists(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId))
-            ? get(/databases/$(database)/documents/organization_members/$(request.auth.uid + '_' + orgId)).data.get('role', null)
-            : (exists(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid))
-               ? get(/databases/$(database)/documents/organization_members/$(orgId + '_' + request.auth.uid)).data.get('role', null)
-               : null));
+       let memberData = getMemberPermissions(orgId);
+       return memberData != null && 'role' in memberData ? memberData.role : null;
     }
 
     function isOrgAdmin(orgId) {
@@ -106,8 +98,8 @@ service cloud.firestore {
 
     function hasPermission(orgId, permission) {
       let memberData = getMemberPermissions(orgId);
-      let role = memberData != null ? memberData.get('role', null) : null;
-      let hasExplicitPerm = memberData != null && memberData.get('permissions', {}).get(permission, false) == true;
+      let role = memberData != null && 'role' in memberData ? memberData.role : null;
+      let hasExplicitPerm = memberData != null && 'permissions' in memberData && permission in memberData.permissions && memberData.permissions[permission] == true;
       
       // Endurecimento progressivo: liberado para admin/owner/systemAdmin, ou se tiver a permissão explicitamente.
       // E fallback tolerante para 'member' para não quebrar a produção abruptamente.
@@ -117,7 +109,7 @@ service cloud.firestore {
     function isSystemAdmin() {
       let userDoc = isAuthenticated() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
       let emailMatched = request.auth != null && 'email' in request.auth.token && (request.auth.token.email == 'pastordanielpcunha@gmail.com' || request.auth.token.email == 'danielcunhapastor@gmail.com');
-      let roleMatched = userDoc != null && (userDoc.data.get('systemRole', '') == 'ceo' || userDoc.data.get('systemRole', '') == 'admin');
+      let roleMatched = userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'admin');
       return emailMatched || roleMatched;
     }
 
@@ -186,6 +178,16 @@ service cloud.firestore {
         allow read: if isAuthenticated(); 
         allow list: if isAuthenticated();
         allow create, update, delete: if isAuthenticated() && (isOrgAdmin(orgId) || isSystemAdmin());
+      }
+
+      match /audit_logs/{document=**} {
+        allow read: if isAuthenticated() && checkOrgAccess(orgId);
+        allow write: if isAuthenticated() && checkOrgAccess(orgId);
+      }
+
+      match /timeline/{document=**} {
+        allow read: if isAuthenticated() && checkOrgAccess(orgId);
+        allow write: if isAuthenticated() && checkOrgAccess(orgId);
       }
 
       match /{app}/{document=**} {
