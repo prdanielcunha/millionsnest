@@ -184,9 +184,18 @@ class AnalyticsManager {
       }
 
       await batch.commit();
-    } catch (error) {
-      console.error("Failed to flush analytics events:", error);
-      // Soft fail to not interrupt UX. If we want, we could push back to buffer.
+    } catch (error: any) {
+      if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+        // Soft fail to not interrupt UX. Log as warning only if needed, but avoid spamming.
+        if (process.env.NODE_ENV === 'development') {
+          console.warn("Analytics flush skipped: Missing or insufficient permissions.");
+        }
+      } else {
+        if (process.env.NODE_ENV === 'development') {
+          console.error("Failed to flush analytics events:", error);
+        }
+      }
+      // Drop events that couldn't be flushed to avoid infinite loops
     }
   }
 }

@@ -5,6 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.js";
 import { useTranslation, Trans } from 'react-i18next';
 
+import { PRODUCT_CATALOG, getProductByLookupKey } from "../lib/pricingCatalog.js";
+
 export function Pricing() {
   const { t } = useTranslation(['landing']);
   const [isAnnual, setIsAnnual] = useState(true);
@@ -15,18 +17,14 @@ export function Pricing() {
   const [plansData, setPlansData] = useState<any[]>([]);
   const [addonsData, setAddonsData] = useState<any[]>([]);
   
-  const [prices, setPrices] = useState({
-    starter_monthly: 19.90,
-    starter_annual: 191.04,
-    advanced_monthly: 29.90,
-    advanced_annual: 287.04,
-    pro_monthly: 34.90,
-    pro_annual: 335.04,
-    setup_premium: 54.90,
-    training_express: 29.90,
-    worship_100: 97.00,
-    music_pack_10: 29.90
-  });
+  // Use CATALOG as root fallback
+  const fallbackPrices = PRODUCT_CATALOG.reduce((acc: any, p) => {
+     const key = p.lookupKey.replace('musicscale_', '');
+     acc[key] = p.price;
+     return acc;
+  }, {});
+
+  const [prices, setPrices] = useState(fallbackPrices);
 
   useEffect(() => {
     fetch('/api/v1/billing/products')

@@ -35,50 +35,47 @@ export class BillingService {
     const plans: NormalizedProduct[] = [];
     const addons: NormalizedProduct[] = [];
 
-    if (this.isMock) {
-      console.log('[BillingService] Returning mock data without Stripe keys');
-      // Mock dinâmico simulando metadatas estruturadas
-      plans.push(this.createMockProduct('price_starter_monthly_mock', 'musicscale_starter_monthly', 'Starter (Mensal)', 19.90, 'month', 'plan', 'starter', 'musicscale'));
-      plans.push(this.createMockProduct('price_starter_annual_mock', 'musicscale_starter_yearly', 'Starter (Anual)', 191.04, 'year', 'plan', 'starter', 'musicscale'));
-      plans.push(this.createMockProduct('price_advanced_monthly_mock', 'musicscale_advanced_monthly', 'Advanced (Mensal)', 29.90, 'month', 'plan', 'advanced', 'musicscale'));
-      plans.push(this.createMockProduct('price_advanced_annual_mock', 'musicscale_advanced_yearly', 'Advanced (Anual)', 287.04, 'year', 'plan', 'advanced', 'musicscale'));
-      plans.push(this.createMockProduct('price_pro_monthly_mock', 'musicscale_pro_monthly', 'Pro (Mensal)', 34.90, 'month', 'plan', 'pro', 'musicscale'));
-      plans.push(this.createMockProduct('price_pro_annual_mock', 'musicscale_pro_yearly', 'Pro (Anual)', 335.04, 'year', 'plan', 'pro', 'musicscale'));
-      
-      addons.push(this.createMockProduct('price_setup_mock', 'musicscale_setup_premium', 'Setup Premium', 54.90, 'one_time', 'addon', 'setup_premium', 'musicscale'));
-      addons.push(this.createMockProduct('price_training_mock', 'musicscale_training_express', 'Treinamento Express', 29.90, 'one_time', 'addon', 'training_express', 'musicscale'));
-      addons.push(this.createMockProduct('price_worship_mock', 'musicscale_worship_100', 'Acervo Inicial Worship', 97.00, 'one_time', 'content_pack', 'worship_100', 'musicscale'));
-      addons.push(this.createMockProduct('price_music_mock', 'musicscale_music_pack_10', 'Music Pack +10', 29.90, 'one_time', 'addon', 'music_pack_10', 'musicscale'));
-      
-      this.cachedProducts = { plans, addons, timestamp: Date.now() };
-      return { plans, addons };
-    }
-
+    let PRODUCT_CATALOG: any[];
     try {
-      if (this.db) {
-        console.log('[BillingService] Fetching from Firestore catalogue...');
-        const snapshot = await this.db.collection('billing_products').where('active', '==', true).get();
-        if (!snapshot.empty) {
-          snapshot.forEach((doc: any) => {
-            const data = doc.data() as NormalizedProduct;
-            if (data.type === 'plan' || data.type === 'subscription') plans.push(data);
-            else addons.push(data);
-          });
-          this.cachedProducts = { plans, addons, timestamp: Date.now() };
-          return { plans, addons };
-        } else {
-          console.log('[BillingService] Firestore empty. Using memory cache fallback if available.');
-        }
+      const { PRODUCT_CATALOG: catalog } = await import('../../lib/pricingCatalog.js');
+      PRODUCT_CATALOG = catalog;
+    } catch {
+      // safe fallback if dynamic import fails during some tsx compilation limits
+      PRODUCT_CATALOG = [];
+      console.error("[BillingService] Failed to load PRODUCT_CATALOG");
+    }
+
+    PRODUCT_CATALOG.forEach((item: any) => {
+      let stripeId = process.env[item.envKey];
+      
+      // Fallback for mock mode or missing keys
+      if (!stripeId) stripeId = `mock_${item.lookupKey}`;
+
+      const normalizedInfo: NormalizedProduct = {
+        id: stripeId,
+        lookupKey: item.lookupKey,
+        app: 'musicscale',
+        type: item.type,
+        tier: item.tier,
+        name: item.name,
+        description: item.description,
+        price: item.price,
+        currency: 'brl',
+        interval: item.interval,
+        feature: item.lookupKey.replace('musicscale_', ''),
+        featured: item.featured || false,
+        recommended: item.recommended || false,
+        metadata: { app: 'musicscale', type: item.type, tier: item.tier }
+      };
+
+      if (item.type === 'plan') {
+        plans.push(normalizedInfo);
+      } else {
+        addons.push(normalizedInfo);
       }
-    } catch (err: any) {
-      console.error('[BillingService] Firestore error:', err.message);
-    }
+    });
 
-    if (this.cachedProducts) {
-      console.log('[BillingService] Graceful degradation: serving stale memory cache');
-      return { plans: this.cachedProducts.plans, addons: this.cachedProducts.addons };
-    }
-
+    this.cachedProducts = { plans, addons, timestamp: Date.now() };
     return { plans, addons };
   }
 

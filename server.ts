@@ -2185,17 +2185,12 @@ async function startServer() {
 
   app.get('/api/v1/billing/products', async (req, res, next) => {
     try {
-      console.log(`[Billing API] Hit endpoint: ${req.url}`);
       res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
       res.setHeader('Content-Type', 'application/json');
       
-      console.log(`[Billing API] Getting BillingService...`);
       const service = getBillingService();
-      
-      console.log(`[Billing API] Calling getProducts()...`);
       const result = await service.getProducts();
       
-      console.log(`[Billing API] Serialization and sending response...`);
       const serialized = JSON.stringify(result);
       return res.status(200).send(serialized);
     } catch (e: any) {
