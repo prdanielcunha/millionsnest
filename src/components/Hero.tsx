@@ -94,12 +94,10 @@ export function Hero() {
           <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#050505] to-transparent z-20 pointer-events-none translate-y-10" />
           
           <div className="relative z-10 mx-auto rounded-xl md:rounded-2xl border border-white/10 bg-[#0B0F19]/50 backdrop-blur-md p-1.5 md:p-2 premium-shadow overflow-hidden flex justify-center">
-             <div className="w-full max-w-[1000px] h-[400px] sm:h-[500px] md:h-[600px] relative rounded-lg md:rounded-xl overflow-hidden bg-[#050505] border border-white/5">
-                <div className="absolute inset-0 origin-top scale-[0.6] sm:scale-[0.8] md:scale-100 flex justify-center w-[800px] max-w-none left-1/2 -translate-x-1/2 md:w-full md:left-0 md:translate-x-0">
-                  <Suspense fallback={<div className="w-full h-full animate-pulse bg-white/5" />}>
-                    <DashboardMockup />
-                  </Suspense>
-                </div>
+             <div className="w-full max-w-[1000px] relative rounded-lg md:rounded-xl overflow-hidden bg-[#050505] border border-white/5 flex justify-center">
+                <Suspense fallback={<div className="w-full aspect-[16/9] animate-pulse bg-white/5" />}>
+                  <DashboardMockup />
+                </Suspense>
              </div>
           </div>
         </motion.div>
