@@ -1,5 +1,6 @@
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase.js";
+import { sanitizeForFirestore } from "./firestoreUtils.js";
 
 export interface AuditLogPayload {
   actorUid: string;
@@ -23,11 +24,11 @@ export async function createAuditLog(payload: AuditLogPayload) {
       ? collection(db, `organizations/${payload.organizationId || payload.targetOrganizationId}/audit_logs`)
       : collection(db, "system_audit_logs");
       
-    await addDoc(colRef, {
+    await addDoc(colRef, sanitizeForFirestore({
       ...payload,
       createdAt: serverTimestamp(),
       timestamp: serverTimestamp(),
-    });
+    }));
   } catch (error) {
     console.error("Failed to create audit log:", error);
     // Non-blocking for the app, just log error

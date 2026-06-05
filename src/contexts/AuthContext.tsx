@@ -5,6 +5,7 @@ import { auth, db } from "../lib/firebase.js";
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 import { analytics } from "../lib/analytics.js";
 import { withTimeout } from "../lib/utils.js";
+import { sanitizeForFirestore } from "../lib/firestoreUtils.js";
 
 interface UserProfile {
   uid: string;
@@ -110,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 userData.organizationId = orgIdToHeal;
                 userData.defaultOrganizationId = orgIdToHeal;
                 
-                const healMemberData = {
+                const healMemberData = sanitizeForFirestore({
                   uid: currentUser.uid,
                   email: currentUser.email,
                   organizationRole: 'owner',
@@ -118,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   status: 'active',
                   permissionsVersion: CURRENT_PERMISSIONS_VERSION,
                   permissions: getDefaultPermissions('owner')
-                };
+                });
                 await setDoc(doc(db, 'organization_members', `${currentUser.uid}_${orgIdToHeal}`), healMemberData, { merge: true });
                 await setDoc(doc(db, `organizations/${orgIdToHeal}/members`, currentUser.uid), healMemberData, { merge: true });
                 await setDoc(doc(db, 'organizations', orgIdToHeal), { ownerUid: currentUser.uid }, { merge: true });
@@ -134,14 +135,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Add member doc to org
                 const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${inviteOrgId}`);
                 const newMemberRef = doc(db, `organizations/${inviteOrgId}/members`, currentUser.uid);
-                const memberData = {
+                const memberData = sanitizeForFirestore({
                   uid: currentUser.uid,
                   organizationId: inviteOrgId,
                   role: inviteRole,
                   permissionsVersion: CURRENT_PERMISSIONS_VERSION,
                   permissions: getDefaultPermissions(inviteRole),
                   createdAt: serverTimestamp()
-                };
+                });
                 await setDoc(orgMemberRef, memberData, { merge: true });
                 await setDoc(newMemberRef, memberData, { merge: true });
               }
@@ -153,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
 
             // Atualizar lastLoginAt e possível org
-            await setDoc(userRef, mergeData, { merge: true });
+            await setDoc(userRef, sanitizeForFirestore(mergeData), { merge: true });
             
             const updatedProfile = { ...userData, lastLoginAt: new Date() };
             setProfile(updatedProfile);
@@ -181,15 +182,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               organizationId: targetOrgId,
               organizations: [targetOrgId],
               subscriptionStatus: 'none',
-              systemRole: currentUser.email === 'pastordanielpcunha@gmail.com' ? 'ceo' : undefined
+              systemRole: currentUser.email === 'pastordanielpcunha@gmail.com' ? 'ceo' : 
+                          currentUser.email === 'danielcunhapastor@gmail.com' ? 'admin' : undefined
             };
             
-            await setDoc(userRef, newProfile);
+            await setDoc(userRef, sanitizeForFirestore(newProfile));
 
             // Se é o dono dessa nova org (não foi convidado), cria a organization default dele
             if (!inviteOrgId) {
                const orgRef = doc(db, 'organizations', targetOrgId);
-               await setDoc(orgRef, {
+               await setDoc(orgRef, sanitizeForFirestore({
                  id: targetOrgId,
                  name: `Organização de ${currentUser.displayName || currentUser.email?.split('@')[0]}`,
                  slug: targetOrgId, // default slug
@@ -199,32 +201,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                  subscriptionPlan: 'monthly',
                  subscriptionStatus: 'none',
                  createdAt: serverTimestamp()
-               }, { merge: true });
+               }), { merge: true });
 
                const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${targetOrgId}`);
                const newMemberRef = doc(db, `organizations/${targetOrgId}/members`, currentUser.uid);
-               const memberData = {
+               const memberData = sanitizeForFirestore({
                  uid: currentUser.uid,
                  organizationId: targetOrgId,
                  role: 'owner',
                  permissionsVersion: CURRENT_PERMISSIONS_VERSION,
                  permissions: getDefaultPermissions('owner'),
                  createdAt: serverTimestamp()
-               };
+               });
                await setDoc(orgMemberRef, memberData, { merge: true });
                await setDoc(newMemberRef, memberData, { merge: true });
             } else {
                // Invited new user logic (member)
                const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${targetOrgId}`);
                const newMemberRef = doc(db, `organizations/${targetOrgId}/members`, currentUser.uid);
-               const memberData = {
+               const memberData = sanitizeForFirestore({
                  uid: currentUser.uid,
                  organizationId: targetOrgId,
                  role: inviteRole,
                  permissionsVersion: CURRENT_PERMISSIONS_VERSION,
                  permissions: getDefaultPermissions(inviteRole),
                  createdAt: serverTimestamp()
-               };
+               });
                await setDoc(orgMemberRef, memberData, { merge: true });
                await setDoc(newMemberRef, memberData, { merge: true });
             }

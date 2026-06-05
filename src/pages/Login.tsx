@@ -104,7 +104,14 @@ export function Login() {
 
   // Se já tiver usuário, mas não fez o redirect ainda (aguardando o effect)
   if (user) {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-[#F5F7FA] animate-spin" />
+          <p className="text-[#A0A7B5] text-sm">{t("access_central") || "Carregando ecossistema..."}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
