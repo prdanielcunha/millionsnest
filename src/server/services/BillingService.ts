@@ -59,7 +59,7 @@ export class BillingService {
         tier: item.tier,
         name: item.name,
         description: item.description,
-        price: item.price,
+        price: item.priceInCents / 100,
         currency: 'brl',
         interval: item.interval,
         feature: item.lookupKey.replace('musicscale_', ''),

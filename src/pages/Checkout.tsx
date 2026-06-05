@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { useNavigate } from 'react-router-dom';
 import { Check, ArrowRight, ShieldCheck, CreditCard, ChevronLeft, Briefcase, Zap, Layers, Tag, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getProductByLookupKey } from '../lib/pricingCatalog.js';
 
 interface NormalizedProduct {
   id: string; // Stripe Price ID
@@ -314,59 +315,109 @@ export default function Checkout() {
                            <div 
                                key={plan.id}
                                onClick={() => plan.lookupKey && setSelectedPlanLookup(plan.lookupKey)}
-                               className={`group relative p-6 rounded-3xl cursor-pointer transition-all duration-300 border ${isSelected ? 'bg-[#181C25] border-[#2B85EB]/50 shadow-[0_0_40px_-10px_rgba(43,133,235,0.2)]' : 'bg-[#101217] border-white/5 hover:border-white/20 hover:bg-[#13151A]'}`}
+                               className={isPro 
+                                   ? `group relative p-6 rounded-3xl cursor-pointer transition-all duration-300 border-2 flex flex-col h-full bg-[#050505] ${isSelected ? 'border-[#2B85EB] shadow-[0_0_40px_rgba(43,133,235,0.3)]' : 'border-[#2B85EB]/50 shadow-[0_0_40px_rgba(43,133,235,0.15)] hover:border-[#2B85EB]/80 hover:shadow-[0_0_40px_rgba(43,133,235,0.25)]'}`
+                                   : `group relative p-6 rounded-3xl cursor-pointer transition-all duration-300 border flex flex-col h-full ${isSelected ? 'bg-[#181C25] border-[#2B85EB]/50 shadow-[0_0_40px_-10px_rgba(43,133,235,0.2)]' : 'bg-[#101217] border-white/5 hover:border-white/20 hover:bg-[#13151A]'}`
+                               }
                            >
-                               {isSelected && (
+                               {!isPro && isSelected && (
                                    <div className="absolute top-0 left-0 w-full h-full rounded-3xl border-2 border-[#2B85EB]/20 pointer-events-none" />
                                )}
                                
                                {isPro && (
-                                   <div className="absolute -top-3 left-8 bg-gradient-to-r from-[#2B85EB] to-[#4A9CFC] text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full shadow-lg shadow-[#2B85EB]/30">
-                                       {t('recommended', 'Recomendado')}
+                                   <div className="absolute inset-0 bg-gradient-to-b from-[#2B85EB]/10 to-transparent pointer-events-none rounded-3xl" />
+                               )}
+                               
+                               {isPro && (
+                                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-max z-20">
+                                     <div className="bg-[#2B85EB] text-white text-[10px] font-bold px-4 py-1.5 rounded-full shadow-lg uppercase tracking-widest flex items-center gap-1.5 border border-white/10">
+                                       <Star className="w-3 h-3 text-yellow-400 fill-current" /> MAIS ESCOLHIDO
+                                     </div>
                                    </div>
                                )}
                                
-                               <div className="flex justify-between items-start mb-6">
+                               <div className="flex justify-between items-start mb-6 relative z-10">
                                    <div>
-                                       <h3 className="text-xl md:text-2xl font-medium text-white mb-1">{plan.name}</h3>
+                                       <h3 className="text-xl md:text-2xl font-medium text-white mb-1 uppercase tracking-widest">{isPro ? 'Pro' : plan.name}</h3>
                                        <p className="text-[#A0A7B5] text-xs font-light">{plan.description || (isPro ? "Para ministérios que desejam a experiência premium completa." : isAdvanced ? "Para ministérios em crescimento." : "Ideal para começar com simplicidade.")}</p>
                                    </div>
-                                   <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#2B85EB] border-[#2B85EB]' : 'border-white/20 group-hover:border-white/40'}`}>
+                                   <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors flex-shrink-0 ${isSelected ? 'bg-[#2B85EB] border-[#2B85EB]' : 'border-white/20 group-hover:border-white/40'}`}>
                                        {isSelected && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
                                    </div>
                                </div>
 
-                               <div className="mb-8">
+                               <div className="mb-8 relative z-10 mt-auto">
                                    <div className="flex items-baseline gap-1">
-                                       <span className="text-4xl font-semibold tracking-tighter text-white">R${plan.price.toFixed(2).replace('.',',')}</span>
-                                       <span className="text-[#A0A7B5] text-sm">/ {billingCycle === 'yearly' ? t('yearly_period', 'ano') : t('monthly_period', 'mês')}</span>
+                                       <span className="text-4xl font-semibold tracking-tighter text-white">
+                                           R${plan.price.toFixed(2).replace('.',',')}
+                                       </span>
+                                       <span className="text-[#A0A7B5] text-sm">
+                                           / {billingCycle === 'yearly' ? t('yearly_period', 'ano') : t('monthly_period', 'mês')}
+                                       </span>
                                    </div>
+                                   {isPro && (
+                                       <div className="mt-2">
+                                           <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB] text-white rounded-md shadow-[0_0_15px_rgba(43,133,235,0.4)]">
+                                             {t('pricing_free_trial', '7 dias grátis')}
+                                           </span>
+                                       </div>
+                                   )}
+                                   {isPro && billingCycle === 'yearly' ? (
+                                       <div className="flex items-center gap-2 mt-4 mb-2 text-xs font-medium relative z-10">
+                                            <span className="text-[#A0A7B5]/50 line-through">R$ {(34.90 * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">20% OFF</span>
+                                       </div>
+                                   ) : isPro && billingCycle === 'monthly' ? (
+                                       <div className="flex items-center gap-2 mt-4 mb-2 text-xs font-medium relative z-10">
+                                            <span className="text-[#A0A7B5]/50 line-through">R$ {getProductByLookupKey(plan.lookupKey || '')?.compareAtPriceInCents ? (getProductByLookupKey(plan.lookupKey || '')!.compareAtPriceInCents! / 100).toFixed(2).replace('.',',') : "44,90"}</span>
+                                            <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-widest">{getProductByLookupKey(plan.lookupKey || '')?.promotionLabel || 'Lançamento'}</span>
+                                       </div>
+                                   ) : null}
                                </div>
 
-                               <ul className="space-y-3 mt-2">
+                               <ul className="space-y-4 pt-6 border-t border-white/5 relative z-10 w-full text-left mt-0">
                                    {isPro ? (
                                        <>
-                                         <FeatureItem text="Tudo do Advanced" />
-                                         <FeatureItem text="Usuários ilimitados" />
-                                         <FeatureItem text="Importações ilimitadas" />
-                                         <FeatureItem text="Importação de Músicas com IA" />
-                                         <FeatureItem text="Sugestões Inteligentes" />
-                                         <FeatureItem text="Suporte prioritário" />
+                                         {[
+                                            'Tudo do Advanced',
+                                            'Usuários ilimitados por organização',
+                                            'Biblioteca Viva completa',
+                                            'Importações ilimitadas da Biblioteca',
+                                            'Importação inteligente de músicas (IA)',
+                                            'Estruturação automática (letra, tom, BPM)',
+                                            'Sugestões inteligentes para repertório e escalas',
+                                            'Clonagem de escalas em um toque',
+                                            'Recursos futuros premium inclusos',
+                                            'Prioridade em novos recursos',
+                                            'Suporte prioritário',
+                                            'Experiência premium completa'
+                                          ].map((item, i) => (
+                                              <li key={i} className="flex items-start gap-3 text-[#F5F7FA]">
+                                                  <Zap className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />
+                                                  <span className="font-normal text-sm opacity-90">{item}</span>
+                                              </li>
+                                          ))}
                                        </>
                                    ) : isAdvanced ? (
                                        <>
                                          <FeatureItem text="Tudo do Starter" />
-                                         <FeatureItem text="Até 20 usuários" />
+                                         <FeatureItem text="Até 20 usuários por organização" />
                                          <FeatureItem text="Biblioteca Viva limitada" />
-                                         <FeatureItem text="Histórico completo" />
+                                         <FeatureItem text="10 importações da Biblioteca Viva /mês" />
+                                         <FeatureItem text="Histórico completo de repertório" />
+                                         <FeatureItem text="Recursos intermediários de organização" />
+                                         <FeatureItem text="Personalização avançada de repertório" />
                                          <FeatureItem text="Suporte prioritário básico" />
                                        </>
                                    ) : (
                                        <>
-                                         <FeatureItem text="Músicas ilimitadas" />
+                                         <FeatureItem text="Até 10 usuários por organização" />
                                          <FeatureItem text="Escalas ilimitadas" />
-                                         <FeatureItem text="Até 10 pessoas" />
-                                         <FeatureItem text="Acesso mobile" />
+                                         <FeatureItem text="Músicas ilimitadas" />
+                                         <FeatureItem text="Cadastro de letras, cifras, tom e BPM" />
+                                         <FeatureItem text="Compartilhamento de escalas" />
+                                         <FeatureItem text="Organização por cultos e eventos" />
+                                         <FeatureItem text="Acesso pelo celular, tablet e computador" />
                                          <FeatureItem text="Sincronização em nuvem" />
                                          <FeatureItem text="Suporte padrão" />
                                        </>
@@ -402,25 +453,59 @@ export default function Checkout() {
                                 <div 
                                     key={addon.id}
                                     onClick={() => addon.lookupKey && toggleAddon(addon.lookupKey)}
-                                    className={`group flex items-center justify-between p-5 rounded-2xl cursor-pointer border transition-all duration-300 ${isSelected ? 'bg-[#181C25] border-[#2B85EB]/30' : 'bg-[#101217] border-white/5 hover:border-white/20'}`}
+                                    className={`group flex flex-col p-5 rounded-2xl cursor-pointer border transition-all duration-300 ${isSelected ? 'bg-[#181C25] border-[#2B85EB]/30' : 'bg-[#101217] border-white/5 hover:border-white/20'}`}
                                 >
-                                    <div className="flex gap-4 items-center">
-                                       <div className={`w-5 h-5 rounded flex-shrink-0 border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#2B85EB] border-[#2B85EB]' : 'border-white/20 group-hover:border-white/40 bg-white/5'}`}>
-                                           {isSelected && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
-                                       </div>
-                                       <div>
-                                           <h4 className="text-base font-medium text-white flex items-center gap-2">
-                                              {addon.name}
-                                              {addon.interval === 'one_time' && (
-                                                <span className="text-[9px] uppercase tracking-wider font-bold bg-white/10 text-white px-2 py-0.5 rounded">{t('one_time_badge', 'Pagamento Único')}</span>
-                                              )}
-                                           </h4>
-                                           <p className="text-[#A0A7B5] text-sm">{description}</p>
-                                       </div>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex gap-4 items-center">
+                                           <div className={`w-5 h-5 rounded flex-shrink-0 border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#2B85EB] border-[#2B85EB]' : 'border-white/20 group-hover:border-white/40 bg-white/5'}`}>
+                                               {isSelected && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
+                                           </div>
+                                           <div>
+                                               <h4 className="text-base font-medium text-white flex items-center gap-2">
+                                                  {addon.name}
+                                                  {addon.interval === 'one_time' && (
+                                                    <span className="text-[9px] uppercase tracking-wider font-bold bg-white/10 text-white px-2 py-0.5 rounded">{t('pricing_one_time', 'Pagamento Único')}</span>
+                                                  )}
+                                               </h4>
+                                           </div>
+                                        </div>
+                                        <div className="font-medium text-white tracking-tight">
+                                            + R${addon.price.toFixed(2).replace('.',',')}
+                                            {addon.interval !== 'one_time' && <span className="text-[#A0A7B5] text-xs font-normal">/{addon.interval === 'year' ? 'ano' : 'mês'}</span>}
+                                        </div>
                                     </div>
-                                    <div className="font-medium text-white tracking-tight">
-                                        + R${addon.price.toFixed(2).replace('.',',')}
-                                        {addon.interval !== 'one_time' && <span className="text-[#A0A7B5] text-xs font-normal">/{addon.interval === 'year' ? 'ano' : 'mês'}</span>}
+                                    <div className="mt-4 ml-9">
+                                        <p className="text-[#A0A7B5] text-sm mb-3">{description}</p>
+                                        <ul className="space-y-2">
+                                            {addon.lookupKey === 'musicscale_setup_premium' && (
+                                                <>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_setup_f1', 'Configuração inicial')}</li>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_setup_f2', 'Onboarding assistido')}</li>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_setup_f3', 'Organização da equipe')}</li>
+                                                </>
+                                            )}
+                                            {addon.lookupKey === 'musicscale_training_express' && (
+                                                <>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_training_f1', 'Sessão ao vivo de 2h')}</li>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_training_f2', 'Tira-dúvidas prático')}</li>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_training_f3', 'Gravação disponível')}</li>
+                                                </>
+                                            )}
+                                            {addon.lookupKey === 'musicscale_worship_100' && (
+                                                <>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_worship_f1', '100 músicas top Brasil')}</li>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_worship_f2', 'Letras e cifras prontas')}</li>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_worship_f3', 'BPM e tons originais')}</li>
+                                                </>
+                                            )}
+                                            {addon.lookupKey === 'musicscale_music_pack_10' && (
+                                                <>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_pack_f1', '10 músicas à sua escolha')}</li>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_pack_f2', 'Estruturação completa')}</li>
+                                                    <li className="flex items-center gap-2 text-xs text-[#A0A7B5]"><Check className="w-3 h-3 text-[#2B85EB]" /> {t('addon_pack_f3', 'Entrega em até 48h')}</li>
+                                                </>
+                                            )}
+                                        </ul>
                                     </div>
                                 </div>
                             );

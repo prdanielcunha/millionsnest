@@ -1590,7 +1590,7 @@ export function Dashboard() {
                             "Até 20 pessoas por organização",
                             "Músicas e escalas ilimitadas",
                             "Acesso limitado à Biblioteca Viva",
-                            "Até 20 importações por mês",
+                            "Até 10 importações por mês",
                             "Personalização avançada de repertório",
                             "Histórico completo de alterações",
                             "Suporte prioritário básico (resposta até 24h)"
@@ -1630,7 +1630,10 @@ export function Dashboard() {
                              {prices.pro_monthly > 0 && prices.pro_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.pro_annual / (prices.pro_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
                           </div>
                         ) : (
-                          <div className="h-5 md:h-6 mb-6 relative z-10" />
+                          <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
+                             <span className="text-[#A0A7B5]/50 line-through">R$ 44,90</span>
+                             <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-widest">Lançamento</span>
+                          </div>
                         )}
                         
                         <button 

@@ -20,7 +20,7 @@ export function Pricing() {
   // Use CATALOG as root fallback
   const fallbackPrices = PRODUCT_CATALOG.reduce((acc: any, p) => {
      const key = p.lookupKey.replace('musicscale_', '');
-     acc[key] = p.price;
+     acc[key] = p.priceInCents / 100;
      return acc;
   }, {});
 
@@ -253,7 +253,7 @@ export function Pricing() {
                 'Tudo do Starter',
                 'Até 20 usuários por organização',
                 'Biblioteca Viva limitada',
-                '20 importações da Biblioteca Viva /mês',
+                '10 importações da Biblioteca Viva /mês',
                 'Histórico completo de repertório',
                 'Recursos intermediários de organização',
                 'Personalização avançada de repertório',
@@ -308,7 +308,7 @@ export function Pricing() {
               </div>
             ) : (
               <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
-                 <span className="text-[#A0A7B5]/50 line-through">R$ 39,90</span>
+                 <span className="text-[#A0A7B5]/50 line-through">R$ 44,90</span>
                  <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-widest">Lançamento</span>
               </div>
             )}
@@ -375,7 +375,7 @@ export function Pricing() {
                   { name: 'Músicas e Escalas', s: 'Ilimitadas', a: 'Ilimitadas', p: 'Ilimitadas' },
                   { name: 'Letras, Cifras, Tom e BPM', s: 'Sim', a: 'Sim', p: 'Sim' },
                   { name: 'Biblioteca Viva', s: 'Não', a: 'Limitada', p: 'Completa' },
-                  { name: 'Importações da Biblioteca', s: 'Nenhuma', a: '20/mês', p: 'Ilimitadas' },
+                  { name: 'Importações da Biblioteca', s: 'Nenhuma', a: '10/mês', p: 'Ilimitadas' },
                   { name: 'Histórico de repertório', s: 'Básico', a: 'Completo', p: 'Completo' },
                   { name: 'Importação inteligente com IA', s: 'Não', a: 'Não', p: 'Sim' },
                   { name: 'Sugestões Inteligentes (IA)', s: 'Não', a: 'Não', p: 'Sim' },

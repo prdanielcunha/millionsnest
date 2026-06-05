@@ -264,6 +264,9 @@ export async function canPerformOperation(orgId: string, type: string, uid?: str
 export async function assertCanPerformOperation(orgId: string, type: string, uid?: string): Promise<void> {
   const check = await canPerformOperation(orgId, type, uid);
   if (!check.allowed) {
+    if (type === 'library_import') {
+      throw new Error(`Você atingiu o limite de ${check.limit} importações da Biblioteca Viva neste mês. Faça upgrade para o Pro para liberar importações ilimitadas.`);
+    }
     throw new Error(`Limite mensal excedido! O plano atual (${check.planName}) permite no máximo ${check.limit} operações do tipo "${type}" por mês, e a organização já consumiu ${check.current}.`);
   }
 }
@@ -2412,6 +2415,103 @@ async function startServer() {
     } catch (e: any) {
       console.error('[Validate Coupon] Error:', e.message);
       res.status(500).json({ error: 'Erro ao validar cupom.' });
+    }
+  });
+
+  app.get('/api/admin/stripe/validate-catalog', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+         return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      try {
+         const decodedToken = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
+         if (!decodedToken.email || !['pastordanielpcunha@gmail.com', 'danielcunhapastor@gmail.com'].includes(decodedToken.email)) {
+             return res.status(403).json({ error: 'Forbidden. Admin/CEO only.' });
+         }
+      } catch (e) {
+         return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      console.log(`[Stripe Validation] Running validation against Stripe...`);
+      const { PRODUCT_CATALOG } = await import('./src/lib/pricingCatalog.js');
+      const stripe = getStripe();
+      
+      const isMock = process.env.STRIPE_SECRET_KEY === undefined;
+      if (isMock) {
+         return res.json({ error: "No STRIPE_SECRET_KEY" });
+      }
+
+      const results = [];
+
+      for (const item of PRODUCT_CATALOG) {
+         const envVal = process.env[item.envKey];
+         let status = 'OK';
+         let valid = true;
+         let stripePrice = null;
+
+         if (!envVal || envVal.startsWith('mock_')) {
+            status = 'MISSING_STRIPE_PRICE';
+            valid = false;
+         } else {
+            try {
+               stripePrice = await stripe.prices.retrieve(envVal, { expand: ['product'] });
+               
+               if (!stripePrice.active) {
+                 status = 'INACTIVE_PRICE';
+                 valid = false;
+               } else if (stripePrice.currency.toLowerCase() !== 'brl') {
+                 status = 'CURRENCY_MISMATCH';
+                 valid = false;
+               } else if (item.type === 'plan' && stripePrice.type !== 'recurring') {
+                 status = 'INTERVAL_MISMATCH';
+                 valid = false;
+               } else if (item.type === 'addon' && stripePrice.type === 'recurring') {
+                 status = 'INTERVAL_MISMATCH';
+                 valid = false;
+               } else if (item.priceInCents !== stripePrice.unit_amount) {
+                 status = 'PRICE_MISMATCH';
+                 valid = false;
+               } else if (stripePrice.product && typeof stripePrice.product !== 'string') {
+                  const prod = stripePrice.product as Stripe.Product;
+                  if (!prod.active) {
+                     status = 'INACTIVE_PRODUCT';
+                     valid = false;
+                  }
+               }
+
+            } catch (err: any) {
+               status = 'NOT_FOUND_IN_STRIPE';
+               valid = false;
+            }
+         }
+
+         results.push({
+            name: item.name,
+            lookupKey: item.lookupKey,
+            envKey: item.envKey,
+            stripePriceId: envVal ? `${envVal.substring(0, 8)}...` : null,
+            stripeProductId: stripePrice && typeof stripePrice.product !== 'string' ? `${stripePrice.product.id.substring(0, 8)}...` : null,
+            expectedPriceInCents: item.priceInCents,
+            stripePriceInCents: stripePrice ? stripePrice.unit_amount : null,
+            interval: item.interval,
+            status,
+            valid
+         });
+      }
+
+      const mode = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ? 'live' : 'test';
+
+      return res.json({
+         environment: mode,
+         totalItems: PRODUCT_CATALOG.length,
+         results
+      });
+
+    } catch (err: any) {
+      console.error(err);
+      return res.status(500).json({ error: err.message });
     }
   });
 

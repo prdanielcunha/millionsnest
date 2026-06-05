@@ -91,7 +91,7 @@ export const MUSIC_SCALE_PLANS: Record<MusicScalePlan, MusicScalePlanDefinition>
       songs: -1,
       scales: -1,
       bandScales: -1,
-      libraryImportsPerMonth: 20,
+      libraryImportsPerMonth: 10,
     },
     features: {
       songsUnlimited: true,

@@ -8,7 +8,10 @@ export interface CatalogProduct {
   tier: 'starter' | 'advanced' | 'pro' | 'addon';
   type: 'plan' | 'addon';
   interval: 'month' | 'year' | 'one_time';
-  price: number;
+  priceInCents: number;
+  compareAtPriceInCents?: number;
+  promotionLabel?: string;
+  savingsLabel?: string;
   featured?: boolean;
   recommended?: boolean;
   envKey: string; // The ENV variable key holding the Stripe Price ID
@@ -23,7 +26,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     tier: 'starter',
     type: 'plan',
     interval: 'month',
-    price: 19.90,
+    priceInCents: 1990,
     envKey: 'STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY'
   },
   {
@@ -33,7 +36,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     tier: 'starter',
     type: 'plan',
     interval: 'year',
-    price: 191.04,
+    priceInCents: 19104,
     envKey: 'STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY'
   },
 
@@ -45,7 +48,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     tier: 'advanced',
     type: 'plan',
     interval: 'month',
-    price: 29.90,
+    priceInCents: 2990,
     envKey: 'STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY'
   },
   {
@@ -55,7 +58,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     tier: 'advanced',
     type: 'plan',
     interval: 'year',
-    price: 287.04,
+    priceInCents: 28704,
     envKey: 'STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY'
   },
 
@@ -67,7 +70,10 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     tier: 'pro',
     type: 'plan',
     interval: 'month',
-    price: 34.90,
+    priceInCents: 3490,
+    compareAtPriceInCents: 4490,
+    promotionLabel: 'Preço de lançamento',
+    savingsLabel: 'Economize R$ 10,00/mês',
     recommended: true,
     envKey: 'STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY'
   },
@@ -78,7 +84,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     tier: 'pro',
     type: 'plan',
     interval: 'year',
-    price: 335.04,
+    priceInCents: 33504,
     recommended: true,
     envKey: 'STRIPE_PRICE_MUSICSCALE_PRO_YEARLY'
   },
@@ -91,7 +97,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     tier: 'addon',
     type: 'addon',
     interval: 'one_time',
-    price: 54.90,
+    priceInCents: 5490,
     envKey: 'STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM'
   },
   {
@@ -101,7 +107,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     tier: 'addon',
     type: 'addon',
     interval: 'one_time',
-    price: 29.90,
+    priceInCents: 2990,
     envKey: 'STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS'
   },
   {
@@ -111,7 +117,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     tier: 'addon',
     type: 'addon',
     interval: 'one_time',
-    price: 97.00,
+    priceInCents: 3990,
     envKey: 'STRIPE_PRICE_MUSICSCALE_WORSHIP_100'
   },
   {
@@ -121,7 +127,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     tier: 'addon',
     type: 'addon',
     interval: 'one_time',
-    price: 29.90,
+    priceInCents: 1490,
     envKey: 'STRIPE_PRICE_MUSICSCALE_PACK_10'
   }
 ];
