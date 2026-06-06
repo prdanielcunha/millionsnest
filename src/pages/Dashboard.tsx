@@ -82,6 +82,10 @@ export function Dashboard() {
   const [repairing, setRepairing] = useState(false);
   const [subscriptionRepairAvailable, setSubscriptionRepairAvailable] = useState(false);
 
+  const [subscriptionBlockedApp, setSubscriptionBlockedApp] = useState<EcosystemApp | null>(null);
+  const [subscriptionBlockedReason, setSubscriptionBlockedReason] = useState<string | null>(null);
+  const [verifyingStripe, setVerifyingStripe] = useState(false);
+
   const handleLaunchEcosystemApp = async (app: EcosystemApp, permsMap: Record<string, boolean>) => {
     analytics.track('app_usage', { userId: user?.uid, organizationId: profile?.organizationId, app: app.id });
     if (!profile || !organization) {
@@ -111,7 +115,13 @@ export function Dashboard() {
       await openEcosystemModule(app.id, user, profile, organization, permsMap);
       feedback.dismiss(toastId);
     } catch (e: any) {
-      feedback.error(`Erro ao abrir: ${e.message || 'Falha ao iniciar módulo.'}`);
+      feedback.dismiss(toastId);
+      if (!isGlobalAdmin) {
+        setSubscriptionBlockedApp(app);
+        setSubscriptionBlockedReason(e.message || 'Assinatura inválida ou inativa.');
+      } else {
+        feedback.error(`Erro ao abrir: ${e.message || 'Falha ao iniciar módulo.'}`);
+      }
     }
   };
 
@@ -871,6 +881,50 @@ export function Dashboard() {
   const currentUserPerms = isGlobalAdmin
     ? normalizePermissions(undefined, 'owner', undefined)
     : normalizePermissions(currentUserData?.permissions, currentUserData?.role || 'member', currentUserData?.permissionsVersion);
+
+  const handleSyncStripeOnBlockedModal = async () => {
+    if (!user || verifyingStripe) return;
+    setVerifyingStripe(true);
+    const toastId = feedback.loading("Sincronizando assinatura em tempo real com o Stripe...");
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/v1/billing/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ userId: user.uid })
+      });
+      const data = await res.json();
+      
+      if (data.status === 'reset' || data.status === 'canceled' || data.status === 'none' || !data.status) {
+        feedback.dismiss(toastId);
+        feedback.error("Não encontramos nenhuma assinatura ativa no Stripe para esta organização. Certifique-se de convalidar o pagamento ou assinar um plano.");
+      } else {
+        feedback.dismiss(toastId);
+        feedback.success("Assinatura ativa identificada com sucesso!");
+        
+        if (fetchSubscriptionAndOrg) {
+          await fetchSubscriptionAndOrg(true);
+        }
+        
+        setSubscriptionBlockedApp(null);
+        setSubscriptionBlockedReason(null);
+        
+        if (subscriptionBlockedApp) {
+          setTimeout(() => {
+            handleLaunchEcosystemApp(subscriptionBlockedApp, currentUserPerms);
+          }, 300);
+        }
+      }
+    } catch (err: any) {
+      feedback.dismiss(toastId);
+      feedback.error(`Erro ao sincronizar: ${err.message || "Tente novamente mais tarde."}`);
+    } finally {
+      setVerifyingStripe(false);
+    }
+  };
 
   const breadcrumbs = [];
   if (activeTab === 'overview') {
@@ -1868,6 +1922,134 @@ export function Dashboard() {
               >
                 Abrir {configAppModal.name}
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Premium Subscription Blocked Modal */}
+      <AnimatePresence>
+        {subscriptionBlockedApp && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              className="w-full max-w-xl bg-gradient-to-b from-[#0F111E] to-[#050505] border border-white/10 rounded-3xl p-8 shadow-[0_0_50px_rgba(43,133,235,0.15)] relative overflow-hidden"
+            >
+              {/* Decorative radial background */}
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-[#2B85EB]/20 rounded-full blur-[80px] pointer-events-none" />
+              <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-[#2B85EB]/10 rounded-full blur-[80px] pointer-events-none" />
+
+              <button
+                onClick={() => {
+                  setSubscriptionBlockedApp(null);
+                  setSubscriptionBlockedReason(null);
+                }}
+                className="absolute top-6 right-6 text-[#A0A7B5] hover:text-white transition-colors p-1"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex flex-col items-center text-center mt-4">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#2B85EB]/20 to-[#2B85EB]/5 border border-[#2B85EB]/30 text-[#2B85EB] flex items-center justify-center mb-6 shadow-lg shadow-[#2B85EB]/5">
+                  <Music className="w-8 h-8 animate-pulse" />
+                </div>
+
+                <div className="mb-2">
+                  <span className="text-[10px] font-bold text-[#2B85EB] bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-3.5 py-1 rounded-full uppercase tracking-widest">
+                    Excelência Ministerial
+                  </span>
+                </div>
+
+                <h3 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight leading-tight max-w-md">
+                  Preparação Fluida &amp; Menos Caos
+                </h3>
+                
+                <p className="text-[#A0A7B5] text-sm md:text-base leading-relaxed mt-4 max-w-lg">
+                  Para garantir a organização completa do seu ministério de louvor com excelência, o acesso ao aplicativo <strong className="text-white">{subscriptionBlockedApp.name}</strong> requer uma assinatura ativa do ecossistema MillionsNest.
+                </p>
+
+                {/* Live Stripe Validation status card */}
+                <div className="w-full bg-[#141829]/50 border border-white/5 rounded-2xl p-5 my-6 text-left relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-full bg-gradient-to-l from-[#2B85EB]/5 to-transparent pointer-events-none" />
+                  
+                  <div className="flex items-center gap-3 mb-3 pb-3 border-b border-white/5">
+                    <span className="flex h-2.5 w-2.5 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                    </span>
+                    <span className="text-xs font-semibold text-[#A0A7B5] uppercase tracking-wider">
+                      Stripe Gateway (Conexão Segura Ativa)
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[11px] text-[#A0A7B5]/60 uppercase tracking-widest mb-0.5">Validação em Tempo Real</p>
+                      <p className="text-xs font-semibold text-emerald-400">Verificado com Sucesso</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-[#A0A7B5]/60 uppercase tracking-widest mb-0.5">Status da Assinatura</p>
+                      <p className="text-xs font-semibold text-red-500 flex items-center gap-1.5 uppercase">
+                        {subscription?.status === 'canceled' ? 'Cancelada' : 'Pendente / Inativa'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="w-full space-y-3.5">
+                  <button
+                    onClick={handleSyncStripeOnBlockedModal}
+                    disabled={verifyingStripe}
+                    className="w-full py-4 bg-[#2B85EB] hover:bg-[#3d92fb] active:scale-[0.98] text-white rounded-xl text-sm font-semibold transition-all shadow-[0_0_30px_rgba(43,133,235,0.3)] hover:shadow-[0_0_40px_rgba(43,133,235,0.5)] flex items-center justify-center gap-2 disabled:opacity-75"
+                  >
+                    {verifyingStripe ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Sincronizando assinatura com o Stripe...
+                      </>
+                    ) : (
+                      <>
+                        Sincronizar e Abrir Aplicativo
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setSubscriptionBlockedApp(null);
+                        setSubscriptionBlockedReason(null);
+                        setActiveTab("billing");
+                      }}
+                      className="flex-1 py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 active:scale-[0.98] text-white rounded-xl text-xs font-semibold transition-all"
+                    >
+                      Escolher Plano Premium
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSubscriptionBlockedApp(null);
+                        setSubscriptionBlockedReason(null);
+                      }}
+                      className="flex-1 py-3.5 bg-transparent border border-transparent hover:text-white text-[#A0A7B5] text-xs font-semibold transition-all"
+                    >
+                      Voltar ao Painel
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-[#A0A7B5]/40 mt-6 max-w-sm">
+                  Se você acabou de realizar o pagamento, clique em "Sincronizar" para liberar instantaneamente o seu acesso ou fale com o nosso suporte.
+                </p>
+              </div>
             </motion.div>
           </motion.div>
         )}

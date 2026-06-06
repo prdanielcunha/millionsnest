@@ -1635,12 +1635,14 @@ async function startServer() {
       let chosenOrgId: string | null = null;
       let subscriptionFound = false;
       let subscriptionStatus: string | null = null;
+      let existingSubData: any = null;
 
       // PASSO 2: Buscar subscriptions/{organizationId} em Firestore
       for (const oId of candidateOrgsList) {
         const subDoc = await db.collection('subscriptions').doc(oId).get();
         if (subDoc.exists) {
-          const status = subDoc.data()?.status;
+          existingSubData = subDoc.data();
+          const status = existingSubData?.status;
           if (status && validStatuses.includes(status)) {
             chosenOrgId = oId;
             subscriptionFound = true;
@@ -1653,17 +1655,30 @@ async function startServer() {
       logSubscriptionFound = subscriptionFound;
       logSubscriptionStatus = subscriptionStatus;
 
-      // PASSO 3: Se NÃO existir assinatura ativa na base, realizar self-healing
-      if (!isGlobalAdmin && !subscriptionFound) {
+      // PASSO 3: Se NÃO for global admin, SEMPRE consultamos o Stripe em tempo real
+      if (!isGlobalAdmin) {
         logStripeLookupPerformed = true;
         const stripe = getStripe();
         if (stripe) {
           let stripeSubObj: any = null;
           const email = decoded.email || userData?.email;
-          const stripeCustomerId = userData?.stripeCustomerId || userData?.subscription?.stripeCustomerId;
+          const stripeCustomerId = userData?.stripeCustomerId || userData?.subscription?.stripeCustomerId || existingSubData?.stripeCustomerId;
+          const stripeSubscriptionId = existingSubData?.stripeSubscriptionId;
 
-          // A. Tentar localizar por stripeCustomerId se cadastrado
-          if (stripeCustomerId) {
+          // A. Tentar recuperar diretamente pelo ID de assinatura (super veloz!)
+          if (stripeSubscriptionId) {
+            try {
+              const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+              if (validStatuses.includes(sub.status)) {
+                stripeSubObj = sub;
+              }
+            } catch (err) {
+              console.warn('[HANDOFF_STRIPE_ALWAYS_CHECK] Direct Retrieve failed:', err);
+            }
+          }
+
+          // B. Se não encontrou por ID de assinatura, tentar por customerId
+          if (!stripeSubObj && stripeCustomerId) {
             try {
               const subs = await stripe.subscriptions.list({ customer: stripeCustomerId, limit: 10, status: 'all' });
               const validSub = subs.data.find((s: any) => validStatuses.includes(s.status));
@@ -1671,14 +1686,14 @@ async function startServer() {
                 stripeSubObj = validSub;
               }
             } catch (err) {
-              console.warn('[HANDOFF_SELF_HEALING] Stripe lookup by stripeCustomerId failed:', err);
+              console.warn('[HANDOFF_STRIPE_ALWAYS_CHECK] Stripe list by customerId failed:', err);
             }
           }
 
-          // B. Tentar localizar por e-mail do usuário se e-mail válido
+          // C. Se ainda não encontrou, buscar por e-mail do usuário
           if (!stripeSubObj && email) {
             try {
-              const customers = await stripe.customers.list({ email: email, limit: 5 });
+              const customers = await stripe.customers.list({ email: email, limit: 10 });
               for (const cust of customers.data) {
                 const subs = await stripe.subscriptions.list({ customer: cust.id, limit: 10, status: 'all' });
                 const validSub = subs.data.find((s: any) => validStatuses.includes(s.status));
@@ -1688,11 +1703,11 @@ async function startServer() {
                 }
               }
             } catch (err) {
-              console.warn('[HANDOFF_SELF_HEALING] Stripe lookup by email failed:', err);
+              console.warn('[HANDOFF_STRIPE_ALWAYS_CHECK] Stripe lookup by email failed:', err);
             }
           }
 
-          // C. Tentar localizar por checkout sessions do cliente
+          // D. Se ainda não encontrou, tentar por checkout sessions
           if (!stripeSubObj && stripeCustomerId) {
             try {
               const checkouts = await stripe.checkout.sessions.list({ customer: stripeCustomerId, limit: 10 });
@@ -1705,95 +1720,64 @@ async function startServer() {
                 }
               }
             } catch (err) {
-              console.warn('[HANDOFF_SELF_HEALING] Stripe lookup by checkout sessions failed:', err);
+              console.warn('[HANDOFF_STRIPE_ALWAYS_CHECK] Stripe lookup by checkout sessions failed:', err);
             }
           }
 
-          // Se encontramos uma assinatura válida no Stripe: executar auto-recuperação
           if (stripeSubObj) {
-            const targetOrgId = candidateOrgsList.length > 0 ? candidateOrgsList[0] : decoded.uid;
+            const targetOrgId = chosenOrgId || (candidateOrgsList.length > 0 ? candidateOrgsList[0] : decoded.uid);
             
-            console.log(`[HANDOFF_SELF_HEALING] Restoring ecosystem records for uid: ${decoded.uid}, org: ${targetOrgId}`);
+            console.log(`[HANDOFF_STRIPE_ALWAYS_CHECK] Active Stripe subscription verified. Syncing dynamically for uid: ${decoded.uid}, org: ${targetOrgId}`);
             
-            const batch = db.batch();
-            const subRef = db.collection('subscriptions').doc(targetOrgId);
-            const orgRef = db.collection('organizations').doc(targetOrgId);
-            const memberRef = db.collection('organization_members').doc(`${decoded.uid}_${targetOrgId}`);
-            const userRef = db.collection('users').doc(decoded.uid);
+            await upsertEcosystemSubscription({
+              userId: decoded.uid,
+              orgId: targetOrgId,
+              subscription: stripeSubObj,
+              eventCreatedTs: Math.floor(Date.now() / 1000),
+              event_type: 'handoff_always_check',
+              userEmail: email
+            });
 
-            batch.set(subRef, {
-              stripeSubscriptionId: stripeSubObj.id,
-              stripeCustomerId: stripeSubObj.customer,
-              organizationId: targetOrgId,
-              status: stripeSubObj.status,
-              plan: stripeSubObj.metadata?.plan || 'monthly',
-              tier: stripeSubObj.metadata?.tier || 'pro',
-              trialEndsAt: stripeSubObj.trial_end ? admin.firestore.Timestamp.fromMillis(stripeSubObj.trial_end * 1000) : null,
-              currentPeriodEnd: admin.firestore.Timestamp.fromMillis(stripeSubObj.current_period_end * 1000),
-              appsAccess: { musicscale: true },
-              features: { musicScale: true, globalLibrary: true },
-              schemaVersion: 1,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
-            batch.set(orgRef, {
-              stripeSubscriptionId: stripeSubObj.id,
-              stripeCustomerId: stripeSubObj.customer,
-              subscriptionStatus: stripeSubObj.status,
-              status: stripeSubObj.status,
-              name: userData?.displayName ? `Organização de ${userData.displayName.split(' ')[0]}` : "Minha Organização",
-              ownerUid: decoded.uid,
-              ownerUserId: decoded.uid,
-              ownerId: decoded.uid,
-              plan: stripeSubObj.metadata?.plan || 'monthly',
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
-            batch.set(memberRef, {
-              uid: decoded.uid,
-              email: email || '',
-              organizationId: targetOrgId,
-              role: 'owner',
-              organizationRole: 'owner',
-              appRole: 'Dono',
-              status: 'active',
-              permissions: {
-                "organization.manageMembers": true,
-                "musicScale.manageSongs": true,
-                "musicScale.manageTeams": true,
-                "organization.manageOrganization": true,
-                "musicScale.manageScales": true,
-                "organization.manageBilling": true,
-                "musicscale.scales.manage": true,
-                "organization.audit.view": true,
-                "organization.members.invite": true,
-                "musicscale.teams.manage": true,
-                "organization.members.manage": true,
-                "organization.billing.manage": true,
-                "organization.settings.update": true,
-                "musicscale.songs.edit": true,
-                "organization.roles.manage": true,
-                "musicscale.songs.manage": true,
-                "organization.apps.manage": true
-              },
-              permissionsVersion: 2
-            }, { merge: true });
-
-            batch.set(userRef, {
-              organizationId: targetOrgId,
-              activeOrganizationId: targetOrgId,
-              defaultOrganizationId: targetOrgId,
-              subscriptionStatus: stripeSubObj.status,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
-            await batch.commit();
             logSelfHealingExecuted = true;
             chosenOrgId = targetOrgId;
             subscriptionFound = true;
             subscriptionStatus = stripeSubObj.status;
             logSubscriptionFound = true;
             logSubscriptionStatus = stripeSubObj.status;
+          } else {
+            console.log(`[HANDOFF_STRIPE_ALWAYS_CHECK] No active subscription found on Stripe for user: ${decoded.uid}`);
+            
+            // Se existia uma assinatura localmente, removemos ou cancelamos no Firestore
+            const targetOrgId = chosenOrgId || (candidateOrgsList.length > 0 ? candidateOrgsList[0] : decoded.uid);
+            const batch = db.batch();
+            batch.set(db.collection('subscriptions').doc(targetOrgId), {
+              status: 'canceled',
+              features: {
+                globalLibrary: false,
+                musicScale: false
+              },
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            batch.set(db.collection('organizations').doc(targetOrgId), {
+              subscriptionStatus: 'canceled',
+              status: 'canceled',
+              'apps.musicscale.access': false,
+              'apps.musicscale.status': 'canceled',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            batch.set(db.collection('users').doc(decoded.uid), {
+              subscriptionStatus: 'canceled',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            await batch.commit();
+
+            subscriptionFound = false;
+            subscriptionStatus = 'canceled';
+            logSubscriptionFound = false;
+            logSubscriptionStatus = 'canceled';
           }
         }
       }
