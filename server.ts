@@ -319,13 +319,15 @@ export async function upsertEcosystemSubscription(params: {
 
   const subRef = db.collection('subscriptions').doc(orgId);
   const orgRef = db.collection('organizations').doc(orgId);
-  const memberRef = db.collection('organization_members').doc(`${userId}_${orgId}`);
+  const legacyMemberRef = db.collection('organization_members').doc(`${userId}_${orgId}`);
+  const memberRef = db.collection('organizations').doc(orgId).collection('members').doc(userId);
   const userRef = db.collection('users').doc(userId);
 
   // Fetch all documents in parallel to check if any are missing (for self-healing)
-  const [subDoc, orgDoc, memberDoc, userDoc] = await Promise.all([
+  const [subDoc, orgDoc, legacyMemberDoc, memberDoc, userDoc] = await Promise.all([
     subRef.get(),
     orgRef.get(),
+    legacyMemberRef.get(),
     memberRef.get(),
     userRef.get()
   ]);
@@ -446,19 +448,23 @@ export async function upsertEcosystemSubscription(params: {
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
 
-  // 3. organization_members/{userId}_{orgId}
-  batch.set(memberRef, {
+  // 3. New Architecture member doc: organizations/{orgId}/members/{userId}
+  const memberData = {
      uid: userId,
      email: userEmail || '',
      organizationId: orgId,
      role: 'owner',
      organizationRole: 'owner',
-     appRole: 'Dono',
+     appRole: 'Administrador',
      status: 'active',
      permissionsVersion: CURRENT_PERMISSIONS_VERSION,
      permissions: getDefaultPermissions('owner'),
      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-  }, { merge: true });
+  };
+  batch.set(memberRef, memberData, { merge: true });
+
+  // 3.1. organization_members/{userId}_{orgId} (Legacy)
+  batch.set(legacyMemberRef, memberData, { merge: true });
 
   // 4. users/{userId}
   const userPayload: any = {
@@ -2131,6 +2137,27 @@ async function startServer() {
 
   app.get('/api/admin/repair/pastordaniel', async (req, res) => {
     try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Token ausente.' });
+      }
+      
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+      
+      const adminUid = decodedToken.uid;
+      const adminDoc = await db!.collection('users').doc(adminUid).get();
+      if (!adminDoc.exists) return res.status(403).json({ error: 'Forbidden' });
+      const adminRole = adminDoc.data()?.systemRole;
+      if (adminRole !== 'ceo' && adminRole !== 'admin' && adminRole !== 'global_admin') {
+        return res.status(403).json({ error: 'Forbidden', message: 'Acesso restrito.' });
+      }
+
       if (!db) return res.status(500).json({ error: 'DB not ready' });
       const stripe = getStripe();
       // Encontra a assinatura no Stripe do e-mail usado
@@ -2328,13 +2355,18 @@ async function startServer() {
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
-      batch.set(db.collection('organization_members').doc(`${uid}_${orgId}`), {
+      const memberData = {
           uid: uid,
           organizationId: orgId,
           role: 'owner',
+          organizationRole: 'owner',
           permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-          permissions: getDefaultPermissions('owner')
-      }, { merge: true });
+          permissions: getDefaultPermissions('owner'),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      batch.set(db.collection('organization_members').doc(`${uid}_${orgId}`), memberData, { merge: true });
+      batch.set(db.collection('organizations').doc(orgId).collection('members').doc(uid), memberData, { merge: true });
 
       await batch.commit();
 
@@ -2409,6 +2441,28 @@ async function startServer() {
 
   app.get('/api/admin/repair/:email', async (req, res) => {
     try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Token ausente.' });
+      }
+      
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+      
+      const adminUid = decodedToken.uid;
+      const adminDoc = await db!.collection('users').doc(adminUid).get();
+      if (!adminDoc.exists) return res.status(403).json({ error: 'Forbidden' });
+      
+      const adminRole = adminDoc.data()?.systemRole;
+      if (adminRole !== 'ceo' && adminRole !== 'admin' && adminRole !== 'global_admin') {
+        return res.status(403).json({ error: 'Forbidden', message: 'Acesso restrito.' });
+      }
+
       const { email } = req.params;
       if (!db || !email) return res.status(400).send('Missing params');
 

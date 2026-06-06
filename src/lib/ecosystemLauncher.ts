@@ -8,7 +8,7 @@ export async function openEcosystemModule(
   user: any,
   profile: any,
   organization: any,
-  currentUserPerms: Record<string, boolean>
+  currentUserData: any
 ) {
   if (!user || !organization || !profile) {
     console.error('[EcosystemLaunch] Missing required data', { hasUser: !!user, hasOrg: !!organization, hasProfile: !!profile });
@@ -70,7 +70,7 @@ export async function openEcosystemModule(
      
      const roleDisplay = resolveUserRoleDisplay({
        userProfile: profile,
-       organizationMember: { role: currentUserPerms?.owner ? 'owner' : (currentUserPerms?.admin ? 'admin' : 'member') } // approximate org role from perms if actual role not passed
+       organizationMember: currentUserData
      });
 
      const context = {
@@ -89,7 +89,9 @@ export async function openEcosystemModule(
          organization: {
            id: organization.id,
            name: organization.name,
-           organizationRole: roleDisplay.organizationRole
+           organizationRole: roleDisplay.organizationRole,
+           subscriptionPlan: organization.subscriptionPlan || organization.plan || 'none',
+           subscriptionStatus: organization.subscriptionStatus || organization.status || 'none'
          },
          capabilities: {
            isGlobalPrivilegedUser: isGlobalPrivilegedUser(profile),
