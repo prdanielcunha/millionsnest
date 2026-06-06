@@ -20,14 +20,15 @@ interface TimelineEvent {
 
 export function UnifiedTimeline() {
   const { profile } = useAuth();
+  const { organization } = useOrganization();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'musicscale' | 'organization' | 'billing'>('all');
 
   useEffect(() => {
-    if (!profile?.organizationId) return;
+    if (!organization?.id || !profile) return;
 
-    const timelineRef = collection(db, `organizations/${profile.organizationId}/timeline`);
+    const timelineRef = collection(db, `organizations/${organization.id}/timeline`);
     const q = query(timelineRef, orderBy('timestamp', 'desc'), limit(50));
 
     const unsub = onSnapshot(q, (snap) => {
@@ -37,7 +38,7 @@ export function UnifiedTimeline() {
       
       // Update UI telemetry for operational tracking
       eventBus.publish('ecosystem.timeline.viewed', { 
-        organizationId: profile.organizationId, 
+        organizationId: organization.id, 
         userId: profile.id, 
         appSource: 'core',
         metadata: { loadedEventCount: data.length }
@@ -45,7 +46,7 @@ export function UnifiedTimeline() {
     });
 
     return () => unsub();
-  }, [profile?.organizationId, profile?.id]);
+  }, [organization?.id, profile?.id]);
 
   const getEventIcon = (type: string) => {
     if (type.includes('scale') || type.includes('rehearsal')) return <CalendarDays className="w-3.5 h-3.5 text-[#2B85EB]" />;

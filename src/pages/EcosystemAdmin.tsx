@@ -34,7 +34,7 @@ export function EcosystemAdmin() {
   const [analyticsEvents, setAnalyticsEvents] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState<'users' | 'analytics'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'organizations' | 'analytics'>('users');
 
   useEffect(() => {
     if (!loading) {
@@ -130,6 +130,13 @@ export function EcosystemAdmin() {
             >
               <Users className="w-4 h-4" />
               Usuários e Acessos
+            </button>
+            <button 
+              onClick={() => setActiveTab('organizations')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-sm transition-colors ${activeTab === 'organizations' ? 'bg-[#2B85EB]/10 text-[#2B85EB]' : 'text-[#A0A7B5] hover:bg-white/5'}`}
+            >
+              <Building className="w-4 h-4" />
+              Organizações e Suporte
             </button>
             <button 
               onClick={() => setActiveTab('analytics')}
@@ -250,6 +257,76 @@ export function EcosystemAdmin() {
               </div>
             </div>
             </>)}
+
+            {activeTab === 'organizations' && (
+              <>
+                {/* Search */}
+                <div className="relative">
+                  <Search className="w-5 h-5 text-[#A0A7B5] absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Buscar organização pelo nome..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full bg-[#0B0F19] border border-white/10 rounded-xl pl-12 pr-4 py-4 text-sm focus:outline-none focus:border-[#2B85EB] transition-colors"
+                  />
+                </div>
+
+                <div className="bg-[#0B0F19] border border-white/10 rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-white/5 border-b border-white/10">
+                        <tr>
+                          <th className="px-6 py-4 font-medium text-[#A0A7B5]">Organização</th>
+                          <th className="px-6 py-4 font-medium text-[#A0A7B5]">Dono / ID</th>
+                          <th className="px-6 py-4 font-medium text-[#A0A7B5]">Plano Atual</th>
+                          <th className="px-6 py-4 font-medium text-[#A0A7B5]">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {organizations
+                          .filter(org => (org.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
+                          .map(org => (
+                          <tr key={org.id} className="hover:bg-white/[0.02]">
+                            <td className="px-6 py-4">
+                              <p className="font-medium text-[#F5F7FA]">{org.name || 'Sem nome'}</p>
+                              <p className="text-xs text-[#A0A7B5]">{org.slug || 'sem-slug'}</p>
+                            </td>
+                            <td className="px-6 py-4 text-[#A0A7B5]">
+                              <p className="text-[#F5F7FA] text-xs">{users.find(u => u.uid === org.ownerUid)?.email || org.ownerUid || 'Desconhecido'}</p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center px-2 py-1 rounded bg-[#2B85EB]/10 text-[#2B85EB] text-xs font-semibold border border-[#2B85EB]/20">
+                                {org.subscriptionPlan || 'free'} • {org.subscriptionStatus || 'active'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Entrar em modo suporte na organização ${org.name}?`)) {
+                                     localStorage.setItem('mn_support_session', JSON.stringify({
+                                        active: true,
+                                        targetOrganizationId: org.id,
+                                        targetOrganizationName: org.name,
+                                        actorSystemRole: profile?.systemRole,
+                                        startedAt: new Date().toISOString()
+                                     }));
+                                     window.location.href = '/dashboard';
+                                  }
+                                }}
+                                className="px-3 py-1.5 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/20 hover:border-[#2B85EB]/40 rounded-lg text-xs font-medium transition-colors"
+                              >
+                                Modo Suporte
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
 
             {activeTab === 'analytics' && (
               <div className="space-y-6">

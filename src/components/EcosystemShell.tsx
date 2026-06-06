@@ -99,8 +99,44 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
     ...ECOSYSTEM_APPS
   ].find(a => a.id === activeAppId) || { id: 'core', name: 'Painel Central' };
 
+  let supportModeObj: any = null;
+  try {
+     const supportStr = localStorage.getItem('mn_support_session');
+     if (supportStr) {
+        const parsed = JSON.parse(supportStr);
+        if (parsed.active && parsed.targetOrganizationId === organization?.id) {
+           supportModeObj = parsed;
+        }
+     }
+  } catch(e) {}
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#F5F7FA] font-sans flex flex-col">
+      {supportModeObj && (
+         <div className="w-full bg-[#2B85EB]/10 border-b border-[#2B85EB]/20 px-4 py-2 flex items-center justify-between shadow-[0_0_15px_rgba(43,133,235,0.1)]">
+            <div className="flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-2">
+               <span className="text-[#2B85EB] font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_10px_rgba(43,133,235,0.4)]">
+                 <AlertTriangle className="w-4 h-4"/> 
+                 MODO SUPORTE ATIVO
+               </span>
+               <span className="text-white/60 text-xs hidden md:inline">•</span>
+               <span className="text-sm font-medium text-white/90">
+                 Você está editando a organização <strong className="text-white">{supportModeObj.targetOrganizationName || organization?.name}</strong>.
+                 <span className="opacity-70 font-normal ml-1 hidden md:inline">Importações feitas por suporte não consomem o limite do cliente.</span>
+               </span>
+            </div>
+            <button 
+              onClick={() => {
+                 localStorage.removeItem('mn_support_session');
+                 window.location.reload();
+              }}
+              className="text-xs shrink-0 whitespace-nowrap bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg font-medium text-white transition-colors border border-white/10"
+            >
+              Sair do modo suporte
+            </button>
+         </div>
+      )}
+      
       {/* Ecosystem Topbar - Persistent & OS-like */}
       <header className="h-14 border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between px-4 lg:px-6 gap-2 md:gap-4 w-full">
         

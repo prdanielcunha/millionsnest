@@ -27,6 +27,17 @@ export async function openEcosystemModule(
   const maxAttempts = 5;
   const retryDelayMs = 3000;
 
+  let isSupportMode = false;
+  try {
+     const supportStr = localStorage.getItem('mn_support_session');
+     if (supportStr) {
+        const supportObj = JSON.parse(supportStr);
+        if (supportObj?.active && supportObj?.targetOrganizationId === organization.id) {
+           isSupportMode = true;
+        }
+     }
+  } catch (e) {}
+
   const attemptHandoff = async (): Promise<any> => {
     const idToken = await auth.currentUser!.getIdToken();
     const response = await fetch('/api/ecosystem/create-handoff', {
@@ -35,7 +46,7 @@ export async function openEcosystemModule(
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ appId: moduleKey, orgId: organization.id })
+        body: JSON.stringify({ appId: moduleKey, orgId: organization.id, supportMode: isSupportMode })
     });
     
     if (!response.ok) {
@@ -98,6 +109,7 @@ export async function openEcosystemModule(
            canBypassBilling: isGlobalPrivilegedUser(profile),
            canUseAllFeatures: isGlobalPrivilegedUser(profile)
          },
+         supportMode: isSupportMode,
          protocolVersion: '1.0.0'
      };
      

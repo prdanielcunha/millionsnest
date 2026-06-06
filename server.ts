@@ -1359,7 +1359,7 @@ async function startServer() {
   app.post('/api/v1/organizations/:orgId/musicscale/usage/increment', express.json(), async (req, res) => {
     try {
       const { orgId } = req.params;
-      const { type, incrementBy = 1 } = req.body;
+      const { type, incrementBy = 1, metadata = {} } = req.body;
       const authHeader = req.headers.authorization;
       if (!authHeader?.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Unauthorized', message: 'Token de autenticação ausente.' });
@@ -1400,6 +1400,44 @@ async function startServer() {
 
       if (!type) {
         return res.status(400).json({ error: 'Missing type' });
+      }
+
+      const isSystemAdmin = userData?.systemRole === 'ceo' || userData?.systemRole === 'admin';
+      const isSupportMode = decodedToken.supportMode === true;
+      const shouldConsumeLibraryImport = !isSystemAdmin && !isSupportMode;
+
+      // Realizar registro de auditoria, preferencialmente para admin/supportMode import
+      if (type === 'library_import') {
+        try {
+          await dbInstance.collection('audit_logs').add({
+            action: "musicscale.library.import",
+            organizationId: orgId,
+            actorUid: decodedToken.uid,
+            actorEmail: decodedToken.email || userData?.email || '',
+            actorDisplayName: userData?.displayName || '',
+            actorSystemRole: userData?.systemRole || 'user',
+            supportMode: isSupportMode,
+            targetOrganizationId: orgId,
+            consumedUsage: shouldConsumeLibraryImport,
+            source: isSupportMode || isSystemAdmin ? "support_admin" : "user",
+            globalSongId: metadata.globalSongId || null,
+            songTitle: metadata.songTitle || null,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        } catch (auditErr) {
+          console.warn('[Audit Log Failed]', auditErr);
+        }
+      }
+
+      if (type === 'library_import' && !shouldConsumeLibraryImport) {
+        // Bypass limit assertions and do NOT increment. 
+        return res.json({
+          success: true,
+          type,
+          monthId: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+          newCount: await getCurrentMonthUsage(orgId, type),
+          supportModeBypassed: true
+        });
       }
 
       // Assert operation limits
@@ -1576,7 +1614,7 @@ async function startServer() {
       const decoded = await admin.auth().verifyIdToken(token);
       logUid = decoded.uid;
       
-      const { appId, orgId } = req.body;
+      const { appId, orgId, supportMode } = req.body;
       if (appId !== 'musicscale') {
         return res.status(400).json({ error: 'Invalid app' });
       }
@@ -1590,13 +1628,23 @@ async function startServer() {
       const userData = userDoc.exists ? userDoc.data() : null;
       const systemRole = userData?.systemRole;
       const isGlobalAdmin = systemRole === 'ceo' || systemRole === 'admin' || systemRole === 'global_admin';
+      
+      let verifiedSupportMode = false;
+      if (supportMode === true) {
+        if (!isGlobalAdmin) {
+           return res.status(403).json({ error: 'Forbidden: only global admins can use support mode' });
+        }
+        verifiedSupportMode = true;
+      }
 
       // PASSO 1: Resolver organizationId do usuário
       const candidateOrgs = new Set<string>();
 
-      // A. Se orgId veio na requisição, ele é o candidato preferencial
+      // A. Apenas permitimos orgId arbitrário se for Global Admin
       if (orgId && typeof orgId === 'string' && orgId.trim() !== '') {
-        candidateOrgs.add(orgId.trim());
+        if (isGlobalAdmin) {
+           candidateOrgs.add(orgId.trim());
+        }
       }
 
       // B. Da conta do usuário (users/{uid})
@@ -1611,13 +1659,16 @@ async function startServer() {
         }
       }
 
-      // C. Do record em organization_members
+      // C. Do record em organizations/{orgId}/members/{uid} E legacy organization_members
       try {
         const membersSnap = await db.collection('organization_members').where('uid', '==', decoded.uid).get();
         membersSnap.docs.forEach(doc => {
           const oId = doc.data()?.organizationId;
           if (oId && typeof oId === 'string' && oId.trim() !== '') candidateOrgs.add(oId.trim());
         });
+        
+        // As organizations collection doesn't have a direct way to find members via collectionGroup without an index, 
+        // the client MUST provide the orgId if it's the new nested subcollection approach, and we'll validate it below.
       } catch (err) {
         console.warn('[HANDOFF_RESOLVER] Failed to query organization_members:', err);
       }
@@ -1634,6 +1685,27 @@ async function startServer() {
         ownedSnap3.docs.forEach(doc => candidateOrgs.add(doc.id));
       } catch (err) {
         console.warn('[HANDOFF_RESOLVER] Failed to query owned organizations:', err);
+      }
+      
+      // Validação Crítica de Segurança: Se o usuário (não-admin) mandou um orgId, DEVEMOS garantir que ele tem vínculo.
+      if (!isGlobalAdmin && orgId && typeof orgId === 'string' && orgId.trim() !== '') {
+         const cleanOrgId = orgId.trim();
+         let isLegit = candidateOrgs.has(cleanOrgId);
+         
+         // Verificar subcollection `members` para o novo padrão: /organizations/{orgId}/members/{uid}
+         if (!isLegit) {
+            const memberDoc = await db.collection('organizations').doc(cleanOrgId).collection('members').doc(decoded.uid).get();
+            if (memberDoc.exists) {
+               isLegit = true;
+            }
+         }
+         
+         if (isLegit) {
+            candidateOrgs.add(cleanOrgId);
+         } else {
+            console.error(`[HANDOFF_SECURITY_VIOLATION] User ${decoded.uid} attempted to access unowned/unassociated orgId: ${cleanOrgId}`);
+            return res.status(403).json({ error: 'Forbidden: You do not have access to this organization.' });
+         }
       }
 
       const candidateOrgsList = Array.from(candidateOrgs);
@@ -1828,6 +1900,7 @@ async function startServer() {
       const customToken = await admin.auth().createCustomToken(decoded.uid, {
         orgId: finalOrgId,
         appId: appId,
+        supportMode: verifiedSupportMode,
       });
 
       return res.json({

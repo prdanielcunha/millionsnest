@@ -97,7 +97,21 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
       setLoadingOrg(true);
       try {
-        const orgId = profile.organizationId;
+        let orgId = profile.organizationId;
+        
+        // Support Mode Logic
+        if (profile.systemRole === 'ceo' || profile.systemRole === 'admin') {
+           try {
+             const supportSessionStr = localStorage.getItem('mn_support_session');
+             if (supportSessionStr) {
+               const supportSession = JSON.parse(supportSessionStr);
+               if (supportSession?.active && supportSession?.targetOrganizationId) {
+                  orgId = supportSession.targetOrganizationId;
+               }
+             }
+           } catch(e) {}
+        }
+        
         const orgRef = doc(db, "organizations", orgId);
         const orgSnap = await withTimeout(getDoc(orgRef), 8000, "Firestore timeout loading org");
 

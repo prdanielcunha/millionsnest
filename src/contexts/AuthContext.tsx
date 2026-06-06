@@ -60,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const updatedProfile = { ...profile, organizationId: orgId };
       setProfile(updatedProfile);
       localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
+      localStorage.removeItem('mn_support_session');
       
       // We must reload the page or tell OrganizationContext to refetch, changing profile.organizationId should trigger OrganizationContext's useEffect
       
@@ -263,6 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     localStorage.removeItem('mn_user_profile');
     localStorage.removeItem('mn_org_context');
+    localStorage.removeItem('mn_support_session');
     await signOut(auth);
   };
 
