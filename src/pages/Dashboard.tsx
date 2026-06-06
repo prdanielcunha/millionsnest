@@ -16,6 +16,7 @@ import { eventBus } from "../packages/events/index.js";
 import { feedback } from '../packages/ui/feedback.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from "../lib/musicScalePlans.js";
+import { canPurchasePlanAgain, isSubscriptionValid } from "../lib/subscriptionHelpers.js";
 import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
 import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
@@ -857,8 +858,8 @@ export function Dashboard() {
   const isTrialing = subscription?.status === "trialing" || subscription?.status === "trial";
   const isActive = subscription?.status === "active" || subscription?.status === "pro";
   const isCanceled = subscription?.status === "canceled";
-  const hasValidSubscription = isActive || isTrialing || isGlobalAdmin;
-  const hasMusicScaleAccess = profile?.products?.includes("musicscale") || hasValidSubscription || isGlobalAdmin || false;
+  const hasValidSubscription = isSubscriptionValid(subscription) || isGlobalAdmin;
+  const hasMusicScaleAccess = profile?.products?.includes("musicscale") || hasValidSubscription || false;
   const showMusicScaleCard = hasMusicScaleAccess || subscription != null;
 
   const formattedRenewal = subscription?.currentPeriodEnd 
@@ -866,11 +867,26 @@ export function Dashboard() {
     : null;
 
   const handleAddonCheckout = async (lookupKey: string) => {
-    navigate('/checkout');
+    navigate(`/checkout?plan=${lookupKey}`);
   };
 
   const handleSubscribe = async (lookupKey: string) => {
-    navigate('/checkout');
+    const check = canPurchasePlanAgain({
+      desiredPlan: lookupKey,
+      existingSubscription: subscription,
+      appKey: 'musicscale'
+    });
+
+    if (!check.allowed) {
+      if (check.action === 'blocked' || check.action === 'manage_existing') {
+          feedback.error(check.userMessage);
+      } else {
+          feedback.success(check.userMessage);
+      }
+      return;
+    }
+
+    navigate(`/checkout?plan=${lookupKey}`);
   };
 
   const currentUserData = members.find(m => m.id === user?.uid);
@@ -1580,13 +1596,18 @@ export function Dashboard() {
                           <div className="h-5 md:h-6 mb-6" />
                         )}
                         
-                        <button 
-                          onClick={() => handleSubscribe(isAnnual ? 'musicscale_starter_yearly' : 'musicscale_starter_monthly')}
-                          disabled={checkoutLoading}
-                          className="w-full py-3.5 px-4 rounded-xl bg-white/5 border border-white/10 text-[#F5F7FA] text-center font-semibold text-sm hover:bg-white/10 transition-all shadow-sm active:scale-95 mb-6 block"
-                        >
-                          {checkoutLoading ? "Processando..." : "Assinar MusicScale Starter"}
-                        </button>
+                        {(() => {
+                          const starterCheck = canPurchasePlanAgain({ desiredPlan: 'starter', existingSubscription: subscription, appKey: 'musicscale' });
+                          return (
+                            <button 
+                              onClick={() => starterCheck.action === 'checkout' ? handleSubscribe(isAnnual ? 'musicscale_starter_yearly' : 'musicscale_starter_monthly') : openBillingPortal()}
+                              disabled={checkoutLoading || starterCheck.action === 'blocked'}
+                              className={`w-full py-3.5 px-4 rounded-xl border text-center font-semibold text-sm transition-all shadow-sm active:scale-95 mb-6 block ${starterCheck.action === 'checkout' ? 'bg-white/5 border-white/10 text-[#F5F7FA] hover:bg-white/10' : 'bg-transparent border-white/10 text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
+                            >
+                              {checkoutLoading ? "Processando..." : (starterCheck.action === 'checkout' ? "Assinar MusicScale Starter" : starterCheck.action === 'manage_existing' ? "Plano Atual (Gerenciar)" : "Gerenciar Assinatura")}
+                            </button>
+                          );
+                        })()}
                         
                         <ul className="space-y-3 flex-1 pt-4 border-t border-white/5">
                           {[
@@ -1634,13 +1655,18 @@ export function Dashboard() {
                           <div className="h-5 md:h-6 mb-6" />
                         )}
                         
-                        <button 
-                          onClick={() => handleSubscribe(isAnnual ? 'musicscale_advanced_yearly' : 'musicscale_advanced_monthly')}
-                          disabled={checkoutLoading}
-                          className="w-full py-3.5 px-4 rounded-xl bg-white/10 border border-white/10 text-[#F5F7FA] text-center font-semibold text-sm hover:bg-white/20 transition-all shadow-sm active:scale-95 mb-6 block"
-                        >
-                          {checkoutLoading ? "Processando..." : "Assinar MusicScale Advanced"}
-                        </button>
+                        {(() => {
+                          const advCheck = canPurchasePlanAgain({ desiredPlan: 'advanced', existingSubscription: subscription, appKey: 'musicscale' });
+                          return (
+                            <button 
+                              onClick={() => advCheck.action === 'checkout' ? handleSubscribe(isAnnual ? 'musicscale_advanced_yearly' : 'musicscale_advanced_monthly') : openBillingPortal()}
+                              disabled={checkoutLoading || advCheck.action === 'blocked'}
+                              className={`w-full py-3.5 px-4 rounded-xl text-center font-semibold text-sm transition-all shadow-sm active:scale-95 mb-6 block ${advCheck.action === 'checkout' ? 'bg-white/10 border border-white/10 text-[#F5F7FA] hover:bg-white/20' : 'bg-transparent border border-white/10 text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
+                            >
+                              {checkoutLoading ? "Processando..." : (advCheck.action === 'checkout' ? "Assinar MusicScale Advanced" : advCheck.action === 'manage_existing' ? "Plano Atual (Gerenciar)" : "Gerenciar Assinatura")}
+                            </button>
+                          );
+                        })()}
                         
                         <ul className="space-y-3 flex-1 pt-4 border-t border-white/5">
                           {[
@@ -1693,13 +1719,18 @@ export function Dashboard() {
                           </div>
                         )}
                         
-                        <button 
-                          onClick={() => handleSubscribe(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
-                          disabled={checkoutLoading}
-                          className="w-full py-3.5 px-4 rounded-xl bg-[#F5F7FA] text-[#050505] text-center font-semibold text-sm hover:bg-white transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] hover:shadow-[0_0_30px_rgba(245,247,250,0.2)] active:scale-95 mb-6 block relative z-10"
-                        >
-                          {checkoutLoading ? "Processando..." : "Assinar MusicScale Pro"}
-                        </button>
+                        {(() => {
+                          const proCheck = canPurchasePlanAgain({ desiredPlan: 'pro', existingSubscription: subscription, appKey: 'musicscale' });
+                          return (
+                            <button 
+                              onClick={() => proCheck.action === 'checkout' ? handleSubscribe(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly') : openBillingPortal()}
+                              disabled={checkoutLoading || proCheck.action === 'blocked'}
+                              className={`w-full py-3.5 px-4 rounded-xl text-center font-semibold text-sm transition-all shadow-[0_0_20px_rgba(245,247,250,0.1)] active:scale-95 mb-6 block relative z-10 ${proCheck.action === 'checkout' ? 'bg-[#F5F7FA] text-[#050505] hover:bg-white hover:shadow-[0_0_30px_rgba(245,247,250,0.2)]' : 'bg-transparent border border-white/10 text-[#A0A7B5] hover:text-[#F5F7FA]'}`}
+                            >
+                              {checkoutLoading ? "Processando..." : (proCheck.action === 'checkout' ? "Assinar MusicScale Pro" : proCheck.action === 'manage_existing' ? "Plano Atual (Gerenciar)" : "Gerenciar Assinatura")}
+                            </button>
+                          );
+                        })()}
                         
                         <ul className="space-y-3 flex-1 pt-4 border-t border-white/5 relative z-10">
                           {[
@@ -1969,11 +2000,11 @@ export function Dashboard() {
                 </div>
 
                 <h3 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight leading-tight max-w-md">
-                  Preparação Fluida &amp; Menos Caos
+                  Não encontramos uma assinatura ativa
                 </h3>
                 
                 <p className="text-[#A0A7B5] text-sm md:text-base leading-relaxed mt-4 max-w-lg">
-                  Para garantir a organização completa do seu ministério de louvor com excelência, o acesso ao aplicativo <strong className="text-white">{subscriptionBlockedApp.name}</strong> requer uma assinatura ativa do ecossistema MillionsNest.
+                  Parece que sua assinatura do <strong className="text-white">{subscriptionBlockedApp.name}</strong> está cancelada, expirada ou ainda não foi ativada. Você pode escolher um plano novamente e continuar usando o ecossistema normalmente.
                 </p>
 
                 {/* Live Stripe Validation status card */}
@@ -2013,11 +2044,11 @@ export function Dashboard() {
                     {verifyingStripe ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Sincronizando assinatura com o Stripe...
+                        Verificando...
                       </>
                     ) : (
                       <>
-                        Sincronizar e Abrir Aplicativo
+                        Atualizar status
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}
@@ -2032,7 +2063,7 @@ export function Dashboard() {
                       }}
                       className="flex-1 py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 active:scale-[0.98] text-white rounded-xl text-xs font-semibold transition-all"
                     >
-                      Escolher Plano Premium
+                      Ver planos
                     </button>
                     <button
                       onClick={() => {
@@ -2041,7 +2072,7 @@ export function Dashboard() {
                       }}
                       className="flex-1 py-3.5 bg-transparent border border-transparent hover:text-white text-[#A0A7B5] text-xs font-semibold transition-all"
                     >
-                      Voltar ao Painel
+                      Voltar ao painel
                     </button>
                   </div>
                 </div>

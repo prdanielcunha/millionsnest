@@ -476,6 +476,7 @@ export async function upsertEcosystemSubscription(params: {
      subscriptionStatus: subscription.status,
      trialEndsAt: trialEnd,
      currentPeriodEnd: currentPeriodEnd,
+     cancelAtPeriodEnd: cancelAtPeriodEnd,
      updatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
   
@@ -3039,9 +3040,31 @@ async function startServer() {
             orgId = userDoc.data()?.organizationId || userId;
          }
          
-         if (!customerId) {
-            const subDoc = await db.collection('subscriptions').doc(orgId).get();
-            if (subDoc.exists) customerId = subDoc.data()?.stripeCustomerId;
+         const subDoc = await db.collection('subscriptions').doc(orgId).get();
+         if (subDoc.exists) {
+            if (!customerId) customerId = subDoc.data()?.stripeCustomerId;
+            const subData = subDoc.data();
+            if (planLookupKey) {
+                const existingPlan = subData?.plan || subData?.tier || 'starter';
+                const status = (subData?.status || '').toLowerCase();
+                const currentPeriodEnd = subData?.currentPeriodEnd;
+                
+                let isValid = false;
+                if (status === 'active' || status === 'trialing') isValid = true;
+                if (status === 'canceled' && currentPeriodEnd) {
+                   const endMs = currentPeriodEnd._seconds ? currentPeriodEnd._seconds * 1000 : (currentPeriodEnd._nanoseconds ? currentPeriodEnd.toMillis?.() : new Date(currentPeriodEnd).getTime());
+                   if (Date.now() < endMs) isValid = true;
+                }
+                
+                if (isValid) {
+                   const normalizedDesired = planLookupKey.replace('musicscale_', '').replace('_monthly', '').replace('_yearly', '');
+                   if (normalizedDesired.includes(existingPlan.toLowerCase()) || existingPlan.toLowerCase().includes(normalizedDesired)) {
+                       return res.status(400).json({ code: 'PLAN_ALREADY_ACTIVE', error: 'Você já possui este plano ativo. Para alterar sua assinatura, acesse a área de assinatura.' });
+                   } else {
+                       return res.status(400).json({ code: 'DIFFERENT_PLAN_ACTIVE', error: 'Você já possui um plano ativo. Para alterar sua assinatura, acesse a área de assinatura.' });
+                   }
+                }
+            }
          }
       }
 
