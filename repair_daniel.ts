@@ -16,7 +16,7 @@ async function repair() {
     const subs = await stripe.subscriptions.list({ customer: customer.id, limit: 1 });
     if (subs.data.length > 0) {
       const sub = subs.data[0];
-      const hasAccess = ['active', 'trialing'].includes(sub.status);
+      const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(sub.status);
       console.log('Found sub:', sub.id, sub.status);
       const batch = db.batch();
       batch.set(db.collection('subscriptions').doc(userId), {

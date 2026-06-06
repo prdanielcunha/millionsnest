@@ -95,7 +95,7 @@ export function Dashboard() {
     }
     
     // Mostrando feedback enquanto processa o handoff
-    const toastId = feedback.loading(`Iniciando ${app.name}...`);
+    const toastId = feedback.loading(`Verificando credenciais para o ${app.name}...`);
     try {
       if (isGlobalAdmin && profile?.organizationRole !== 'owner') {
          createAuditLog({
@@ -276,21 +276,24 @@ export function Dashboard() {
            }
         } else {
            setSubscription(null);
-           // If user is logged in but has no sub doc, check for inconsistency
            if (!forceSync) {
-             console.log("[Dashboard] No sub doc found, checking if repair is available...");
+             console.log("[Dashboard] No sub doc found, triggering background auto-repair via sync...");
              try {
-               const token = await user.getIdToken();
-               const checkRes = await fetch('/api/repair/check', {
-                 headers: { 'Authorization': `Bearer ${token}` }
+               fetch('/api/v1/billing/sync', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ userId: user.uid })
+               }).then(async r => {
+                 if (r.ok) {
+                    const data = await r.json();
+                    if (data.status === 'success' || data.stripeStatus) {
+                      console.log("[Dashboard] Background auto-repair successful.");
+                      fetchSubscriptionAndOrg(true);
+                    }
+                 }
                });
-               const checkData = await checkRes.json();
-               if (checkData.requiresRepair) {
-                 setSubscriptionRepairAvailable(true);
-                 console.warn("🚨 [MILLIONSNEST_SYNC] DOCUMENTO NÃO ENCONTRADO mas Stripe possui assinatura. Repair sugerido.");
-               }
              } catch (e) {
-               console.error("[Dashboard] Repair check failed", e);
+               console.error("[Dashboard] Auto repair check failed", e);
              }
            }
         }
@@ -841,8 +844,8 @@ export function Dashboard() {
     return <Navigate to="/login" replace />;
   }
 
-  const isTrialing = subscription?.status === "trialing";
-  const isActive = subscription?.status === "active";
+  const isTrialing = subscription?.status === "trialing" || subscription?.status === "trial";
+  const isActive = subscription?.status === "active" || subscription?.status === "pro";
   const isCanceled = subscription?.status === "canceled";
   const hasValidSubscription = isActive || isTrialing || isGlobalAdmin;
   const hasMusicScaleAccess = profile?.products?.includes("musicscale") || hasValidSubscription || isGlobalAdmin || false;

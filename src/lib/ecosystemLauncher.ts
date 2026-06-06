@@ -12,36 +12,61 @@ export async function openEcosystemModule(
 ) {
   if (!user || !organization || !profile) {
     console.error('[EcosystemLaunch] Missing required data', { hasUser: !!user, hasOrg: !!organization, hasProfile: !!profile });
-    alert("Não foi possível iniciar o aplicativo agora. Verifique sua sessão.");
-    return;
+    throw new Error("Sessão inválida ou dados incompletos. Tente recarregar a página.");
   }
 
   const app = ECOSYSTEM_APPS.find(a => a.id === moduleKey);
   if (!app) {
      console.error('[EcosystemLaunch] App not found', { moduleKey });
-     alert("Aplicativo não encontrado.");
-     return;
+     throw new Error("Aplicativo não encontrado no catálogo.");
   }
 
   console.debug('[EcosystemLaunch] Starting module handoff launch', { moduleKey, uid: user.uid, orgId: organization.id });
   
+  let attempts = 0;
+  const maxAttempts = 5;
+  const retryDelayMs = 3000;
+
+  const attemptHandoff = async (): Promise<any> => {
+    const idToken = await auth.currentUser!.getIdToken();
+    const response = await fetch('/api/ecosystem/create-handoff', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ appId: moduleKey, orgId: organization.id })
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json();
+        
+        if (response.status === 403 && errorData.error?.includes('Subscription missing')) {
+            if (attempts < maxAttempts) {
+                attempts++;
+                console.warn(`[EcosystemLaunch] Not ready yet, retrying in ${retryDelayMs}ms... (Attempt ${attempts}/${maxAttempts})`);
+                await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+                
+                // Triggers a server-side sync request just in case
+                await fetch('/api/v1/billing/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: user.uid })
+                }).catch(() => {});
+                
+                return attemptHandoff();
+            }
+            throw new Error('Não encontramos uma assinatura ativa para esta organização. Se você acabou de assinar, estamos finalizando a ativação. Tente novamente em alguns segundos.');
+        }
+        
+        throw new Error(errorData.error || 'Falha ao obter contexto de handoff');
+    }
+    
+    return response.json();
+  };
+
   try {
-     const idToken = await auth.currentUser!.getIdToken();
-     const response = await fetch('/api/ecosystem/create-handoff', {
-         method: 'POST',
-         headers: {
-             'Content-Type': 'application/json',
-             'Authorization': `Bearer ${idToken}`
-         },
-         body: JSON.stringify({ appId: moduleKey, orgId: organization.id })
-     });
-     
-     if (!response.ok) {
-         const errorData = await response.json();
-         throw new Error(errorData.error || 'Falha ao obter contexto de handoff');
-     }
-     
-     const handoff = await response.json();
+     const handoff = await attemptHandoff();
      
      const roleDisplay = resolveUserRoleDisplay({
        userProfile: profile,
@@ -81,6 +106,6 @@ export async function openEcosystemModule(
      window.location.assign(url.toString());
   } catch (e: any) {
     console.error('[EcosystemLaunch] Failed to launch', e);
-    alert(`Não foi possível iniciar o ${app.name} agora: ${e.message || 'Erro desconhecido'}`);
+    throw new Error(`Não foi possível iniciar o ${app.name} agora: ${e.message || 'Erro desconhecido'}`);
   }
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useNavigate } from 'react-router-dom';
-import { Check, ArrowRight, ShieldCheck, CreditCard, ChevronLeft, Briefcase, Zap, Layers, Tag, X } from 'lucide-react';
+import { Check, ArrowRight, ShieldCheck, CreditCard, ChevronLeft, Briefcase, Zap, Layers, Tag, X, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getProductByLookupKey } from '../lib/pricingCatalog.js';
 

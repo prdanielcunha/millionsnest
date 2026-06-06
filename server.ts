@@ -300,6 +300,221 @@ function getBillingService(): BillingService {
   return billingService;
 }
 
+/**
+ * Idempotently and resiliently upserts ecosystem subscription and auto-heals related organization documents
+ */
+export async function upsertEcosystemSubscription(params: {
+  userId: string;
+  orgId: string;
+  subscription: Stripe.Subscription;
+  eventCreatedTs: number;
+  event_type: string;
+  userEmail?: string | null;
+}) {
+  const { userId, orgId, subscription, eventCreatedTs, event_type } = params;
+  const db = getDb();
+  if (!db) {
+    throw new Error('Database not initialized in upsertEcosystemSubscription');
+  }
+
+  const subRef = db.collection('subscriptions').doc(orgId);
+  const orgRef = db.collection('organizations').doc(orgId);
+  const memberRef = db.collection('organization_members').doc(`${userId}_${orgId}`);
+  const userRef = db.collection('users').doc(userId);
+
+  // Fetch all documents in parallel to check if any are missing (for self-healing)
+  const [subDoc, orgDoc, memberDoc, userDoc] = await Promise.all([
+    subRef.get(),
+    orgRef.get(),
+    memberRef.get(),
+    userRef.get()
+  ]);
+
+  const anyMissing = !subDoc.exists || !orgDoc.exists || !memberDoc.exists || !userDoc.exists;
+
+  // Idempotency: if all documents exist, check the incoming timestamp
+  if (!anyMissing) {
+    const existingTs = subDoc.data()?.lastStripeEventTs || orgDoc.data()?.lastStripeEventTs || 0;
+    if (existingTs && existingTs > eventCreatedTs) {
+      console.log(`[UPSERT_ECOSYSTEM_SUBSCRIPTION] Idempotency Skip for UID: ${userId}, Org: ${orgId}. Existing event TS ${existingTs} is newer than incoming ${eventCreatedTs} from ${event_type}.`);
+      return {
+        success: true,
+        skipped: true,
+        createdDocuments: [],
+        updatedDocuments: [],
+        resolvedPlan: subDoc.data()?.plan || 'starter',
+        trialEndsAt: subDoc.data()?.trialEndsAt ? (subDoc.data()?.trialEndsAt instanceof admin.firestore.Timestamp ? subDoc.data()?.trialEndsAt.toDate() : new Date(subDoc.data()?.trialEndsAt)) : null
+      };
+    }
+  }
+
+  const createdDocuments: string[] = [];
+  const updatedDocuments: string[] = [];
+
+  if (!subDoc.exists) createdDocuments.push(`subscriptions/${orgId}`);
+  else updatedDocuments.push(`subscriptions/${orgId}`);
+
+  if (!orgDoc.exists) createdDocuments.push(`organizations/${orgId}`);
+  else updatedDocuments.push(`organizations/${orgId}`);
+
+  if (!memberDoc.exists) createdDocuments.push(`organization_members/${userId}_${orgId}`);
+  else updatedDocuments.push(`organization_members/${userId}_${orgId}`);
+
+  if (!userDoc.exists) createdDocuments.push(`users/${userId}`);
+  else updatedDocuments.push(`users/${userId}`);
+
+  // Resolve userEmail fallback
+  let userEmail = params.userEmail;
+  if (!userEmail && userDoc.exists) {
+    userEmail = userDoc.data()?.email;
+  }
+  if (!userEmail && stripeInstance && subscription.customer) {
+     try {
+        const custObj = await stripeInstance.customers.retrieve(subscription.customer as string);
+        if (custObj && !custObj.deleted && (custObj as any).email) {
+           userEmail = (custObj as any).email;
+        }
+     } catch (err) {
+        console.warn('[UPSERT_ECOSYSTEM_SUBSCRIPTION] Failed to retrieve customer email:', err);
+     }
+  }
+
+  const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000);
+  const trialEnd = (subscription as any).trial_end ? admin.firestore.Timestamp.fromMillis((subscription as any).trial_end * 1000) : null;
+  const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(subscription.status);
+
+  const priceId = (subscription as any).items?.data?.[0]?.price?.id || null;
+  const metadataPlan = (subscription as any).metadata?.plan || 'starter';
+  const resolvedPlan = priceIdToMusicScalePlan(priceId) || normalizeMusicScalePlan(metadataPlan);
+  const planDetails = MUSIC_SCALE_PLANS[resolvedPlan] || MUSIC_SCALE_PLANS['starter'];
+  const cancelAtPeriodEnd = (subscription as any).cancel_at_period_end || false;
+
+  const batch = db.batch();
+
+  // 1. subscriptions/{orgId}
+  batch.set(subRef, {
+    schemaVersion: 2,
+    organizationId: orgId,
+    app: 'musicscale',
+    status: subscription.status,
+    plan: resolvedPlan,
+    priceId: priceId,
+    stripeCustomerId: subscription.customer,
+    stripeSubscriptionId: subscription.id,
+    trialEndsAt: trialEnd,
+    currentPeriodEnd: currentPeriodEnd,
+    cancelAtPeriodEnd: cancelAtPeriodEnd,
+    limits: planDetails.limits,
+    features: {
+      globalLibrary: hasAccess,
+      musicScale: hasAccess,
+      ...planDetails.features
+    },
+    supportTier: planDetails.features?.supportTier || 'basic',
+    lastStripeEventTs: eventCreatedTs,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  // 2. organizations/{orgId}
+  const orgName = orgDoc.exists ? (orgDoc.data()?.name || `Organização de ${userEmail || userId}`) : `Organização de ${userEmail || userId}`;
+  batch.set(orgRef, {
+    name: orgName,
+    ownerUid: userId,
+    ownerId: userId,
+    plan: resolvedPlan,
+    subscriptionPlan: resolvedPlan,
+    subscriptionStatus: subscription.status,
+    status: subscription.status,
+    enabledApps: admin.firestore.FieldValue.arrayUnion('musicscale'),
+    
+    // Nested app cache object
+    'apps.musicscale.access': hasAccess,
+    'apps.musicscale.status': subscription.status,
+    'apps.musicscale.plan': resolvedPlan,
+    'apps.musicscale.features': planDetails.features,
+    'apps.musicscale.limits': planDetails.limits,
+    'apps.musicscale.supportTier': planDetails.features?.supportTier || 'basic',
+    'apps.musicscale.currentPeriodEnd': currentPeriodEnd,
+    'apps.musicscale.trialEndsAt': trialEnd,
+    'apps.musicscale.updatedAt': admin.firestore.FieldValue.serverTimestamp(),
+    'apps.musicscale.planUpdatedAt': admin.firestore.FieldValue.serverTimestamp(),
+    
+    planUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    entitlementsVersion: 2,
+    
+    lastStripeEventTs: eventCreatedTs,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  // 3. organization_members/{userId}_{orgId}
+  batch.set(memberRef, {
+     uid: userId,
+     email: userEmail || '',
+     organizationId: orgId,
+     role: 'owner',
+     organizationRole: 'owner',
+     appRole: 'Dono',
+     status: 'active',
+     permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+     permissions: getDefaultPermissions('owner'),
+     updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  // 4. users/{userId}
+  const userPayload: any = {
+     organizationId: orgId,
+     activeOrganizationId: orgId,
+     defaultOrganizationId: orgId,
+     stripeCustomerId: subscription.customer,
+     stripeSubscriptionId: subscription.id,
+     subscriptionStatus: subscription.status,
+     trialEndsAt: trialEnd,
+     currentPeriodEnd: currentPeriodEnd,
+     updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+  
+  if (!userDoc.exists || !userDoc.data()?.displayName) {
+     userPayload['displayName'] = userEmail ? userEmail.split('@')[0] : 'Usuário';
+  }
+  if (!userDoc.exists || !userDoc.data()?.email) {
+     userPayload['email'] = userEmail || '';
+  }
+  if (!userDoc.exists || !userDoc.data()?.products) {
+     userPayload['products'] = ['musicscale'];
+  }
+  if (!userDoc.exists || !userDoc.data()?.permissions) {
+     userPayload['permissions'] = { musicscale: true };
+  }
+  if (!userDoc.exists || !userDoc.data()?.appsAccess) {
+     userPayload['appsAccess'] = { musicscale: true };
+  }
+
+  batch.set(userRef, userPayload, { merge: true });
+
+  await batch.commit();
+
+  console.log('[UPSERT_ECOSYSTEM_SUBSCRIPTION] Complete:', {
+    orgId,
+    uid: userId,
+    subscriptionId: subscription.id,
+    customerId: subscription.customer,
+    status: subscription.status,
+    plan: resolvedPlan,
+    trialEndsAt: trialEnd ? trialEnd.toDate().toISOString() : null,
+    createdDocuments,
+    updatedDocuments
+  });
+
+  return {
+    success: true,
+    skipped: false,
+    createdDocuments,
+    updatedDocuments,
+    resolvedPlan,
+    trialEndsAt: trialEnd ? trialEnd.toDate() : null
+  };
+}
+
 async function startServer() {
   try {
     console.log('[SERVER] Bootstrapping...');
@@ -376,7 +591,7 @@ async function startServer() {
             subscription: session.subscription
           });
           
-          let userId = session.metadata?.uid || session.client_reference_id;
+          let userId = session.metadata?.userId || session.metadata?.uid || session.client_reference_id;
           const customerId = session.customer as string;
 
           if (!userId) {
@@ -463,7 +678,7 @@ async function startServer() {
             expand: ['discount', 'discount.promotion_code', 'discount.coupon']
           });
           const userDocSnap = await db.collection('users').doc(userId).get();
-          const orgId = (userDocSnap.exists && userDocSnap.data()?.organizationId) ? userDocSnap.data()?.organizationId : userId;
+          const orgId = session.metadata?.organizationId || ((userDocSnap.exists && userDocSnap.data()?.organizationId) ? userDocSnap.data()?.organizationId : userId);
           
           console.log('[STRIPE_WEBHOOK_DEBUG]', {
             metadata_recebida: session.metadata,
@@ -487,107 +702,29 @@ async function startServer() {
              });
           }
 
-          const batch = db.batch();
-          const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000);
-          const trialEnd = (subscription as any).trial_end ? admin.firestore.Timestamp.fromMillis((subscription as any).trial_end * 1000) : null;
-          const hasAccess = ['active', 'trialing'].includes(subscription.status);
-
-          const priceId = subscription.items?.data?.[0]?.price?.id || null;
-          const resolvedPlan = priceIdToMusicScalePlan(priceId) || normalizeMusicScalePlan(plan);
-          const planDetails = MUSIC_SCALE_PLANS[resolvedPlan];
-          const cancelAtPeriodEnd = subscription.cancel_at_period_end || false;
-
-          // 1. Organization
-          batch.set(db.collection('organizations').doc(orgId), {
-            name: `Organização de ${session.customer_email || userId}`,
-            ownerUid: userId,
-            ownerId: userId,
-            plan: resolvedPlan,
-            subscriptionPlan: resolvedPlan,
-            subscriptionStatus: subscription.status,
-            enabledApps: admin.firestore.FieldValue.arrayUnion('musicscale'),
-            
-            // Nested app cache object
-            'apps.musicscale.access': hasAccess,
-            'apps.musicscale.status': subscription.status,
-            'apps.musicscale.plan': resolvedPlan,
-            'apps.musicscale.features': planDetails.features,
-            'apps.musicscale.limits': planDetails.limits,
-            'apps.musicscale.supportTier': planDetails.features.supportTier,
-            'apps.musicscale.currentPeriodEnd': currentPeriodEnd,
-            'apps.musicscale.trialEndsAt': trialEnd,
-            'apps.musicscale.updatedAt': admin.firestore.FieldValue.serverTimestamp(),
-            'apps.musicscale.planUpdatedAt': admin.firestore.FieldValue.serverTimestamp(),
-            
-            // Local Cache Invalidation Version and Timestamp
-            planUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            entitlementsVersion: 2,
-            
-            lastStripeEventTs: eventCreatedTs,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
-
-          // 2. Membership
-          batch.set(db.collection('organization_members').doc(`${userId}_${orgId}`), {
-             uid: userId,
-             organizationId: orgId,
-             role: 'owner',
-             permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-             permissions: getDefaultPermissions('owner')
-          }, { merge: true });
-
-          // 3. Subscription
-          const subPayload = {
-            schemaVersion: 2,
-            organizationId: orgId,
-            app: 'musicscale',
-            status: subscription.status,
-            plan: resolvedPlan,
-            priceId: priceId,
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: subscriptionId,
-            trial_period_days: 7,
-            trialEndsAt: trialEnd,
-            currentPeriodEnd: currentPeriodEnd,
-            cancelAtPeriodEnd: cancelAtPeriodEnd,
-            limits: planDetails.limits,
-            features: {
-              globalLibrary: hasAccess,
-              musicScale: hasAccess,
-              ...planDetails.features
-            },
-            supportTier: planDetails.features.supportTier,
-            lastStripeEventTs: eventCreatedTs,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          };
-          
-          console.log('[STRIPE_WEBHOOK_DEBUG_PAYLOAD]', {
-            path_exato_salvo: `subscriptions/${orgId}`,
-            payload_salvo: subPayload
+          const result = await upsertEcosystemSubscription({
+             userId,
+             orgId,
+             subscription,
+             eventCreatedTs,
+             event_type: event.type,
+             userEmail: session.customer_details?.email || session.customer_email || (userDocSnap.exists ? userDocSnap.data()?.email : null)
           });
 
-          batch.set(db.collection('subscriptions').doc(orgId), subPayload, { merge: true });
-
-          // 4. User
-          batch.set(db.collection('users').doc(userId), {
-            organizationId: orgId,
-            organizationRole: 'owner',
-            lastStripeEventTs: eventCreatedTs,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
-
-          await batch.commit();
-          
-          console.log('[OWNERSHIP_SYNC]', {
-            uid: userId,
-            organizationId: orgId,
-            role_anterior: 'unknown',
-            role_nova: 'owner',
-            motivo: 'checkout.session.completed'
+          await auditRef.update({ 
+             status: result.skipped ? 'skipped' : 'success', 
+             processedUserId: userId,
+             orgId,
+             createdDocuments: result.createdDocuments,
+             updatedDocuments: result.updatedDocuments,
+             stripeDetails: {
+               subscriptionId,
+               customerId,
+               status: subscription.status,
+               plan: result.resolvedPlan,
+               trialEndsAt: result.trialEndsAt ? result.trialEndsAt.toISOString() : null
+             }
           });
-
-          console.log(`[STRIPE_WEBHOOK] Successfully provisioned architecture for user: ${userId}`);
-          await auditRef.update({ status: 'success', processedUserId: userId });
           break;
         }
 
@@ -661,101 +798,111 @@ async function startServer() {
              subsQuery = await db.collection('subscriptions').where('stripeCustomerId', '==', customerId).get();
           }
 
-          if (!subsQuery.empty) {
-             const batch = db.batch();
-             let processedCount = 0;
+          let targetsToProcess: Array<{ ref: any, docData: any, targetUserId: string, targetOrgId: string }> = [];
 
+          if (!subsQuery.empty) {
              for (const doc of subsQuery.docs) {
                  const docData = doc.data();
-                 const userId = doc.id;
-
-                 // IDEMPOTENCY CHECK: Only update if the event is newer than the last recorded event
-                 if (docData.lastStripeEventTs && docData.lastStripeEventTs > eventCreatedTs) {
-                   console.log(`[STRIPE_WEBHOOK] Skipping Outdated Event for user ${userId}: Incoming TS ${eventCreatedTs} is older than current TS ${docData.lastStripeEventTs}`);
-                   continue;
+                 const orgIdFromDoc = doc.id;
+                 let userIdFromDoc = docData.userId || docData.uid || stripeSubObj?.metadata?.userId || stripeSubObj?.metadata?.uid;
+                 if (!userIdFromDoc) {
+                     const usersSnap = await db.collection('users').where('organizationId', '==', orgIdFromDoc).get();
+                     if (!usersSnap.empty) {
+                         userIdFromDoc = usersSnap.docs[0].id;
+                     } else if (customerId) {
+                         const usersByCustomer = await db.collection('users').where('stripeCustomerId', '==', customerId).get();
+                         if (!usersByCustomer.empty) {
+                             userIdFromDoc = usersByCustomer.docs[0].id;
+                         }
+                     }
                  }
-
-                 const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(currentPeriodEndTs * 1000);
-                 const trialEnd = trialEndTs ? admin.firestore.Timestamp.fromMillis(trialEndTs * 1000) : null;
-                 const hasAccess = ['active', 'trialing'].includes(status);
-
-                 const userDocSnap = await db.collection('users').doc(userId).get();
-                 const orgId = (userDocSnap.exists && userDocSnap.data()?.organizationId) ? userDocSnap.data()?.organizationId : userId;
-
-                 const priceId = stripeSubObj?.items?.data?.[0]?.price?.id || docData.priceId || null;
-                 const metadataPlan = stripeSubObj?.metadata?.plan || docData.plan || 'starter';
-                 const resolvedPlan = priceIdToMusicScalePlan(priceId) || normalizeMusicScalePlan(metadataPlan);
-                 const planDetails = MUSIC_SCALE_PLANS[resolvedPlan];
-                 const cancelAtPeriodEnd = stripeSubObj?.cancel_at_period_end || false;
-
-                 batch.set(doc.ref, {
-                    status: status,
-                    plan: resolvedPlan,
-                    priceId: priceId,
-                    currentPeriodEnd: currentPeriodEnd,
-                    trialEndsAt: trialEnd,
-                    cancelAtPeriodEnd: cancelAtPeriodEnd,
-                    limits: planDetails.limits,
-                    features: {
-                      globalLibrary: hasAccess,
-                      musicScale: hasAccess,
-                      ...planDetails.features
-                    },
-                    supportTier: planDetails.features.supportTier,
-                    lastStripeEventTs: eventCreatedTs,
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                 }, { merge: true });
-                 
-                 console.log('[STRIPE_WEBHOOK_DEBUG_PAYLOAD]', {
-                   path: `subscriptions/${doc.id}`,
-                   hasAccess,
-                   resolvedPlan
+                 const finalUserId = userIdFromDoc || orgIdFromDoc;
+                 targetsToProcess.push({
+                     ref: doc.ref,
+                     docData,
+                     targetUserId: finalUserId,
+                     targetOrgId: orgIdFromDoc
                  });
-                 
-                 batch.set(db.collection('organizations').doc(orgId), {
-                    plan: resolvedPlan,
-                    subscriptionPlan: resolvedPlan,
-                    subscriptionStatus: status,
-                    enabledApps: admin.firestore.FieldValue.arrayUnion('musicscale'),
-                    
-                    // Nested app cache object
-                    'apps.musicscale.access': hasAccess,
-                    'apps.musicscale.status': status,
-                    'apps.musicscale.plan': resolvedPlan,
-                    'apps.musicscale.features': planDetails.features,
-                    'apps.musicscale.limits': planDetails.limits,
-                    'apps.musicscale.supportTier': planDetails.features.supportTier,
-                    'apps.musicscale.currentPeriodEnd': currentPeriodEnd,
-                    'apps.musicscale.trialEndsAt': trialEnd,
-                    'apps.musicscale.updatedAt': admin.firestore.FieldValue.serverTimestamp(),
-                    'apps.musicscale.planUpdatedAt': admin.firestore.FieldValue.serverTimestamp(),
-                    
-                    // Invalidation & Cache Versioning
-                    planUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                    entitlementsVersion: 2,
+             }
+          } else {
+             // Self-Healing logic to find and provision the subscriber user & org
+             let resolvedUserId = stripeSubObj?.metadata?.userId || stripeSubObj?.metadata?.uid;
+             let resolvedOrgId = stripeSubObj?.metadata?.organizationId;
 
-                    lastStripeEventTs: eventCreatedTs,
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                 }, { merge: true });
+             if (!resolvedUserId && customerId) {
+                const usersSnap = await db.collection('users').where('stripeCustomerId', '==', customerId).get();
+                if (!usersSnap.empty) {
+                   resolvedUserId = usersSnap.docs[0].id;
+                   resolvedOrgId = usersSnap.docs[0].data()?.organizationId || resolvedUserId;
+                }
+             }
 
-                 batch.set(db.collection('users').doc(userId), {
-                    lastStripeEventTs: eventCreatedTs,
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                 }, { merge: true });
-                 
-                 processedCount++;
+             if (!resolvedUserId && customerId) {
+                try {
+                   const stripeObj = getStripe();
+                   const custObj = await stripeObj.customers.retrieve(customerId);
+                   if (custObj && !custObj.deleted && (custObj as any).email) {
+                      const usersSnap = await db.collection('users').where('email', '==', (custObj as any).email).get();
+                      if (!usersSnap.empty) {
+                         resolvedUserId = usersSnap.docs[0].id;
+                         resolvedOrgId = usersSnap.docs[0].data()?.organizationId || resolvedUserId;
+                      }
+                   }
+                } catch (err) {
+                   console.warn('[STRIPE_WEBHOOK] Failed to self-heal customer email lookup:', err);
+                }
+             }
+
+             if (resolvedUserId) {
+                resolvedOrgId = resolvedOrgId || resolvedUserId;
+                console.log('[STRIPE_WEBHOOK_HEAL] Creating virtual subscription target for org:', resolvedOrgId);
+                targetsToProcess.push({
+                   ref: db.collection('subscriptions').doc(resolvedOrgId),
+                   docData: {},
+                   targetUserId: resolvedUserId,
+                   targetOrgId: resolvedOrgId
+                });
+             }
+          }
+
+          if (targetsToProcess.length > 0) {
+             let processedCount = 0;
+             const allCreatedDocs: string[] = [];
+             const allUpdatedDocs: string[] = [];
+
+             for (const target of targetsToProcess) {
+                 const userId = target.targetUserId;
+                 const orgId = target.targetOrgId;
+
+                 const result = await upsertEcosystemSubscription({
+                   userId,
+                   orgId,
+                   subscription: stripeSubObj,
+                   eventCreatedTs,
+                   event_type: event.type
+                 });
+
+                 if (result && !result.skipped) {
+                   allCreatedDocs.push(...result.createdDocuments);
+                   allUpdatedDocs.push(...result.updatedDocuments);
+                   processedCount++;
+                 }
              }
              
              if (processedCount > 0) {
-               await batch.commit();
-               console.log(`[STRIPE_WEBHOOK] Batch sync successful for ${processedCount} users.`);
-               await auditRef.update({ status: 'success', targetsFound: processedCount });
+               console.log(`[STRIPE_WEBHOOK] Batch sync successful via upsertEcosystemSubscription for ${processedCount} targets.`);
+               await auditRef.update({ 
+                  status: 'success', 
+                  targetsFound: processedCount,
+                  createdDocuments: allCreatedDocs,
+                  updatedDocuments: allUpdatedDocs
+               });
              } else {
-               await auditRef.update({ status: 'skipped', reason: 'Outdated event' });
+               await auditRef.update({ status: 'skipped', reason: 'All targets skipped or outdated' });
              }
           } else {
-             console.log(`[STRIPE_WEBHOOK] NO target documents found for sub: ${subscriptionId}`);
-             await auditRef.update({ status: 'error', error: 'Subscription document not found in Firestore' });
+             console.log(`[STRIPE_WEBHOOK] NO target documents found or resolved for sub: ${subscriptionId}`);
+             await auditRef.update({ status: 'error', error: 'Subscription document not found and auto-provisioning failed' });
           }
           break;
         }
@@ -1349,7 +1496,7 @@ async function startServer() {
         const data = subDoc.data()!;
         status = data.status;
         plan = data.plan;
-        hasAccess = ['active', 'trialing'].includes(status);
+        hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(status);
         trialEndsAt = data.trialEndsAt ? new Date(data.trialEndsAt.seconds * 1000).toISOString() : null;
         currentPeriodEnd = data.currentPeriodEnd ? new Date(data.currentPeriodEnd.seconds * 1000).toISOString() : null;
       }
@@ -1361,7 +1508,7 @@ async function startServer() {
           for (const memberDoc of memberships.docs) {
             const mOrgId = memberDoc.data().organizationId;
             const orgDoc = await db.collection('organizations').doc(mOrgId).get();
-            if (orgDoc.exists && ['active', 'trialing'].includes(orgDoc.data()?.subscriptionStatus)) {
+            if (orgDoc.exists && ['active', 'trialing', 'trial', 'pro'].includes(orgDoc.data()?.subscriptionStatus)) {
               hasAccess = true;
               status = orgDoc.data()?.subscriptionStatus || 'active';
               plan = orgDoc.data()?.plan || 'monthly';
@@ -1404,6 +1551,14 @@ async function startServer() {
   });
 
   app.post('/api/ecosystem/create-handoff', express.json(), async (req, res) => {
+    let logUid: string | null = null;
+    let logOrgId: string | null = null;
+    let logSubscriptionFound = false;
+    let logSubscriptionStatus: string | null = null;
+    let logStripeLookupPerformed = false;
+    let logSelfHealingExecuted = false;
+    let logAccessGranted = false;
+
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader?.startsWith('Bearer ')) {
@@ -1412,46 +1567,297 @@ async function startServer() {
 
       const token = authHeader.split('Bearer ')[1];
       const decoded = await admin.auth().verifyIdToken(token);
+      logUid = decoded.uid;
       
       const { appId, orgId } = req.body;
       if (appId !== 'musicscale') {
         return res.status(400).json({ error: 'Invalid app' });
       }
-      
-      if (!orgId || typeof orgId !== 'string') {
-        return res.status(400).json({ error: 'Missing or invalid orgId' });
-      }
 
-      if (!db) return res.status(500).json({ error: 'Database not initialized' });
-      
-      const orgDoc = await db.collection('organizations').doc(orgId).get();
-      if (!orgDoc.exists) {
-        return res.status(404).json({ error: 'Organization not found' });
+      if (!db) {
+        console.error('[HANDOFF_ERROR] Database not initialized');
+        return res.status(500).json({ error: 'Database not initialized' });
       }
       
       const userDoc = await db.collection('users').doc(decoded.uid).get();
-      const systemRole = userDoc.data()?.systemRole;
+      const userData = userDoc.exists ? userDoc.data() : null;
+      const systemRole = userData?.systemRole;
       const isGlobalAdmin = systemRole === 'ceo' || systemRole === 'admin' || systemRole === 'global_admin';
 
-      const subDoc = await db.collection('subscriptions').doc(orgId).get();
-      if (!isGlobalAdmin && (!subDoc.exists || !['active', 'trialing'].includes(subDoc.data()?.status))) {
-        return res.status(403).json({ error: 'Access denied: Subscription missing' });
+      // PASSO 1: Resolver organizationId do usuário
+      const candidateOrgs = new Set<string>();
+
+      // A. Se orgId veio na requisição, ele é o candidato preferencial
+      if (orgId && typeof orgId === 'string' && orgId.trim() !== '') {
+        candidateOrgs.add(orgId.trim());
       }
 
+      // B. Da conta do usuário (users/{uid})
+      if (userData) {
+        if (userData.organizationId) candidateOrgs.add(userData.organizationId);
+        if (userData.activeOrganizationId) candidateOrgs.add(userData.activeOrganizationId);
+        if (userData.defaultOrganizationId) candidateOrgs.add(userData.defaultOrganizationId);
+        if (Array.isArray(userData.organizations)) {
+          userData.organizations.forEach((o: any) => {
+            if (typeof o === 'string' && o.trim() !== '') candidateOrgs.add(o.trim());
+          });
+        }
+      }
+
+      // C. Do record em organization_members
+      try {
+        const membersSnap = await db.collection('organization_members').where('uid', '==', decoded.uid).get();
+        membersSnap.docs.forEach(doc => {
+          const oId = doc.data()?.organizationId;
+          if (oId && typeof oId === 'string' && oId.trim() !== '') candidateOrgs.add(oId.trim());
+        });
+      } catch (err) {
+        console.warn('[HANDOFF_RESOLVER] Failed to query organization_members:', err);
+      }
+
+      // D. De organizations de propriedade do usuário (ownerUid / ownerUserId / ownerId)
+      try {
+        const ownedSnap1 = await db.collection('organizations').where('ownerUid', '==', decoded.uid).get();
+        ownedSnap1.docs.forEach(doc => candidateOrgs.add(doc.id));
+
+        const ownedSnap2 = await db.collection('organizations').where('ownerUserId', '==', decoded.uid).get();
+        ownedSnap2.docs.forEach(doc => candidateOrgs.add(doc.id));
+
+        const ownedSnap3 = await db.collection('organizations').where('ownerId', '==', decoded.uid).get();
+        ownedSnap3.docs.forEach(doc => candidateOrgs.add(doc.id));
+      } catch (err) {
+        console.warn('[HANDOFF_RESOLVER] Failed to query owned organizations:', err);
+      }
+
+      const candidateOrgsList = Array.from(candidateOrgs);
+      const validStatuses = ['active', 'trialing', 'trial', 'past_due', 'pro'];
+
+      let chosenOrgId: string | null = null;
+      let subscriptionFound = false;
+      let subscriptionStatus: string | null = null;
+
+      // PASSO 2: Buscar subscriptions/{organizationId} em Firestore
+      for (const oId of candidateOrgsList) {
+        const subDoc = await db.collection('subscriptions').doc(oId).get();
+        if (subDoc.exists) {
+          const status = subDoc.data()?.status;
+          if (status && validStatuses.includes(status)) {
+            chosenOrgId = oId;
+            subscriptionFound = true;
+            subscriptionStatus = status;
+            break;
+          }
+        }
+      }
+
+      logSubscriptionFound = subscriptionFound;
+      logSubscriptionStatus = subscriptionStatus;
+
+      // PASSO 3: Se NÃO existir assinatura ativa na base, realizar self-healing
+      if (!isGlobalAdmin && !subscriptionFound) {
+        logStripeLookupPerformed = true;
+        const stripe = getStripe();
+        if (stripe) {
+          let stripeSubObj: any = null;
+          const email = decoded.email || userData?.email;
+          const stripeCustomerId = userData?.stripeCustomerId || userData?.subscription?.stripeCustomerId;
+
+          // A. Tentar localizar por stripeCustomerId se cadastrado
+          if (stripeCustomerId) {
+            try {
+              const subs = await stripe.subscriptions.list({ customer: stripeCustomerId, limit: 10, status: 'all' });
+              const validSub = subs.data.find((s: any) => validStatuses.includes(s.status));
+              if (validSub) {
+                stripeSubObj = validSub;
+              }
+            } catch (err) {
+              console.warn('[HANDOFF_SELF_HEALING] Stripe lookup by stripeCustomerId failed:', err);
+            }
+          }
+
+          // B. Tentar localizar por e-mail do usuário se e-mail válido
+          if (!stripeSubObj && email) {
+            try {
+              const customers = await stripe.customers.list({ email: email, limit: 5 });
+              for (const cust of customers.data) {
+                const subs = await stripe.subscriptions.list({ customer: cust.id, limit: 10, status: 'all' });
+                const validSub = subs.data.find((s: any) => validStatuses.includes(s.status));
+                if (validSub) {
+                  stripeSubObj = validSub;
+                  break;
+                }
+              }
+            } catch (err) {
+              console.warn('[HANDOFF_SELF_HEALING] Stripe lookup by email failed:', err);
+            }
+          }
+
+          // C. Tentar localizar por checkout sessions do cliente
+          if (!stripeSubObj && stripeCustomerId) {
+            try {
+              const checkouts = await stripe.checkout.sessions.list({ customer: stripeCustomerId, limit: 10 });
+              const completedSession = checkouts.data.find((s: any) => s.status === 'complete' && s.subscription);
+              if (completedSession) {
+                const subId = completedSession.subscription as string;
+                const sub = await stripe.subscriptions.retrieve(subId);
+                if (validStatuses.includes(sub.status)) {
+                  stripeSubObj = sub;
+                }
+              }
+            } catch (err) {
+              console.warn('[HANDOFF_SELF_HEALING] Stripe lookup by checkout sessions failed:', err);
+            }
+          }
+
+          // Se encontramos uma assinatura válida no Stripe: executar auto-recuperação
+          if (stripeSubObj) {
+            const targetOrgId = candidateOrgsList.length > 0 ? candidateOrgsList[0] : decoded.uid;
+            
+            console.log(`[HANDOFF_SELF_HEALING] Restoring ecosystem records for uid: ${decoded.uid}, org: ${targetOrgId}`);
+            
+            const batch = db.batch();
+            const subRef = db.collection('subscriptions').doc(targetOrgId);
+            const orgRef = db.collection('organizations').doc(targetOrgId);
+            const memberRef = db.collection('organization_members').doc(`${decoded.uid}_${targetOrgId}`);
+            const userRef = db.collection('users').doc(decoded.uid);
+
+            batch.set(subRef, {
+              stripeSubscriptionId: stripeSubObj.id,
+              stripeCustomerId: stripeSubObj.customer,
+              organizationId: targetOrgId,
+              status: stripeSubObj.status,
+              plan: stripeSubObj.metadata?.plan || 'monthly',
+              tier: stripeSubObj.metadata?.tier || 'pro',
+              trialEndsAt: stripeSubObj.trial_end ? admin.firestore.Timestamp.fromMillis(stripeSubObj.trial_end * 1000) : null,
+              currentPeriodEnd: admin.firestore.Timestamp.fromMillis(stripeSubObj.current_period_end * 1000),
+              appsAccess: { musicscale: true },
+              features: { musicScale: true, globalLibrary: true },
+              schemaVersion: 1,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            batch.set(orgRef, {
+              stripeSubscriptionId: stripeSubObj.id,
+              stripeCustomerId: stripeSubObj.customer,
+              subscriptionStatus: stripeSubObj.status,
+              status: stripeSubObj.status,
+              name: userData?.displayName ? `Organização de ${userData.displayName.split(' ')[0]}` : "Minha Organização",
+              ownerUid: decoded.uid,
+              ownerUserId: decoded.uid,
+              ownerId: decoded.uid,
+              plan: stripeSubObj.metadata?.plan || 'monthly',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            batch.set(memberRef, {
+              uid: decoded.uid,
+              email: email || '',
+              organizationId: targetOrgId,
+              role: 'owner',
+              organizationRole: 'owner',
+              appRole: 'Dono',
+              status: 'active',
+              permissions: {
+                "organization.manageMembers": true,
+                "musicScale.manageSongs": true,
+                "musicScale.manageTeams": true,
+                "organization.manageOrganization": true,
+                "musicScale.manageScales": true,
+                "organization.manageBilling": true,
+                "musicscale.scales.manage": true,
+                "organization.audit.view": true,
+                "organization.members.invite": true,
+                "musicscale.teams.manage": true,
+                "organization.members.manage": true,
+                "organization.billing.manage": true,
+                "organization.settings.update": true,
+                "musicscale.songs.edit": true,
+                "organization.roles.manage": true,
+                "musicscale.songs.manage": true,
+                "organization.apps.manage": true
+              },
+              permissionsVersion: 2
+            }, { merge: true });
+
+            batch.set(userRef, {
+              organizationId: targetOrgId,
+              activeOrganizationId: targetOrgId,
+              defaultOrganizationId: targetOrgId,
+              subscriptionStatus: stripeSubObj.status,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            await batch.commit();
+            logSelfHealingExecuted = true;
+            chosenOrgId = targetOrgId;
+            subscriptionFound = true;
+            subscriptionStatus = stripeSubObj.status;
+            logSubscriptionFound = true;
+            logSubscriptionStatus = stripeSubObj.status;
+          }
+        }
+      }
+
+      // Determinar o orgId definitivo para usar no Custom Token
+      const finalOrgId = chosenOrgId || (candidateOrgsList.length > 0 ? candidateOrgsList[0] : (orgId || decoded.uid));
+      logOrgId = finalOrgId;
+
+      // PASSO 4 & PASSO 5: Validação final (somente falha se não for global_admin e não encontrarmos assinatura)
+      if (!isGlobalAdmin && !subscriptionFound) {
+        const errMessage = 'Access denied: Subscription missing. Reason: No active subscription found in Firestore or Stripe for users organizations.';
+        console.error(`[HANDOFF_DENIED] uid: ${decoded.uid}, org: ${finalOrgId}. details: ${errMessage}`);
+        
+        // Print clean handover logger
+        console.log('[HANDOFF]', {
+           uid: decoded.uid,
+           organizationId: finalOrgId,
+           subscriptionFound: false,
+           subscriptionStatus: null,
+           stripeLookupPerformed: logStripeLookupPerformed,
+           selfHealingExecuted: logSelfHealingExecuted,
+           accessGranted: false
+        });
+
+        return res.status(403).json({ error: errMessage });
+      }
+
+      logAccessGranted = true;
+
+      // Print clean handover logger
+      console.log('[HANDOFF]', {
+         uid: decoded.uid,
+         organizationId: finalOrgId,
+         subscriptionFound: subscriptionFound,
+         subscriptionStatus: subscriptionStatus,
+         stripeLookupPerformed: logStripeLookupPerformed,
+         selfHealingExecuted: logSelfHealingExecuted,
+         accessGranted: true
+      });
+
       const customToken = await admin.auth().createCustomToken(decoded.uid, {
-        orgId,
+        orgId: finalOrgId,
         appId: appId,
       });
 
       return res.json({
         customToken,
-        orgId,
+        orgId: finalOrgId,
         uid: decoded.uid,
         expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes
       });
     } catch (e: any) {
-      console.error('[API Handoff]', e);
-      return res.status(500).json({ error: 'Internal Error' });
+      console.error('[API Handoff Fatal Error]', e);
+      // Print clean handoff logger even on failure
+      console.log('[HANDOFF]', {
+         uid: logUid,
+         organizationId: logOrgId,
+         subscriptionFound: logSubscriptionFound,
+         subscriptionStatus: logSubscriptionStatus,
+         stripeLookupPerformed: logStripeLookupPerformed,
+         selfHealingExecuted: logSelfHealingExecuted,
+         accessGranted: logAccessGranted
+      });
+      return res.status(500).json({ error: `Internal Error: ${e?.message || e}` });
     }
   });
 
@@ -1619,45 +2025,43 @@ async function startServer() {
       }
 
       const sub = subscriptions.data[0];
-      const hasAccess = ['active', 'trialing'].includes(sub.status);
+      const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(sub.status);
       const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000);
       const trialEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
       
-      let discoveredPlan = 'monthly';
-      let discoveredTier = 'pro';
-      const firstItem = sub.items?.data?.[0];
-      if (firstItem && firstItem.price?.lookup_key) {
-         if (firstItem.price.lookup_key.includes('year') || firstItem.price.lookup_key.includes('annual')) {
-             discoveredPlan = 'annual';
-         }
-         if (firstItem.price.lookup_key.includes('starter')) {
-             discoveredTier = 'starter';
-         }
-      }
+      const priceId = sub.items?.data?.[0]?.price?.id || null;
+      const metadataPlan = sub.metadata?.plan || 'starter';
+      const resolvedPlan = priceIdToMusicScalePlan(priceId) || normalizeMusicScalePlan(metadataPlan);
+      const planDetails = MUSIC_SCALE_PLANS[resolvedPlan];
+      const cancelAtPeriodEnd = sub.cancel_at_period_end || false;
 
       console.log('[SYNC_SUCCESS_PREP]', {
         userId,
         status: sub.status,
-        plan: discoveredPlan,
-        tier: discoveredTier
+        plan: resolvedPlan
       });
 
       const userDocRef2 = await db.collection('users').doc(userId).get();
       const orgId2 = (userDocRef2.exists && userDocRef2.data()?.organizationId) ? userDocRef2.data()?.organizationId : userId;
 
       const subPayload = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         organizationId: orgId2,
+        app: 'musicscale',
         status: sub.status,
-        plan: discoveredPlan,
-        tier: discoveredTier,
+        plan: resolvedPlan,
+        priceId: priceId,
         stripeCustomerId: customerId,
         stripeSubscriptionId: sub.id,
-        currentPeriodEnd: currentPeriodEnd,
         trialEndsAt: trialEnd,
+        currentPeriodEnd: currentPeriodEnd,
+        cancelAtPeriodEnd: cancelAtPeriodEnd,
+        limits: planDetails.limits,
+        supportTier: planDetails.features.supportTier,
         features: {
           globalLibrary: hasAccess,
-          musicScale: hasAccess
+          musicScale: hasAccess,
+          ...planDetails.features
         },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
@@ -1672,6 +2076,25 @@ async function startServer() {
       batch.set(db.collection('subscriptions').doc(orgId2), subPayload, { merge: true });
 
       batch.set(db.collection('organizations').doc(orgId2), {
+        plan: resolvedPlan,
+        subscriptionPlan: resolvedPlan,
+        subscriptionStatus: sub.status,
+        enabledApps: admin.firestore.FieldValue.arrayUnion('musicscale'),
+        
+        'apps.musicscale.access': hasAccess,
+        'apps.musicscale.status': sub.status,
+        'apps.musicscale.plan': resolvedPlan,
+        'apps.musicscale.features': planDetails.features,
+        'apps.musicscale.limits': planDetails.limits,
+        'apps.musicscale.supportTier': planDetails.features.supportTier,
+        'apps.musicscale.currentPeriodEnd': currentPeriodEnd,
+        'apps.musicscale.trialEndsAt': trialEnd,
+        'apps.musicscale.updatedAt': admin.firestore.FieldValue.serverTimestamp(),
+        'apps.musicscale.planUpdatedAt': admin.firestore.FieldValue.serverTimestamp(),
+        
+        planUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        entitlementsVersion: 2,
+
         ownerUid: userId,
         ownerId: userId,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -1735,7 +2158,7 @@ async function startServer() {
       if (subs.data.length === 0) return res.status(404).send('No sub found');
       
       const sub = subs.data[0];
-      const hasAccess = ['active', 'trialing'].includes(sub.status);
+      const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(sub.status);
       const cpEnd = admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000);
       const tEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
       
@@ -1870,7 +2293,7 @@ async function startServer() {
           status: subs.data.length > 0 ? subs.data[0].status : 'none',
           plan: subs.data.length > 0 ? subs.data[0].metadata?.plan : 'none',
           trialing: subs.data.length > 0 ? subs.data[0].status === 'trialing' : false,
-          active: subs.data.length > 0 ? ['active', 'trialing'].includes(subs.data[0].status) : false
+          active: subs.data.length > 0 ? ['active', 'trialing', 'trial', 'pro'].includes(subs.data[0].status) : false
       });
 
       if (subs.data.length === 0) {
@@ -1878,7 +2301,7 @@ async function startServer() {
       }
 
       const s = subs.data[0];
-      const hasAccess = ['active', 'trialing'].includes(s.status);
+      const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(s.status);
       const cpEnd = admin.firestore.Timestamp.fromMillis((s as any).current_period_end * 1000);
       const tEnd = s.trial_end ? admin.firestore.Timestamp.fromMillis(s.trial_end * 1000) : null;
       const plan = s.metadata?.plan || 'monthly';
@@ -2042,7 +2465,7 @@ async function startServer() {
       if (subs.data.length > 0) {
         const s = subs.data[0];
         stripeStatus = s.status;
-        const hasAccess = ['active', 'trialing'].includes(s.status);
+        const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(s.status);
         const cpEnd = admin.firestore.Timestamp.fromMillis((s as any).current_period_end * 1000);
         const tEnd = s.trial_end ? admin.firestore.Timestamp.fromMillis(s.trial_end * 1000) : null;
         
@@ -2629,7 +3052,12 @@ async function startServer() {
           trial_period_days: 7, // 7 days trial
           metadata: {
             uid: userId,
-            plan: planLookupKey || 'unknown'
+            userId: userId,
+            organizationId: orgId,
+            plan: planLookupKey || 'unknown',
+            app: 'musicscale',
+            productId: planLookupKey || 'unknown',
+            source: 'millionsnest_site'
           }
         };
       } else {
@@ -2639,8 +3067,12 @@ async function startServer() {
       // Global metadata
       sessionArgs.metadata = {
         uid: userId,
+        userId: userId,
+        organizationId: orgId,
         unified_checkout: 'true',
         plan: planLookupKey || 'none',
+        app: 'musicscale',
+        source: 'millionsnest_site',
         addons: addonLookupKeys ? addonLookupKeys.join(',') : ''
       };
 
@@ -2728,12 +3160,25 @@ async function startServer() {
         allow_promotion_codes: true, // Permite uso de cupons de desconto para novos planos
         subscription_data: {
           trial_period_days: 7, // 7 days trial mandatory by requirements
+          metadata: {
+            uid: userId,
+            userId: userId,
+            organizationId: orgId,
+            plan: planItem ? planItem.lookupKey : 'unknown',
+            app: 'musicscale',
+            productId: planItem ? planItem.lookupKey : 'unknown',
+            source: 'millionsnest_site'
+          }
         },
         client_reference_id: userId,
         metadata: {
           uid: userId,
-          plan: planItem ? planItem.tier || planItem.feature : 'unknown',
-          product: planItem ? planItem.app : 'musicscale'
+          userId: userId,
+          organizationId: orgId,
+          plan: planItem ? planItem.lookupKey : 'none',
+          app: 'musicscale',
+          productId: planItem ? planItem.lookupKey : 'none',
+          source: 'millionsnest_site'
         },
         success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
