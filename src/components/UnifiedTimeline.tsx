@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase.js';
 import { useAuth } from '../contexts/AuthContext.js';
+import { useOrganization } from '../contexts/OrganizationContext.js';
 import { Clock, CheckCircle2, Music, Users, ShieldAlert, Filter, CalendarDays, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { eventBus } from '../packages/events/index.js';

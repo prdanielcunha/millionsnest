@@ -35,10 +35,23 @@ export function EcosystemAdmin() {
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<'users' | 'organizations' | 'analytics'>('users');
+  const [diagnosticOrg, setDiagnosticOrg] = useState<any>(null);
+  const [ownerSearchTerm, setOwnerSearchTerm] = useState("");
+  const [selectedOwner, setSelectedOwner] = useState<any>(null);
+  const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [alertMessage, setAlertMessage] = useState<{ title: string; message: string; type: 'success' | 'error' } | null>(null);
+
+  const customConfirm = (message: string, onConfirm: () => void) => {
+    setConfirmAction({ message, onConfirm });
+  };
+
+  const customAlert = (title: string, message: string, type: 'success' | 'error' = 'success') => {
+    setAlertMessage({ title, message, type });
+  };
 
   useEffect(() => {
     if (!loading) {
-      if (profile?.systemRole !== 'ceo' && profile?.systemRole !== 'admin') {
+      if (!['ceo', 'admin', 'global_admin'].includes(profile?.systemRole || '')) {
         navigate('/dashboard');
       } else {
         loadEcosystemData();
@@ -48,12 +61,21 @@ export function EcosystemAdmin() {
 
   const loadEcosystemData = async () => {
     try {
+      if (!user) return;
+      const idToken = await user.getIdToken();
+      const resOrgs = await fetch('/api/admin/organizations', {
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
+      if (resOrgs.ok) {
+        const data = await resOrgs.json();
+        setOrganizations(data.organizations || []);
+      }
+
+      // Also fetching users securely
       const usersSnap = await getDocs(query(collection(db, "users")));
-      const orgsSnap = await getDocs(query(collection(db, "organizations")));
-      const analyticsSnap = await getDocs(query(collection(db, "analytics_events")));
-      
       setUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setOrganizations(orgsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      
+      const analyticsSnap = await getDocs(query(collection(db, "analytics_events")));
       setAnalyticsEvents(analyticsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err) {
       console.error(err);
@@ -63,32 +85,32 @@ export function EcosystemAdmin() {
   };
 
   const handleUpdateRole = async (userId: string, currentRole: string | undefined, newRole: string | null) => {
-    if (!window.confirm(`Tem certeza que deseja atualizar o nível de acesso deste usuário?`)) return;
-    
-    try {
-      if (!user) return;
-      const token = await user.getIdToken();
-      
-      const res = await fetch(`/api/admin/users/${userId}/role`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ newRole })
-      });
+    customConfirm(`Tem certeza que deseja atualizar o nível de acesso deste usuário?`, async () => {
+      try {
+        if (!user) return;
+        const token = await user.getIdToken();
+        
+        const res = await fetch(`/api/admin/users/${userId}/role`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ newRole })
+        });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        alert(`Erro: ${errorData.error}`);
-        return;
+        if (!res.ok) {
+          const errorData = await res.json();
+          customAlert('Erro', `Erro: ${errorData.error}`, 'error');
+          return;
+        }
+        
+        await loadEcosystemData();
+      } catch (err) {
+        console.error("Error updating role:", err);
+        customAlert('Erro', 'Erro ao atualizar função.', 'error');
       }
-      
-      await loadEcosystemData();
-    } catch (err) {
-      console.error("Error updating role:", err);
-      alert("Erro ao atualizar função.");
-    }
+    });
   };
 
   if (loading || loadingData) {
@@ -176,78 +198,101 @@ export function EcosystemAdmin() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {filteredUsers.map(user => (
-                      <tr key={user.id} className="hover:bg-white/[0.02]">
+                    {filteredUsers.map(mappedUser => (
+                      <tr key={mappedUser.id} className="hover:bg-white/[0.02]">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            {user.photoURL ? (
-                              <img src={user.photoURL} className="w-8 h-8 rounded-full" alt="avatar" />
+                            {mappedUser.photoURL ? (
+                              <img src={mappedUser.photoURL} className="w-8 h-8 rounded-full" alt="avatar" />
                             ) : (
                               <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
                                 <User className="w-4 h-4 text-[#A0A7B5]" />
                               </div>
                             )}
                             <div>
-                              <p className="font-medium text-[#F5F7FA]">{user.displayName || 'Sem nome'}</p>
-                              <p className="text-xs text-[#A0A7B5]">{user.email}</p>
+                              <p className="font-medium text-[#F5F7FA]">{mappedUser.displayName || 'Sem nome'}</p>
+                              <p className="text-xs text-[#A0A7B5]">{mappedUser.email}</p>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-[#A0A7B5]">
-                          {organizations.find(o => o.id === user.organizationId)?.name || <span className="text-white/20">Nenhuma</span>}
+                          {organizations.find(o => o.id === mappedUser.organizationId)?.name || <span className="text-white/20">Nenhuma</span>}
                         </td>
                         <td className="px-6 py-4">
-                          {user.systemRole === 'ceo' && (
+                          {mappedUser.systemRole === 'ceo' && (
                             <span className="inline-flex items-center px-2 py-1 rounded bg-purple-500/10 text-purple-400 text-xs font-semibold border border-purple-500/20">
                               CEO
                             </span>
                           )}
-                          {user.systemRole === 'admin' && (
+                          {mappedUser.systemRole === 'admin' && (
                             <span className="inline-flex items-center px-2 py-1 rounded bg-[#2B85EB]/10 text-[#2B85EB] text-xs font-semibold border border-[#2B85EB]/20">
                               Admin Global
                             </span>
                           )}
-                          {!user.systemRole && (
+                          {!mappedUser.systemRole && (
                             <span className="inline-flex items-center px-2 py-1 rounded bg-white/5 text-[#A0A7B5] text-xs border border-white/10">
                               Usuário Padrão
                             </span>
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin') && user.id !== profile.uid && (
+                          {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin') && mappedUser.id !== profile.uid && (
                             <select
-                              value={user.systemRole || 'user'}
-                              onChange={(e) => handleUpdateRole(user.id, user.systemRole, e.target.value)}
+                              value={mappedUser.systemRole || 'user'}
+                              onChange={(e) => handleUpdateRole(mappedUser.id, mappedUser.systemRole, e.target.value)}
                               disabled={
                                 !canChangeSystemRole(
                                   profile?.systemRole,
-                                  user.systemRole,
-                                  user.systemRole,
-                                  user.id === profile?.uid,
+                                  mappedUser.systemRole,
+                                  mappedUser.systemRole,
+                                  mappedUser.id === profile?.uid,
                                   users.filter(u => u.systemRole === 'ceo').length
                                 ).allowed
                               }
                               className="bg-[#050505] border border-white/10 rounded-lg px-2 py-1 text-xs text-[#F5F7FA] focus:outline-none disabled:opacity-50"
                             >
-                              {canChangeSystemRole(profile?.systemRole, user.systemRole, 'user', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                              {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'user', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
                                 <option value="user">Remover Acesso Global</option>
                               )}
-                              {canChangeSystemRole(profile?.systemRole, user.systemRole, 'admin', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                              {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'admin', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
                                 <option value="admin">Tornar Admin Global</option>
                               )}
-                              {canChangeSystemRole(profile?.systemRole, user.systemRole, 'ceo', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                              {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'ceo', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
                                 <option value="ceo">Tornar CEO</option>
                               )}
                               
                               {/* Fallback description option when disabled */}
-                              {!canChangeSystemRole(profile?.systemRole, user.systemRole, 'user', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
-                               !canChangeSystemRole(profile?.systemRole, user.systemRole, 'admin', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
-                               !canChangeSystemRole(profile?.systemRole, user.systemRole, 'ceo', user.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
-                                <option value={user.systemRole || 'user'}>
-                                  {user.systemRole === 'ceo' ? 'CEO' : user.systemRole === 'admin' || user.systemRole === 'global_admin' ? 'Admin Global' : 'Usuário Padrão'}
+                              {!canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'user', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
+                               !canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'admin', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
+                               !canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'ceo', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                                <option value={mappedUser.systemRole || 'user'}>
+                                  {mappedUser.systemRole === 'ceo' ? 'CEO' : mappedUser.systemRole === 'admin' || mappedUser.systemRole === 'global_admin' ? 'Admin Global' : 'Usuário Padrão'}
                                 </option>
                               )}
                             </select>
+                          )}
+                          {!organizations.find(o => o.id === mappedUser.organizationId) && (
+                            <button
+                                onClick={() => {
+                                  customConfirm(`Tem certeza que deseja criar uma nova organização para o usuário ${mappedUser.email}?`, async () => {
+                                    try {
+                                      const token = await user?.getIdToken();
+                                      const res = await fetch(`/api/admin/users/${mappedUser.id}/create-organization`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+                                      });
+                                      if (!res.ok) throw new Error("Falha ao criar organização");
+                                      customAlert("Sucesso", "Organização criada com sucesso!", "success");
+                                      loadEcosystemData();
+                                    } catch (e: any) {
+                                      customAlert("Erro", "Erro ao criar organização: " + e.message, "error");
+                                    }
+                                  });
+                                }}
+                                className="ml-2 px-2 py-1 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/20 hover:border-[#2B85EB]/40 rounded-lg text-[10px] font-medium transition-colors whitespace-nowrap"
+                              >
+                                Criar Org
+                              </button>
                           )}
                         </td>
                       </tr>
@@ -301,22 +346,11 @@ export function EcosystemAdmin() {
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <button
-                                onClick={() => {
-                                  if (window.confirm(`Entrar em modo suporte na organização ${org.name}?`)) {
-                                     localStorage.setItem('mn_support_session', JSON.stringify({
-                                        active: true,
-                                        targetOrganizationId: org.id,
-                                        targetOrganizationName: org.name,
-                                        actorSystemRole: profile?.systemRole,
-                                        startedAt: new Date().toISOString()
-                                     }));
-                                     window.location.href = '/dashboard';
-                                  }
-                                }}
-                                className="px-3 py-1.5 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/20 hover:border-[#2B85EB]/40 rounded-lg text-xs font-medium transition-colors"
+                                <button
+                                onClick={() => setDiagnosticOrg(org)}
+                                className="px-3 py-1.5 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/20 hover:border-[#2B85EB]/40 rounded-lg text-xs font-medium transition-colors whitespace-nowrap"
                               >
-                                Modo Suporte
+                                Ver Diagnóstico
                               </button>
                             </td>
                           </tr>
@@ -572,6 +606,267 @@ export function EcosystemAdmin() {
           </div>
         </div>
       </main>
+
+      {/* Diagnostic Modal */}
+      {diagnosticOrg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#0B0F19] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col shadow-2xl">
+            <div className="p-6 border-b border-white/5 flex items-center justify-between sticky top-0 bg-[#0B0F19] z-10">
+              <div>
+                <h3 className="text-xl font-bold text-[#F5F7FA] flex items-center gap-2">
+                  <ActivityIcon className="w-5 h-5 text-[#2B85EB]" />
+                  Diagnóstico de Organização
+                </h3>
+                <p className="text-sm text-[#A0A7B5] mt-1">Reparo administrativo do ecossistema MillionsNest.</p>
+              </div>
+              <button 
+                onClick={() => setDiagnosticOrg(null)}
+                className="p-2 hover:bg-white/5 rounded-full transition-colors text-[#A0A7B5]"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 flex-1">
+              {/* Resumo */}
+              <div className="bg-white/[0.02] border border-white/5 p-4 rounded-xl space-y-2">
+                <p className="text-sm text-[#F5F7FA]"><strong>ID:</strong> <span className="font-mono text-xs">{diagnosticOrg.id}</span></p>
+                <p className="text-sm text-[#F5F7FA]"><strong>Nome:</strong> {diagnosticOrg.name || <span className="text-red-400">Ausente</span>}</p>
+                <p className="text-sm text-[#F5F7FA]"><strong>Dono (UID):</strong> {diagnosticOrg.ownerUserId || <span className="text-red-400">Ausente</span>}</p>
+                <p className="text-sm text-[#F5F7FA]"><strong>Dono (Email):</strong> {diagnosticOrg.ownerEmail || <span className="text-red-400">Ausente</span>}</p>
+                <p className="text-sm text-[#F5F7FA]"><strong>Plano:</strong> {diagnosticOrg.subscriptionPlan} ({diagnosticOrg.subscriptionStatus})</p>
+              </div>
+
+              {/* Inconsistências Comuns */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-[#F5F7FA] border-b border-white/10 pb-2">Status de Saúde</h4>
+                
+                {!diagnosticOrg.ownerUserId && (
+                  <div className="flex items-start gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-red-400">Dono Ausente</p>
+                      <p className="text-xs text-red-400/80 mt-1">A organização está órfã. Sem vínculo com nenhum UID de usuário.</p>
+                    </div>
+                  </div>
+                )}
+                
+                {diagnosticOrg.ownerUserId && !diagnosticOrg.ownerEmail && (
+                  <div className="flex items-start gap-3 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-yellow-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-yellow-400">Email do Dono Desconhecido</p>
+                      <p className="text-xs text-yellow-400/80 mt-1">O UID do dono está presente, mas falta o e-mail no registro da organização.</p>
+                    </div>
+                  </div>
+                )}
+                
+                {!(diagnosticOrg.apps?.musicscale?.access) && (
+                  <div className="flex items-start gap-3 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-yellow-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-yellow-400">MusicScale Inativo ou Incompleto</p>
+                      <p className="text-xs text-yellow-400/80 mt-1">A tag apps.musicscale.access não está explicitamente ativa.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Seleção de Dono (Reparo) */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-[#F5F7FA] border-b border-white/10 pb-2">Ações de Reparo</h4>
+                
+                {/* 1. Selecionar e Vincular Dono */}
+                <div className="bg-white/5 border border-white/10 p-4 rounded-xl space-y-3">
+                  <p className="text-sm font-medium text-[#F5F7FA]">Selecionar ou Alterar Dono</p>
+                  <p className="text-xs text-[#A0A7B5]">Pesquise pelo novo dono. Ele herdará os acessos e a organização.</p>
+                  
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Buscar por UID ou nome nos usuários carregados..." 
+                      className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-[#F5F7FA]"
+                      value={ownerSearchTerm}
+                      onChange={e => setOwnerSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  
+                  {ownerSearchTerm && (
+                    <div className="max-h-40 overflow-y-auto border border-white/10 rounded-lg bg-black/50 p-2 space-y-1">
+                      {users
+                        .filter(u => u.displayName?.toLowerCase().includes(ownerSearchTerm.toLowerCase()) || 
+                                     u.email?.toLowerCase().includes(ownerSearchTerm.toLowerCase()) || 
+                                     u.id.includes(ownerSearchTerm))
+                        .map(u => (
+                        <div 
+                          key={u.id} 
+                          className={`p-2 rounded-lg cursor-pointer flex justify-between items-center text-xs ${selectedOwner?.id === u.id ? 'bg-[#2B85EB]/20 border border-[#2B85EB]/50' : 'hover:bg-white/10'}`}
+                          onClick={() => setSelectedOwner(u)}
+                        >
+                          <div>
+                            <p className="font-medium text-[#F5F7FA]">{u.displayName || 'Sem nome'}</p>
+                            <p className="text-[#A0A7B5]">{u.email}</p>
+                          </div>
+                          <p className="text-[10px] text-white/40">{u.id}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedOwner && (
+                    <div className="pt-2 flex justify-end">
+                      <button 
+                        disabled={isExecutingRepair}
+                        onClick={() => {
+                          customConfirm(`Tem certeza que deseja vincular ${selectedOwner.email} como dono da organização? O usuário atual na organizationId será alterado.`, async () => {
+                            setIsExecutingRepair(true);
+                            try {
+                              const token = await user?.getIdToken();
+                              const res = await fetch(`/api/admin/organizations/${diagnosticOrg.id}/link-owner`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                body: JSON.stringify({
+                                  selectedOwnerUid: selectedOwner.id,
+                                  selectedOwnerEmail: selectedOwner.email,
+                                  selectedOwnerName: selectedOwner.displayName
+                                })
+                              });
+                              if (!res.ok) throw new Error("Falha na API");
+                              customAlert('Sucesso', 'Dono vinculado com sucesso!', 'success');
+                              setDiagnosticOrg(null);
+                              loadEcosystemData();
+                            } catch (e: any) {
+                              customAlert('Erro', 'Erro ao vincular dono: ' + e.message, 'error');
+                            } finally {
+                              setIsExecutingRepair(false);
+                            }
+                          });
+                        }}
+                        className="px-4 py-2 bg-[#2B85EB] text-white rounded-lg text-sm font-medium hover:bg-[#2B85EB]/90 disabled:opacity-50"
+                      >
+                        {isExecutingRepair ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Vincular Dono Selecionado'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Criar Estrutura MusicScale */}
+                <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-[#F5F7FA]">Criar Estrutura Mínima (MusicScale)</p>
+                    <p className="text-xs text-[#A0A7B5]">Injeta configurações básicas, papéis e permissões para abrir o app.</p>
+                  </div>
+                  <button 
+                    disabled={isExecutingRepair}
+                    onClick={() => {
+                      customConfirm(`Tem certeza que deseja aplicar a estrutura mínima para ${diagnosticOrg.id}? Isso não afeta músicas existentes.`, async () => {
+                        setIsExecutingRepair(true);
+                        try {
+                          const token = await user?.getIdToken();
+                          const res = await fetch(`/api/admin/organizations/${diagnosticOrg.id}/create-musicscale-structure`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+                          });
+                          if (!res.ok) throw new Error("Falha na API de estrutura");
+                          customAlert('Sucesso', 'Estrutura criada com sucesso!', 'success');
+                          setDiagnosticOrg(null);
+                        } catch (e: any) {
+                          customAlert('Erro', 'Erro ao criar estrutura: ' + e.message, 'error');
+                        } finally {
+                          setIsExecutingRepair(false);
+                        }
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-[#F5F7FA] border border-white/20 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    Executar Rotina
+                  </button>
+                </div>
+
+                {/* 3. Normalizar Plano */}
+                <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-[#F5F7FA]">Normalizar Plano e Faturamento</p>
+                    <p className="text-xs text-[#A0A7B5]">Converte legacy 'plan: MONTHLY' em estruturas separadas compatíveis e resincroniza status.</p>
+                  </div>
+                  <button 
+                    disabled={isExecutingRepair}
+                    onClick={() => {
+                      customConfirm(`Tem certeza que deseja tentar normalizar o plano para ${diagnosticOrg.id}?`, async () => {
+                        setIsExecutingRepair(true);
+                        try {
+                          const token = await user?.getIdToken();
+                          const res = await fetch(`/api/admin/organizations/${diagnosticOrg.id}/normalize-plan`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+                          });
+                          if (!res.ok) throw new Error("Falha na API de normalização");
+                          customAlert('Sucesso', 'Plano normalizado com sucesso!', 'success');
+                          setDiagnosticOrg(null);
+                          loadEcosystemData();
+                        } catch (e: any) {
+                          customAlert('Erro', 'Erro ao normalizar plano: ' + e.message, 'error');
+                        } finally {
+                          setIsExecutingRepair(false);
+                        }
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    Normalizar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirm Modal */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0A0A0B] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-lg font-medium text-[#F5F7FA] mb-2">Confirmação</h3>
+            <p className="text-sm text-[#A0A7B5] mb-6">{confirmAction.message}</p>
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setConfirmAction(null)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors border border-white/5"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => {
+                  confirmAction.onConfirm();
+                  setConfirmAction(null);
+                }}
+                className="px-4 py-2 bg-[#2B85EB] hover:bg-[#2B85EB]/90 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Alert Modal */}
+      {alertMessage && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+           <div className="bg-[#0A0A0B] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl flex flex-col items-center text-center">
+             <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${alertMessage.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                {alertMessage.type === 'error' ? <AlertCircle className="w-6 h-6" /> : <Check className="w-6 h-6" />}
+             </div>
+             <h3 className="text-lg font-medium text-[#F5F7FA] mb-2">{alertMessage.title}</h3>
+             <p className="text-sm text-[#A0A7B5] mb-6">{alertMessage.message}</p>
+             <button 
+               onClick={() => setAlertMessage(null)}
+               className="w-full px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-colors"
+             >
+                OK
+             </button>
+           </div>
+        </div>
+      )}
     </EcosystemShell>
   );
 }

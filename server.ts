@@ -1215,7 +1215,8 @@ async function startServer() {
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       if (!userRef.exists) return res.status(403).json({ error: 'Forbidden' });
       const userData = userRef.data();
-      if (userData?.systemRole !== 'ceo' && userData?.systemRole !== 'admin' && userData?.systemRole !== 'global_admin') {
+      const isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(userData?.systemRole);
+      if (!isSystemAdmin) {
          return res.status(403).json({ error: 'Acesso restrito' });
       }
 
@@ -1224,13 +1225,291 @@ async function startServer() {
          id: doc.id,
          name: doc.data().name || 'Sem nome',
          slug: doc.data().slug || null,
-         ownerUid: doc.data().ownerUid || null,
-         subscriptionStatus: doc.data().subscriptionStatus || 'none'
+         ownerUserId: doc.data().ownerUserId || doc.data().ownerUid || doc.data().ownerId || null,
+         ownerEmail: doc.data().ownerEmail || null,
+         ownerName: doc.data().ownerName || null,
+         subscriptionPlan: doc.data().subscriptionPlan || doc.data().plan || 'free',
+         subscriptionStatus: doc.data().subscriptionStatus || doc.data().status || 'none',
+         createdAt: doc.data().createdAt,
+         updatedAt: doc.data().updatedAt,
+         apps: doc.data().apps
       }));
 
       return res.json({ organizations });
     } catch (err) {
       console.error('[API Admin Orgs]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  // Diagnósticos e Reparo Central - MillionsNest
+  app.post('/api/admin/organizations/:orgId/link-owner', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decoded.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const { selectedOwnerUid, selectedOwnerEmail, selectedOwnerName } = req.body;
+      if (!selectedOwnerUid || !selectedOwnerEmail) return res.status(400).json({ error: 'Missing owner details' });
+
+      const batch = db!.batch();
+      
+      // Update Organization
+      const orgRef = db!.collection('organizations').doc(orgId);
+      batch.set(orgRef, {
+        ownerUserId: selectedOwnerUid,
+        ownerEmail: selectedOwnerEmail,
+        ownerName: selectedOwnerName || null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        repairedAt: admin.firestore.FieldValue.serverTimestamp(),
+        repairedBy: decoded.uid
+      }, { merge: true });
+
+      // Add to members subcollection
+      const memberRef = orgRef.collection('members').doc(selectedOwnerUid);
+      batch.set(memberRef, {
+        uid: selectedOwnerUid,
+        email: selectedOwnerEmail,
+        displayName: selectedOwnerName || null,
+        organizationRole: 'owner',
+        role: 'owner', // legacy
+        status: 'active',
+        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        repairedBy: decoded.uid
+      }, { merge: true });
+
+      // Update User
+      const targetUserRef = db!.collection('users').doc(selectedOwnerUid);
+      batch.set(targetUserRef, {
+        organizationId: orgId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      // Audit log
+      const auditRef = db!.collection('audit_logs').doc();
+      batch.set(auditRef, {
+        action: 'system.organization.repair.link_owner',
+        actorUid: decoded.uid,
+        actorEmail: decoded.email,
+        actorSystemRole: userData?.systemRole,
+        organizationId: orgId,
+        targetUserId: selectedOwnerUid,
+        before: {},
+        after: { ownerUserId: selectedOwnerUid, ownerEmail: selectedOwnerEmail },
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await batch.commit();
+      return res.json({ success: true });
+    } catch (err) {
+      console.error('[API Link Owner]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.post('/api/admin/organizations/:orgId/create-musicscale-structure', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decoded.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const batch = db!.batch();
+      
+      const orgRef = db!.collection('organizations').doc(orgId);
+      
+      // Settings
+      const settingsRef = orgRef.collection('musicscale').doc('settings');
+      batch.set(settingsRef, {
+        repairedAt: admin.firestore.FieldValue.serverTimestamp(),
+        repairedBy: decoded.uid,
+        isSetupComplete: true
+      }, { merge: true });
+
+      // Default Role
+      const rolesRef = orgRef.collection('musicscale').doc('settings').collection('roles').doc('default_member');
+      batch.set(rolesRef, {
+        id: 'default_member',
+        name: 'Membro',
+        permissions: ['musicscale.songs.view', 'musicscale.scales.view'],
+        isDefault: true,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      // Audit log
+      const auditRef = db!.collection('audit_logs').doc();
+      batch.set(auditRef, {
+        action: 'system.organization.repair.create_musicscale_structure',
+        actorUid: decoded.uid,
+        actorEmail: decoded.email,
+        actorSystemRole: userData?.systemRole,
+        organizationId: orgId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await batch.commit();
+      return res.json({ success: true });
+    } catch (err) {
+      console.error('[API Create Structure]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.post('/api/admin/users/:uid/create-organization', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decoded.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { uid } = req.params;
+      const targetUserRef = await db!.collection('users').doc(uid).get();
+      if (!targetUserRef.exists) return res.status(404).json({ error: 'Usuário não encontrado' });
+      const targetUser = targetUserRef.data() || {};
+      
+      // Auto-generate Organization
+      const orgRef = db!.collection('organizations').doc();
+      const orgId = orgRef.id;
+      const batch = db!.batch();
+
+      batch.set(orgRef, {
+        name: `Minha Organização (${targetUser.displayName || targetUser.email || 'Usuário'})`,
+        slug: `org-${orgId.substring(0, 8)}`,
+        ownerUserId: uid,
+        ownerEmail: targetUser.email,
+        ownerName: targetUser.displayName || null,
+        plan: 'starter',
+        subscriptionPlan: 'starter',
+        status: 'active',
+        subscriptionStatus: 'active',
+        apps: { musicscale: { access: true, roles: ['owner'] } },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Assign Membership
+      const memberRef = orgRef.collection('members').doc(uid);
+      batch.set(memberRef, {
+        uid: uid,
+        email: targetUser.email,
+        displayName: targetUser.displayName || null,
+        organizationRole: 'owner',
+        role: 'owner',
+        status: 'active',
+        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Update User
+      batch.update(db!.collection('users').doc(uid), {
+        organizationId: orgId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Add minimum MusicScale structure
+      const settingsRef = orgRef.collection('musicscale').doc('settings');
+      batch.set(settingsRef, {
+        isSetupComplete: true,
+        repairedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Audit log
+      const auditRef = db!.collection('audit_logs').doc();
+      batch.set(auditRef, {
+        action: 'system.user.repair.create_organization',
+        actorUid: decoded.uid,
+        actorEmail: decoded.email,
+        actorSystemRole: userData?.systemRole,
+        targetUserId: uid,
+        createdOrganizationId: orgId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await batch.commit();
+
+      return res.json({ success: true, organizationId: orgId });
+    } catch (err) {
+      console.error('[API Create Org for User]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.post('/api/admin/organizations/:orgId/normalize-plan', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decoded.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const orgRef = db!.collection('organizations').doc(orgId);
+      const orgData = (await orgRef.get()).data() || {};
+      
+      // Look for a subscription to grab the proper priceId if possible
+      const subRef = await db!.collection('subscriptions').doc(orgId).get();
+      const sub = subRef.exists ? subRef.data() : null;
+      const priceId = sub?.stripePriceId || orgData.stripePriceId || Object.keys(MUSIC_SCALE_PLANS).find(k => MUSIC_SCALE_PLANS[k].name === orgData.plan);
+
+      const targetPlan = priceIdToMusicScalePlan(priceId);
+
+      const updateData: any = {};
+      
+      updateData.subscriptionPlan = targetPlan;
+      updateData.billingInterval = Object.keys(MUSIC_SCALE_PLANS).find(k => k === priceId)?.includes('yearly') ? 'yearly' : 'monthly';
+      if (orgData.plan === 'MONTHLY' || orgData.plan === 'YEARLY') {
+         updateData.plan = admin.firestore.FieldValue.delete();
+      }
+
+      await orgRef.update({
+        ...updateData,
+        repairedAt: admin.firestore.FieldValue.serverTimestamp(),
+        repairedBy: decoded.uid
+      });
+
+      // Audit log
+      const auditRef = db!.collection('audit_logs').doc();
+      await auditRef.set({
+        action: 'system.organization.repair.normalize_plan',
+        actorUid: decoded.uid,
+        actorEmail: decoded.email,
+        actorSystemRole: userData?.systemRole,
+        organizationId: orgId,
+        before: { plan: orgData.plan || null, subscriptionPlan: orgData.subscriptionPlan || null },
+        after: { subscriptionPlan: targetPlan, billingInterval: updateData.billingInterval },
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true, plan: targetPlan });
+    } catch (err) {
+      console.error('[API Normalize Plan]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
   });
@@ -1402,7 +1681,7 @@ async function startServer() {
         return res.status(400).json({ error: 'Missing type' });
       }
 
-      const isSystemAdmin = userData?.systemRole === 'ceo' || userData?.systemRole === 'admin';
+      const isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(userData?.systemRole);
       const isSupportMode = decodedToken.supportMode === true;
       const shouldConsumeLibraryImport = !isSystemAdmin && !isSupportMode;
 
