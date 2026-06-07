@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { collection, query, getDocs, doc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
-import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp } from "lucide-react";
+import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp, Pencil } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EcosystemShell } from "../components/EcosystemShell.js";
 import { canChangeSystemRole } from "../lib/roleResolver.js";
@@ -41,12 +41,84 @@ export function EcosystemAdmin() {
   const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [alertMessage, setAlertMessage] = useState<{ title: string; message: string; type: 'success' | 'error' } | null>(null);
 
+  const [isExecutingRepair, setIsExecutingRepair] = useState(false);
+  const [createOrgModalUser, setCreateOrgModalUser] = useState<any | null>(null);
+  const [createOrgName, setCreateOrgName] = useState("");
+  const [renameOrgModal, setRenameOrgModal] = useState<any | null>(null);
+  const [renameOrgName, setRenameOrgName] = useState("");
+
   const customConfirm = (message: string, onConfirm: () => void) => {
     setConfirmAction({ message, onConfirm });
   };
 
   const customAlert = (title: string, message: string, type: 'success' | 'error' = 'success') => {
     setAlertMessage({ title, message, type });
+  };
+
+  const handleCreateOrganizationSubmit = async () => {
+    if (!createOrgModalUser) return;
+    if (!createOrgName.trim()) {
+      customAlert("Erro", "O nome da organização não pode ficar vazio.", "error");
+      return;
+    }
+    
+    setIsExecutingRepair(true);
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`/api/admin/users/${createOrgModalUser.id}/create-organization`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ organizationName: createOrgName.trim() })
+      });
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || "Falha ao criar organização");
+      }
+      customAlert("Sucesso", "Organização criada com sucesso!", "success");
+      setCreateOrgModalUser(null);
+      loadEcosystemData();
+    } catch (e: any) {
+      customAlert("Erro", "Erro ao criar organização: " + e.message, "error");
+    } finally {
+      setIsExecutingRepair(false);
+    }
+  };
+
+  const handleRenameOrganizationSubmit = async (orgId: string, newName: string) => {
+    if (!newName.trim()) {
+      customAlert("Erro", "O nome da organização não pode ficar vazio.", "error");
+      return;
+    }
+
+    setIsExecutingRepair(true);
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`/api/admin/organizations/${orgId}/rename`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ newName: newName.trim() })
+      });
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || "Falha ao renomear organização");
+      }
+      customAlert("Sucesso", "Organização renomeada com sucesso!", "success");
+      setRenameOrgModal(null);
+      if (diagnosticOrg?.id === orgId) {
+        setDiagnosticOrg({ ...diagnosticOrg, name: newName.trim() });
+      }
+      loadEcosystemData();
+    } catch (e: any) {
+      customAlert("Erro", "Erro ao renomear organização: " + e.message, "error");
+    } finally {
+      setIsExecutingRepair(false);
+    }
   };
 
   useEffect(() => {
@@ -274,20 +346,9 @@ export function EcosystemAdmin() {
                           {!organizations.find(o => o.id === mappedUser.organizationId) && (
                             <button
                                 onClick={() => {
-                                  customConfirm(`Tem certeza que deseja criar uma nova organização para o usuário ${mappedUser.email}?`, async () => {
-                                    try {
-                                      const token = await user?.getIdToken();
-                                      const res = await fetch(`/api/admin/users/${mappedUser.id}/create-organization`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
-                                      });
-                                      if (!res.ok) throw new Error("Falha ao criar organização");
-                                      customAlert("Sucesso", "Organização criada com sucesso!", "success");
-                                      loadEcosystemData();
-                                    } catch (e: any) {
-                                      customAlert("Erro", "Erro ao criar organização: " + e.message, "error");
-                                    }
-                                  });
+                                  const emailPrefix = mappedUser.email ? mappedUser.email.split('@')[0] : "";
+                                  setCreateOrgModalUser(mappedUser);
+                                  setCreateOrgName(emailPrefix);
                                 }}
                                 className="ml-2 px-2 py-1 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/20 hover:border-[#2B85EB]/40 rounded-lg text-[10px] font-medium transition-colors whitespace-nowrap"
                               >
@@ -345,12 +406,22 @@ export function EcosystemAdmin() {
                                 {org.subscriptionPlan || 'free'} • {org.subscriptionStatus || 'active'}
                               </span>
                             </td>
-                            <td className="px-6 py-4">
-                                <button
+                            <td className="px-6 py-4 flex gap-2">
+                              <button
                                 onClick={() => setDiagnosticOrg(org)}
                                 className="px-3 py-1.5 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/20 hover:border-[#2B85EB]/40 rounded-lg text-xs font-medium transition-colors whitespace-nowrap"
                               >
                                 Ver Diagnóstico
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRenameOrgModal(org);
+                                  setRenameOrgName(org.name || '');
+                                }}
+                                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-[#F5F7FA] border border-white/10 hover:border-white/20 rounded-lg text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-1.5"
+                              >
+                                <Pencil className="w-3.5 h-3.5 text-[#A0A7B5]" />
+                                Renomear
                               </button>
                             </td>
                           </tr>
@@ -676,6 +747,23 @@ export function EcosystemAdmin() {
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-[#F5F7FA] border-b border-white/10 pb-2">Ações de Reparo</h4>
                 
+                {/* 0. Alterar Nome da Organização */}
+                <div className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-[#F5F7FA]">Alterar Nome da Organização</p>
+                    <p className="text-xs text-[#A0A7B5]">Atualiza o nome amigável de exibição da empresa/ministério.</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setRenameOrgModal(diagnosticOrg);
+                      setRenameOrgName(diagnosticOrg.name || '');
+                    }}
+                    className="px-3 py-1.5 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/20 rounded-lg text-xs font-medium transition-colors whitespace-nowrap"
+                  >
+                    Renomear
+                  </button>
+                </div>
+                
                 {/* 1. Selecionar e Vincular Dono */}
                 <div className="bg-white/5 border border-white/10 p-4 rounded-xl space-y-3">
                   <p className="text-sm font-medium text-[#F5F7FA]">Selecionar ou Alterar Dono</p>
@@ -865,6 +953,108 @@ export function EcosystemAdmin() {
                 OK
              </button>
            </div>
+        </div>
+      )}
+
+      {/* Modal de Criar Organização Customizada */}
+      {createOrgModalUser && (
+        <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0B0F19] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-[#F5F7FA]">Criar Nova Organização</h3>
+                <p className="text-xs text-[#A0A7B5] mt-1">Preencha o nome da organização para <strong>{createOrgModalUser.email}</strong>.</p>
+              </div>
+              <button 
+                onClick={() => setCreateOrgModalUser(null)} 
+                className="text-[#A0A7B5] hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-[#A0A7B5] font-medium block">Nome da Organização</label>
+              <input
+                type="text"
+                value={createOrgName}
+                onChange={e => setCreateOrgName(e.target.value)}
+                placeholder="Insira o nome da organização..."
+                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-[#F5F7FA] focus:outline-none focus:border-[#2B85EB] transition-colors"
+                autoFocus
+              />
+              <p className="text-[10px] text-white/40">Sugerido automaticamente do seu e-mail (antes do @). Sinta-se livre para renomear.</p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button 
+                onClick={() => setCreateOrgModalUser(null)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors border border-white/5"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleCreateOrganizationSubmit}
+                disabled={isExecutingRepair || !createOrgName.trim()}
+                className="px-4 py-2 bg-[#2B85EB] hover:bg-[#2B85EB]/90 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isExecutingRepair ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Criar Organização'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Renomear Organização */}
+      {renameOrgModal && (
+        <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0B0F19] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-[#F5F7FA]">Renomear Organização</h3>
+                <p className="text-xs text-[#A0A7B5] mt-1">Altere o nome amigável da organização no ecossistema.</p>
+              </div>
+              <button 
+                onClick={() => setRenameOrgModal(null)} 
+                className="text-[#A0A7B5] hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-1 text-xs text-[#A0A7B5] bg-white/[0.02] border border-white/5 p-3 rounded-lg">
+              <p><strong>ID da Org:</strong> <span className="font-mono text-[10px]">{renameOrgModal.id}</span></p>
+              <p><strong>Nome atual:</strong> {renameOrgModal.name}</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-[#A0A7B5] font-medium block">Novo Nome</label>
+              <input
+                type="text"
+                value={renameOrgName}
+                onChange={e => setRenameOrgName(e.target.value)}
+                placeholder="Insira o novo nome..."
+                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-[#F5F7FA] focus:outline-none focus:border-[#2B85EB] transition-colors"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button 
+                onClick={() => setRenameOrgModal(null)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors border border-white/5"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => handleRenameOrganizationSubmit(renameOrgModal.id, renameOrgName)}
+                disabled={isExecutingRepair || !renameOrgName.trim() || renameOrgName.trim() === renameOrgModal.name}
+                className="px-4 py-2 bg-[#2B85EB] hover:bg-[#2B85EB]/90 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isExecutingRepair ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar Alteração'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </EcosystemShell>

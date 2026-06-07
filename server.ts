@@ -1385,6 +1385,7 @@ async function startServer() {
       }
 
       const { uid } = req.params;
+      const { organizationName } = req.body;
       const targetUserRef = await db!.collection('users').doc(uid).get();
       if (!targetUserRef.exists) return res.status(404).json({ error: 'Usuário não encontrado' });
       const targetUser = targetUserRef.data() || {};
@@ -1394,8 +1395,10 @@ async function startServer() {
       const orgId = orgRef.id;
       const batch = db!.batch();
 
+      const finalName = organizationName?.trim() || `Minha Organização (${targetUser.displayName || targetUser.email || 'Usuário'})`;
+
       batch.set(orgRef, {
-        name: `Minha Organização (${targetUser.displayName || targetUser.email || 'Usuário'})`,
+        name: finalName,
         slug: `org-${orgId.substring(0, 8)}`,
         ownerUserId: uid,
         ownerEmail: targetUser.email,
@@ -1510,6 +1513,55 @@ async function startServer() {
       return res.json({ success: true, plan: targetPlan });
     } catch (err) {
       console.error('[API Normalize Plan]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.post('/api/admin/organizations/:orgId/rename', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decoded.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const { newName } = req.body;
+      if (!newName?.trim()) return res.status(400).json({ error: 'Novo nome é obrigatório' });
+
+      const orgRef = db!.collection('organizations').doc(orgId);
+      const orgSnap = await orgRef.get();
+      if (!orgSnap.exists) return res.status(404).json({ error: 'Organização não encontrada' });
+      const orgData = orgSnap.data() || {};
+
+      const oldName = orgData.name;
+
+      await orgRef.update({
+        name: newName.trim(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Audit log
+      const auditRef = db!.collection('audit_logs').doc();
+      await auditRef.set({
+        action: 'system.organization.rename',
+        actorUid: decoded.uid,
+        actorEmail: decoded.email,
+        actorSystemRole: userData?.systemRole,
+        organizationId: orgId,
+        before: { name: oldName },
+        after: { name: newName.trim() },
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true, newName: newName.trim() });
+    } catch (err) {
+      console.error('[API Rename Organization]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
   });
