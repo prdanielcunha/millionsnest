@@ -183,6 +183,13 @@
         { "fieldPath": "organizationId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "members",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "uid", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

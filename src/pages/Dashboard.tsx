@@ -8,7 +8,7 @@ import {
   Star, Zap, Headphones, Video, ListMusic, Check, Users, Link, Mail, Plus, X, Loader2, Copy
 } from "lucide-react";
 import { Navbar } from "../components/Navbar.js";
-import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc, limit } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc, limit, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { getDefaultPermissions, normalizePermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 import { analytics } from "../lib/analytics.js";
@@ -523,6 +523,16 @@ export function Dashboard() {
       if (!res.ok) throw new Error(data.error || 'Failed to save');
       setOrganization({ ...organization, name: orgNameInput, slug: orgSlugInput });
       setIsEditingOrg(false);
+      try {
+        const stored = localStorage.getItem('mn_org_context');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.organization = { ...parsed.organization, name: orgNameInput, slug: orgSlugInput };
+          localStorage.setItem('mn_org_context', JSON.stringify(parsed));
+        }
+      } catch (lsErr) {
+        console.warn("[Dashboard] Silently caught cache update failure:", lsErr);
+      }
     } catch (e: any) {
       console.error(e);
       alert(`Erro ao salvar organização: ${e.message}`);
@@ -799,7 +809,27 @@ export function Dashboard() {
   }, [user]);
 
   useEffect(() => {
+    if (!user) return;
+    
+    // Initial manual/background fetch of all dependencies (members, subscriptions, legacy config)
     fetchSubscriptionAndOrg();
+
+    // Subscribe to real-time organization updates for immediate database sync
+    const orgId = activeContextOrgId;
+    const orgRef = doc(db, "organizations", orgId);
+    
+    const unsubscribeOrg = onSnapshot(orgRef, (snap) => {
+      if (snap.exists()) {
+        const orgData = { id: snap.id, ...snap.data() };
+        setOrganization(orgData);
+      }
+    }, (err) => {
+      console.warn("[Dashboard] Real-time organization update failed, falling back to manual fetches:", err);
+    });
+
+    return () => {
+      unsubscribeOrg();
+    };
   }, [user, activeContextOrgId]);
 
   useEffect(() => {

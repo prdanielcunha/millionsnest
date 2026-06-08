@@ -7,6 +7,93 @@ import { useNavigate } from "react-router-dom";
 import { EcosystemShell } from "../components/EcosystemShell.js";
 import { canChangeSystemRole } from "../lib/roleResolver.js";
 
+function resolveUserOrganizationContextLocal(
+  userId: string,
+  userData: any,
+  organizations: any[]
+) {
+  if (!userId) return { hasOrganization: false, organizations: [], inconsistencies: [], needsRepair: false, activeOrgs: [], primaryOrg: null, activeOrg: null };
+
+  const finalOrgs: any[] = [];
+  const foundIds = new Set<string>();
+
+  organizations.forEach(org => {
+    const isOwner = org.ownerUserId === userId || org.ownerUid === userId || org.ownerId === userId;
+    if (isOwner) {
+      if (!foundIds.has(org.id)) {
+        foundIds.add(org.id);
+        finalOrgs.push(org);
+      }
+    }
+  });
+
+  if (userData) {
+    const fields = [userData.activeOrganizationId, userData.primaryOrganizationId, userData.organizationId];
+    fields.forEach(id => {
+      if (id && typeof id === 'string') {
+        const org = organizations.find(o => o.id === id);
+        if (org && !foundIds.has(id)) {
+          foundIds.add(id);
+          finalOrgs.push(org);
+        }
+      }
+    });
+
+    if (Array.isArray(userData.organizations)) {
+      userData.organizations.forEach((id: any) => {
+        if (id && typeof id === 'string') {
+          const org = organizations.find(o => o.id === id);
+          if (org && !foundIds.has(id)) {
+            foundIds.add(id);
+            finalOrgs.push(org);
+          }
+        }
+      });
+    }
+  }
+
+  const activeOrgs = finalOrgs.filter(o => o.status !== 'archived');
+
+  let activeId = userData?.activeOrganizationId || null;
+  let primaryId = userData?.primaryOrganizationId || null;
+  let legacyId = userData?.organizationId || null;
+
+  let activeOrg = activeOrgs.find(o => o.id === activeId) || null;
+  let primaryOrg = activeOrgs.find(o => o.id === primaryId) || null;
+  let legacyOrg = activeOrgs.find(o => o.id === legacyId) || null;
+
+  const resolvedPrimary = primaryOrg || activeOrg || legacyOrg || activeOrgs[0] || null;
+  const resolvedActive = activeOrg || resolvedPrimary || null;
+
+  const inconsistencies: string[] = [];
+  let needsRepair = false;
+
+  if (activeOrgs.length > 0) {
+    if (!primaryId) {
+      needsRepair = true;
+      inconsistencies.push('Vínculo primário canonical (primaryOrganizationId) ausente.');
+    }
+    if (!activeId) {
+      needsRepair = true;
+      inconsistencies.push('Vínculo ativo canonical (activeOrganizationId) ausente.');
+    }
+    if (legacyId !== resolvedActive?.id) {
+      needsRepair = true;
+      inconsistencies.push(`userData.organizationId legado está de-sincronizado.`);
+    }
+  }
+
+  return {
+    organizations: finalOrgs,
+    activeOrgs,
+    primaryOrg: resolvedPrimary,
+    activeOrg: resolvedActive,
+    hasOrganization: activeOrgs.length > 0,
+    needsRepair,
+    inconsistencies
+  };
+}
+
 function ActivityIcon({ className }: { className?: string }) {
   return (
     <svg 
@@ -47,6 +134,143 @@ export function EcosystemAdmin() {
   const [renameOrgModal, setRenameOrgModal] = useState<any | null>(null);
   const [renameOrgName, setRenameOrgName] = useState("");
 
+  // Diagnostics and repair states
+  const [diagnosticsModalUser, setDiagnosticsModalUser] = useState<any | null>(null);
+  const [diagnosticsData, setDiagnosticsData] = useState<any | null>(null);
+  const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
+  const [selectedMainOrgId, setSelectedMainOrgId] = useState<string>("");
+  const [movingFromOrgId, setMovingFromOrgId] = useState<string>("");
+  const [movingToOrgId, setMovingToOrgId] = useState<string>("");
+
+  const fetchDiagnostics = async (targetUser: any) => {
+    setLoadingDiagnostics(true);
+    setDiagnosticsData(null);
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`/api/admin/users/${targetUser.id}/diagnostics`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) throw new Error("Erro ao carregar diagnósticos");
+      const data = await res.json();
+      setDiagnosticsData(data);
+      if (data.primaryOrganizationId) {
+        setSelectedMainOrgId(data.primaryOrganizationId);
+      } else if (data.organizations?.length > 0) {
+        setSelectedMainOrgId(data.organizations[0].id);
+      }
+    } catch (e: any) {
+      customAlert("Erro", "Erro ao carregar dados de diagnóstico: " + e.message, "error");
+    } finally {
+      setLoadingDiagnostics(false);
+    }
+  };
+
+  const handleSetPrimaryOrg = async (orgId: string) => {
+    if (!diagnosticsModalUser) return;
+    setIsExecutingRepair(true);
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`/api/admin/users/${diagnosticsModalUser.id}/set-primary-organization`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ organizationId: orgId })
+      });
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || "Erro ao definir principal");
+      }
+      customAlert("Sucesso", "Organização principal definida de forma canônica com sucesso!", "success");
+      await fetchDiagnostics(diagnosticsModalUser);
+      loadEcosystemData();
+    } catch (e: any) {
+      customAlert("Erro", "Erro ao processar: " + e.message, "error");
+    } finally {
+      setIsExecutingRepair(false);
+    }
+  };
+
+  const handleArchiveOrDeleteOrg = async (orgId: string, action: 'archive' | 'delete') => {
+    if (!diagnosticsModalUser) return;
+    try {
+      const token = await user?.getIdToken();
+      const checkRes = await fetch(`/api/admin/organizations/${orgId}/check-empty`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!checkRes.ok) throw new Error("Erro ao checar dados da organização");
+      const checkData = await checkRes.json();
+
+      const label = action === 'archive' ? 'ARQUIVAR' : 'EXCLUIR PERMANENTEMENTE';
+      const warningMessage = `Tem certeza que deseja ${label} a organização "${checkData.orgName}"?\n\n` +
+        `• Músicas de Produção: ${checkData.songsCount}\n` +
+        `• Escalas de Produção: ${checkData.scalesCount}\n` +
+        `• Membros Cadastrados: ${checkData.membersCount}\n` +
+        `• Convites Ativos: ${checkData.invitesCount}\n` +
+        `${checkData.hasActiveSubscription ? '⚠️ AVISO CRÍTICO: Esta organização possui faturamento ativo no Stripe!' : ''}\n\n` +
+        (checkData.isSafeToArchive ? 'Esta organização está vazia e é segura para arquivamento ou exclusão.' : '⚠️ AVISO IMPORTANTE: Contém dados de produção e ativos criados pelos usuários! É altamente sugerido mover ou transferir os dados primeiro!');
+
+      customConfirm(warningMessage, async () => {
+        setIsExecutingRepair(true);
+        try {
+          const res = await fetch(`/api/admin/organizations/${orgId}/archive-or-delete`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ action })
+          });
+          if (!res.ok) throw new Error("Erro ao realizar ação");
+          customAlert("Sucesso", `Organização ${action === 'archive' ? 'arquivada' : 'excluída'} com sucesso!`, "success");
+          await fetchDiagnostics(diagnosticsModalUser);
+          loadEcosystemData();
+        } catch (err: any) {
+          customAlert("Erro", err.message, "error");
+        } finally {
+          setIsExecutingRepair(false);
+        }
+      });
+    } catch (e: any) {
+      customAlert("Erro", e.message, "error");
+    }
+  };
+
+  const handleMoveOrgData = async (fromOrgId: string, toOrgId: string) => {
+    if (!fromOrgId || !toOrgId) return;
+    if (fromOrgId === toOrgId) {
+      customAlert("Aviso", "As organizações de origem e destino devem ser diferentes.", "error");
+      return;
+    }
+    
+    customConfirm(`Deseja mover as Músicas e Escalas vinculadas de forma definitiva? Isso migrará todos os ativos com segurança.`, async () => {
+      setIsExecutingRepair(true);
+      try {
+        const token = await user?.getIdToken();
+        const res = await fetch(`/api/admin/organizations/${fromOrgId}/move-data`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ toOrgId })
+        });
+        if (!res.ok) throw new Error("Erro ao mover os dados");
+        const resData = await res.json();
+        customAlert("Sucesso", `Dados transferidos com sucesso! Músicas migradas: ${resData.movedSongs}, Escalas migradas: ${resData.movedScales}.`, "success");
+        await fetchDiagnostics(diagnosticsModalUser);
+        loadEcosystemData();
+      } catch (err: any) {
+        customAlert("Erro", err.message, "error");
+      } finally {
+        setIsExecutingRepair(false);
+      }
+    });
+  };
+
   const customConfirm = (message: string, onConfirm: () => void) => {
     setConfirmAction({ message, onConfirm });
   };
@@ -55,7 +279,7 @@ export function EcosystemAdmin() {
     setAlertMessage({ title, message, type });
   };
 
-  const handleCreateOrganizationSubmit = async () => {
+  const handleCreateOrganizationSubmit = async (confirmedAdditional: boolean = false) => {
     if (!createOrgModalUser) return;
     if (!createOrgName.trim()) {
       customAlert("Erro", "O nome da organização não pode ficar vazio.", "error");
@@ -71,11 +295,22 @@ export function EcosystemAdmin() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ organizationName: createOrgName.trim() })
+        body: JSON.stringify({ 
+          organizationName: createOrgName.trim(),
+          confirmCreateAdditional: confirmedAdditional
+        })
       });
+      const data = await res.json();
       if (!res.ok) {
-        const errJson = await res.json();
-        throw new Error(errJson.error || "Falha ao criar organização");
+        if (data.requiresExplicitConfirmation) {
+          setIsExecutingRepair(false);
+          customConfirm(
+            "Este usuário já possui uma organização ativa vinculada. Deseja realmente criar uma organização adicional para ele?",
+            () => handleCreateOrganizationSubmit(true)
+          );
+          return;
+        }
+        throw new Error(data.message || data.error || "Falha ao criar organização");
       }
       customAlert("Sucesso", "Organização criada com sucesso!", "success");
       setCreateOrgModalUser(null);
@@ -270,94 +505,128 @@ export function EcosystemAdmin() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {filteredUsers.map(mappedUser => (
-                      <tr key={mappedUser.id} className="hover:bg-white/[0.02]">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            {mappedUser.photoURL ? (
-                              <img src={mappedUser.photoURL} className="w-8 h-8 rounded-full" alt="avatar" />
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                                <User className="w-4 h-4 text-[#A0A7B5]" />
+                    {filteredUsers.map(mappedUser => {
+                      const resolvedContext = resolveUserOrganizationContextLocal(mappedUser.id, mappedUser, organizations);
+                      return (
+                        <tr key={mappedUser.id} className="hover:bg-white/[0.02]">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              {mappedUser.photoURL ? (
+                                <img src={mappedUser.photoURL} className="w-8 h-8 rounded-full" alt="avatar" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                                  <User className="w-4 h-4 text-[#A0A7B5]" />
+                                </div>
+                              )}
+                              <div>
+                                <p className="font-medium text-[#F5F7FA]">{mappedUser.displayName || 'Sem nome'}</p>
+                                <p className="text-xs text-[#A0A7B5]">{mappedUser.email}</p>
                               </div>
-                            )}
-                            <div>
-                              <p className="font-medium text-[#F5F7FA]">{mappedUser.displayName || 'Sem nome'}</p>
-                              <p className="text-xs text-[#A0A7B5]">{mappedUser.email}</p>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-[#A0A7B5]">
-                          {organizations.find(o => o.id === mappedUser.organizationId)?.name || <span className="text-white/20">Nenhuma</span>}
-                        </td>
-                        <td className="px-6 py-4">
-                          {mappedUser.systemRole === 'ceo' && (
-                            <span className="inline-flex items-center px-2 py-1 rounded bg-purple-500/10 text-purple-400 text-xs font-semibold border border-purple-500/20">
-                              CEO
-                            </span>
-                          )}
-                          {mappedUser.systemRole === 'admin' && (
-                            <span className="inline-flex items-center px-2 py-1 rounded bg-[#2B85EB]/10 text-[#2B85EB] text-xs font-semibold border border-[#2B85EB]/20">
-                              Admin Global
-                            </span>
-                          )}
-                          {!mappedUser.systemRole && (
-                            <span className="inline-flex items-center px-2 py-1 rounded bg-white/5 text-[#A0A7B5] text-xs border border-white/10">
-                              Usuário Padrão
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin') && mappedUser.id !== profile.uid && (
-                            <select
-                              value={mappedUser.systemRole || 'user'}
-                              onChange={(e) => handleUpdateRole(mappedUser.id, mappedUser.systemRole, e.target.value)}
-                              disabled={
-                                !canChangeSystemRole(
-                                  profile?.systemRole,
-                                  mappedUser.systemRole,
-                                  mappedUser.systemRole,
-                                  mappedUser.id === profile?.uid,
-                                  users.filter(u => u.systemRole === 'ceo').length
-                                ).allowed
-                              }
-                              className="bg-[#050505] border border-white/10 rounded-lg px-2 py-1 text-xs text-[#F5F7FA] focus:outline-none disabled:opacity-50"
-                            >
-                              {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'user', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
-                                <option value="user">Remover Acesso Global</option>
+                          </td>
+                          <td className="px-6 py-4">
+                            {resolvedContext.hasOrganization ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="font-medium text-white">
+                                  {resolvedContext.primaryOrg?.name || resolvedContext.activeOrg?.name}
+                                </span>
+                                {resolvedContext.organizations.length > 1 && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded-full w-max font-semibold">
+                                    {resolvedContext.organizations.length} organizações
+                                  </span>
+                                )}
+                                {resolvedContext.needsRepair && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 px-1.5 py-0.5 rounded-full w-max font-semibold">
+                                    ⚠️ Precisa de reparo
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-white/20">Nenhuma</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            {mappedUser.systemRole === 'ceo' && (
+                              <span className="inline-flex items-center px-2 py-1 rounded bg-purple-500/10 text-purple-400 text-xs font-semibold border border-purple-500/20">
+                                CEO
+                              </span>
+                            )}
+                            {mappedUser.systemRole === 'admin' && (
+                              <span className="inline-flex items-center px-2 py-1 rounded bg-[#2B85EB]/10 text-[#2B85EB] text-xs font-semibold border border-[#2B85EB]/20">
+                                Admin Global
+                              </span>
+                            )}
+                            {!mappedUser.systemRole && (
+                              <span className="inline-flex items-center px-2 py-1 rounded bg-white/5 text-[#A0A7B5] text-xs border border-white/10">
+                                Usuário Padrão
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin') && mappedUser.id !== profile.uid && (
+                                <select
+                                  value={mappedUser.systemRole || 'user'}
+                                  onChange={(e) => handleUpdateRole(mappedUser.id, mappedUser.systemRole, e.target.value)}
+                                  disabled={
+                                    !canChangeSystemRole(
+                                      profile?.systemRole,
+                                      mappedUser.systemRole,
+                                      mappedUser.systemRole,
+                                      mappedUser.id === profile?.uid,
+                                      users.filter(u => u.systemRole === 'ceo').length
+                                    ).allowed
+                                  }
+                                  className="bg-[#050505] border border-white/10 rounded-lg px-2 py-1 text-xs text-[#F5F7FA] focus:outline-none disabled:opacity-50"
+                                >
+                                  {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'user', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                                    <option value="user">Remover Acesso Global</option>
+                                  )}
+                                  {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'admin', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                                    <option value="admin">Tornar Admin Global</option>
+                                  )}
+                                  {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'ceo', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                                    <option value="ceo">Tornar CEO</option>
+                                  )}
+                                  
+                                  {!canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'user', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
+                                   !canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'admin', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
+                                   !canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'ceo', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                                    <option value={mappedUser.systemRole || 'user'}>
+                                      {mappedUser.systemRole === 'ceo' ? 'CEO' : mappedUser.systemRole === 'admin' || mappedUser.systemRole === 'global_admin' ? 'Admin Global' : 'Usuário Padrão'}
+                                    </option>
+                                  )}
+                                </select>
                               )}
-                              {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'admin', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
-                                <option value="admin">Tornar Admin Global</option>
+
+                              {!resolvedContext.hasOrganization ? (
+                                <button
+                                  onClick={() => {
+                                    const emailPrefix = mappedUser.email ? mappedUser.email.split('@')[0] : "";
+                                    setCreateOrgModalUser(mappedUser);
+                                    setCreateOrgName(emailPrefix);
+                                  }}
+                                  className="px-2 py-1 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/20 hover:border-[#2B85EB]/40 rounded-lg text-[10px] font-medium transition-colors whitespace-nowrap"
+                                >
+                                  Criar Org
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setDiagnosticsModalUser(mappedUser);
+                                    fetchDiagnostics(mappedUser);
+                                  }}
+                                  className="px-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 hover:border-purple-500/40 rounded-lg text-[10px] font-medium transition-colors whitespace-nowrap inline-flex items-center gap-1"
+                                >
+                                  <Shield className="w-3 h-3 text-purple-400" />
+                                  Resolver Vínculos
+                                </button>
                               )}
-                              {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'ceo', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
-                                <option value="ceo">Tornar CEO</option>
-                              )}
-                              
-                              {/* Fallback description option when disabled */}
-                              {!canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'user', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
-                               !canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'admin', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
-                               !canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'ceo', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
-                                <option value={mappedUser.systemRole || 'user'}>
-                                  {mappedUser.systemRole === 'ceo' ? 'CEO' : mappedUser.systemRole === 'admin' || mappedUser.systemRole === 'global_admin' ? 'Admin Global' : 'Usuário Padrão'}
-                                </option>
-                              )}
-                            </select>
-                          )}
-                          {!organizations.find(o => o.id === mappedUser.organizationId) && (
-                            <button
-                                onClick={() => {
-                                  const emailPrefix = mappedUser.email ? mappedUser.email.split('@')[0] : "";
-                                  setCreateOrgModalUser(mappedUser);
-                                  setCreateOrgName(emailPrefix);
-                                }}
-                                className="ml-2 px-2 py-1 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/20 hover:border-[#2B85EB]/40 rounded-lg text-[10px] font-medium transition-colors whitespace-nowrap"
-                              >
-                                Criar Org
-                              </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -399,7 +668,29 @@ export function EcosystemAdmin() {
                               <p className="text-xs text-[#A0A7B5]">{org.slug || 'sem-slug'}</p>
                             </td>
                             <td className="px-6 py-4 text-[#A0A7B5]">
-                              <p className="text-[#F5F7FA] text-xs">{users.find(u => u.uid === org.ownerUid)?.email || org.ownerUid || 'Desconhecido'}</p>
+                              {(() => {
+                                const ownerId = org.ownerUserId || org.ownerUid || org.ownerId;
+                                const oUser = users.find(u => u.id === ownerId || u.uid === ownerId);
+                                if (oUser) {
+                                  return (
+                                    <div>
+                                      <p className="text-[#F5F7FA] text-xs font-semibold">{oUser.displayName || 'Sem Nome'}</p>
+                                      <p className="text-[#A0A7B5] text-[10px]">{oUser.email}</p>
+                                    </div>
+                                  );
+                                }
+                                if (org.ownerEmail || org.ownerName) {
+                                  return (
+                                    <div>
+                                      <p className="text-[#F5F7FA] text-xs font-semibold">{org.ownerName || 'Sem Nome'}</p>
+                                      <p className="text-[#A0A7B5] text-[10px]">{org.ownerEmail}</p>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <p className="text-white/40 text-xs">Desconhecido</p>
+                                );
+                              })()}
                             </td>
                             <td className="px-6 py-4">
                               <span className="inline-flex items-center px-2 py-1 rounded bg-[#2B85EB]/10 text-[#2B85EB] text-xs font-semibold border border-[#2B85EB]/20">
@@ -912,7 +1203,7 @@ export function EcosystemAdmin() {
 
       {/* Custom Confirm Modal */}
       {confirmAction && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#0A0A0B] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <h3 className="text-lg font-medium text-[#F5F7FA] mb-2">Confirmação</h3>
             <p className="text-sm text-[#A0A7B5] mb-6">{confirmAction.message}</p>
@@ -939,7 +1230,7 @@ export function EcosystemAdmin() {
 
       {/* Custom Alert Modal */}
       {alertMessage && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
            <div className="bg-[#0A0A0B] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl flex flex-col items-center text-center">
              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${alertMessage.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
                 {alertMessage.type === 'error' ? <AlertCircle className="w-6 h-6" /> : <Check className="w-6 h-6" />}
@@ -1052,6 +1343,234 @@ export function EcosystemAdmin() {
                 className="px-4 py-2 bg-[#2B85EB] hover:bg-[#2B85EB]/90 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isExecutingRepair ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar Alteração'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Diagnóstico e Reparo de Organizações do Usuário */}
+      {diagnosticsModalUser && (
+        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0B0F19] border border-white/10 rounded-2xl p-6 w-full max-w-4xl shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto text-[#F5F7FA]">
+            
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-white/5 pb-4">
+              <div>
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-purple-400" />
+                  Diagnóstico e Reparo de Vínculos
+                </h3>
+                <p className="text-xs text-[#A0A7B5] mt-1">
+                  Gerencie o isolamento de tenant, resolva organizações duplicadas e defina o contexto canônico para <strong className="text-purple-300">{diagnosticsModalUser.email}</strong>.
+                </p>
+              </div>
+              <button 
+                onClick={() => {
+                  setDiagnosticsModalUser(null);
+                  setDiagnosticsData(null);
+                }} 
+                className="text-[#A0A7B5] hover:text-white transition-colors text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {loadingDiagnostics ? (
+              <div className="py-20 flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-8 h-8 text-[#2B85EB] animate-spin" />
+                <p className="text-xs text-[#A0A7B5] font-medium">Analisando base de dados do Firestore...</p>
+              </div>
+            ) : diagnosticsData ? (
+              <div className="space-y-6">
+                
+                {/* User Context & Overview Cards */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-white/[0.02] border border-white/5 p-4 rounded-xl space-y-2">
+                    <p className="text-xs text-[#A0A7B5] font-semibold uppercase tracking-wider">Identidade no Firestore</p>
+                    <div className="text-sm space-y-1">
+                      <p><span className="text-[#A0A7B5]">Nome:</span> <strong>{diagnosticsData.user?.displayName || 'Sem nome'}</strong></p>
+                      <p><span className="text-[#A0A7B5]">E-mail:</span> <strong>{diagnosticsData.user?.email}</strong></p>
+                      <p><span className="text-[#A0A7B5]">UID:</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-gray-300 select-all">{diagnosticsData.user?.uid}</code></p>
+                      <p><span className="text-[#A0A7B5]">Cargo Global:</span> <span className="text-xs bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded text-purple-400 font-semibold">{diagnosticsData.user?.systemRole || 'user'}</span></p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/[0.02] border border-white/5 p-4 rounded-xl space-y-2">
+                    <p className="text-xs text-[#A0A7B5] font-semibold uppercase tracking-wider">Chaves de Contexto do Tenant (User Doc)</p>
+                    <div className="text-sm space-y-1">
+                      <p><span className="text-[#A0A7B5]">primaryOrganizationId (Canônico):</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-green-400 font-mono">{diagnosticsData.primaryOrganizationId || 'NENHUMA (Inconsistência!)'}</code></p>
+                      <p><span className="text-[#A0A7B5]">activeOrganizationId (Canônico):</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-blue-400 font-mono">{diagnosticsData.activeOrganizationId || 'NENHUMA'}</code></p>
+                      <p><span className="text-[#A0A7B5]">organizationId (Legado):</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-yellow-500 font-mono">{diagnosticsData.user?.organizationId || 'NENHUMA'}</code></p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Inconsistencies & Healing Banner */}
+                {diagnosticsData.needsRepair && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-xl flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+                    <div className="space-y-2 flex-grow">
+                      <div>
+                        <h4 className="text-sm font-semibold text-yellow-400">Inconsistências de Arquitetura Encontradas!</h4>
+                        <ul className="list-disc list-inside text-xs text-yellow-200/80 mt-1 space-y-1">
+                          {diagnosticsData.inconsistencies.map((inc: string, idx: number) => (
+                            <li key={idx}>{inc}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="pt-1 flex items-center gap-2">
+                        <span className="text-xs text-[#A0A7B5]">Para corrigir e reparar instantaneamente estas chaves, defina uma das organizações abaixo como a **Organização Principal** do usuário.</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* List of Linked Organizations */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-[#A0A7B5] uppercase tracking-wider">Organizações Vinculadas Detectadas</h4>
+                  
+                  <div className="border border-white/5 rounded-xl divide-y divide-white/5 bg-black/20 overflow-hidden">
+                    {diagnosticsData.organizations?.length === 0 ? (
+                      <p className="p-6 text-center text-xs text-white/40">Nenhuma organização associada a este usuário no ecossistema.</p>
+                    ) : (
+                      diagnosticsData.organizations.map((org: any) => {
+                        const isPrimary = org.id === diagnosticsData.primaryOrganizationId;
+                        const isActive = org.id === diagnosticsData.activeOrganizationId;
+                        const isLegacy = org.id === diagnosticsData.user?.organizationId;
+                        const isOwner = org.ownerUid === diagnosticsData.user?.uid || org.ownerUserId === diagnosticsData.user?.uid;
+                        
+                        return (
+                          <div key={org.id} className="p-4 hover:bg-white/[0.01] transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
+                            <div className="space-y-2 max-w-md">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-sm text-white">{org.name}</span>
+                                <span className="font-mono text-[9px] bg-white/5 px-1 py-0.5 rounded text-white/60">{org.id}</span>
+                                
+                                {isOwner ? (
+                                  <span className="bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 px-1.5 py-0.5 rounded text-[10px] font-semibold">Dono</span>
+                                ) : (
+                                  <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded text-[10px] font-semibold">Membro</span>
+                                )}
+
+                                {isPrimary && (
+                                  <span className="bg-green-500/15 text-green-400 border border-green-500/25 px-1.5 py-0.5 rounded text-[10px] font-bold">Principal</span>
+                                )}
+                                {isActive && (
+                                  <span className="bg-blue-500/15 text-blue-400 border border-blue-500/25 px-1.5 py-0.5 rounded text-[10px] font-bold">Ativa na Sessão</span>
+                                )}
+                                {isLegacy && (
+                                  <span className="bg-yellow-500/15 text-yellow-400 border border-yellow-500/25 px-1.5 py-0.5 rounded text-[10px] font-semibold">Legada</span>
+                                )}
+                              </div>
+
+                              {/* Org Statistics/Details */}
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-[#A0A7B5] text-[11px]">
+                                <p>• Músicas: <strong className="text-white">{org.stats?.songsCount ?? 0}</strong></p>
+                                <p>• Escalas: <strong className="text-white">{org.stats?.scalesCount ?? 0}</strong></p>
+                                <p>• Membros: <strong className="text-white">{org.stats?.membersCount ?? 0}</strong></p>
+                                <p>• Convites: <strong className="text-white">{org.stats?.invitesCount ?? 0}</strong></p>
+                                <p className="col-span-2">• Faturamento Plan: <strong className="text-[#2B85EB] uppercase">{org.subscriptionPlan || 'Nenhum'} ({org.subscriptionStatus || 'Nulo'})</strong></p>
+                                <p className="col-span-2">• Criada em: <strong className="text-white">{org.createdAt ? new Date(org.createdAt).toLocaleDateString('pt-BR') : 'Desconhecido'}</strong></p>
+                              </div>
+                            </div>
+
+                            {/* Actions per Org */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {!isPrimary && (
+                                <button
+                                  onClick={() => handleSetPrimaryOrg(org.id)}
+                                  disabled={isExecutingRepair}
+                                  className="px-2.5 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 hover:border-green-500/40 rounded-lg text-[10px] font-medium transition-colors"
+                                >
+                                  Tornar Principal & Alinhar
+                                </button>
+                              )}
+                              
+                              <button
+                                onClick={() => handleArchiveOrDeleteOrg(org.id, 'archive')}
+                                disabled={isExecutingRepair || isPrimary}
+                                className="px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/45 rounded-lg text-[10px] font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                title={isPrimary ? 'Não é possível arquivar a organização principal' : ''}
+                              >
+                                Arquivar Org
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Data Migrator & Consolidator Tool */}
+                {diagnosticsData.organizations?.length > 1 && (
+                  <div className="border border-white/5 bg-white/[0.02] rounded-xl p-4 space-y-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-purple-400">Consolidador de Dados (Migração de Ativos)</h4>
+                      <p className="text-[11px] text-[#A0A7B5] mt-1">
+                        Transfira todas as Músicas e Escalas de produção de um workspace duplicado criado por engano para a organização principal do usuário antes de arquivá-lo.
+                      </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-3 gap-4 items-end pt-2">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-[#A0A7B5] font-semibold uppercase tracking-wider">Mover Dados DE (Origem)</label>
+                        <select
+                          value={movingFromOrgId}
+                          onChange={e => setMovingFromOrgId(e.target.value)}
+                          className="w-full bg-[#050505] border border-white/10 rounded-lg p-2 text-xs text-[#F5F7FA] focus:outline-none"
+                        >
+                          <option value="">Selecione...</option>
+                          {diagnosticsData.organizations.map((org: any) => (
+                            <option key={org.id} value={org.id}>
+                              {org.name} ({org.stats?.songsCount} mus, {org.stats?.scalesCount} esc)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-[#A0A7B5] font-semibold uppercase tracking-wider">Mover Dados PARA (Destino)</label>
+                        <select
+                          value={movingToOrgId}
+                          onChange={e => setMovingToOrgId(e.target.value)}
+                          className="w-full bg-[#050505] border border-white/10 rounded-lg p-2 text-xs text-[#F5F7FA] focus:outline-none"
+                        >
+                          <option value="">Selecione...</option>
+                          {diagnosticsData.organizations.map((org: any) => (
+                            <option key={org.id} value={org.id}>
+                              {org.name} (ID: {org.id.substring(0,6)}...)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={() => handleMoveOrgData(movingFromOrgId, movingToOrgId)}
+                        disabled={isExecutingRepair || !movingFromOrgId || !movingToOrgId || movingFromOrgId === movingToOrgId}
+                        className="w-full py-2 bg-[#2B85EB] hover:bg-[#2B85EB]/90 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
+                        {isExecutingRepair ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Migrar Ativos Agora'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-20 text-center text-xs text-white/40">Falha ao obter diagnóstico de dados.</div>
+            )}
+
+            {/* Footer */}
+            <div className="flex justify-end border-t border-white/5 pt-4">
+              <button 
+                onClick={() => {
+                  setDiagnosticsModalUser(null);
+                  setDiagnosticsData(null);
+                }}
+                className="px-5 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors border border-white/5"
+              >
+                Fechar Painel
               </button>
             </div>
           </div>

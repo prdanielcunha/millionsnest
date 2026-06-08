@@ -30,6 +30,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard.js').then(module => ({ de
 const Checkout = lazy(() => import('./pages/Checkout.js'));
 const AdminDebug = lazy(() => import('./pages/AdminDebug.js'));
 const EcosystemAdmin = lazy(() => import('./pages/EcosystemAdmin.js').then(module => ({ default: module.EcosystemAdmin })));
+const EcosystemDataConsole = lazy(() => import('./pages/EcosystemDataConsole.js').then(module => ({ default: module.EcosystemDataConsole })));
 const OrganizationPublicPage = lazy(() => import('./pages/OrganizationPublicPage.js').then(module => ({ default: module.OrganizationPublicPage })));
 
 function LoadingFallback() {
@@ -79,6 +80,9 @@ export default function App() {
                 <Route path="/dashboard/:tab/:subTab" element={<Dashboard />} />
                 <Route path="/admin/debug/organization" element={<AdminDebug />} />
                 <Route path="/admin/ecosystem" element={<EcosystemAdmin />} />
+                <Route path="/admin/ecosystem-data" element={<EcosystemDataConsole />} />
+                <Route path="/admin/database" element={<EcosystemDataConsole />} />
+                <Route path="/ecosystem/data-console" element={<EcosystemDataConsole />} />
                 <Route path="/upgrade" element={<Checkout />} />
                 <Route path="/checkout" element={<Checkout />} />
                 <Route path="/termos-de-uso" element={<Terms />} />

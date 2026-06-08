@@ -56,8 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user || !profile) return;
     try {
       const userRef = doc(db, "users", user.uid);
-      await setDoc(userRef, { organizationId: orgId }, { merge: true });
-      const updatedProfile = { ...profile, organizationId: orgId };
+      await setDoc(userRef, { 
+        organizationId: orgId,
+        activeOrganizationId: orgId
+      }, { merge: true });
+      const updatedProfile = { ...profile, organizationId: orgId, activeOrganizationId: orgId };
       setProfile(updatedProfile);
       localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
       localStorage.removeItem('mn_support_session');

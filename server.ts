@@ -685,7 +685,11 @@ async function startServer() {
             expand: ['discount', 'discount.promotion_code', 'discount.coupon']
           });
           const userDocSnap = await db.collection('users').doc(userId).get();
-          const orgId = session.metadata?.organizationId || ((userDocSnap.exists && userDocSnap.data()?.organizationId) ? userDocSnap.data()?.organizationId : userId);
+          const orgContext = await resolveUserOrganizationContext(userId);
+          const orgId = session.metadata?.organizationId 
+            || orgContext.primaryOrganizationId 
+            || orgContext.activeOrganizationId 
+            || ((userDocSnap.exists && userDocSnap.data()?.organizationId) ? userDocSnap.data()?.organizationId : userId);
           
           console.log('[STRIPE_WEBHOOK_DEBUG]', {
             metadata_recebida: session.metadata,
@@ -861,7 +865,8 @@ async function startServer() {
              }
 
              if (resolvedUserId) {
-                resolvedOrgId = resolvedOrgId || resolvedUserId;
+                const orgContext = await resolveUserOrganizationContext(resolvedUserId);
+                resolvedOrgId = resolvedOrgId || orgContext.primaryOrganizationId || orgContext.activeOrganizationId || resolvedUserId;
                 console.log('[STRIPE_WEBHOOK_HEAL] Creating virtual subscription target for org:', resolvedOrgId);
                 targetsToProcess.push({
                    ref: db.collection('subscriptions').doc(resolvedOrgId),
@@ -1385,12 +1390,36 @@ async function startServer() {
       }
 
       const { uid } = req.params;
-      const { organizationName } = req.body;
+      const { organizationName, confirmCreateAdditional } = req.body;
       const targetUserRef = await db!.collection('users').doc(uid).get();
       if (!targetUserRef.exists) return res.status(404).json({ error: 'Usuário não encontrado' });
       const targetUser = targetUserRef.data() || {};
       
-      // Auto-generate Organization
+      // Validate existing organization context using canonical resolver to prevent duplicates
+      const context = await resolveUserOrganizationContext(uid);
+      
+      // 1. If user has database or membership inconsistencies, force "Resolver Vínculos" route first
+      if (context.needsRepair) {
+         return res.status(400).json({
+            error: 'inconsistency_detected',
+            message: 'Inconsistências foram detectadas nos vínculos de organização deste usuário. Por favor, utilize a ferramenta "Resolver vínculos" para alinhar o usuário e suas organizações antes de efetuar qualquer criação.',
+            inconsistencies: context.inconsistencies
+         });
+      }
+
+      // 2. If user already has a valid organization context, block unless they explicitly confirm creating an additional one
+      if (context.hasOrganization && !confirmCreateAdditional) {
+         const primaryOrgId = context.primaryOrganizationId;
+         const primaryOrg = context.organizations.find((o: any) => o.id === primaryOrgId);
+         return res.status(400).json({
+            error: 'has_organization',
+            message: 'Este usuário já possui uma organização ativa e válida no MillionsNest. Para prosseguir com uma organização extra, é necessária uma confirmação explícita de "Criar organização adicional".',
+            primaryOrganization: primaryOrg || null,
+            requiresExplicitConfirmation: true
+         });
+      }
+
+      // 3. Create the organization
       const orgRef = db!.collection('organizations').doc();
       const orgId = orgRef.id;
       const batch = db!.batch();
@@ -1398,61 +1427,87 @@ async function startServer() {
       const finalName = organizationName?.trim() || `Minha Organização (${targetUser.displayName || targetUser.email || 'Usuário'})`;
 
       batch.set(orgRef, {
+        id: orgId,
         name: finalName,
         slug: `org-${orgId.substring(0, 8)}`,
-        ownerUserId: uid,
-        ownerEmail: targetUser.email,
+        ownerUid: uid,
+        ownerId: uid, // legacy compatibility
+        ownerUserId: uid, // legacy compatibility
+        ownerEmail: targetUser.email || null,
         ownerName: targetUser.displayName || null,
         plan: 'starter',
         subscriptionPlan: 'starter',
         status: 'active',
         subscriptionStatus: 'active',
+        enabledApps: ['musicscale'],
         apps: { musicscale: { access: true, roles: ['owner'] } },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      // Assign Membership
+      // 4. Assign Membership (canonical subcollection)
       const memberRef = orgRef.collection('members').doc(uid);
-      batch.set(memberRef, {
+      const memberData = {
         uid: uid,
-        email: targetUser.email,
+        email: targetUser.email || null,
         displayName: targetUser.displayName || null,
         organizationRole: 'owner',
         role: 'owner',
         status: 'active',
         joinedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      };
+      batch.set(memberRef, memberData);
 
-      // Update User
-      batch.update(db!.collection('users').doc(uid), {
+      // 5. Assign Membership (legacy organization_members collection compatibility)
+      const legacyMemberRef = db!.collection('organization_members').doc(`${uid}_${orgId}`);
+      batch.set(legacyMemberRef, {
+        uid: uid,
         organizationId: orgId,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        role: 'owner',
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+        permissions: getDefaultPermissions('owner'),
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      // Add minimum MusicScale structure
+      // 6. Update User credentials and organizational tracking list
+      const userUpdates: any = {
+        organizations: admin.firestore.FieldValue.arrayUnion(orgId),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      
+      const isAdditional = context.hasOrganization === true;
+      if (!isAdditional) {
+        // If it's their very first organization, define the defaults
+        userUpdates.organizationId = orgId;
+        userUpdates.activeOrganizationId = orgId;
+        userUpdates.primaryOrganizationId = orgId;
+      }
+      batch.update(db!.collection('users').doc(uid), userUpdates);
+
+      // 7. Initialize minimal contracted application structure (MusicScale)
       const settingsRef = orgRef.collection('musicscale').doc('settings');
       batch.set(settingsRef, {
         isSetupComplete: true,
         repairedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      // Audit log
+      // 8. Log administrative action details in server-authoritative audit logs
       const auditRef = db!.collection('audit_logs').doc();
       batch.set(auditRef, {
-        action: 'system.user.repair.create_organization',
+        action: isAdditional ? 'system.user.repair.create_additional_organization' : 'system.user.repair.create_organization',
         actorUid: decoded.uid,
         actorEmail: decoded.email,
         actorSystemRole: userData?.systemRole,
         targetUserId: uid,
         createdOrganizationId: orgId,
+        isAdditionalOrganization: isAdditional,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
       await batch.commit();
 
-      return res.json({ success: true, organizationId: orgId });
+      return res.json({ success: true, organizationId: orgId, isAdditional });
     } catch (err) {
       console.error('[API Create Org for User]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
@@ -1514,6 +1569,548 @@ async function startServer() {
     } catch (err) {
       console.error('[API Normalize Plan]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  // CANONICAL RESOLVER - MillionsNest Ecosystem Organization Context
+  async function resolveUserOrganizationContext(uid: string) {
+    if (!uid) {
+      return {
+        activeOrganizationId: null,
+        primaryOrganizationId: null,
+        organizations: [],
+        ownedOrganizations: [],
+        memberships: [],
+        hasOrganization: false,
+        needsRepair: false,
+        inconsistencies: []
+      };
+    }
+
+    const userDoc = await db!.collection('users').doc(uid).get();
+    const userData = userDoc.exists ? userDoc.data() : null;
+
+    // 1. Fetch organizations where fluid user uid is marked as owner/creator
+    const ownedQuery1 = await db!.collection('organizations').where('ownerUserId', '==', uid).get();
+    const ownedQuery2 = await db!.collection('organizations').where('ownerUid', '==', uid).get();
+    const ownedQuery3 = await db!.collection('organizations').where('ownerId', '==', uid).get();
+
+    const potentialOrgIds = new Set<string>();
+
+    if (userData) {
+      if (userData.activeOrganizationId) potentialOrgIds.add(userData.activeOrganizationId);
+      if (userData.primaryOrganizationId) potentialOrgIds.add(userData.primaryOrganizationId);
+      if (userData.organizationId) potentialOrgIds.add(userData.organizationId);
+
+      if (Array.isArray(userData.organizations)) {
+        userData.organizations.forEach((id: any) => { if (typeof id === 'string') potentialOrgIds.add(id); });
+      }
+      if (Array.isArray(userData.organizationIds)) {
+        userData.organizationIds.forEach((id: any) => { if (typeof id === 'string') potentialOrgIds.add(id); });
+      }
+      if (Array.isArray(userData.memberships)) {
+        userData.memberships.forEach((m: any) => {
+          if (typeof m === 'string') potentialOrgIds.add(m);
+          else if (m && typeof m === 'object' && typeof m.organizationId === 'string') potentialOrgIds.add(m.organizationId);
+        });
+      }
+    }
+
+    // Include any legacy organization_members links the user has
+    try {
+      const legacyMembersSnap = await db!.collection('organization_members').where('uid', '==', uid).get();
+      legacyMembersSnap.docs.forEach(doc => {
+        const oId = doc.data()?.organizationId;
+        if (oId && typeof oId === 'string') potentialOrgIds.add(oId);
+      });
+    } catch (legErr) {
+      console.warn('[resolveUserOrganizationContext] Legacy members lookup bypassed:', legErr);
+    }
+
+    ownedQuery1.docs.forEach(doc => potentialOrgIds.add(doc.id));
+    ownedQuery2.docs.forEach(doc => potentialOrgIds.add(doc.id));
+    ownedQuery3.docs.forEach(doc => potentialOrgIds.add(doc.id));
+
+    const organizationsMap: { [id: string]: any } = {};
+    const membershipsMap: { [id: string]: any } = {};
+
+    const orgIdsList = Array.from(potentialOrgIds);
+    if (orgIdsList.length > 0) {
+      const orgChunks = [];
+      for (let i = 0; i < orgIdsList.length; i += 10) {
+        orgChunks.push(orgIdsList.slice(i, i + 10));
+      }
+
+      for (const chunk of orgChunks) {
+        const qs = await db!.collection('organizations').where(admin.firestore.FieldPath.documentId(), 'in', chunk).get();
+        qs.docs.forEach(doc => {
+          organizationsMap[doc.id] = { id: doc.id, ...doc.data() };
+        });
+      }
+    }
+
+    // Concurrent membership lookup directly on resolved potential organizations subcollections
+    if (Object.keys(organizationsMap).length > 0) {
+      const lookupPromises = Object.keys(organizationsMap).map(async (orgId) => {
+        try {
+          const mDoc = await db!.collection('organizations').doc(orgId).collection('members').doc(uid).get();
+          if (mDoc.exists) {
+            membershipsMap[orgId] = { id: uid, ...mDoc.data() };
+          }
+        } catch (mErr) {
+          console.warn(`[resolveUserOrganizationContext] Standalone member lookup failed for org ${orgId}:`, mErr);
+        }
+      });
+      await Promise.all(lookupPromises);
+    }
+
+    const finalOrganizations: any[] = [];
+    const ownedOrganizations: any[] = [];
+    const inconsistencies: string[] = [];
+    let needsRepair = false;
+
+    for (const orgId of Object.keys(organizationsMap)) {
+      const org = organizationsMap[orgId];
+      if (!membershipsMap[orgId]) {
+        const isOwner = org.ownerUserId === uid || org.ownerUid === uid || org.ownerId === uid;
+        if (isOwner) {
+          needsRepair = true;
+          inconsistencies.push(`Usuário é dono da organização ${org.name || 'Sem nome'} (${orgId}) mas não possui documento de membro.`);
+        }
+      }
+    }
+
+    for (const orgId of Object.keys(organizationsMap)) {
+      const org = organizationsMap[orgId];
+      const membership = membershipsMap[orgId];
+      const isOwner = org.ownerUserId === uid || org.ownerUid === uid || org.ownerId === uid || membership?.role === 'owner' || membership?.organizationRole === 'owner';
+
+      const orgItem = {
+        id: orgId,
+        name: org.name || 'Sem nome',
+        slug: org.slug || null,
+        ownerUserId: org.ownerUserId || org.ownerUid || org.ownerId || null,
+        ownerEmail: org.ownerEmail || null,
+        ownerName: org.ownerName || null,
+        subscriptionPlan: org.subscriptionPlan || org.plan || 'free',
+        subscriptionStatus: org.subscriptionStatus || org.status || 'none',
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt,
+        apps: org.apps,
+        userRole: membership?.role || membership?.organizationRole || (isOwner ? 'owner' : null),
+        status: org.status || 'active',
+        membership: membership || null
+      };
+
+      finalOrganizations.push(orgItem);
+      if (isOwner) {
+        ownedOrganizations.push(orgItem);
+      }
+    }
+
+    const activeOrgsList = finalOrganizations.filter(o => o.status !== 'archived');
+
+    finalOrganizations.sort((a, b) => {
+      const roleWeight = (r: string | null) => r === 'owner' ? 3 : r === 'admin' ? 2 : r === 'member' ? 1 : 0;
+      const diff = roleWeight(b.userRole) - roleWeight(a.userRole);
+      if (diff !== 0) return diff;
+      const tA = a.createdAt?.seconds || 0;
+      const tB = b.createdAt?.seconds || 0;
+      return tB - tA;
+    });
+
+    let activeOrganizationId: string | null = null;
+    let primaryOrganizationId: string | null = null;
+
+    if (userData) {
+      if (userData.activeOrganizationId && organizationsMap[userData.activeOrganizationId] && organizationsMap[userData.activeOrganizationId].status !== 'archived') {
+        activeOrganizationId = userData.activeOrganizationId;
+      }
+      if (userData.primaryOrganizationId && organizationsMap[userData.primaryOrganizationId] && organizationsMap[userData.primaryOrganizationId].status !== 'archived') {
+        primaryOrganizationId = userData.primaryOrganizationId;
+      }
+      if (userData.organizationId && organizationsMap[userData.organizationId] && organizationsMap[userData.organizationId].status !== 'archived') {
+        if (!activeOrganizationId) activeOrganizationId = userData.organizationId;
+        if (!primaryOrganizationId) primaryOrganizationId = userData.organizationId;
+      }
+    }
+
+    if (activeOrgsList.length > 0) {
+      if (!primaryOrganizationId) {
+        primaryOrganizationId = activeOrgsList[0].id;
+        needsRepair = true;
+        inconsistencies.push('Vínculo primário canonical (primaryOrganizationId) ausente.');
+      }
+      if (!activeOrganizationId) {
+        activeOrganizationId = primaryOrganizationId;
+      }
+    }
+
+    if (userData) {
+      if (activeOrganizationId && userData.organizationId !== activeOrganizationId) {
+        needsRepair = true;
+        inconsistencies.push('userData.organizationId legado está desalinhado.');
+      }
+      if (activeOrganizationId && !userData.activeOrganizationId) {
+        needsRepair = true;
+      }
+      if (primaryOrganizationId && !userData.primaryOrganizationId) {
+        needsRepair = true;
+      }
+    }
+
+    const hasOrganization = activeOrgsList.length > 0;
+
+    return {
+      activeOrganizationId,
+      primaryOrganizationId,
+      organizations: finalOrganizations,
+      ownedOrganizations,
+      memberships: Object.values(membershipsMap),
+      hasOrganization,
+      needsRepair,
+      inconsistencies
+    };
+  }
+
+  // 1. Get detailed user diagnostics
+  app.get('/api/admin/users/:uid/diagnostics', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+
+      const userSnap = await db!.collection('users').doc(decoded.uid).get();
+      const userData = userSnap.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole || '')) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { uid } = req.params;
+      const context = await resolveUserOrganizationContext(uid);
+
+      const enhancedOrgs = await Promise.all(context.organizations.map(async (org: any) => {
+        const songsCountSnap = await db!.collection('songs').where('organizationId', '==', org.id).get();
+        const scalesCountSnap = await db!.collection('scales').where('organizationId', '==', org.id).get();
+        const membersCountSnap = await db!.collection('organizations').doc(org.id).collection('members').get();
+        const invitesCountSnap = await db!.collection('organizations').doc(org.id).collection('invites').get();
+
+        return {
+          ...org,
+          songsCount: songsCountSnap.size,
+          scalesCount: scalesCountSnap.size,
+          membersCount: membersCountSnap.size,
+          invitesCount: invitesCountSnap.size
+        };
+      }));
+
+      return res.json({
+        ...context,
+        organizations: enhancedOrgs
+      });
+    } catch (e: any) {
+      console.error('[API User Diagnostics]', e);
+      return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    }
+  });
+
+  // 2. Define primary organization
+  app.post('/api/admin/users/:uid/set-primary-organization', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+
+      const actorSnap = await db!.collection('users').doc(decoded.uid).get();
+      const actorData = actorSnap.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(actorData?.systemRole || '')) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { uid } = req.params;
+      const { organizationId } = req.body;
+      if (!organizationId) return res.status(400).json({ error: 'organizationId is required' });
+
+      const targetUserRef = db!.collection('users').doc(uid);
+      const targetUserSnap = await targetUserRef.get();
+      if (!targetUserSnap.exists) return res.status(404).json({ error: 'User not found' });
+      const targetUser = targetUserSnap.data() || {};
+
+      const orgRef = db!.collection('organizations').doc(organizationId);
+      const orgSnap = await orgRef.get();
+      if (!orgSnap.exists) return res.status(404).json({ error: 'Organization not found' });
+      const orgData = orgSnap.data() || {};
+
+      const beforeUser = {
+        organizationId: targetUser.organizationId || null,
+        activeOrganizationId: targetUser.activeOrganizationId || null,
+        primaryOrganizationId: targetUser.primaryOrganizationId || null
+      };
+
+      const beforeOrg = {
+        ownerUserId: orgData.ownerUserId || null,
+        ownerEmail: orgData.ownerEmail || null,
+        ownerName: orgData.ownerName || null
+      };
+
+      const batch = db!.batch();
+
+      batch.update(targetUserRef, {
+        organizationId: organizationId,
+        activeOrganizationId: organizationId,
+        primaryOrganizationId: organizationId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      const orgUpdate: any = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      if (!orgData.ownerUserId || orgData.ownerUserId !== uid) {
+        orgUpdate.ownerUserId = uid;
+        orgUpdate.ownerUid = uid;
+        orgUpdate.ownerId = uid;
+        orgUpdate.ownerEmail = targetUser.email || null;
+        orgUpdate.ownerName = targetUser.displayName || null;
+      }
+      batch.set(orgRef, orgUpdate, { merge: true });
+
+      const memberRef = orgRef.collection('members').doc(uid);
+      const isOwner = orgData.ownerUserId === uid || orgData.ownerUid === uid || orgData.ownerId === uid || orgUpdate.ownerUserId === uid;
+      batch.set(memberRef, {
+        uid: uid,
+        email: targetUser.email || null,
+        displayName: targetUser.displayName || null,
+        organizationRole: isOwner ? 'owner' : (orgData.membersRole || 'member'),
+        role: isOwner ? 'owner' : (orgData.membersRole || 'member'),
+        status: 'active',
+        joinedAt: orgData.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      const legacyMemberRef = db!.collection('organization_members').doc(`${uid}_${organizationId}`);
+      batch.set(legacyMemberRef, {
+        uid: uid,
+        role: isOwner ? 'owner' : 'member',
+        status: 'active'
+      }, { merge: true });
+
+      const auditRef = db!.collection('audit_logs').doc();
+      batch.set(auditRef, {
+        action: 'system.user.set_primary_organization',
+        actorUid: decoded.uid,
+        actorEmail: decoded.email,
+        actorSystemRole: actorData?.systemRole,
+        targetUserId: uid,
+        organizationId: organizationId,
+        before: { user: beforeUser, org: beforeOrg },
+        after: {
+          user: {
+            organizationId,
+            activeOrganizationId: organizationId,
+            primaryOrganizationId: organizationId
+          },
+          org: {
+            ownerUserId: uid,
+            ownerEmail: targetUser.email || null,
+            ownerName: targetUser.displayName || null
+          }
+        },
+        source: "millionsnest_ecosystem_console",
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await batch.commit();
+
+      return res.json({ success: true, activeOrganizationId: organizationId });
+    } catch (e: any) {
+      console.error('[API Set Primary Org]', e);
+      return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    }
+  });
+
+  // 3. Check emptiness
+  app.get('/api/admin/organizations/:orgId/check-empty', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+
+      const userSnap = await db!.collection('users').doc(decoded.uid).get();
+      const userData = userSnap.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole || '')) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const songsCountSnap = await db!.collection('songs').where('organizationId', '==', orgId).get();
+      const scalesCountSnap = await db!.collection('scales').where('organizationId', '==', orgId).get();
+      const membersCountSnap = await db!.collection('organizations').doc(orgId).collection('members').get();
+      const invitesCountSnap = await db!.collection('organizations').doc(orgId).collection('invites').get();
+
+      const orgDoc = await db!.collection('organizations').doc(orgId).get();
+      const orgData = orgDoc.exists ? orgDoc.data() : null;
+
+      const subDoc = await db!.collection('subscriptions').doc(orgId).get();
+      const subData = subDoc.exists ? subDoc.data() : null;
+
+      const songsCount = songsCountSnap.size;
+      const scalesCount = scalesCountSnap.size;
+      const membersCount = membersCountSnap.size;
+      const invitesCount = invitesCountSnap.size;
+
+      const hasActiveSubscription = (subData?.status === 'active' || (orgData?.subscriptionStatus === 'active') && (orgData?.plan !== 'free'));
+      const isSafeToArchive = (songsCount === 0 && scalesCount === 0 && membersCount <= 1);
+
+      return res.json({
+        songsCount,
+        scalesCount,
+        membersCount,
+        invitesCount,
+        hasActiveSubscription,
+        isSafeToArchive,
+        orgName: orgData?.name || 'Sem nome'
+      });
+    } catch (e: any) {
+      console.error('[API Check Empty]', e);
+      return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    }
+  });
+
+  // 4. Archive/delete
+  app.post('/api/admin/organizations/:orgId/archive-or-delete', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+
+      const actorSnap = await db!.collection('users').doc(decoded.uid).get();
+      const actorData = actorSnap.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(actorData?.systemRole || '')) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const { action } = req.body; 
+      if (!['archive', 'delete'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+
+      const orgRef = db!.collection('organizations').doc(orgId);
+      const orgSnap = await orgRef.get();
+      if (!orgSnap.exists) return res.status(404).json({ error: 'Organization not found' });
+      const orgData = orgSnap.data() || {};
+
+      const batch = db!.batch();
+
+      if (action === 'archive') {
+        batch.update(orgRef, {
+          status: 'archived',
+          subscriptionStatus: 'archived',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else {
+        batch.delete(orgRef);
+      }
+
+      const auditRef = db!.collection('audit_logs').doc();
+      batch.set(auditRef, {
+        action: action === 'archive' ? 'system.organization.archive' : 'system.organization.delete',
+        actorUid: decoded.uid,
+        actorEmail: decoded.email,
+        actorSystemRole: actorData?.systemRole,
+        organizationId: orgId,
+        before: orgData,
+        after: action === 'archive' ? { status: 'archived' } : null,
+        source: "millionsnest_ecosystem_console",
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await batch.commit();
+
+      return res.json({ success: true });
+    } catch (e: any) {
+      console.error('[API Archive/Delete]', e);
+      return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    }
+  });
+
+  // 5. Move data
+  app.post('/api/admin/organizations/:fromOrgId/move-data', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+
+      const actorSnap = await db!.collection('users').doc(decoded.uid).get();
+      const actorData = actorSnap.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(actorData?.systemRole || '')) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { fromOrgId } = req.params;
+      const { toOrgId } = req.body;
+      if (!toOrgId) return res.status(400).json({ error: 'toOrgId is required' });
+
+      const songsSnap = await db!.collection('songs').where('organizationId', '==', fromOrgId).get();
+      const songsBatch = db!.batch();
+      songsSnap.docs.forEach(doc => {
+        songsBatch.update(doc.ref, {
+          organizationId: toOrgId,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      });
+      if (!songsSnap.empty) await songsBatch.commit();
+
+      const scalesSnap = await db!.collection('scales').where('organizationId', '==', fromOrgId).get();
+      const scalesBatch = db!.batch();
+      scalesSnap.docs.forEach(doc => {
+        scalesBatch.update(doc.ref, {
+          organizationId: toOrgId,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      });
+      if (!scalesSnap.empty) await scalesBatch.commit();
+
+      const auditRef = db!.collection('audit_logs').doc();
+      await auditRef.set({
+        action: 'system.organization.move_data',
+        actorUid: decoded.uid,
+        actorEmail: decoded.email,
+        actorSystemRole: actorData?.systemRole,
+        organizationId: fromOrgId,
+        before: { fromOrgId, toOrgId },
+        after: { movedSongs: songsSnap.size, movedScales: scalesSnap.size },
+        source: "millionsnest_ecosystem_console",
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({
+        success: true,
+        movedSongs: songsSnap.size,
+        movedScales: scalesSnap.size
+      });
+    } catch (e: any) {
+      console.error('[API Move Data]', e);
+      return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    }
+  });
+
+  // 6. User canonical context endpoint
+  app.get('/api/user/organization-context', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+
+      const context = await resolveUserOrganizationContext(decoded.uid);
+      return res.json(context);
+    } catch (e: any) {
+      console.error('[API User Org Context]', e);
+      return res.status(500).json({ error: e.message || 'Internal Server Error' });
     }
   });
 
@@ -1596,6 +2193,398 @@ async function startServer() {
       return res.json({ members });
     } catch (err) {
       console.error('[API Admin Org Members]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  // ==========================================
+  // ECOSYSTEM DATA CONSOLE ENDPOINTS
+  // ==========================================
+
+  app.get('/api/admin/database/organizations', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Token de autenticação ausente.' });
+      }
+      
+      const token = authHeader.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+
+      const userRef = await db!.collection('users').doc(decodedToken.uid).get();
+      if (!userRef.exists) return res.status(403).json({ error: 'Forbidden' });
+      const userData = userRef.data();
+      const isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(userData?.systemRole);
+      if (!isSystemAdmin) {
+         return res.status(403).json({ error: 'Acesso restrito' });
+      }
+
+      const orgsQuery = await db!.collection('organizations').orderBy('createdAt', 'desc').limit(200).get();
+      
+      const organizations = await Promise.all(orgsQuery.docs.map(async doc => {
+        const orgData = doc.data();
+        const orgId = doc.id;
+        
+        let memberCount = 0;
+        let songCount = 0;
+        let scaleCount = 0;
+        
+        try {
+          const membersSnap = await db!.collection('organizations').doc(orgId).collection('members').count().get();
+          memberCount = membersSnap.data().count;
+        } catch (e) {}
+
+        try {
+          const songsSnap = await db!.collection('songs').where('organizationId', '==', orgId).count().get();
+          songCount = songsSnap.data().count;
+        } catch (e) {}
+
+        try {
+          const scalesSnap = await db!.collection('scales').where('organizationId', '==', orgId).count().get();
+          scaleCount = scalesSnap.data().count;
+        } catch (e) {}
+        
+        // Compute health status
+        let healthStatus = 'Saudável';
+        if (!orgData.ownerUid && !orgData.ownerUserId && !orgData.ownerId) {
+          healthStatus = 'Crítica';
+        } else if (!orgData.apps?.musicscale?.access) {
+          healthStatus = 'Atenção';
+        }
+
+        return {
+          id: orgId,
+          name: orgData.name || 'Sem nome',
+          slug: orgData.slug || null,
+          ownerUserId: orgData.ownerUserId || orgData.ownerUid || orgData.ownerId || null,
+          ownerEmail: orgData.ownerEmail || null,
+          ownerName: orgData.ownerName || null,
+          subscriptionPlan: orgData.subscriptionPlan || orgData.plan || 'free',
+          subscriptionStatus: orgData.subscriptionStatus || orgData.status || 'none',
+          createdAt: orgData.createdAt,
+          updatedAt: orgData.updatedAt,
+          apps: orgData.apps,
+          memberCount,
+          songCount,
+          scaleCount,
+          healthStatus
+        };
+      }));
+
+      return res.json({ organizations });
+    } catch (err: any) {
+      console.error('[API Admin Database Orgs]', err);
+      return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+  });
+
+  app.get('/api/admin/database/organizations/:orgId/songs', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decodedToken.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const songsSnap = await db!.collection('songs').where('organizationId', '==', orgId).orderBy('title', 'asc').limit(500).get();
+      const songs = songsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return res.json({ songs });
+    } catch (err: any) {
+      console.error('[API Get MS Songs]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.post('/api/admin/database/organizations/:orgId/songs', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decodedToken.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const { title, artist, key, bpms, lyrics } = req.body;
+      
+      if (!title?.trim()) {
+        return res.status(400).json({ error: 'O título da música é obrigatório.' });
+      }
+
+      const newSong = {
+        title: title.trim(),
+        artist: artist?.trim() || '',
+        key: key?.trim() || '',
+        bpms: Number(bpms) || 0,
+        lyrics: lyrics?.trim() || '',
+        organizationId: orgId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      const songRef = await db!.collection('songs').add(newSong);
+
+      // Log in audit_logs
+      await db!.collection('audit_logs').add({
+        action: 'musicscale.song.created',
+        actorUid: decodedToken.uid,
+        actorEmail: decodedToken.email,
+        actorSystemRole: userData?.systemRole,
+        organizationId: orgId,
+        targetEntityType: 'song',
+        targetEntityId: songRef.id,
+        after: { title: title.trim(), artist: artist?.trim() },
+        source: 'millionsnest_admin_console',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true, id: songRef.id });
+    } catch (err: any) {
+      console.error('[API Post MS Song]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.put('/api/admin/database/organizations/:orgId/songs/:songId', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decodedToken.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId, songId } = req.params;
+      const { title, artist, key, bpms, lyrics } = req.body;
+
+      if (!title?.trim()) {
+        return res.status(400).json({ error: 'O título da música é obrigatório.' });
+      }
+
+      const songRef = db!.collection('songs').doc(songId);
+      const songSnap = await songRef.get();
+      if (!songSnap.exists || songSnap.data()?.organizationId !== orgId) {
+        return res.status(404).json({ error: 'Música não encontrada nesta organização.' });
+      }
+
+      const oldData = songSnap.data() || {};
+      const updateData = {
+        title: title.trim(),
+        artist: artist?.trim() || '',
+        key: key?.trim() || '',
+        bpms: Number(bpms) || 0,
+        lyrics: lyrics?.trim() || '',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      await songRef.update(updateData);
+
+      // Log in audit_logs
+      await db!.collection('audit_logs').add({
+        action: 'musicscale.song.updated',
+        actorUid: decodedToken.uid,
+        actorEmail: decodedToken.email,
+        actorSystemRole: userData?.systemRole,
+        organizationId: orgId,
+        targetEntityType: 'song',
+        targetEntityId: songId,
+        before: { title: oldData.title, artist: oldData.artist },
+        after: { title: title.trim(), artist: artist?.trim() },
+        source: 'millionsnest_admin_console',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error('[API Put MS Song]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.delete('/api/admin/database/organizations/:orgId/songs/:songId', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decodedToken.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId, songId } = req.params;
+
+      const songRef = db!.collection('songs').doc(songId);
+      const songSnap = await songRef.get();
+      if (!songSnap.exists || songSnap.data()?.organizationId !== orgId) {
+        return res.status(404).json({ error: 'Música não encontrada nesta organização.' });
+      }
+
+      const oldData = songSnap.data() || {};
+      await songRef.delete();
+
+      // Log in audit_logs
+      await db!.collection('audit_logs').add({
+        action: 'musicscale.song.deleted',
+        actorUid: decodedToken.uid,
+        actorEmail: decodedToken.email,
+        actorSystemRole: userData?.systemRole,
+        organizationId: orgId,
+        targetEntityType: 'song',
+        targetEntityId: songId,
+        before: { title: oldData.title, artist: oldData.artist },
+        source: 'millionsnest_admin_console',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error('[API Delete MS Song]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.get('/api/admin/database/organizations/:orgId/scales', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decodedToken.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const scalesSnap = await db!.collection('scales').where('organizationId', '==', orgId).orderBy('createdAt', 'desc').limit(200).get();
+      const scales = scalesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return res.json({ scales });
+    } catch (err: any) {
+      console.error('[API Get MS Scales]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.put('/api/admin/database/organizations/:orgId/update-fields', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decodedToken.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const { name, slug, subscriptionPlan, subscriptionStatus } = req.body;
+
+      if (!name?.trim()) {
+        return res.status(400).json({ error: 'O nome da organização não pode ficar vazio.' });
+      }
+
+      const orgRef = db!.collection('organizations').doc(orgId);
+      const orgSnap = await orgRef.get();
+      if (!orgSnap.exists) {
+        return res.status(404).json({ error: 'Organização não encontrada.' });
+      }
+
+      const oldData = orgSnap.data() || {};
+      const batch = db!.batch();
+
+      // Prepare organization updates
+      const orgUpdate: any = {
+        name: name.trim(),
+        slug: slug?.trim() || oldData.slug || '',
+        subscriptionPlan: subscriptionPlan || oldData.subscriptionPlan || 'free',
+        subscriptionStatus: subscriptionStatus || oldData.subscriptionStatus || 'none',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      batch.update(orgRef, orgUpdate);
+
+      // Prepare subscription updates
+      const subRef = db!.collection('subscriptions').doc(orgId);
+      const subUpdate: any = {
+        plan: subscriptionPlan || 'free',
+        status: subscriptionStatus || 'none',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      
+      // Use set with merge
+      batch.set(subRef, subUpdate, { merge: true });
+
+      // Create Audit Log
+      const auditRef = db!.collection('audit_logs').doc();
+      batch.set(auditRef, {
+        action: 'system.organization.database_update',
+        actorUid: decodedToken.uid,
+        actorEmail: decodedToken.email,
+        actorSystemRole: userData?.systemRole,
+        organizationId: orgId,
+        targetEntityType: 'organization',
+        targetEntityId: orgId,
+        before: {
+          name: oldData.name,
+          slug: oldData.slug,
+          subscriptionPlan: oldData.subscriptionPlan,
+          subscriptionStatus: oldData.subscriptionStatus
+        },
+        after: {
+          name: name.trim(),
+          slug: slug?.trim() || '',
+          subscriptionPlan,
+          subscriptionStatus
+        },
+        source: 'millionsnest_admin_console',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await batch.commit();
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error('[API Put Org Fields]', err);
+      return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    }
+  });
+
+  app.get('/api/admin/database/audit-logs', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decodedToken.uid).get();
+      const userData = userRef.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const logsSnap = await db!.collection('audit_logs').orderBy('createdAt', 'desc').limit(150).get();
+      const logs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return res.json({ logs });
+    } catch (err: any) {
+      console.error('[API Get Audit Logs]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
   });
@@ -3438,11 +4427,12 @@ async function startServer() {
       let customerId: string | undefined;
       let orgId = userId;
       if (db) {
+         const orgContext = await resolveUserOrganizationContext(userId);
          const userDoc = await db.collection('users').doc(userId).get();
          if (userDoc.exists) {
             customerId = userDoc.data()?.stripeCustomerId;
-            orgId = userDoc.data()?.organizationId || userId;
          }
+         orgId = orgContext.primaryOrganizationId || orgContext.activeOrganizationId || (userDoc.exists ? userDoc.data()?.organizationId : null) || userId;
          
          const subDoc = await db.collection('subscriptions').doc(orgId).get();
          if (subDoc.exists) {
@@ -3594,11 +4584,12 @@ async function startServer() {
       let customerId: string | undefined;
       let orgId = userId;
       if (db) {
+         const orgContext = await resolveUserOrganizationContext(userId);
          const userDoc = await db.collection('users').doc(userId).get();
          if (userDoc.exists) {
             customerId = userDoc.data()?.stripeCustomerId;
-            orgId = userDoc.data()?.organizationId || userId;
          }
+         orgId = orgContext.primaryOrganizationId || orgContext.activeOrganizationId || (userDoc.exists ? userDoc.data()?.organizationId : null) || userId;
          
          if (!customerId) {
             const subDoc = await db.collection('subscriptions').doc(orgId).get();

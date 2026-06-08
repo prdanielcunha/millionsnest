@@ -1,6 +1,6 @@
 import React, { useState, useEffect, ReactNode, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, LayoutGrid, LayoutDashboard, Building2, ChevronDown, Check, LogOut, ArrowRight, Loader2, User, AlertTriangle, Music, Calendar, Users, QrCode } from 'lucide-react';
+import { Search, LayoutGrid, LayoutDashboard, Building2, ChevronDown, Check, LogOut, ArrowRight, Loader2, User, AlertTriangle, Music, Calendar, Users, QrCode, Database, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useOrganization } from '../contexts/OrganizationContext.js';
 import { ECOSYSTEM_APPS, EcosystemApp } from '../lib/apps.js';
@@ -361,6 +361,17 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                      <User className="w-4 h-4" /> Minha Conta
                    </Link>
                    
+                   {['ceo', 'admin', 'global_admin'].includes(profile?.systemRole) && (
+                     <>
+                       <div className="h-px bg-white/5 my-1" />
+                       <Link to="/admin/ecosystem-data" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-[#2B85EB]/80 hover:text-white hover:bg-white/5 rounded-lg transition-all font-semibold">
+                         <Database className="w-4 h-4 text-[#2B85EB]" /> Banco de Dados
+                       </Link>
+                       <Link to="/admin/ecosystem" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/5 rounded-lg transition-colors">
+                         <Shield className="w-4 h-4" /> Painel Geral Admin
+                       </Link>
+                     </>
+                   )}
                    <div className="h-px bg-white/5 my-1" />
                    
                    <button onClick={() => { logout(); setProfileMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
