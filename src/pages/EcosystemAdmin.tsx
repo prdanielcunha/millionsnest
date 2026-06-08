@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { collection, query, getDocs, doc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
-import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp, Pencil } from "lucide-react";
+import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp, Pencil, Database } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EcosystemShell } from "../components/EcosystemShell.js";
 import { canChangeSystemRole } from "../lib/roleResolver.js";
@@ -68,6 +68,11 @@ function resolveUserOrganizationContextLocal(
   const inconsistencies: string[] = [];
   let needsRepair = false;
 
+  const uidUsedAsOrganizationIdSuspected = !!organizations.find((o: any) => o.id === userId);
+  if (uidUsedAsOrganizationIdSuspected) {
+    inconsistencies.push('SUSPEITA: Organização com ID igual ao UID do usuário identificada.');
+  }
+
   if (activeOrgs.length > 0) {
     if (!primaryId) {
       needsRepair = true;
@@ -90,7 +95,8 @@ function resolveUserOrganizationContextLocal(
     activeOrg: resolvedActive,
     hasOrganization: activeOrgs.length > 0,
     needsRepair,
-    inconsistencies
+    inconsistencies,
+    uidUsedAsOrganizationIdSuspected
   };
 }
 
@@ -112,6 +118,16 @@ function ActivityIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
+const formatDate = (dateObj: any) => {
+  if (!dateObj) return 'Não informado';
+  if (typeof dateObj === 'string') return new Date(dateObj).toLocaleDateString('pt-BR');
+  if (typeof dateObj === 'number') return new Date(dateObj).toLocaleDateString('pt-BR');
+  if (dateObj.toDate) return dateObj.toDate().toLocaleDateString('pt-BR');
+  if (dateObj._seconds) return new Date(dateObj._seconds * 1000).toLocaleDateString('pt-BR');
+  if (dateObj.seconds) return new Date(dateObj.seconds * 1000).toLocaleDateString('pt-BR');
+  return new Date(dateObj).toLocaleDateString('pt-BR') !== 'Invalid Date' ? new Date(dateObj).toLocaleDateString('pt-BR') : 'Não informado';
+};
 
 export function EcosystemAdmin() {
   const { user, profile, loading } = useAuth();
@@ -192,6 +208,89 @@ export function EcosystemAdmin() {
     } finally {
       setIsExecutingRepair(false);
     }
+  };
+
+  const handleMigrateUidOrg = async (orgId: string) => {
+    if (!diagnosticsModalUser) return;
+    
+    customConfirm(`Tem certeza que deseja migrar a organização ${orgId} para um novo ID seguro? Esta ação irá duplicar os dados para o novo workspace e redirecionar os membros de forma que não prejudicará o faturamento.`, async () => {
+      setIsExecutingRepair(true);
+      try {
+        const token = await user?.getIdToken();
+        const res = await fetch(`/api/admin/organizations/${orgId}/migrate-uid-id`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        let jsonRes;
+        try { jsonRes = await res.json(); } catch(e) {}
+        
+        if (!res.ok) throw new Error(jsonRes?.error || 'Falha na API');
+        
+        customAlert('Sucesso', 'Organização migrada com sucesso para novo ID seguro!', 'success');
+        await fetchDiagnostics(diagnosticsModalUser);
+        loadEcosystemData();
+      } catch (e: any) {
+        customAlert('Erro', 'Falha ao migrar organização: ' + e.message, 'error');
+      } finally {
+        setIsExecutingRepair(false);
+      }
+    });
+  };
+
+  const executeRepairCall = async (endpoint: string, payload: any = {}, successMessage: string) => {
+    if (!diagnosticsModalUser) return;
+    setIsExecutingRepair(true);
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      let jsonRes;
+      try { jsonRes = await res.json(); } catch(e) {}
+      if (!res.ok) throw new Error(jsonRes?.error || 'Falha na API');
+      
+      customAlert('Sucesso', successMessage, 'success');
+      await fetchDiagnostics(diagnosticsModalUser);
+      loadEcosystemData();
+    } catch (e: any) {
+      customAlert('Erro', 'Falha na operação: ' + e.message, 'error');
+    } finally {
+      setIsExecutingRepair(false);
+    }
+  };
+
+  const handleRepairIdentity = () => {
+    if (!diagnosticsModalUser) return;
+    executeRepairCall(`/api/admin/users/${diagnosticsModalUser.uid}/repair-identity`, {}, 'Identidade completada com sucesso!');
+  };
+
+  const handlePersistPrimaryOrg = (orgId: string) => {
+    if (!diagnosticsModalUser) return;
+    executeRepairCall(`/api/admin/users/${diagnosticsModalUser.uid}/persist-primary-organization`, { organizationId: orgId }, 'Organização principal persistida!');
+  };
+
+  const handleRemoveLegacyField = () => {
+    if (!diagnosticsModalUser) return;
+    executeRepairCall(`/api/admin/users/${diagnosticsModalUser.uid}/remove-legacy-organization-field`, {}, 'Campo legado removido!');
+  };
+
+  const handleRepairMembership = (orgId: string) => {
+    if (!diagnosticsModalUser) return;
+    executeRepairCall(`/api/admin/users/${diagnosticsModalUser.uid}/repair-membership`, { organizationId: orgId }, 'Membership reparada!');
+  };
+
+  const handleAutoRepair = (orgId?: string) => {
+    if (!diagnosticsModalUser) return;
+    executeRepairCall(`/api/admin/users/${diagnosticsModalUser.uid}/auto-repair`, { organizationId: orgId }, 'Reparo automático completo executado!');
   };
 
   const handleArchiveOrDeleteOrg = async (orgId: string, action: 'archive' | 'delete') => {
@@ -420,6 +519,39 @@ export function EcosystemAdmin() {
     });
   };
 
+  const handleBackfillUsers = async () => {
+    customConfirm(`Tem certeza que deseja rodar o Backfill Global? Isso irá corrigir dados de identidade e chaves de tenant para todos os usuários legados da plataforma.`, async () => {
+      setIsExecutingRepair(true);
+      try {
+        const token = await user?.getIdToken();
+        const res = await fetch(`/api/admin/ecosystem/backfill-users`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        let jsonRes;
+        try { jsonRes = await res.json(); } catch(e) {}
+        
+        if (!res.ok) throw new Error(jsonRes?.error || 'Falha na API');
+        
+        const r = jsonRes.results;
+        customAlert(
+          'Backfill Concluído',
+          `Total checados: ${r.totalChecked}\nIdentidades completadas: ${r.identitiesRepaired}\nContextos persistidos: ${r.contextsPersisted}\nLegados removidos: ${r.legacyRemoved}\nMemberships criadas: ${r.membershipsRepaired}\nPrecisam migrar OrgID: ${r.needsOrgIdMigration}`,
+          'success'
+        );
+        loadEcosystemData();
+      } catch (e: any) {
+        customAlert('Erro', 'Falha ao processar Backfill: ' + e.message, 'error');
+      } finally {
+        setIsExecutingRepair(false);
+      }
+    });
+  };
+
   if (loading || loadingData) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
@@ -437,13 +569,25 @@ export function EcosystemAdmin() {
     <EcosystemShell activeAppId="core">
       {/* Header */}
       <header className="border-b border-white/5 bg-[#0B0F19]">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-[#2B85EB]" />
+        <div className="max-w-7xl mx-auto px-6 h-20 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-[#2B85EB]" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">Ecossistema MillionsNest</h1>
+              <p className="text-xs text-[#A0A7B5]">Painel de Controle Global ({profile?.systemRole?.toUpperCase()})</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold">Ecossistema MillionsNest</h1>
-            <p className="text-xs text-[#A0A7B5]">Painel de Controle Global ({profile?.systemRole?.toUpperCase()})</p>
+          <div className="flex items-center gap-2">
+            <button
+               onClick={handleBackfillUsers}
+               disabled={isExecutingRepair}
+               className="px-4 py-2 bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 disabled:opacity-50 transition-colors rounded-lg text-xs font-semibold border border-yellow-500/20 flex items-center gap-2"
+            >
+               <Database className="w-4 h-4" />
+               Forçar Backfill de Identidades
+            </button>
           </div>
         </div>
       </header>
@@ -535,9 +679,14 @@ export function EcosystemAdmin() {
                                     {resolvedContext.organizations.length} organizações
                                   </span>
                                 )}
-                                {resolvedContext.needsRepair && (
+                                {resolvedContext.needsRepair && resolvedContext.inconsistencies.filter(i => !i.includes('SUSPEITA')).length > 0 && (
                                   <span className="inline-flex items-center gap-1 text-[10px] bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 px-1.5 py-0.5 rounded-full w-max font-semibold">
                                     ⚠️ Precisa de reparo
+                                  </span>
+                                )}
+                                {resolvedContext.uidUsedAsOrganizationIdSuspected && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] bg-red-500/10 text-red-500 border border-red-500/20 px-1.5 py-0.5 rounded-full w-max font-semibold">
+                                    ⚠️ Migrar Org ID
                                   </span>
                                 )}
                               </div>
@@ -1397,31 +1546,55 @@ export function EcosystemAdmin() {
                   </div>
 
                   <div className="bg-white/[0.02] border border-white/5 p-4 rounded-xl space-y-2">
-                    <p className="text-xs text-[#A0A7B5] font-semibold uppercase tracking-wider">Chaves de Contexto do Tenant (User Doc)</p>
-                    <div className="text-sm space-y-1">
-                      <p><span className="text-[#A0A7B5]">primaryOrganizationId (Canônico):</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-green-400 font-mono">{diagnosticsData.primaryOrganizationId || 'NENHUMA (Inconsistência!)'}</code></p>
-                      <p><span className="text-[#A0A7B5]">activeOrganizationId (Canônico):</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-blue-400 font-mono">{diagnosticsData.activeOrganizationId || 'NENHUMA'}</code></p>
-                      <p><span className="text-[#A0A7B5]">organizationId (Legado):</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-yellow-500 font-mono">{diagnosticsData.user?.organizationId || 'NENHUMA'}</code></p>
+                    <p className="text-xs text-[#A0A7B5] font-semibold uppercase tracking-wider">Chaves de Contexto do Tenant</p>
+                    <div className="grid grid-cols-2 gap-4 text-sm mt-3">
+                       <div className="space-y-1">
+                          <p className="text-[#A0A7B5] text-[10px] uppercase">Persistido no DB (/users/uid):</p>
+                          <p><span className="text-[#A0A7B5]">primary:</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-green-400 font-mono">{diagnosticsData.rawContext?.primaryOrganizationId || 'AUSENTE'}</code></p>
+                          <p><span className="text-[#A0A7B5]">active:</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-blue-400 font-mono">{diagnosticsData.rawContext?.activeOrganizationId || 'AUSENTE'}</code></p>
+                          <p><span className="text-[#A0A7B5]">legacy:</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-yellow-500 font-mono">{diagnosticsData.rawContext?.legacyOrganizationId || 'AUSENTE'}</code></p>
+                       </div>
+                       <div className="space-y-1">
+                          <p className="text-[#A0A7B5] text-[10px] uppercase">Resolvido (Runtime Engine):</p>
+                          <p><span className="text-[#A0A7B5]">primary:</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-green-400 font-mono">{diagnosticsData.primaryOrganizationId || 'NENHUMA'}</code></p>
+                          <p><span className="text-[#A0A7B5]">active:</span> <code className="text-xs bg-black/40 px-1 py-0.5 rounded text-blue-400 font-mono">{diagnosticsData.activeOrganizationId || 'NENHUMA'}</code></p>
+                       </div>
                     </div>
                   </div>
                 </div>
 
+                {/* Specific UID Migration Alert */}
+                {diagnosticsData.uidUsedAsOrganizationIdSuspected && (
+                   <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex flex-col gap-3">
+                     <div className="flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                        <div>
+                           <h4 className="text-sm font-semibold text-red-400">Risco Estrutural Detectado: Org ID = UID</h4>
+                           <p className="text-xs text-red-200/80 mt-1">Este usuário possui uma organização com o ID igual ao seu UID pessoal. Isto é um resquício de uma arquitetura legada e afeta a integridade multi-tenant.</p>
+                        </div>
+                     </div>
+                   </div>
+                )}
+
                 {/* Inconsistencies & Healing Banner */}
-                {diagnosticsData.needsRepair && (
+                {diagnosticsData.needsRepair && diagnosticsData.inconsistencies?.filter(inc => !inc.includes('SUSPEITA:')).length > 0 && (
                   <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-xl flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
                     <div className="space-y-2 flex-grow">
                       <div>
                         <h4 className="text-sm font-semibold text-yellow-400">Inconsistências de Arquitetura Encontradas!</h4>
                         <ul className="list-disc list-inside text-xs text-yellow-200/80 mt-1 space-y-1">
-                          {diagnosticsData.inconsistencies.map((inc: string, idx: number) => (
+                          {diagnosticsData.inconsistencies.filter(inc => !inc.includes('SUSPEITA:')).map((inc: string, idx: number) => (
                             <li key={idx}>{inc}</li>
                           ))}
                         </ul>
                       </div>
-                      <div className="pt-1 flex items-center gap-2">
-                        <span className="text-xs text-[#A0A7B5]">Para corrigir e reparar instantaneamente estas chaves, defina uma das organizações abaixo como a **Organização Principal** do usuário.</span>
-                      </div>
+                      
+                      {!diagnosticsData.rawContext?.primaryOrganizationId && !diagnosticsData.uidUsedAsOrganizationIdSuspected && diagnosticsData.organizations?.length > 1 && (
+                         <div className="pt-1 flex items-center gap-2">
+                           <span className="text-xs text-[#A0A7B5]">Para solucionar pendências ativas, defina uma das organizações abaixo como a **Organização Principal**.</span>
+                         </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1466,17 +1639,32 @@ export function EcosystemAdmin() {
 
                               {/* Org Statistics/Details */}
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-[#A0A7B5] text-[11px]">
-                                <p>• Músicas: <strong className="text-white">{org.stats?.songsCount ?? 0}</strong></p>
-                                <p>• Escalas: <strong className="text-white">{org.stats?.scalesCount ?? 0}</strong></p>
-                                <p>• Membros: <strong className="text-white">{org.stats?.membersCount ?? 0}</strong></p>
-                                <p>• Convites: <strong className="text-white">{org.stats?.invitesCount ?? 0}</strong></p>
+                                <p>• Músicas: <strong className="text-white">{org.songsCount ?? org.stats?.songsCount ?? 0}</strong></p>
+                                <p>• Escalas: <strong className="text-white">{org.scalesCount ?? org.stats?.scalesCount ?? 0}</strong></p>
+                                <p>• Membros: <strong className="text-white">{Math.max(org.membersCount ?? org.stats?.membersCount ?? 0, (org.ownerUid || org.ownerId) ? 1 : 0)}</strong></p>
+                                <p>• Convites: <strong className="text-white">{org.invitesCount ?? org.stats?.invitesCount ?? 0}</strong></p>
                                 <p className="col-span-2">• Faturamento Plan: <strong className="text-[#2B85EB] uppercase">{org.subscriptionPlan || 'Nenhum'} ({org.subscriptionStatus || 'Nulo'})</strong></p>
-                                <p className="col-span-2">• Criada em: <strong className="text-white">{org.createdAt ? new Date(org.createdAt).toLocaleDateString('pt-BR') : 'Desconhecido'}</strong></p>
+                                <p className="col-span-2">• Criada em: <strong className="text-white">{formatDate(org.createdAt)}</strong></p>
                               </div>
                             </div>
 
                             {/* Actions per Org */}
                             <div className="flex items-center gap-2 flex-wrap">
+                              {org.id === diagnosticsData.user?.uid && (
+                                <div className="w-full mb-1">
+                                  <div className="bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-lg flex items-center justify-between">
+                                    <span className="text-red-400 text-[10px] font-bold">O ID desta organização é igual ao UID do usuário. Isso indica criação legada ou incorreta.</span>
+                                    <button
+                                      onClick={() => handleMigrateUidOrg(org.id)}
+                                      disabled={isExecutingRepair}
+                                      className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-[10px] font-bold shadow transition-colors shrink-0"
+                                    >
+                                      Migrar para novo Org ID seguro
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                              
                               {!isPrimary && (
                                 <button
                                   onClick={() => handleSetPrimaryOrg(org.id)}
@@ -1500,6 +1688,37 @@ export function EcosystemAdmin() {
                         );
                       })
                     )}
+                  </div>
+                </div>
+
+                {/* Reparos Disponíveis */}
+                <div className="border border-green-500/20 bg-green-500/[0.02] rounded-xl p-4 space-y-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-green-400">Reparos Disponíveis</h4>
+                    <p className="text-[11px] text-[#A0A7B5] mt-1">Ações de auto-correção sugeridas para as inconsistências detectadas neste usuário.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                     {(!diagnosticsData.user?.email || !diagnosticsData.user?.displayName || diagnosticsData.user?.displayName === 'Sem nome') && (
+                       <button onClick={handleRepairIdentity} disabled={isExecutingRepair} className="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 hover:border-blue-500/40 rounded-lg text-[11px] font-medium transition-colors">
+                          Completar Identidade
+                       </button>
+                     )}
+                     
+                     {!diagnosticsData.primaryOrganizationId && diagnosticsData.activeOrganizationId && (
+                       <button onClick={() => handlePersistPrimaryOrg(diagnosticsData.activeOrganizationId)} disabled={isExecutingRepair} className="px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 hover:border-purple-500/40 rounded-lg text-[11px] font-medium transition-colors">
+                          Persistir Organização Principal
+                       </button>
+                     )}
+
+                     {diagnosticsData.user?.organizationId && (
+                       <button onClick={handleRemoveLegacyField} disabled={isExecutingRepair} className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 hover:border-yellow-500/40 rounded-lg text-[11px] font-medium transition-colors">
+                          Remover Campo Legado
+                       </button>
+                     )}
+
+                     <button onClick={() => handleAutoRepair(diagnosticsData.activeOrganizationId || undefined)} disabled={isExecutingRepair} className="px-3 py-1.5 bg-green-500 text-white hover:bg-green-600 rounded-lg text-[11px] font-bold shadow transition-colors flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5" /> Executar Reparo Completo Seguro
+                     </button>
                   </div>
                 </div>
 

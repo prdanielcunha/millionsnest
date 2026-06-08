@@ -419,9 +419,10 @@ export async function upsertEcosystemSubscription(params: {
 
   // 2. organizations/{orgId}
   const orgName = orgDoc.exists ? (orgDoc.data()?.name || `Organização de ${userEmail || userId}`) : `Organização de ${userEmail || userId}`;
-  batch.set(orgRef, {
+  const orgPayload: any = {
     name: orgName,
     ownerUid: userId,
+    ownerUserId: userId,
     ownerId: userId,
     plan: resolvedPlan,
     subscriptionPlan: resolvedPlan,
@@ -446,10 +447,15 @@ export async function upsertEcosystemSubscription(params: {
     
     lastStripeEventTs: eventCreatedTs,
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
-  }, { merge: true });
+  };
+  
+  if (!orgDoc.exists) {
+     orgPayload.createdAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+  batch.set(orgRef, orgPayload, { merge: true });
 
   // 3. New Architecture member doc: organizations/{orgId}/members/{userId}
-  const memberData = {
+  const memberData: any = {
      uid: userId,
      email: userEmail || '',
      organizationId: orgId,
@@ -461,6 +467,11 @@ export async function upsertEcosystemSubscription(params: {
      permissions: getDefaultPermissions('owner'),
      updatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
+  if (!memberDoc.exists) {
+     memberData.createdAt = admin.firestore.FieldValue.serverTimestamp();
+     memberData.joinedAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+  
   batch.set(memberRef, memberData, { merge: true });
 
   // 3.1. organization_members/{userId}_{orgId} (Legacy)
@@ -470,6 +481,7 @@ export async function upsertEcosystemSubscription(params: {
   const userPayload: any = {
      organizationId: orgId,
      activeOrganizationId: orgId,
+     primaryOrganizationId: orgId,
      defaultOrganizationId: orgId,
      stripeCustomerId: subscription.customer,
      stripeSubscriptionId: subscription.id,
@@ -480,17 +492,23 @@ export async function upsertEcosystemSubscription(params: {
      updatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
   
-  if (!userDoc.exists || !userDoc.data()?.displayName) {
-     userPayload['displayName'] = userEmail ? userEmail.split('@')[0] : 'Usuário';
+  if (userEmail && (!userDoc.exists || !userDoc.data()?.email)) {
+     userPayload.email = userEmail;
   }
-  if (!userDoc.exists || !userDoc.data()?.email) {
-     userPayload['email'] = userEmail || '';
+  if (!userDoc.exists || !userDoc.data()?.displayName) {
+     userPayload.displayName = userEmail ? userEmail.split('@')[0] : 'Usuário ' + userId.substring(0, 5);
+  }
+  if (!userDoc.exists || !userDoc.data()?.systemRole) {
+     userPayload.systemRole = 'user';
+  }
+  if (!userDoc.exists || !userDoc.data()?.createdAt) {
+     userPayload.createdAt = admin.firestore.FieldValue.serverTimestamp();
   }
   if (!userDoc.exists || !userDoc.data()?.products) {
-     userPayload['products'] = ['musicscale'];
+     userPayload.products = ['musicscale'];
   }
   if (!userDoc.exists || !userDoc.data()?.permissions) {
-     userPayload['permissions'] = { musicscale: true };
+     userPayload.permissions = { musicscale: true };
   }
   if (!userDoc.exists || !userDoc.data()?.appsAccess) {
      userPayload['appsAccess'] = { musicscale: true };
@@ -1398,7 +1416,7 @@ async function startServer() {
   app.get('/api/admin/debug-final-check', async (req, res) => {
      try {
          const db = admin.firestore();
-         const email = 'pastordanielpcunha@gmail.com';
+         const email = req.query.email || 'pastordanielpcunha@gmail.com';
          const p = await db.collection('users').where('email', '==', email).get();
          if(p.empty) return res.json({error: "Not found"});
          const uid = p.docs[0].id;
@@ -1616,6 +1634,107 @@ async function startServer() {
     }
   });
 
+async function repairUserIdentity(uid: string, fallback?: {
+  email?: string;
+  displayName?: string;
+  photoURL?: string | null;
+  source?: string;
+}) {
+  const db = getDb();
+  if (!db) return;
+  
+  let authUser: admin.auth.UserRecord | null = null;
+  try {
+    authUser = await admin.auth().getUser(uid);
+  } catch(e) {
+    //
+  }
+
+  const userRef = db.collection('users').doc(uid);
+  const userDoc = await userRef.get();
+  
+  let currentData = userDoc.exists ? userDoc.data()! : {};
+  let changed = false;
+  let updates: any = {};
+
+  const targetEmail = authUser?.email || fallback?.email || currentData.email;
+  const targetDisplayName = authUser?.displayName || fallback?.displayName || currentData.displayName || currentData.name || (targetEmail ? targetEmail.split('@')[0] : `Sem nome`);
+  const targetPhoto = authUser?.photoURL || fallback?.photoURL || currentData.photoURL;
+
+  if (targetEmail && currentData.email !== targetEmail) {
+    updates.email = targetEmail;
+    changed = true;
+  }
+  
+  if (targetDisplayName && currentData.displayName !== targetDisplayName && currentData.displayName !== `Sem nome`) {
+     if (!currentData.displayName || currentData.displayName === 'Sem nome' || currentData.displayName === 'Usuário') {
+         updates.displayName = targetDisplayName;
+         changed = true;
+     }
+  } else if (!currentData.displayName || currentData.displayName === 'Sem nome') {
+     updates.displayName = targetDisplayName;
+     changed = true;
+  }
+
+  if (targetPhoto && currentData.photoURL !== targetPhoto) {
+    updates.photoURL = targetPhoto;
+    changed = true;
+  }
+
+  if (!userDoc.exists) {
+    updates.createdAt = admin.firestore.FieldValue.serverTimestamp();
+    updates.systemRole = 'user';
+    changed = true;
+  }
+
+  if (changed) {
+    updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+    await userRef.set(updates, { merge: true });
+    
+    // Auto-update in memberships
+    if (updates.email || updates.displayName) {
+       try {
+          const orgsContext = await resolveUserOrganizationContext(uid);
+          for (const org of orgsContext.organizations) {
+             const mRef = db.collection('organizations').doc(org.id).collection('members').doc(uid);
+             const mDoc = await mRef.get();
+             if (mDoc.exists) {
+                const dupDates: any = {};
+                if (updates.email) dupDates.email = updates.email;
+                if (updates.displayName) dupDates.displayName = updates.displayName;
+                dupDates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+                await mRef.update(dupDates);
+             }
+          }
+       } catch(e) {
+          console.error('[REPAIR_USER_MEMBERSHIPS_ERROR]', e);
+       }
+    }
+  }
+}
+
+async function autoRepairSingleOrganizationUser(uid: string) {
+    const db = getDb();
+    if (!db) return;
+    const context = await resolveUserOrganizationContext(uid);
+    if (context.organizations.length === 1 && context.hasOrganization) {
+        const orgId = context.organizations[0].id;
+        const userRef = db.collection('users').doc(uid);
+        const userDoc = await userRef.get();
+        if (userDoc.exists) {
+           const userData = userDoc.data()!;
+           const updates: any = {};
+           if (userData.primaryOrganizationId !== orgId) updates.primaryOrganizationId = orgId;
+           if (userData.activeOrganizationId !== orgId) updates.activeOrganizationId = orgId;
+           if (userData.organizationId !== orgId) updates.organizationId = orgId; // update legacy
+           if (Object.keys(updates).length > 0) {
+              updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+              await userRef.update(updates);
+           }
+        }
+    }
+}
+
   // CANONICAL RESOLVER - MillionsNest Ecosystem Organization Context
   async function resolveUserOrganizationContext(uid: string) {
     if (!uid) {
@@ -1710,7 +1829,7 @@ async function startServer() {
 
     const finalOrganizations: any[] = [];
     const ownedOrganizations: any[] = [];
-    const inconsistencies: string[] = [];
+    let inconsistencies: string[] = [];
     let needsRepair = false;
 
     for (const orgId of Object.keys(organizationsMap)) {
@@ -1766,6 +1885,12 @@ async function startServer() {
     let activeOrganizationId: string | null = null;
     let primaryOrganizationId: string | null = null;
 
+    let uidUsedAsOrganizationIdSuspected = false;
+    if (organizationsMap[uid]) {
+      uidUsedAsOrganizationIdSuspected = true;
+      inconsistencies.push('SUSPEITA: Organização com ID igual ao UID do usuário identificada.');
+    }
+
     if (userData) {
       // Prioridade 1: activeOrganizationId, se existir e não arquivada
       if (userData.activeOrganizationId && organizationsMap[userData.activeOrganizationId] && organizationsMap[userData.activeOrganizationId].status !== 'archived') {
@@ -1800,7 +1925,9 @@ async function startServer() {
         primaryOrganizationId = (ownerOrg || memberOrg || activeOrgsList[0]).id;
         activeOrganizationId = primaryOrganizationId;
         needsRepair = true;
-        inconsistencies.push('Vínculo primário canonical ausente. Fallback provisório assumido base nas organizações ativas.');
+        if (!uidUsedAsOrganizationIdSuspected) {
+           inconsistencies.push('Vínculo primário canonical ausente. Fallback provisório assumido base nas organizações ativas.');
+        }
       }
     } else {
       // Nenhuma organização ativa/acessível -> contexto vazio e pedir reparo
@@ -1821,20 +1948,49 @@ async function startServer() {
       }
     }
 
-    let uidUsedAsOrganizationIdSuspected = false;
-    if (organizationsMap[uid]) {
-      uidUsedAsOrganizationIdSuspected = true;
-      inconsistencies.push('SUSPEITA: Organização com ID igual ao UID do usuário identificada.');
-    }
-
     const hasOrganization = activeOrganizationId !== null;
 
-    let currentOrganization = null;
     let currentOrganizationId = activeOrganizationId;
+    let currentOrganization = null;
     let roleInCurrentOrganization = null;
     if (currentOrganizationId) {
-       currentOrganization = organizationsMap[currentOrganizationId] || null;
+       currentOrganization = finalOrganizations.find(o => o.id === currentOrganizationId) || null;
        roleInCurrentOrganization = currentOrganization?.userRole || null;
+    }
+
+    // AUTO-HEAL: If exactly one active organization exists and primary/active is missing or need repair
+    let canAutoRepair = false;
+    let autoRepaired = false;
+    if (finalOrganizations.length === 1 && !uidUsedAsOrganizationIdSuspected && hasOrganization) {
+       canAutoRepair = true;
+       // We can trigger background fix
+       const fixedOrgId = finalOrganizations[0].id;
+       const userDocRef = db.collection('users').doc(uid);
+       if (needsRepair && userData) {
+          try {
+             const updates: any = {};
+             if (userData.primaryOrganizationId !== fixedOrgId) updates.primaryOrganizationId = fixedOrgId;
+             if (userData.activeOrganizationId !== fixedOrgId) updates.activeOrganizationId = fixedOrgId;
+             if (userData.organizationId !== fixedOrgId) updates.organizationId = fixedOrgId;
+             
+             if (Object.keys(updates).length > 0) {
+                 await userDocRef.update({ ...updates, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+                 console.log(`[AUTO-HEAL] Fixed single organization context for user ${uid}.`);
+                 
+                 // Update local state to reflect fix immediately
+                 primaryOrganizationId = fixedOrgId;
+                 activeOrganizationId = fixedOrgId;
+                 
+                 // Re-check inconsistencies
+                 inconsistencies = inconsistencies.filter(i => !i.includes('primário canonical ausente'));
+                 inconsistencies = inconsistencies.filter(i => !i.includes('desalinhado'));
+                 needsRepair = inconsistencies.length > 0;
+                 autoRepaired = true;
+             }
+          } catch(e) {
+             console.error('[AUTO-HEAL ERROR]', e);
+          }
+       }
     }
 
     return {
@@ -1851,7 +2007,12 @@ async function startServer() {
       hasMultipleOrganizations: activeOrgsList.length > 1,
       needsRepair,
       inconsistencies,
-      uidUsedAsOrganizationIdSuspected
+      uidUsedAsOrganizationIdSuspected,
+      rawContext: {
+         primaryOrganizationId: userData?.primaryOrganizationId || null,
+         activeOrganizationId: userData?.activeOrganizationId || null,
+         legacyOrganizationId: userData?.organizationId || null
+      }
     };
   }
 
@@ -1864,13 +2025,20 @@ async function startServer() {
       const decoded = await admin.auth().verifyIdToken(token);
 
       const userSnap = await db!.collection('users').doc(decoded.uid).get();
-      const userData = userSnap.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole || '')) {
+      const userDataCheck = userSnap.data();
+      if (!['ceo', 'admin', 'global_admin'].includes(userDataCheck?.systemRole || '')) {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
       const { uid } = req.params;
+      
+      // Auto-heal operations BEFORE context resolution
+      await repairUserIdentity(uid);
+      await autoRepairSingleOrganizationUser(uid);
+
       const context = await resolveUserOrganizationContext(uid);
+      const userSnapResolved = await db!.collection('users').doc(uid).get();
+      const userData = userSnapResolved.data() || {};
 
       const enhancedOrgs = await Promise.all(context.organizations.map(async (org: any) => {
         const songsCountSnap = await db!.collection('songs').where('organizationId', '==', org.id).get();
@@ -2015,6 +2183,410 @@ async function startServer() {
       return res.json({ success: true, activeOrganizationId: organizationId });
     } catch (e: any) {
       console.error('[API Set Primary Org]', e);
+      return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    }
+  });
+
+  app.post('/api/admin/ecosystem/backfill-users', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      
+      const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+      const actorRole = actorDoc.data()?.systemRole;
+      if (!['ceo', 'global_admin'].includes(actorRole)) {
+        return res.status(403).json({ error: 'Forbidden. Required ceo/global_admin' });
+      }
+
+      console.log('[BACKFILL START] Triggered by', decoded.uid);
+      const results = {
+         totalChecked: 0,
+         missingEmailInAuth: 0,
+         identitiesRepaired: 0,
+         contextsPersisted: 0,
+         legacyRemoved: 0,
+         membershipsRepaired: 0,
+         needsOrgIdMigration: 0,
+         errors: [] as string[]
+      };
+
+      const usersSnap = await db!.collection('users').get();
+      results.totalChecked = usersSnap.size;
+
+      for (const uDoc of usersSnap.docs) {
+         try {
+            const uid = uDoc.id;
+            let userData = uDoc.data();
+            
+            // 1. Identity
+            let authUser = await admin.auth().getUser(uid).catch(() => null);
+            if (!authUser || !authUser.email) {
+                results.missingEmailInAuth++;
+            }
+            if (authUser && (!userData.email || !userData.displayName || userData.displayName === 'Sem nome')) {
+                await repairUserIdentity(uid);
+                results.identitiesRepaired++;
+                userData = (await db!.collection('users').doc(uid).get()).data() || userData;
+            }
+
+            // Resolve context to find repairs needed
+            const context = await resolveUserOrganizationContext(uid);
+            
+            // Org ID = UID check
+            if (context.uidUsedAsOrganizationIdSuspected) {
+               results.needsOrgIdMigration++;
+            }
+
+            if (context.hasOrganization && context.organizations.length === 1) {
+               const orgId = context.organizations[0].id;
+               
+               // Persist primary
+               if (userData.primaryOrganizationId !== orgId) {
+                   await db!.collection('users').doc(uid).update({ primaryOrganizationId: orgId, activeOrganizationId: orgId, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+                   results.contextsPersisted++;
+               }
+
+               // Remove Legacy field
+               if (userData.organizationId === orgId) {
+                   await db!.collection('users').doc(uid).update({ organizationId: admin.firestore.FieldValue.delete() });
+                   results.legacyRemoved++;
+               }
+
+               // Repair Membership
+               const memberRef = db!.collection('organizations').doc(orgId).collection('members').doc(uid);
+               const memberDoc = await memberRef.get();
+               if (!memberDoc.exists || !memberDoc.data()?.email || !memberDoc.data()?.displayName || memberDoc.data()?.displayName === 'Sem nome') {
+                   await memberRef.set({
+                       uid,
+                       email: authUser?.email || userData.email || null,
+                       displayName: authUser?.displayName || userData.displayName || 'Usuário Sem Nome',
+                       role: "owner",
+                       organizationRole: "owner",
+                       status: "active",
+                       joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+                       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                       permissions: getDefaultPermissions("owner"),
+                       permissionsVersion: CURRENT_PERMISSIONS_VERSION
+                   }, { merge: true });
+                   results.membershipsRepaired++;
+               }
+            }
+         } catch(e: any) {
+            results.errors.push(`UID ${uDoc.id}: ${e.message}`);
+         }
+      }
+
+      console.log('[BACKFILL END]', results);
+      return res.json({ success: true, results });
+    } catch (e: any) {
+      console.error('[API Ecosystem Backfill]', e);
+      return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    }
+  });
+
+  app.post('/api/admin/users/:uid/repair-identity', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
+      const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+
+      const { uid } = req.params;
+      
+      const authUser = await admin.auth().getUser(uid).catch(() => null);
+      if (!authUser) return res.status(404).json({ error: 'User not found in Auth' });
+
+      const email = authUser.email;
+      const displayName = authUser.displayName || 'Usuário Sem Nome';
+      const photoURL = authUser.photoURL || null;
+
+      const userRef = db!.collection('users').doc(uid);
+      const batch = db!.batch();
+      
+      batch.set(userRef, {
+        email,
+        displayName,
+        name: displayName,
+        photoURL,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        identityRepairedAt: admin.firestore.FieldValue.serverTimestamp(),
+        identityRepairSource: "firebase_auth_admin"
+      }, { merge: true });
+
+      const membersQuery = await db!.collectionGroup('members').where('uid', '==', uid).get();
+      for (const mDoc of membersQuery.docs) {
+          batch.set(mDoc.ref, { email, displayName, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      }
+
+      await batch.commit();
+
+      return res.json({ success: true });
+    } catch(e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/users/:uid/persist-primary-organization', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
+      const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+
+      const { uid } = req.params;
+      const { organizationId } = req.body;
+      if (!organizationId) return res.status(400).json({ error: 'organizationId required'});
+
+      const userRef = db!.collection('users').doc(uid);
+      await userRef.set({
+        primaryOrganizationId: organizationId,
+        activeOrganizationId: organizationId,
+        legacyOrganizationId: admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        primaryOrganizationRepairedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      return res.json({ success: true });
+    } catch(e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/users/:uid/remove-legacy-organization-field', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
+      const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+
+      const { uid } = req.params;
+      const userRef = db!.collection('users').doc(uid);
+      
+      await userRef.update({
+        organizationId: admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true });
+    } catch(e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/users/:uid/repair-membership', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
+      const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+
+      const { uid } = req.params;
+      const { organizationId } = req.body;
+      if (!organizationId) return res.status(400).json({ error: 'organizationId required'});
+
+      const userDoc = await db!.collection('users').doc(uid).get();
+      const userData = userDoc.data() || {};
+      
+      const email = userData.email || null;
+      const displayName = userData.displayName || 'Usuário Sem Nome';
+
+      const memberRef = db!.collection('organizations').doc(organizationId).collection('members').doc(uid);
+      await memberRef.set({
+        uid,
+        email,
+        displayName,
+        role: "owner",
+        organizationRole: "owner",
+        status: "active",
+        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        permissions: getDefaultPermissions("owner"),
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION
+      }, { merge: true });
+
+      return res.json({ success: true });
+    } catch(e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/users/:uid/auto-repair', express.json(), async (req: any, res) => {
+     try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+        const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
+        const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+        if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+
+        const { uid } = req.params;
+        const { organizationId } = req.body;
+
+        await repairUserIdentity(uid);
+        await autoRepairSingleOrganizationUser(uid);
+        
+        if (organizationId) {
+            const userRef = db!.collection('users').doc(uid);
+            await userRef.set({
+                primaryOrganizationId: organizationId,
+                activeOrganizationId: organizationId,
+                organizationId: admin.firestore.FieldValue.delete(), 
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                primaryOrganizationRepairedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            const memberRef = db!.collection('organizations').doc(organizationId).collection('members').doc(uid);
+            const userDoc = await userRef.get();
+            await memberRef.set({
+                uid,
+                email: userDoc.data()?.email || null,
+                displayName: userDoc.data()?.displayName || 'Usuário Sem Nome',
+                role: "owner",
+                organizationRole: "owner",
+                status: "active",
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+                permissions: getDefaultPermissions("owner"),
+                permissionsVersion: CURRENT_PERMISSIONS_VERSION
+            }, { merge: true });
+        }
+
+        return res.json({ success: true });
+     } catch(e: any) {
+        return res.status(500).json({ error: e.message });
+     }
+  });
+
+  app.post('/api/admin/organizations/:orgId/migrate-uid-id', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      
+      const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+      const actorRole = actorDoc.data()?.systemRole;
+      if (!['ceo', 'global_admin'].includes(actorRole)) {
+        return res.status(403).json({ error: 'Forbidden. Required ceo/global_admin' });
+      }
+
+      const originalOrgId = req.params.orgId;
+      const orgRef = db!.collection('organizations').doc(originalOrgId);
+      const orgDoc = await orgRef.get();
+
+      if (!orgDoc.exists) {
+        return res.status(404).json({ error: 'Organization not found' });
+      }
+
+      const orgData = orgDoc.data();
+      const ownerUid = orgData?.ownerUid || orgData?.ownerUserId || orgData?.ownerId;
+      
+      if (!ownerUid) {
+         return res.status(400).json({ error: 'Cannot migrate org without owner defined.' });
+      }
+
+      // ONLY allow if original org ID strictly equals the owner's UID
+      if (originalOrgId !== ownerUid) {
+        return res.status(400).json({ error: 'Org ID does not match owner UID. Migration strictly prohibited.' });
+      }
+
+      const newOrgRef = db!.collection('organizations').doc();
+      const newOrgId = newOrgRef.id;
+
+      const subRef = db!.collection('subscriptions').doc(originalOrgId);
+      const subDoc = await subRef.get();
+      const newSubRef = db!.collection('subscriptions').doc(newOrgId);
+
+      const batch = db!.batch();
+
+      // Duplicate org doc
+      const newOrgData = { ...orgData, id: newOrgId, slug: newOrgId, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+      batch.set(newOrgRef, newOrgData);
+      
+      // Duplicate subscription if exists
+      if (subDoc.exists) {
+         batch.set(newSubRef, { ...subDoc.data(), organizationId: newOrgId });
+      }
+
+      // Update the user's document contexts
+      const userRef = db!.collection('users').doc(ownerUid);
+      const userDoc = await userRef.get();
+      if (userDoc.exists) {
+        const u = userDoc.data()!;
+        const updates: any = {};
+        if (u.organizationId === originalOrgId) updates.organizationId = newOrgId;
+        if (u.primaryOrganizationId === originalOrgId) updates.primaryOrganizationId = newOrgId;
+        if (u.activeOrganizationId === originalOrgId) updates.activeOrganizationId = newOrgId;
+        updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+        batch.update(userRef, updates);
+      }
+
+      // Re-create the membership
+      const newMemberRef = newOrgRef.collection('members').doc(ownerUid);
+      batch.set(newMemberRef, {
+        uid: ownerUid,
+        email: userDoc.data()?.email || null,
+        displayName: userDoc.data()?.displayName || null,
+        organizationRole: 'owner',
+        role: 'owner',
+        status: 'active',
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION || 2,
+        permissions: getDefaultPermissions('owner'),
+        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Legacy member
+      batch.set(db!.collection('organization_members').doc(`${ownerUid}_${newOrgId}`), {
+        uid: ownerUid,
+        organizationId: newOrgId,
+        role: 'owner',
+        status: 'active',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Delete the old org and sub to strictly avoid multi-tenant collision
+      // Instead, we archive it
+      batch.update(orgRef, {
+         status: 'archived',
+         archived: true,
+         archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+         migratedToOrgId: newOrgId
+      });
+      if (subDoc.exists) batch.update(subRef, {
+         status: 'migrated',
+         migratedToOrgId: newOrgId,
+         archivedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      const aliasRef = db!.collection('organization_aliases').doc(originalOrgId);
+      batch.set(aliasRef, {
+         oldOrgId: originalOrgId,
+         newOrgId: newOrgId,
+         reason: "UID_EQUALS_ORG_ID",
+         createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      const auditRef = db!.collection('audit_logs').doc();
+      batch.set(auditRef, {
+        action: 'system.organization.migrate_uid_clash',
+        actorUid: decoded.uid,
+        targetUserId: ownerUid,
+        oldOrganizationId: originalOrgId,
+        newOrganizationId: newOrgId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await batch.commit();
+
+      return res.json({ success: true, migratedTo: newOrgId });
+    } catch (e: any) {
+      console.error('[API Migrate Org UID Clash]', e);
       return res.status(500).json({ error: e.message || 'Internal Server Error' });
     }
   });
@@ -3228,7 +3800,19 @@ async function startServer() {
           }
 
           if (stripeSubObj) {
-            const targetOrgId = chosenOrgId || (candidateOrgsList.length > 0 ? candidateOrgsList[0] : decoded.uid);
+            let targetOrgId = chosenOrgId;
+            if (!targetOrgId && candidateOrgsList.length > 0) {
+               targetOrgId = candidateOrgsList[0];
+            }
+            if (!targetOrgId) {
+               const userDocSnap = await db.collection('users').doc(decoded.uid).get();
+               const userDoc = userDocSnap.exists ? userDocSnap.data() : null;
+               if (userDoc && userDoc.organizationId && userDoc.organizationId !== decoded.uid) {
+                  targetOrgId = userDoc.organizationId;
+               } else {
+                  targetOrgId = db.collection('organizations').doc().id;
+               }
+            }
             
             console.log(`[HANDOFF_STRIPE_ALWAYS_CHECK] Active Stripe subscription verified. Syncing dynamically for uid: ${decoded.uid}, org: ${targetOrgId}`);
             

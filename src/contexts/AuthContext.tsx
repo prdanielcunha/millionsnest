@@ -15,6 +15,7 @@ interface UserProfile {
   products: string[]; // Legacy
   organizationId?: string; // Active Org
   defaultOrganizationId?: string;
+  primaryOrganizationId?: string;
   activeOrganizationId?: string;
   organizations?: string[]; // Standardized ecosystem field
   subscriptionStatus?: string; // Standardized ecosystem field
