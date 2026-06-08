@@ -258,7 +258,20 @@ export function EcosystemAdmin() {
       try { jsonRes = await res.json(); } catch(e) {}
       if (!res.ok) throw new Error(jsonRes?.error || 'Falha na API');
       
-      customAlert('Sucesso', successMessage, 'success');
+      if (jsonRes.changed === false) {
+         customAlert('Sem Alterações', 'A operação não resultou em alterações no banco, os dados podem já estar corretos ou é necessário resolver outra inconsistência primeiro (ex: migrar Org ID).', 'info');
+      } else if (jsonRes.steps) {
+         const changes = [];
+         if (jsonRes.steps.identity?.changed) changes.push(`- Identidade completada`);
+         if (jsonRes.steps.primaryOrganization?.changed) changes.push(`- Organização Principal vinculada: ${jsonRes.steps.primaryOrganization.after}`);
+         if (jsonRes.steps.legacyOrganizationId?.changed) changes.push(`- Campo legacy apagado com sucesso`);
+         if (jsonRes.steps.membership?.changed) changes.push(`- Vínculo/Membership criado ou reparado`);
+         const msg = changes.length > 0 ? `Reparo concluído. Ações persistidas:\n${changes.join('\n')}` : successMessage;
+         customAlert('Sucesso', msg, 'success');
+      } else {
+         customAlert('Sucesso', successMessage, 'success');
+      }
+
       await fetchDiagnostics(diagnosticsModalUser);
       loadEcosystemData();
     } catch (e: any) {

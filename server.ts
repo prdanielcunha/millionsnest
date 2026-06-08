@@ -2299,14 +2299,15 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const authUser = await admin.auth().getUser(uid).catch(() => null);
       if (!authUser) return res.status(404).json({ error: 'User not found in Auth' });
 
-      const email = authUser.email;
-      const displayName = authUser.displayName || 'Usuário Sem Nome';
-      const photoURL = authUser.photoURL || null;
-
       const userRef = db!.collection('users').doc(uid);
-      const batch = db!.batch();
-      
-      batch.set(userRef, {
+      const userDocBefore = await userRef.get();
+      const beforeData = userDocBefore.data() || {};
+
+      const email = authUser.email || beforeData.email;
+      const displayName = authUser.displayName || beforeData.displayName || beforeData.name || (email ? email.split('@')[0] : 'Usuário Sem Nome');
+      const photoURL = authUser.photoURL || beforeData.photoURL || null;
+
+      await userRef.set({
         email,
         displayName,
         name: displayName,
@@ -2316,14 +2317,19 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         identityRepairSource: "firebase_auth_admin"
       }, { merge: true });
 
-      const membersQuery = await db!.collectionGroup('members').where('uid', '==', uid).get();
-      for (const mDoc of membersQuery.docs) {
-          batch.set(mDoc.ref, { email, displayName, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      // Update memberships explicitly via resolved orgs (no collectionGroup index needed)
+      const context = await resolveUserOrganizationContext(uid);
+      for (const org of context.organizations) {
+          const mRef = db!.collection('organizations').doc(org.id).collection('members').doc(uid);
+          await mRef.set({ email, displayName, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
       }
 
-      await batch.commit();
+      const userDocAfter = await userRef.get();
+      const afterData = userDocAfter.data() || {};
 
-      return res.json({ success: true });
+      const didChange = beforeData.email !== afterData.email || beforeData.displayName !== afterData.displayName;
+
+      return res.json({ success: true, changed: didChange, steps: { identity: { success: true, changed: didChange, before: beforeData, after: afterData } } });
     } catch(e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2342,15 +2348,20 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       if (!organizationId) return res.status(400).json({ error: 'organizationId required'});
 
       const userRef = db!.collection('users').doc(uid);
+      const userDocBefore = await userRef.get();
+      const beforePrimary = userDocBefore.data()?.primaryOrganizationId;
+
       await userRef.set({
         primaryOrganizationId: organizationId,
         activeOrganizationId: organizationId,
-        legacyOrganizationId: admin.firestore.FieldValue.delete(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         primaryOrganizationRepairedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
-      return res.json({ success: true });
+      const userDocAfter = await userRef.get();
+      const afterPrimary = userDocAfter.data()?.primaryOrganizationId;
+
+      return res.json({ success: true, changed: beforePrimary !== afterPrimary });
     } catch(e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2367,12 +2378,23 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const { uid } = req.params;
       const userRef = db!.collection('users').doc(uid);
       
-      await userRef.update({
-        organizationId: admin.firestore.FieldValue.delete(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      const beforeData = (await userRef.get()).data() || {};
+      const beforeLegacy = beforeData.organizationId;
 
-      return res.json({ success: true });
+      if (beforeLegacy === uid) {
+         return res.json({ success: true, changed: false, message: 'Cannot remove legacy when OrgID=UID. Migrate first.' });
+      }
+
+      if (beforeLegacy) {
+         await userRef.update({
+            organizationId: admin.firestore.FieldValue.delete(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+         });
+      }
+
+      const afterData = (await userRef.get()).data() || {};
+      
+      return res.json({ success: true, changed: !!beforeLegacy && !afterData.organizationId });
     } catch(e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2392,25 +2414,29 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const userDoc = await db!.collection('users').doc(uid).get();
       const userData = userDoc.data() || {};
-      
       const email = userData.email || null;
       const displayName = userData.displayName || 'Usuário Sem Nome';
 
       const memberRef = db!.collection('organizations').doc(organizationId).collection('members').doc(uid);
+      const beforeDoc = await memberRef.get();
+      const beforeExists = beforeDoc.exists;
+
       await memberRef.set({
         uid,
         email,
         displayName,
-        role: "owner",
-        organizationRole: "owner",
+        role: beforeDoc.data()?.role || "owner",
+        organizationRole: beforeDoc.data()?.organizationRole || "owner",
         status: "active",
-        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        joinedAt: beforeDoc.data()?.joinedAt || admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        permissions: getDefaultPermissions("owner"),
-        permissionsVersion: CURRENT_PERMISSIONS_VERSION
+        permissions: beforeDoc.data()?.permissions || getDefaultPermissions("owner"),
+        permissionsVersion: beforeDoc.data()?.permissionsVersion || CURRENT_PERMISSIONS_VERSION
       }, { merge: true });
 
-      return res.json({ success: true });
+      const afterDoc = await memberRef.get();
+
+      return res.json({ success: true, changed: !beforeExists || beforeDoc.data()?.displayName !== afterDoc.data()?.displayName });
     } catch(e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2425,38 +2451,117 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
 
         const { uid } = req.params;
-        const { organizationId } = req.body;
+        const { organizationId: inputOrgId } = req.body;
 
-        await repairUserIdentity(uid);
-        await autoRepairSingleOrganizationUser(uid);
+        const results = {
+           success: false,
+           changed: false,
+           steps: {} as any
+        };
+
+        const userRef = db!.collection('users').doc(uid);
+        const beforeUserDoc = await userRef.get();
+        const beforeUserData = beforeUserDoc.data() || {};
+        const beforePrimary = beforeUserData.primaryOrganizationId;
+        const beforeLegacy = beforeUserData.organizationId;
         
-        if (organizationId) {
-            const userRef = db!.collection('users').doc(uid);
-            await userRef.set({
-                primaryOrganizationId: organizationId,
-                activeOrganizationId: organizationId,
-                organizationId: admin.firestore.FieldValue.delete(), 
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                primaryOrganizationRepairedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+        // 1. Repair Identity manually
+        const authUser = await admin.auth().getUser(uid).catch(() => null);
+        const email = authUser?.email || beforeUserData.email;
+        const displayName = authUser?.displayName || beforeUserData.displayName || beforeUserData.name || (email ? email.split('@')[0] : 'Usuário Sem Nome');
+        
+        await userRef.set({
+           email,
+           displayName,
+           name: displayName,
+           photoURL: authUser?.photoURL || beforeUserData.photoURL || null,
+           identityRepairedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
 
-            const memberRef = db!.collection('organizations').doc(organizationId).collection('members').doc(uid);
-            const userDoc = await userRef.get();
-            await memberRef.set({
-                uid,
-                email: userDoc.data()?.email || null,
-                displayName: userDoc.data()?.displayName || 'Usuário Sem Nome',
-                role: "owner",
-                organizationRole: "owner",
-                status: "active",
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                joinedAt: admin.firestore.FieldValue.serverTimestamp(),
-                permissions: getDefaultPermissions("owner"),
-                permissionsVersion: CURRENT_PERMISSIONS_VERSION
-            }, { merge: true });
+        const midUserData = (await userRef.get()).data() || {};
+        results.steps.identity = { 
+           success: true, 
+           changed: beforeUserData.email !== midUserData.email || beforeUserData.displayName !== midUserData.displayName,
+           before: { email: beforeUserData.email, displayName: beforeUserData.displayName },
+           after: { email: midUserData.email, displayName: midUserData.displayName }
+        };
+
+        // 2. Persist Primary Org
+        let workingOrgId = inputOrgId;
+        if (!workingOrgId) {
+            const context = await resolveUserOrganizationContext(uid);
+            if (context.hasOrganization && context.organizations.length === 1) {
+                workingOrgId = context.organizations[0].id;
+            } else if (midUserData.activeOrganizationId) {
+                workingOrgId = midUserData.activeOrganizationId;
+            }
         }
 
-        return res.json({ success: true });
+        if (workingOrgId) {
+           await userRef.set({
+               primaryOrganizationId: workingOrgId,
+               activeOrganizationId: workingOrgId,
+               primaryOrganizationRepairedAt: admin.firestore.FieldValue.serverTimestamp()
+           }, { merge: true });
+           
+           results.steps.primaryOrganization = {
+               success: true,
+               changed: beforePrimary !== workingOrgId,
+               before: beforePrimary,
+               after: workingOrgId
+           };
+
+           // 3. Repair Membership
+           const memRef = db!.collection('organizations').doc(workingOrgId).collection('members').doc(uid);
+           const beforeMemDoc = await memRef.get();
+           const beforeMemExists = beforeMemDoc.exists;
+
+           await memRef.set({
+               uid,
+               email,
+               displayName,
+               role: beforeMemDoc.data()?.role || "owner",
+               organizationRole: beforeMemDoc.data()?.organizationRole || "owner",
+               status: "active",
+               joinedAt: beforeMemDoc.data()?.joinedAt || admin.firestore.FieldValue.serverTimestamp(),
+               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+               permissions: beforeMemDoc.data()?.permissions || getDefaultPermissions("owner"),
+               permissionsVersion: beforeMemDoc.data()?.permissionsVersion || CURRENT_PERMISSIONS_VERSION
+           }, { merge: true });
+
+           results.steps.membership = {
+               success: true,
+               changed: !beforeMemExists || beforeMemDoc.data()?.email !== email,
+               beforeExists: beforeMemExists,
+               afterExists: true
+           };
+        } else {
+           results.steps.primaryOrganization = { success: false, error: 'No orgId resolvable' };
+           results.steps.membership = { success: false, error: 'No orgId resolvable' };
+        }
+
+        // 4. Remove Legacy
+        if (beforeLegacy) {
+           if (beforeLegacy === uid) {
+               results.steps.legacyOrganizationId = { success: true, changed: false, error: 'Cannot remove when legacy=uid' };
+           } else {
+               await userRef.update({
+                   organizationId: admin.firestore.FieldValue.delete(),
+                   updatedAt: admin.firestore.FieldValue.serverTimestamp()
+               });
+               results.steps.legacyOrganizationId = { success: true, changed: true, before: beforeLegacy, after: null };
+           }
+        } else {
+           results.steps.legacyOrganizationId = { success: true, changed: false, before: null, after: null };
+        }
+
+        const afterUserDoc = await userRef.get();
+        const afterUserData = afterUserDoc.data() || {};
+        
+        results.changed = JSON.stringify(beforeUserData) !== JSON.stringify(afterUserData);
+        results.success = true;
+
+        return res.json(results);
      } catch(e: any) {
         return res.status(500).json({ error: e.message });
      }
