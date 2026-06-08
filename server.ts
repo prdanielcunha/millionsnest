@@ -1395,6 +1395,31 @@ async function startServer() {
     }
   });
 
+  app.get('/api/admin/debug-final-check', async (req, res) => {
+     try {
+         const db = admin.firestore();
+         const email = 'pastordanielpcunha@gmail.com';
+         const p = await db.collection('users').where('email', '==', email).get();
+         if(p.empty) return res.json({error: "Not found"});
+         const uid = p.docs[0].id;
+         const userData = p.docs[0].data();
+
+         const m = await db.collection('organization_members').where('uid', '==', uid).get();
+         const legacyMemberships = m.docs.map(d => ({id: d.id, data: d.data()}));
+
+         const context = await resolveUserOrganizationContext(uid);
+
+         return res.json({
+            uid,
+            userData,
+            legacyMemberships,
+            context
+         });
+     } catch(e: any) {
+         return res.status(500).json({error: e.message});
+     }
+  });
+
   app.post('/api/admin/users/:uid/create-organization', express.json(), async (req: any, res) => {
     try {
       const authHeader = req.headers.authorization;
@@ -3077,7 +3102,8 @@ async function startServer() {
         verifiedSupportMode = true;
       }
 
-      // PASSO 1: Resolver organizationId do usuário
+      // PASSO 1: Resolver organizationId do usuário usando Canonical Resolver
+      const orgContext = await resolveUserOrganizationContext(decoded.uid);
       const candidateOrgs = new Set<string>();
 
       // A. Apenas permitimos orgId arbitrário se for Global Admin
@@ -3087,58 +3113,11 @@ async function startServer() {
         }
       }
 
-      // B. Da conta do usuário (users/{uid})
-      if (userData) {
-        if (userData.organizationId) candidateOrgs.add(userData.organizationId);
-        if (userData.activeOrganizationId) candidateOrgs.add(userData.activeOrganizationId);
-        if (userData.defaultOrganizationId) candidateOrgs.add(userData.defaultOrganizationId);
-        if (Array.isArray(userData.organizations)) {
-          userData.organizations.forEach((o: any) => {
-            if (typeof o === 'string' && o.trim() !== '') candidateOrgs.add(o.trim());
-          });
-        }
-      }
-
-      // C. Do record em organizations/{orgId}/members/{uid} E legacy organization_members
-      try {
-        const membersSnap = await db.collection('organization_members').where('uid', '==', decoded.uid).get();
-        membersSnap.docs.forEach(doc => {
-          const oId = doc.data()?.organizationId;
-          if (oId && typeof oId === 'string' && oId.trim() !== '') candidateOrgs.add(oId.trim());
-        });
-        
-        // As organizations collection doesn't have a direct way to find members via collectionGroup without an index, 
-        // the client MUST provide the orgId if it's the new nested subcollection approach, and we'll validate it below.
-      } catch (err) {
-        console.warn('[HANDOFF_RESOLVER] Failed to query organization_members:', err);
-      }
-
-      // D. De organizations de propriedade do usuário (ownerUid / ownerUserId / ownerId)
-      try {
-        const ownedSnap1 = await db.collection('organizations').where('ownerUid', '==', decoded.uid).get();
-        ownedSnap1.docs.forEach(doc => candidateOrgs.add(doc.id));
-
-        const ownedSnap2 = await db.collection('organizations').where('ownerUserId', '==', decoded.uid).get();
-        ownedSnap2.docs.forEach(doc => candidateOrgs.add(doc.id));
-
-        const ownedSnap3 = await db.collection('organizations').where('ownerId', '==', decoded.uid).get();
-        ownedSnap3.docs.forEach(doc => candidateOrgs.add(doc.id));
-      } catch (err) {
-        console.warn('[HANDOFF_RESOLVER] Failed to query owned organizations:', err);
-      }
-      
-      // Validação Crítica de Segurança: Se o usuário (não-admin) mandou um orgId, DEVEMOS garantir que ele tem vínculo.
+      // Validação Crítica de Segurança: Se o usuário (não-admin) mandou um orgId específico para handoff
       if (!isGlobalAdmin && orgId && typeof orgId === 'string' && orgId.trim() !== '') {
          const cleanOrgId = orgId.trim();
-         let isLegit = candidateOrgs.has(cleanOrgId);
-         
-         // Verificar subcollection `members` para o novo padrão: /organizations/{orgId}/members/{uid}
-         if (!isLegit) {
-            const memberDoc = await db.collection('organizations').doc(cleanOrgId).collection('members').doc(decoded.uid).get();
-            if (memberDoc.exists) {
-               isLegit = true;
-            }
-         }
+         // Verify if cleanOrgId is in the user's canonical context active list
+         const isLegit = orgContext.organizations.some(o => o.id === cleanOrgId && o.status !== 'archived');
          
          if (isLegit) {
             candidateOrgs.add(cleanOrgId);
@@ -3147,6 +3126,11 @@ async function startServer() {
             return res.status(403).json({ error: 'Forbidden: You do not have access to this organization.' });
          }
       }
+
+      // Adiciona o current active do context
+      if (orgContext.activeOrganizationId) candidateOrgs.add(orgContext.activeOrganizationId);
+      if (orgContext.primaryOrganizationId) candidateOrgs.add(orgContext.primaryOrganizationId);
+      orgContext.organizations.filter(o => o.status !== 'archived').forEach(o => candidateOrgs.add(o.id));
 
       const candidateOrgsList = Array.from(candidateOrgs);
       const validStatuses = ['active', 'trialing', 'trial', 'past_due', 'pro'];
