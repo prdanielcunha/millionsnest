@@ -1509,7 +1509,7 @@ export function EcosystemAdmin() {
                     <div>
                       <h4 className="text-sm font-semibold text-purple-400">Consolidador de Dados (Migração de Ativos)</h4>
                       <p className="text-[11px] text-[#A0A7B5] mt-1">
-                        Transfira todas as Músicas e Escalas de produção de um workspace duplicado criado por engano para a organização principal do usuário antes de arquivá-lo.
+                        Transfira todas as Músicas, Escalas de produção e Membros de um workspace duplicado criado por engano para a organização principal do usuário antes de arquivá-lo.
                       </p>
                     </div>
 

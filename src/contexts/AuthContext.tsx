@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useMemo } from "react";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, collection } from "firebase/firestore";
 import { auth, db } from "../lib/firebase.js";
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 import { analytics } from "../lib/analytics.js";
@@ -27,6 +27,7 @@ interface UserProfile {
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
+  canonicalContext: any | null;
   loading: boolean;
   logout: () => Promise<void>;
   switchOrganization: (orgId: string) => Promise<void>;
@@ -35,6 +36,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
+  canonicalContext: null,
   loading: true,
   logout: async () => {},
   switchOrganization: async () => {},
@@ -42,6 +44,7 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [canonicalContext, setCanonicalContext] = useState<any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(() => {
     try {
       const cached = localStorage.getItem('mn_user_profile');
@@ -96,37 +99,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           if (userSnap.exists()) {
             const userData = userSnap.data() as UserProfile;
-            
-            // Check for pending invite logic if needed locally?
-            const inviteOrgId = localStorage.getItem('invite_org_id');
-            const inviteRole = localStorage.getItem('invite_role') || 'member';
             let mergeData: any = { lastLoginAt: serverTimestamp() };
             
+            try {
+              const idToken = await currentUser.getIdToken(true);
+              const res = await fetch('/api/user/organization-context', {
+                headers: { 'Authorization': `Bearer ${idToken}` }
+              });
+              if (res.ok) {
+                const canonicalCtx = await res.json();
+                setCanonicalContext(canonicalCtx);
+                if (canonicalCtx.activeOrganizationId && canonicalCtx.activeOrganizationId !== userData.activeOrganizationId) {
+                  mergeData.activeOrganizationId = canonicalCtx.activeOrganizationId;
+                  userData.activeOrganizationId = canonicalCtx.activeOrganizationId;
+                }
+                if (canonicalCtx.primaryOrganizationId && canonicalCtx.primaryOrganizationId !== userData.primaryOrganizationId) {
+                  mergeData.primaryOrganizationId = canonicalCtx.primaryOrganizationId;
+                  userData.primaryOrganizationId = canonicalCtx.primaryOrganizationId;
+                }
+                // Avoid using legacy userData.organizationId locally if activeOrganizationId exists
+                if (canonicalCtx.activeOrganizationId) {
+                  mergeData.organizationId = canonicalCtx.activeOrganizationId;
+                  userData.organizationId = canonicalCtx.activeOrganizationId;
+                }
+              }
+            } catch (ctxErr) {
+              console.error('Falha ao buscar contexto canônico no AuthContext:', ctxErr);
+            }
+
+            const inviteOrgId = localStorage.getItem('invite_org_id');
+            const inviteRole = localStorage.getItem('invite_role') || 'member';
+
             // Auto-assign CEO role to specific email
             if (currentUser.email === 'pastordanielpcunha@gmail.com') {
               if (userData.systemRole !== 'ceo') {
                 mergeData.systemRole = 'ceo';
                 userData.systemRole = 'ceo';
-              }
-              const orgIdToHeal = userData.defaultOrganizationId || userData.organizationId || currentUser.uid;
-              if (orgIdToHeal) {
-                mergeData.organizationId = orgIdToHeal;
-                mergeData.defaultOrganizationId = orgIdToHeal;
-                userData.organizationId = orgIdToHeal;
-                userData.defaultOrganizationId = orgIdToHeal;
-                
-                const healMemberData = sanitizeForFirestore({
-                  uid: currentUser.uid,
-                  email: currentUser.email,
-                  organizationRole: 'owner',
-                  role: 'owner',
-                  status: 'active',
-                  permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-                  permissions: getDefaultPermissions('owner')
-                });
-                await setDoc(doc(db, 'organization_members', `${currentUser.uid}_${orgIdToHeal}`), healMemberData, { merge: true });
-                await setDoc(doc(db, `organizations/${orgIdToHeal}/members`, currentUser.uid), healMemberData, { merge: true });
-                await setDoc(doc(db, 'organizations', orgIdToHeal), { ownerUid: currentUser.uid }, { merge: true });
               }
             }
 
@@ -152,12 +160,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
               // Switch active org to the invited org
               mergeData.organizationId = inviteOrgId;
+              mergeData.activeOrganizationId = inviteOrgId;
+              mergeData.primaryOrganizationId = inviteOrgId;
               userData.organizationId = inviteOrgId;
+              userData.activeOrganizationId = inviteOrgId;
+              userData.primaryOrganizationId = inviteOrgId;
               localStorage.removeItem('invite_org_id');
               localStorage.removeItem('invite_role');
             }
 
-            // Atualizar lastLoginAt e possível org
             await setDoc(userRef, sanitizeForFirestore(mergeData), { merge: true });
             
             const updatedProfile = { ...userData, lastLoginAt: new Date() };
@@ -166,13 +177,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             analytics.track('login', {
               userId: currentUser.uid,
-              organizationId: updatedProfile.organizationId || currentUser.uid
+              organizationId: updatedProfile.activeOrganizationId || updatedProfile.organizationId
             });
           } else {
             // Criar novo usuário
             const inviteOrgId = localStorage.getItem('invite_org_id');
             const inviteRole = localStorage.getItem('invite_role') || 'member';
-            const targetOrgId = inviteOrgId || currentUser.uid;
+            
+            let targetOrgId = inviteOrgId;
+            if (!targetOrgId) {
+               targetOrgId = doc(collection(db, 'organizations')).id;
+            }
 
             const newProfile: Partial<UserProfile> = {
               uid: currentUser.uid,
@@ -184,6 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
               organizationId: targetOrgId,
+              primaryOrganizationId: targetOrgId,
+              activeOrganizationId: targetOrgId,
               organizations: [targetOrgId],
               subscriptionStatus: 'none',
               systemRole: currentUser.email === 'pastordanielpcunha@gmail.com' ? 'ceo' : 
@@ -194,16 +211,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             // Se é o dono dessa nova org (não foi convidado), cria a organization default dele
             if (!inviteOrgId) {
-               const orgRef = doc(db, 'organizations', targetOrgId);
+               const orgRef = doc(db, 'organizations', targetOrgId as string);
                await setDoc(orgRef, sanitizeForFirestore({
                  id: targetOrgId,
                  name: `Organização de ${currentUser.displayName || currentUser.email?.split('@')[0]}`,
                  slug: targetOrgId, // default slug
                  ownerUid: currentUser.uid, // standardized field
-                 ownerId: currentUser.uid, // legacy field
                  enabledApps: ['musicscale'], // default apps access
                  subscriptionPlan: 'monthly',
                  subscriptionStatus: 'none',
+                 status: 'active',
                  createdAt: serverTimestamp()
                }), { merge: true });
 
@@ -274,10 +291,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const contextValue = useMemo(() => ({
     user,
     profile,
+    canonicalContext,
     loading,
     logout,
     switchOrganization
-  }), [user, profile, loading]);
+  }), [user, profile, canonicalContext, loading]);
 
   return (
     <AuthContext.Provider value={contextValue}>

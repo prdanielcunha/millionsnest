@@ -97,7 +97,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
       setLoadingOrg(true);
       try {
-        let orgId = profile.organizationId;
+        let orgId = profile.activeOrganizationId || profile.primaryOrganizationId || profile.organizationId;
         
         // Support Mode Logic
         if (profile.systemRole === 'ceo' || profile.systemRole === 'admin') {

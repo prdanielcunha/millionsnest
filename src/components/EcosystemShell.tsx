@@ -20,7 +20,7 @@ interface EcosystemShellProps {
 }
 
 export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList }: EcosystemShellProps) {
-  const { user, profile, logout, switchOrganization } = useAuth();
+  const { user, profile, canonicalContext, logout, switchOrganization } = useAuth();
   
   let organization: any = null;
   let currentUserPerms: any = {};
@@ -167,7 +167,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
 
             {/* Org Switcher Menu */}
             <AnimatePresence>
-              {orgMenuOpen && profile?.organizations && profile.organizations.length > 1 && (
+              {orgMenuOpen && canonicalContext?.organizations && canonicalContext.organizations.length > 1 && (
                 <motion.div
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -178,19 +178,35 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                   <div className="px-3 py-2 text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest mb-1">
                     Selecionar Organização
                   </div>
-                  {profile.organizations.map((orgId: string) => (
+                  {canonicalContext.organizations.filter((org:any) => org.status !== 'archived').map((org: any) => (
                     <button
-                      key={orgId}
+                      key={org.id}
                       onClick={() => {
                         setOrgMenuOpen(false);
-                        switchOrganization(orgId).then(() => window.location.reload());
+                        switchOrganization(org.id).then(() => window.location.reload());
                       }}
-                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-[#F5F7FA] hover:bg-white/5 rounded-lg transition-colors"
+                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-[#F5F7FA] hover:bg-white/5 rounded-lg transition-colors group"
                     >
-                      <span className="truncate">Org: {orgId.substring(0,8)}...</span>
-                      {profile.organizationId === orgId && <Check className="w-4 h-4 text-[#2B85EB]" />}
+                      <div className="flex flex-col items-start gap-1">
+                        <span className="truncate max-w-[160px] font-medium text-left">{org.name}</span>
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                           {org.userRole === 'owner' && <span className="text-[9px] px-1.5 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-md leading-none flex items-center">Dono</span>}
+                           {org.userRole === 'admin' && <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-md leading-none flex items-center">Admin</span>}
+                           {org.id === canonicalContext.primaryOrganizationId && <span className="text-[9px] px-1.5 py-0.5 bg-[#2B85EB]/10 text-[#2B85EB] border border-[#2B85EB]/20 rounded-md leading-none flex items-center">Principal</span>}
+                        </div>
+                      </div>
+                      {canonicalContext.activeOrganizationId === org.id && <Check className="w-4 h-4 text-[#2B85EB] shrink-0" />}
                     </button>
                   ))}
+                  
+                  {canonicalContext.needsRepair && (
+                     <div className="mt-2 pt-2 border-t border-white/5 px-2">
+                         <div className="flex items-center gap-2 p-2 bg-amber-500/10 text-amber-500 rounded-lg text-xs font-medium">
+                            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                            Inconsistência detectada. <a href="/app/admin/diagnose" className="underline ml-1">Reparar.</a>
+                         </div>
+                     </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

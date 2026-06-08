@@ -686,10 +686,18 @@ async function startServer() {
           });
           const userDocSnap = await db.collection('users').doc(userId).get();
           const orgContext = await resolveUserOrganizationContext(userId);
-          const orgId = session.metadata?.organizationId 
+          let orgId = session.metadata?.organizationId 
             || orgContext.primaryOrganizationId 
-            || orgContext.activeOrganizationId 
-            || ((userDocSnap.exists && userDocSnap.data()?.organizationId) ? userDocSnap.data()?.organizationId : userId);
+            || orgContext.activeOrganizationId;
+
+          if (!orgId) {
+             const userDoc = userDocSnap.exists ? userDocSnap.data() : null;
+             if (userDoc && userDoc.organizationId && userDoc.organizationId !== userId) {
+                orgId = userDoc.organizationId;
+             } else {
+                orgId = db.collection('organizations').doc().id;
+             }
+          }
           
           console.log('[STRIPE_WEBHOOK_DEBUG]', {
             metadata_recebida: session.metadata,
@@ -866,7 +874,18 @@ async function startServer() {
 
              if (resolvedUserId) {
                 const orgContext = await resolveUserOrganizationContext(resolvedUserId);
-                resolvedOrgId = resolvedOrgId || orgContext.primaryOrganizationId || orgContext.activeOrganizationId || resolvedUserId;
+                resolvedOrgId = resolvedOrgId || orgContext.primaryOrganizationId || orgContext.activeOrganizationId;
+                
+                if (!resolvedOrgId) {
+                   const userDocSnap = await db.collection('users').doc(resolvedUserId).get();
+                   const userDoc = userDocSnap.exists ? userDocSnap.data() : null;
+                   if (userDoc && userDoc.organizationId && userDoc.organizationId !== resolvedUserId) {
+                      resolvedOrgId = userDoc.organizationId;
+                   } else {
+                      resolvedOrgId = db.collection('organizations').doc().id;
+                   }
+                }
+                
                 console.log('[STRIPE_WEBHOOK_HEAL] Creating virtual subscription target for org:', resolvedOrgId);
                 targetsToProcess.push({
                    ref: db.collection('subscriptions').doc(resolvedOrgId),
@@ -1723,27 +1742,45 @@ async function startServer() {
     let primaryOrganizationId: string | null = null;
 
     if (userData) {
+      // Prioridade 1: activeOrganizationId, se existir e não arquivada
       if (userData.activeOrganizationId && organizationsMap[userData.activeOrganizationId] && organizationsMap[userData.activeOrganizationId].status !== 'archived') {
         activeOrganizationId = userData.activeOrganizationId;
       }
+      
+      // Prioridade 2: primaryOrganizationId, se existir e não arquivada
       if (userData.primaryOrganizationId && organizationsMap[userData.primaryOrganizationId] && organizationsMap[userData.primaryOrganizationId].status !== 'archived') {
         primaryOrganizationId = userData.primaryOrganizationId;
       }
-      if (userData.organizationId && organizationsMap[userData.organizationId] && organizationsMap[userData.organizationId].status !== 'archived') {
-        if (!activeOrganizationId) activeOrganizationId = userData.organizationId;
-        if (!primaryOrganizationId) primaryOrganizationId = userData.organizationId;
+
+      // Se a ativa não é válida mas a primária é, fallback para a primária
+      if (!activeOrganizationId && primaryOrganizationId) {
+        activeOrganizationId = primaryOrganizationId;
+      }
+
+      // Fallback legado apenas se não houver ativo/primário ainda
+      if (!activeOrganizationId && !primaryOrganizationId && userData.organizationId && organizationsMap[userData.organizationId] && organizationsMap[userData.organizationId].status !== 'archived') {
+        activeOrganizationId = userData.organizationId;
+        primaryOrganizationId = userData.organizationId;
+        needsRepair = true;
+        inconsistencies.push('Usando organizationId legado como fallback.');
       }
     }
 
     if (activeOrgsList.length > 0) {
       if (!primaryOrganizationId) {
-        primaryOrganizationId = activeOrgsList[0].id;
-        needsRepair = true;
-        inconsistencies.push('Vínculo primário canonical (primaryOrganizationId) ausente.');
-      }
-      if (!activeOrganizationId) {
+        // Fallbacks se usuário tem organizações mas não tem primária definida
+        const ownerOrg = activeOrgsList.find(o => o.userRole === 'owner');
+        const memberOrg = activeOrgsList.find(o => o.membership != null);
+        
+        primaryOrganizationId = (ownerOrg || memberOrg || activeOrgsList[0]).id;
         activeOrganizationId = primaryOrganizationId;
+        needsRepair = true;
+        inconsistencies.push('Vínculo primário canonical ausente. Fallback provisório assumido base nas organizações ativas.');
       }
+    } else {
+      // Nenhuma organização ativa/acessível -> contexto vazio e pedir reparo
+      primaryOrganizationId = null;
+      activeOrganizationId = null;
     }
 
     if (userData) {
@@ -1759,17 +1796,37 @@ async function startServer() {
       }
     }
 
-    const hasOrganization = activeOrgsList.length > 0;
+    let uidUsedAsOrganizationIdSuspected = false;
+    if (organizationsMap[uid]) {
+      uidUsedAsOrganizationIdSuspected = true;
+      inconsistencies.push('SUSPEITA: Organização com ID igual ao UID do usuário identificada.');
+    }
+
+    const hasOrganization = activeOrganizationId !== null;
+
+    let currentOrganization = null;
+    let currentOrganizationId = activeOrganizationId;
+    let roleInCurrentOrganization = null;
+    if (currentOrganizationId) {
+       currentOrganization = organizationsMap[currentOrganizationId] || null;
+       roleInCurrentOrganization = currentOrganization?.userRole || null;
+    }
 
     return {
+      uid,
       activeOrganizationId,
       primaryOrganizationId,
+      currentOrganizationId,
+      currentOrganization,
       organizations: finalOrganizations,
       ownedOrganizations,
       memberships: Object.values(membershipsMap),
+      roleInCurrentOrganization,
       hasOrganization,
+      hasMultipleOrganizations: activeOrgsList.length > 1,
       needsRepair,
-      inconsistencies
+      inconsistencies,
+      uidUsedAsOrganizationIdSuspected
     };
   }
 
@@ -1867,23 +1924,30 @@ async function startServer() {
       const orgUpdate: any = {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
-      if (!orgData.ownerUserId || orgData.ownerUserId !== uid) {
+      
+      let isOwner = false;
+      if (orgData.ownerUid === uid || orgData.ownerUserId === uid || orgData.ownerId === uid) {
+         isOwner = true;
+      } else if (!orgData.ownerUid && !orgData.ownerUserId && !orgData.ownerId) {
         orgUpdate.ownerUserId = uid;
         orgUpdate.ownerUid = uid;
         orgUpdate.ownerId = uid;
         orgUpdate.ownerEmail = targetUser.email || null;
         orgUpdate.ownerName = targetUser.displayName || null;
+        isOwner = true;
       }
-      batch.set(orgRef, orgUpdate, { merge: true });
+      
+      if (Object.keys(orgUpdate).length > 1) {
+         batch.set(orgRef, orgUpdate, { merge: true });
+      }
 
       const memberRef = orgRef.collection('members').doc(uid);
-      const isOwner = orgData.ownerUserId === uid || orgData.ownerUid === uid || orgData.ownerId === uid || orgUpdate.ownerUserId === uid;
       batch.set(memberRef, {
         uid: uid,
         email: targetUser.email || null,
         displayName: targetUser.displayName || null,
-        organizationRole: isOwner ? 'owner' : (orgData.membersRole || 'member'),
-        role: isOwner ? 'owner' : (orgData.membersRole || 'member'),
+        organizationRole: isOwner ? 'owner' : 'member',
+        role: isOwner ? 'owner' : 'member',
         status: 'active',
         joinedAt: orgData.createdAt || admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -2007,9 +2071,41 @@ async function startServer() {
       if (action === 'archive') {
         batch.update(orgRef, {
           status: 'archived',
+          archived: true,
           subscriptionStatus: 'archived',
+          archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+          archivedBy: decoded.uid,
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
+
+        // TAREFA 6: Limpar usuário de ter essa org como ativa/primária
+        const usersToUpdate = new Set<string>();
+        
+        const q1 = await db!.collection('users').where('activeOrganizationId', '==', orgId).get();
+        q1.docs.forEach(d => usersToUpdate.add(d.id));
+        
+        const q2 = await db!.collection('users').where('primaryOrganizationId', '==', orgId).get();
+        q2.docs.forEach(d => usersToUpdate.add(d.id));
+
+        const q3 = await db!.collection('users').where('organizationId', '==', orgId).get();
+        q3.docs.forEach(d => usersToUpdate.add(d.id));
+
+        for (const uid of Array.from(usersToUpdate)) {
+          const userRef = db!.collection('users').doc(uid);
+          const userDoc = await userRef.get();
+          if (userDoc.exists) {
+            const uData = userDoc.data();
+            const updateObj: any = {};
+            if (uData.activeOrganizationId === orgId) updateObj.activeOrganizationId = admin.firestore.FieldValue.delete();
+            if (uData.primaryOrganizationId === orgId) updateObj.primaryOrganizationId = admin.firestore.FieldValue.delete();
+            if (uData.organizationId === orgId) updateObj.organizationId = admin.firestore.FieldValue.delete();
+            
+            if (Object.keys(updateObj).length > 0) {
+               batch.update(userRef, updateObj);
+            }
+          }
+        }
+
       } else {
         batch.delete(orgRef);
       }
@@ -2073,6 +2169,30 @@ async function startServer() {
         });
       });
       if (!scalesSnap.empty) await scalesBatch.commit();
+
+      const membersSnap = await db!.collection('organizations').doc(fromOrgId).collection('members').get();
+      const membersBatch = db!.batch();
+      membersSnap.docs.forEach(doc => {
+        const data = doc.data();
+        const mRef = db!.collection('organizations').doc(toOrgId).collection('members').doc(doc.id);
+        membersBatch.set(mRef, {
+           ...data,
+           organizationId: toOrgId,
+           updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        
+        // Update user canonical context if needed (safe update)
+        const userRef = db!.collection('users').doc(doc.id);
+        const legacyRef = db!.collection('organization_members').doc(`${doc.id}_${toOrgId}`);
+        membersBatch.set(legacyRef, {
+           uid: doc.id,
+           organizationId: toOrgId,
+           role: data.role,
+           status: 'active',
+           updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      });
+      if (!membersSnap.empty) await membersBatch.commit();
 
       const auditRef = db!.collection('audit_logs').doc();
       await auditRef.set({
