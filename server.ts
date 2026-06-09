@@ -1886,7 +1886,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     let primaryOrganizationId: string | null = null;
 
     let uidUsedAsOrganizationIdSuspected = false;
-    if (organizationsMap[uid]) {
+    if (organizationsMap[uid] && organizationsMap[uid].status !== 'archived' && !organizationsMap[uid].archived) {
       uidUsedAsOrganizationIdSuspected = true;
       inconsistencies.push('SUSPEITA: Organização com ID igual ao UID do usuário identificada.');
     }
@@ -2057,6 +2057,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       return res.json({
         ...context,
+        user: { ...userData, uid },
         organizations: enhancedOrgs
       });
     } catch (e: any) {
@@ -2631,6 +2632,19 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         batch.update(userRef, updates);
       }
 
+      // Archive old organization
+      batch.update(orgRef, {
+        status: 'archived',
+        archived: true,
+        archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        migratedTo: newOrgId
+      });
+
+      // Archive old subscription if it exists
+      if (subDoc.exists) {
+         batch.update(subRef, { status: 'canceled', archived: true });
+      }
+
       // Re-create the membership
       const newMemberRef = newOrgRef.collection('members').doc(ownerUid);
       batch.set(newMemberRef, {
@@ -2688,6 +2702,56 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       });
 
       await batch.commit();
+
+      // --- 2. MIGRATE DATA (SONGS, SCALES) ---
+      let batch2 = db!.batch();
+      let operationCount = 0;
+      
+      const commitBatchIfFull = async () => {
+          if (operationCount >= 400) {
+              await batch2.commit();
+              batch2 = db!.batch();
+              operationCount = 0;
+          }
+      };
+
+      const songsSnap = await db!.collection('songs').where('organizationId', '==', originalOrgId).get();
+      for (const doc of songsSnap.docs) {
+          batch2.update(doc.ref, { organizationId: newOrgId, migratedFromOrg: originalOrgId });
+          operationCount++;
+          await commitBatchIfFull();
+      }
+
+      const scalesSnap = await db!.collection('scales').where('organizationId', '==', originalOrgId).get();
+      for (const doc of scalesSnap.docs) {
+          batch2.update(doc.ref, { organizationId: newOrgId, migratedFromOrg: originalOrgId });
+          operationCount++;
+          await commitBatchIfFull();
+      }
+
+      // --- 3. MIGRATE SUBCOLLECTIONS (MEMBERS, INVITES) ---
+      const membersSnap = await orgRef.collection('members').get();
+      for (const doc of membersSnap.docs) {
+          if (doc.id === ownerUid) continue; // already created owner
+          const newMemRef = newOrgRef.collection('members').doc(doc.id);
+          batch2.set(newMemRef, doc.data());
+          batch2.delete(doc.ref);
+          operationCount += 2;
+          await commitBatchIfFull();
+      }
+
+      const invitesSnap = await orgRef.collection('invites').get();
+      for (const doc of invitesSnap.docs) {
+          const newInvRef = newOrgRef.collection('invites').doc(doc.id);
+          batch2.set(newInvRef, { ...doc.data(), organizationId: newOrgId });
+          batch2.delete(doc.ref);
+          operationCount += 2;
+          await commitBatchIfFull();
+      }
+
+      if (operationCount > 0) {
+          await batch2.commit();
+      }
 
       return res.json({ success: true, migratedTo: newOrgId });
     } catch (e: any) {

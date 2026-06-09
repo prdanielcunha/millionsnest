@@ -259,7 +259,7 @@ export function EcosystemAdmin() {
       if (!res.ok) throw new Error(jsonRes?.error || 'Falha na API');
       
       if (jsonRes.changed === false) {
-         customAlert('Sem Alterações', 'A operação não resultou em alterações no banco, os dados podem já estar corretos ou é necessário resolver outra inconsistência primeiro (ex: migrar Org ID).', 'info');
+         customAlert('Sem Alterações', 'A operação não resultou em alterações no banco, os dados podem já estar corretos ou é necessário resolver outra inconsistência primeiro (ex: migrar Org ID).', 'success');
       } else if (jsonRes.steps) {
          const changes = [];
          if (jsonRes.steps.identity?.changed) changes.push(`- Identidade completada`);
@@ -1648,6 +1648,9 @@ export function EcosystemAdmin() {
                                 {isLegacy && (
                                   <span className="bg-yellow-500/15 text-yellow-400 border border-yellow-500/25 px-1.5 py-0.5 rounded text-[10px] font-semibold">Legada</span>
                                 )}
+                                {org.status === 'archived' && (
+                                  <span className="bg-red-500/15 text-red-400 border border-red-500/25 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">Arquivada</span>
+                                )}
                               </div>
 
                               {/* Org Statistics/Details */}
@@ -1663,7 +1666,7 @@ export function EcosystemAdmin() {
 
                             {/* Actions per Org */}
                             <div className="flex items-center gap-2 flex-wrap">
-                              {org.id === diagnosticsData.user?.uid && (
+                              {org.id === diagnosticsData.user?.uid && org.status !== 'archived' && (
                                 <div className="w-full mb-1">
                                   <div className="bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-lg flex items-center justify-between">
                                     <span className="text-red-400 text-[10px] font-bold">O ID desta organização é igual ao UID do usuário. Isso indica criação legada ou incorreta.</span>
