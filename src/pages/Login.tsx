@@ -20,16 +20,7 @@ export function Login() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const org = params.get('org');
-    const role = params.get('role');
-    if (org) {
-      localStorage.setItem('invite_org_id', org);
-      if (role) {
-        localStorage.setItem('invite_role', role);
-      }
-    }
-    
+    // invite_org_id injection removed to prevent blindly trusting invalid organization ids bypassing Join.tsx validations
     if (authLoading) return;
     
     if (user && profile) {

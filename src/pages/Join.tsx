@@ -15,16 +15,17 @@ export function Join() {
   const navigate = useNavigate();
   const { user, profile, switchOrganization, loading: authLoading } = useAuth();
   
-  const [status, setStatus] = useState<'loading' | 'validating' | 'success' | 'error' | 'already_member'>('validating');
+  const [status, setStatus] = useState<'loading' | 'validating' | 'success' | 'error' | 'already_member' | 'requesting_access' | 'access_requested'>('validating');
   const [errorMessage, setErrorMessage] = useState('');
   const [inviteData, setInviteData] = useState<any>(null);
+  const [requestLoading, setRequestLoading] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
     
     // Se não estiver logado, manda pro login com retorno
     if (!user) {
-      sessionStorage.setItem('mn_invite_redirect', `/join/${orgId}?token=${token}`);
+      sessionStorage.setItem('mn_invite_redirect', `/join/${orgId}${token ? `?token=${token}` : ''}`);
       navigate(`/login?org=${orgId}&invite=true`);
       return;
     }
@@ -32,10 +33,53 @@ export function Join() {
     validateAndAcceptInvite();
   }, [user, authLoading, orgId, token]);
 
+  const handleRequestAccess = async () => {
+    if (!user || !orgId) return;
+    setRequestLoading(true);
+    try {
+       // Check if already requested
+       const reqRef = doc(db, `organizations/${orgId}/join_requests`, user.uid);
+       const reqSnap = await getDoc(reqRef);
+       if (reqSnap.exists() && reqSnap.data().status === 'pending') {
+          setStatus('access_requested');
+          return;
+       }
+
+       await setDoc(reqRef, {
+         uid: user.uid,
+         email: user.email,
+         displayName: profile?.displayName || user.email?.split('@')[0],
+         photoURL: profile?.photoURL || '',
+         status: 'pending',
+         requestedAt: serverTimestamp()
+       });
+       setStatus('access_requested');
+    } catch (e: any) {
+       console.error(e);
+       setStatus('error');
+       setErrorMessage('Erro ao solicitar acesso. Tente novamente mais tarde.');
+    } finally {
+       setRequestLoading(false);
+    }
+  };
+
   const validateAndAcceptInvite = async () => {
-    if (!orgId || !token) {
+    if (!orgId) {
       setStatus('error');
-      setErrorMessage('Link de convite inválido ou malformado.');
+      setErrorMessage('Link inválido. Organização não identificada.');
+      return;
+    }
+
+    if (!token) {
+      const orgRef = doc(db, 'organizations', orgId);
+      const orgSnap = await getDoc(orgRef);
+      if (!orgSnap.exists()) {
+        setStatus('error');
+        setErrorMessage('Organização não encontrada.');
+        return;
+      }
+      setInviteData({ organizationName: orgSnap.data().name });
+      setStatus('requesting_access');
       return;
     }
 
@@ -244,6 +288,51 @@ export function Join() {
               className="w-full py-3 bg-white/5 text-[#F5F7FA] text-sm font-semibold rounded-xl hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
             >
               Ir para o meu Painel <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        )}
+
+        {status === 'requesting_access' && (
+          <div className="flex flex-col items-center py-8">
+            <div className="w-16 h-16 bg-[#2B85EB]/10 text-[#2B85EB] rounded-full flex items-center justify-center mb-6">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h2 className="text-[#F5F7FA] font-bold text-xl mb-2">Solicitar Acesso</h2>
+            <p className="text-[#A0A7B5] text-sm mb-8">
+              Você está solicitando acesso à organização <strong className="text-white">{inviteData?.organizationName || 'do ecossistema'}</strong>.
+            </p>
+            
+            <button 
+              onClick={handleRequestAccess}
+              disabled={requestLoading}
+              className="w-full py-3 mb-4 bg-[#2B85EB] hover:bg-[#2B85EB]/90 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {requestLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Enviar Solicitação de Acesso'}
+            </button>
+            <Link 
+              to="/dashboard"
+              className="text-xs text-[#A0A7B5] hover:text-white transition-colors"
+            >
+              Cancelar e voltar
+            </Link>
+          </div>
+        )}
+
+        {status === 'access_requested' && (
+          <div className="flex flex-col items-center py-8">
+            <div className="w-16 h-16 bg-yellow-500/10 text-yellow-500 rounded-full flex items-center justify-center mb-6">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h2 className="text-[#F5F7FA] font-bold text-xl mb-2">Solicitação Enviada!</h2>
+            <p className="text-[#A0A7B5] text-sm mb-8">
+              Sua solicitação de acesso foi enviada para os administradores. Você receberá acesso assim que for aprovada.
+            </p>
+            
+            <Link 
+              to="/dashboard"
+              className="w-full py-3 bg-white/5 text-[#F5F7FA] text-sm font-semibold rounded-xl hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
+            >
+              Retornar ao Painel <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
         )}

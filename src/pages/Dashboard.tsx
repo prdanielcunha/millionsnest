@@ -168,6 +168,7 @@ export function Dashboard() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
+  const [joinRequests, setJoinRequests] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   const [prices, setPrices] = useState({ 
@@ -464,6 +465,17 @@ export function Dashboard() {
         console.error("Erro ao buscar convites", err);
       }
 
+      // Fetch pending join requests
+      try {
+        const joinReqRef = collection(db, `organizations/${orgId}/join_requests`);
+        const joinReqQ = query(joinReqRef, where('status', '==', 'pending'));
+        const joinReqSnap = await getDocs(joinReqQ);
+        const reqs = joinReqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setJoinRequests(reqs);
+      } catch (err) {
+        console.error("Erro ao buscar solicitacoes de acesso", err);
+      }
+
       // Fetch audit logs
       try {
         const auditRef = collection(db, `organizations/${orgId}/audit_logs`);
@@ -722,6 +734,91 @@ export function Dashboard() {
     } catch (e) {
       console.error(e);
       alert("Erro ao gerar convite.");
+    }
+  };
+
+  const handleAcceptJoinRequest = async (requestId: string) => {
+    try {
+      const orgId = activeContextOrgId;
+      const requestRef = doc(db, `organizations/${orgId}/join_requests`, requestId);
+      const reqSnap = await getDoc(requestRef);
+      if (!reqSnap.exists()) return;
+      
+      const reqData = reqSnap.data();
+      
+      // Enforce user limits client-side securely
+      const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
+      const maxUsersLimit = entitlements?.limits?.users ?? 10;
+      const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
+      
+      if (maxUsersLimit !== -1 && occupiedSlots >= maxUsersLimit) {
+        alert(`Limite de usuários atingido! Faça o upgrade do seu plano para liberar mais vagas.`);
+        return;
+      }
+
+      await updateDoc(requestRef, {
+        status: 'approved',
+        approvedAt: serverTimestamp(),
+        approvedBy: user?.uid
+      });
+
+      const memberRef = doc(db, `organizations/${orgId}/members`, requestId);
+      await setDoc(memberRef, {
+        uid: requestId,
+        email: reqData.email || '',
+        displayName: reqData.displayName || '',
+        photoURL: reqData.photoURL || '',
+        role: 'member',
+        status: 'active',
+        joinedAt: serverTimestamp(),
+        invitedBy: user?.uid || 'system'
+      }, { merge: true });
+
+      const legacyMemberRef = doc(db, "organization_members", `${requestId}_${orgId}`);
+      await setDoc(legacyMemberRef, {
+        role: 'member',
+        addedAt: serverTimestamp()
+      }, { merge: true });
+
+      // Modifies target user's organizations array
+      const userRef = doc(db, "users", requestId);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+         const userData = userSnap.data();
+         const orgs = userData.organizations || [];
+         if (!orgs.includes(orgId)) {
+            await updateDoc(userRef, {
+               organizations: [...orgs, orgId]
+            });
+         }
+      }
+
+      setJoinRequests(prev => prev.filter(r => r.id !== requestId));
+      
+      // refresh members
+      const newMemberSnap = await getDoc(memberRef);
+      if (newMemberSnap.exists()) {
+        setMembers(prev => [...prev, { id: newMemberSnap.id, ...newMemberSnap.data() }]);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao aceitar solicitação.");
+    }
+  };
+
+  const handleRejectJoinRequest = async (requestId: string) => {
+    try {
+      const orgId = activeContextOrgId;
+      const requestRef = doc(db, `organizations/${orgId}/join_requests`, requestId);
+      await updateDoc(requestRef, {
+        status: 'rejected',
+        rejectedAt: serverTimestamp(),
+        rejectedBy: user?.uid
+      });
+      setJoinRequests(prev => prev.filter(r => r.id !== requestId));
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao rejeitar solicitação.");
     }
   };
 
@@ -1394,8 +1491,12 @@ export function Dashboard() {
                 savingOrg={savingOrg}
                 handleCreateInvite={handleCreateInvite}
                 handleRevokeInvite={handleRevokeInvite}
+                handleAcceptJoinRequest={handleAcceptJoinRequest}
+                handleRejectJoinRequest={handleRejectJoinRequest}
                 onOpenInviteModal={() => setIsInviteModalOpen(true)}
                 pendingInvites={pendingInvites}
+                joinRequests={joinRequests}
+                setJoinRequests={setJoinRequests}
                 copiedLink={copiedLink}
                 auditLogs={auditLogs}
                 setActiveDashboardTab={setActiveTab}
@@ -1455,6 +1556,38 @@ export function Dashboard() {
                       <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Email</p>
                       <p className="text-base font-semibold text-[#F5F7FA]">{user.email}</p>
                     </div>
+                  </div>
+
+                  <div className="flex flex-col pb-6 border-b border-white/5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Trocar Organização Ativa</p>
+                    {profile?.organizations && profile.organizations.length > 0 ? (
+                      <div className="flex flex-col gap-2">
+                        {profile.organizations.map((orgIdStr: string) => (
+                           <button 
+                             key={orgIdStr}
+                             disabled={profile.organizationId === orgIdStr}
+                             onClick={() => {
+                               switchOrganization(orgIdStr).then(() => {
+                                  window.location.reload();
+                               });
+                             }}
+                             className={`flex items-center justify-between p-4 rounded-xl border transition-all text-left ${profile.organizationId === orgIdStr ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 cursor-default' : 'bg-[#050505] border-white/5 hover:border-white/10 cursor-pointer'}`}
+                           >
+                             <div>
+                               <p className="text-sm font-semibold text-[#F5F7FA]">
+                                 ID: {orgIdStr}
+                                 {profile.organizationId === orgIdStr && <span className="ml-2 text-[10px] bg-[#2B85EB]/20 text-[#2B85EB] uppercase tracking-widest px-2 py-0.5 rounded font-bold">Ativa</span>}
+                               </p>
+                             </div>
+                             {profile.organizationId !== orgIdStr && (
+                                <span className="text-xs text-[#A0A7B5] group-hover:text-white transition-colors flex items-center gap-1 font-medium bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">Acessar</span>
+                             )}
+                           </button>
+                        ))}
+                      </div>
+                    ) : (
+                       <p className="text-sm text-[#A0A7B5] bg-[#050505] p-4 rounded-xl border border-white/5">Você não possui organizações vinculadas.</p>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between pb-6 border-b border-white/5">

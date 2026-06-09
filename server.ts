@@ -1999,8 +1999,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       primaryOrganizationId,
       currentOrganizationId,
       currentOrganization,
-      organizations: finalOrganizations,
-      ownedOrganizations,
+      organizations: activeOrgsList,
+      ownedOrganizations: ownedOrganizations.filter((o: any) => o.status !== 'archived' && o.archived !== true),
       memberships: Object.values(membershipsMap),
       roleInCurrentOrganization,
       hasOrganization,
@@ -2055,10 +2055,27 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         };
       }));
 
+      // Fetch Audit Logs for this user
+      const auditLogsSnap = await db!.collection('audit_logs').where('targetUserUid', '==', uid).orderBy('timestamp', 'desc').limit(20).get();
+      const auditLogs = auditLogsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Fetch Pending Invites via collectionGroup
+      let pendingInvites: any[] = [];
+      if (userData.email) {
+        const invitesSnap = await db!.collectionGroup('invites').where('email', '==', userData.email).where('status', '==', 'pending').get();
+        pendingInvites = invitesSnap.docs.map(doc => {
+           // We can get organizationId from document reference path: organizations/{orgId}/invites/{inviteId}
+           const orgId = doc.ref.parent.parent?.id;
+           return { id: doc.id, organizationId: orgId, ...doc.data() };
+        });
+      }
+
       return res.json({
         ...context,
         user: { ...userData, uid },
-        organizations: enhancedOrgs
+        organizations: enhancedOrgs,
+        auditLogs,
+        pendingInvites
       });
     } catch (e: any) {
       console.error('[API User Diagnostics]', e);
@@ -2438,6 +2455,92 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const afterDoc = await memberRef.get();
 
       return res.json({ success: true, changed: !beforeExists || beforeDoc.data()?.displayName !== afterDoc.data()?.displayName });
+    } catch(e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/users/:uid/change-active-org', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
+      const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+
+      const { uid } = req.params;
+      const { organizationId } = req.body;
+      if (!organizationId) return res.status(400).json({ error: 'organizationId is required' });
+
+      const orgRef = db!.collection('organizations').doc(organizationId);
+      const orgDoc = await orgRef.get();
+      if (!orgDoc.exists) {
+         return res.status(404).json({ error: 'Organization does not exist.' });
+      }
+
+      const userRef = db!.collection('users').doc(uid);
+      const userDoc = await userRef.get();
+      if (!userDoc.exists) return res.status(404).json({ error: 'User does not exist.' });
+
+      const oldContext = userDoc.data()!;
+      
+      const updates = {
+         activeOrganizationId: organizationId,
+         primaryOrganizationId: typeof oldContext.primaryOrganizationId === 'string' ? oldContext.primaryOrganizationId : organizationId,
+         organizationId: organizationId, // legacy fallback safety
+         updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      await userRef.update(updates);
+
+      // Audit Log
+      await db!.collection('audit_logs').add({
+         action: 'system.tenant.change_active',
+         adminUid: decoded.uid,
+         targetUserUid: uid,
+         oldOrganizationId: oldContext.activeOrganizationId || null,
+         newOrganizationId: organizationId,
+         timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true, message: 'Current Active Organization successfully changed.' });
+    } catch(e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/users/:uid/remove-membership', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
+      const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+
+      const { uid } = req.params;
+      const { organizationId } = req.body;
+      if (!organizationId) return res.status(400).json({ error: 'organizationId is required' });
+
+      const batch = db!.batch();
+
+      const memberRef = db!.collection('organizations').doc(organizationId).collection('members').doc(uid);
+      batch.delete(memberRef);
+
+      const legacyMemberRef = db!.collection('organization_members').doc(`${uid}_${organizationId}`);
+      batch.delete(legacyMemberRef);
+
+      await batch.commit();
+
+      // Audit Log
+      await db!.collection('audit_logs').add({
+         action: 'system.tenant.remove_membership',
+         adminUid: decoded.uid,
+         targetUserUid: uid,
+         organizationId: organizationId,
+         timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true, message: 'Membership removed successfully.' });
     } catch(e: any) {
       return res.status(500).json({ error: e.message });
     }

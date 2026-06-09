@@ -181,14 +181,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               organizationId: updatedProfile.activeOrganizationId || updatedProfile.organizationId
             });
           } else {
-            // Criar novo usuário
-            const inviteOrgId = localStorage.getItem('invite_org_id');
-            const inviteRole = localStorage.getItem('invite_role') || 'member';
-            
-            let targetOrgId = inviteOrgId;
-            if (!targetOrgId) {
-               targetOrgId = doc(collection(db, 'organizations')).id;
-            }
+            // Criar novo usuário e usa um ID único para seu workspace pessoal
+            const targetOrgId = doc(collection(db, 'organizations')).id;
 
             const newProfile: Partial<UserProfile> = {
               uid: currentUser.uid,
@@ -210,61 +204,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             await setDoc(userRef, sanitizeForFirestore(newProfile));
 
-            // Se é o dono dessa nova org (não foi convidado), cria a organization default dele
-            if (!inviteOrgId) {
-               const orgRef = doc(db, 'organizations', targetOrgId as string);
-               await setDoc(orgRef, sanitizeForFirestore({
-                 id: targetOrgId,
-                 name: `Organização de ${currentUser.displayName || currentUser.email?.split('@')[0]}`,
-                 slug: targetOrgId, // default slug
-                 ownerUid: currentUser.uid, // standardized field
-                 enabledApps: ['musicscale'], // default apps access
-                 subscriptionPlan: 'monthly',
-                 subscriptionStatus: 'none',
-                 status: 'active',
-                 createdAt: serverTimestamp()
-               }), { merge: true });
+            // Cria a organization default dele
+            const orgRef = doc(db, 'organizations', targetOrgId as string);
+            await setDoc(orgRef, sanitizeForFirestore({
+              id: targetOrgId,
+              name: `Organização de ${currentUser.displayName || currentUser.email?.split('@')[0]}`,
+              slug: targetOrgId, // default slug
+              ownerUid: currentUser.uid, // standardized field
+              enabledApps: ['musicscale'], // default apps access
+              subscriptionPlan: 'monthly',
+              subscriptionStatus: 'none',
+              status: 'active',
+              createdAt: serverTimestamp()
+            }), { merge: true });
 
-               const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${targetOrgId}`);
-               const newMemberRef = doc(db, `organizations/${targetOrgId}/members`, currentUser.uid);
-               const memberData = sanitizeForFirestore({
-                 uid: currentUser.uid,
-                 organizationId: targetOrgId,
-                 role: 'owner',
-                 permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-                 permissions: getDefaultPermissions('owner'),
-                 createdAt: serverTimestamp()
-               });
-               await setDoc(orgMemberRef, memberData, { merge: true });
-               await setDoc(newMemberRef, memberData, { merge: true });
-            } else {
-               // Invited new user logic (member)
-               const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${targetOrgId}`);
-               const newMemberRef = doc(db, `organizations/${targetOrgId}/members`, currentUser.uid);
-               const memberData = sanitizeForFirestore({
-                 uid: currentUser.uid,
-                 organizationId: targetOrgId,
-                 role: inviteRole,
-                 permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-                 permissions: getDefaultPermissions(inviteRole),
-                 createdAt: serverTimestamp()
-               });
-               await setDoc(orgMemberRef, memberData, { merge: true });
-               await setDoc(newMemberRef, memberData, { merge: true });
-            }
-
-            if (inviteOrgId) {
-               localStorage.removeItem('invite_org_id');
-               localStorage.removeItem('invite_role');
-            }
+            const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${targetOrgId}`);
+            const newMemberRef = doc(db, `organizations/${targetOrgId}/members`, currentUser.uid);
+            const memberData = sanitizeForFirestore({
+              uid: currentUser.uid,
+              organizationId: targetOrgId,
+              role: 'owner',
+              permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+              permissions: getDefaultPermissions('owner'),
+              createdAt: serverTimestamp()
+            });
+            await setDoc(orgMemberRef, memberData, { merge: true });
+            await setDoc(newMemberRef, memberData, { merge: true });
 
             setProfile(newProfile as UserProfile);
             localStorage.setItem('mn_user_profile', JSON.stringify(newProfile));
             
+            // Cleanup any residual local storage invites
+            localStorage.removeItem('invite_org_id');
+            localStorage.removeItem('invite_role');
+
             analytics.track('signup', {
               userId: currentUser.uid,
-              organizationId: targetOrgId,
-              metadata: { invite: !!inviteOrgId }
+              organizationId: targetOrgId
             });
           }
         } catch (error) {

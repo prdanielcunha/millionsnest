@@ -28,7 +28,10 @@ export function OrganizationManager({
   savingOrg,
   handleCreateInvite,
   handleRevokeInvite,
+  handleAcceptJoinRequest,
+  handleRejectJoinRequest,
   pendingInvites = [],
+  joinRequests = [],
   copiedLink,
   auditLogs,
   setActiveDashboardTab,
@@ -160,6 +163,7 @@ export function OrganizationManager({
         {visibleTabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
+          const hasNotification = tab.id === 'members' && joinRequests && joinRequests.length > 0;
           return (
             <button
               key={tab.id}
@@ -170,9 +174,12 @@ export function OrganizationManager({
                 }
                 setActiveTab(tab.id as OrgTab);
               }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm border ${isActive ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20 shadow-sm' : 'bg-transparent text-[#A0A7B5] border-transparent hover:bg-white/5 hover:text-[#F5F7FA]'}`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm border relative ${isActive ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20 shadow-sm' : 'bg-transparent text-[#A0A7B5] border-transparent hover:bg-white/5 hover:text-[#F5F7FA]'}`}
             >
-              <Icon className="w-4 h-4" />
+              <div className="relative">
+                 <Icon className="w-4 h-4" />
+                 {hasNotification && <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-[#050505]"></span>}
+              </div>
               {tab.label}
             </button>
           )
@@ -385,6 +392,42 @@ export function OrganizationManager({
                        </div>
                        );
                      })}
+                   </div>
+                 </div>
+               )}
+
+               {joinRequests && joinRequests.length > 0 && (
+                 <div className="mt-8">
+                   <h4 className="text-sm font-semibold text-[#A0A7B5] mb-4 uppercase tracking-wider relative inline-block">
+                      Solicitações de Acesso Pendentes
+                      <span className="absolute -top-1 -right-3 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                   </h4>
+                   <p className="text-xs text-[#A0A7B5] mb-4">Usuários aguardando aprovação para ingressar na organização como membro padrão.</p>
+                   <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
+                     {joinRequests.map((req: any, i: number) => (
+                       <div key={req.id} className={`flex items-center justify-between p-4 ${i !== joinRequests.length - 1 ? 'border-b border-white/5' : ''}`}>
+                         <div className="flex items-center gap-3">
+                           <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
+                             {req.photoURL ? <img src={req.photoURL} alt="" className="w-full h-full rounded-xl object-cover" /> : req.displayName?.charAt(0) || req.email?.charAt(0) || '?'}
+                           </div>
+                           <div className="flex flex-col">
+                             <span className="text-sm font-semibold text-[#F5F7FA]">{req.displayName || 'Usuário Indefinido'}</span>
+                             <span className="text-xs text-[#A0A7B5]">{req.email || req.id}</span>
+                           </div>
+                         </div>
+                         
+                         {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
+                           <div className="flex gap-2">
+                              <button onClick={() => handleRejectJoinRequest && handleRejectJoinRequest(req.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 rounded-lg">
+                                Recusar
+                              </button>
+                              <button onClick={() => handleAcceptJoinRequest && handleAcceptJoinRequest(req.id)} className="text-xs font-medium text-[#10B981] hover:text-emerald-300 transition-colors px-3 py-1.5 bg-[#10B981]/10 hover:bg-[#10B981]/20 rounded-lg">
+                                Aprovar
+                              </button>
+                           </div>
+                         )}
+                       </div>
+                     ))}
                    </div>
                  </div>
                )}

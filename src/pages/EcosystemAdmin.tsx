@@ -306,6 +306,18 @@ export function EcosystemAdmin() {
     executeRepairCall(`/api/admin/users/${diagnosticsModalUser.uid}/auto-repair`, { organizationId: orgId }, 'Reparo automático completo executado!');
   };
 
+  const handleChangeActiveOrg = (orgId: string) => {
+    if (!diagnosticsModalUser || !orgId) return;
+    executeRepairCall(`/api/admin/users/${diagnosticsModalUser.uid}/change-active-org`, { organizationId: orgId }, 'Organização ativa alterada com sucesso!');
+  };
+
+  const handleRemoveMembership = (orgId: string) => {
+    if (!diagnosticsModalUser || !orgId) return;
+    customConfirm(`Tem certeza que deseja remover este usuário dessa organização permanentemente?`, () => {
+      executeRepairCall(`/api/admin/users/${diagnosticsModalUser.uid}/remove-membership`, { organizationId: orgId }, 'Vínculo removido com sucesso!');
+    });
+  };
+
   const handleArchiveOrDeleteOrg = async (orgId: string, action: 'archive' | 'delete') => {
     if (!diagnosticsModalUser) return;
     try {
@@ -1681,6 +1693,16 @@ export function EcosystemAdmin() {
                                 </div>
                               )}
                               
+                              {!isActive && org.status !== 'archived' && (
+                                <button
+                                  onClick={() => handleChangeActiveOrg(org.id)}
+                                  disabled={isExecutingRepair}
+                                  className="px-2.5 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 hover:border-blue-500/40 rounded-lg text-[10px] font-medium transition-colors"
+                                >
+                                  Tornar Ativa
+                                </button>
+                              )}
+
                               {!isPrimary && (
                                 <button
                                   onClick={() => handleSetPrimaryOrg(org.id)}
@@ -1688,6 +1710,17 @@ export function EcosystemAdmin() {
                                   className="px-2.5 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 hover:border-green-500/40 rounded-lg text-[10px] font-medium transition-colors"
                                 >
                                   Tornar Principal & Alinhar
+                                </button>
+                              )}
+
+                              {!isOwner && org.status !== 'archived' && (
+                                <button
+                                  onClick={() => handleRemoveMembership(org.id)}
+                                  disabled={isExecutingRepair || isPrimary}
+                                  className="px-2.5 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 hover:border-orange-500/45 rounded-lg text-[10px] font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                  title={isPrimary ? 'Não é possível remover da organização principal' : ''}
+                                >
+                                  Remover Vínculo
                                 </button>
                               )}
                               
@@ -1788,6 +1821,51 @@ export function EcosystemAdmin() {
                       >
                         {isExecutingRepair ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Migrar Ativos Agora'}
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Convites Pendentes */}
+                {diagnosticsData.pendingInvites && diagnosticsData.pendingInvites.length > 0 && (
+                  <div className="border border-orange-500/20 bg-orange-500/[0.02] rounded-xl p-4 space-y-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-orange-400">Convites Pendentes</h4>
+                      <p className="text-[11px] text-[#A0A7B5] mt-1">Convites enviados para o e-mail deste usuário que ainda não foram aceitos.</p>
+                    </div>
+                    <div className="space-y-2">
+                       {diagnosticsData.pendingInvites.map((invite: any) => (
+                          <div key={invite.id} className="p-3 bg-white/5 border border-white/5 rounded-lg flex items-center justify-between">
+                            <div>
+                               <p className="text-sm font-medium text-white">Organização: {invite.organizationId}</p>
+                               <p className="text-xs text-[#A0A7B5]">Role: <span className="text-white">{invite.role}</span> | Enviado: {invite.createdAt ? new Date(invite.createdAt._seconds ? invite.createdAt._seconds * 1000 : invite.createdAt).toLocaleString() : 'Sem data'}</p>
+                            </div>
+                            <span className="px-2 py-1 bg-orange-500/10 text-orange-400 text-[10px] rounded border border-orange-500/20 uppercase font-semibold">Pendente</span>
+                          </div>
+                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Audit Logs */}
+                {diagnosticsData.auditLogs && diagnosticsData.auditLogs.length > 0 && (
+                  <div className="border border-blue-500/20 bg-blue-500/[0.02] rounded-xl p-4 space-y-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-400">Histórico de Movimentações (Audit Logs)</h4>
+                      <p className="text-[11px] text-[#A0A7B5] mt-1">Últimas ações administrativas realizadas no vínculo deste usuário.</p>
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                       {diagnosticsData.auditLogs.map((log: any) => (
+                           <div key={log.id} className="p-2 bg-white/5 border border-white/5 rounded-lg text-xs space-y-1">
+                              <p className="flex justify-between items-center text-white">
+                                 <strong className="text-blue-300">{log.action}</strong>
+                                 <span className="text-[10px] text-[#A0A7B5]">{log.timestamp ? new Date(log.timestamp._seconds ? log.timestamp._seconds * 1000 : log.timestamp).toLocaleString() : 'Recente'}</span>
+                              </p>
+                              {log.newOrganizationId && <p className="text-[#A0A7B5]">Nova Org: <span className="text-white">{log.newOrganizationId}</span></p>}
+                              {log.oldOrganizationId && <p className="text-[#A0A7B5]">Org Antiga: <span className="text-white">{log.oldOrganizationId}</span></p>}
+                              {log.organizationId && <p className="text-[#A0A7B5]">Org: <span className="text-white">{log.organizationId}</span></p>}
+                              {log.adminUid && <p className="text-[#A0A7B5]">Admin: {log.adminUid}</p>}
+                           </div>
+                       ))}
                     </div>
                   </div>
                 )}
