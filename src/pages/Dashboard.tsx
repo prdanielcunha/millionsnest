@@ -769,6 +769,9 @@ export function Dashboard() {
         displayName: reqData.displayName || '',
         photoURL: reqData.photoURL || '',
         role: 'member',
+        organizationRole: 'member',
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+        permissions: getDefaultPermissions('member'),
         status: 'active',
         joinedAt: serverTimestamp(),
         invitedBy: user?.uid || 'system'
@@ -777,6 +780,9 @@ export function Dashboard() {
       const legacyMemberRef = doc(db, "organization_members", `${requestId}_${orgId}`);
       await setDoc(legacyMemberRef, {
         role: 'member',
+        organizationRole: 'member',
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+        permissions: getDefaultPermissions('member'),
         addedAt: serverTimestamp()
       }, { merge: true });
 

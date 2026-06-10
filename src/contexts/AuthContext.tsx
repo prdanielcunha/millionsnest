@@ -152,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   uid: currentUser.uid,
                   organizationId: inviteOrgId,
                   role: inviteRole,
+                  organizationRole: inviteRole,
                   permissionsVersion: CURRENT_PERMISSIONS_VERSION,
                   permissions: getDefaultPermissions(inviteRole),
                   createdAt: serverTimestamp()
@@ -224,6 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               uid: currentUser.uid,
               organizationId: targetOrgId,
               role: 'owner',
+              organizationRole: 'owner',
               permissionsVersion: CURRENT_PERMISSIONS_VERSION,
               permissions: getDefaultPermissions('owner'),
               createdAt: serverTimestamp()

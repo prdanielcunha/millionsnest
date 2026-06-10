@@ -6,6 +6,7 @@ import { db } from '../lib/firebase.js';
 import { motion } from 'framer-motion';
 import { Loader2, CheckCircle2, XCircle, ArrowRight } from 'lucide-react';
 import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
+import { CURRENT_PERMISSIONS_VERSION, getDefaultPermissions } from '../lib/rbac.js';
 import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from '../lib/musicScalePlans.js';
 
 export function Join() {
@@ -170,6 +171,9 @@ export function Join() {
         displayName: profile?.displayName || user!.email?.split('@')[0] || '',
         photoURL: profile?.photoURL || '',
         role: assignedRole,
+        organizationRole: assignedRole,
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+        permissions: getDefaultPermissions(assignedRole),
         status: 'active',
         joinedAt: serverTimestamp(),
         invitedBy: invite.createdBy || 'system'
@@ -179,6 +183,9 @@ export function Join() {
       const legacyMemberRef = doc(db, "organization_members", `${user!.uid}_${orgId}`);
       await setDoc(legacyMemberRef, {
         role: assignedRole,
+        organizationRole: assignedRole,
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+        permissions: getDefaultPermissions(assignedRole),
         addedAt: serverTimestamp()
       }, { merge: true });
 

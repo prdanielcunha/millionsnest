@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { collection, query, getDocs, doc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
-import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp, Pencil, Database } from "lucide-react";
+import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp, Pencil, Database, Layers } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EcosystemShell } from "../components/EcosystemShell.js";
 import { canChangeSystemRole } from "../lib/roleResolver.js";
@@ -139,6 +139,7 @@ export function EcosystemAdmin() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<'users' | 'organizations' | 'analytics'>('users');
   const [diagnosticOrg, setDiagnosticOrg] = useState<any>(null);
+  const [isMigratingRoles, setIsMigratingRoles] = useState(false);
   const [ownerSearchTerm, setOwnerSearchTerm] = useState("");
   const [selectedOwner, setSelectedOwner] = useState<any>(null);
   const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
@@ -237,6 +238,30 @@ export function EcosystemAdmin() {
         customAlert('Erro', 'Falha ao migrar organização: ' + e.message, 'error');
       } finally {
         setIsExecutingRepair(false);
+      }
+    });
+  };
+
+  const handleMigrateRoles = async () => {
+    customConfirm(`Atenção: Esta ação irá varrer todas as organizações e re-sincronizar a estrutura hierárquica (organizationRole, musicscaleRole e ministryFunction) para todos os membros do ecossistema. Isso é seguro e deve ser executado para completar a atualização da arquitetura. Deseja prosseguir?`, async () => {
+      setIsMigratingRoles(true);
+      try {
+        const token = await user?.getIdToken();
+        const res = await fetch(`/api/admin/roles-migration`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const jsonRes = await res.json();
+        
+        if (!res.ok) throw new Error(jsonRes.error || 'Falha na API');
+        
+        customAlert('Sucesso', `Arquitetura de Cargos Migrada com sucesso! ${jsonRes.migratedCount} documentos foram atualizados de forma canônica.`, 'success');
+      } catch (e: any) {
+        customAlert('Erro', 'Falha ao migrar cargos: ' + e.message, 'error');
+      } finally {
+        setIsMigratingRoles(false);
       }
     });
   };
@@ -605,6 +630,14 @@ export function EcosystemAdmin() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+               onClick={handleMigrateRoles}
+               disabled={isMigratingRoles}
+               className="px-4 py-2 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 disabled:opacity-50 transition-colors rounded-lg text-xs font-semibold border border-purple-500/20 flex items-center gap-2 mr-2"
+            >
+               <Layers className="w-4 h-4" />
+               Migrar Arquitetura de Permissões
+            </button>
             <button
                onClick={handleBackfillUsers}
                disabled={isExecutingRepair}

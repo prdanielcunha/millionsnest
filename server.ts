@@ -1198,22 +1198,17 @@ async function startServer() {
                           
       await db.collection('organizations').doc(orgId).collection('members').doc(memberId).set({
         role: newRole,
+        organizationRole: newRole,
         permissions: defaultPerms,
-        permissionsVersion: 2
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION || 2
       }, { merge: true });
 
       // Update Legacy collection compat
       await db.collection('organization_members').doc(`${memberId}_${orgId}`).set({
         role: newRole,
+        organizationRole: newRole,
         permissions: defaultPerms,
-        permissionsVersion: 2
-      }, { merge: true });
-
-      // Update User collection compat
-      await db.collection('users').doc(memberId).set({
-        role: newRole,
-        permissions: defaultPerms,
-        permissionsVersion: 2
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION || 2
       }, { merge: true });
 
       // Audit Log
@@ -2505,6 +2500,100 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       return res.json({ success: true, message: 'Current Active Organization successfully changed.' });
     } catch(e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Global Migration Endpoint for Roles and Permissions
+  app.post('/api/admin/roles-migration', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
+      const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+
+      const batchLimit = 300;
+      let migratedCount = 0;
+      
+      const orgsSnap = await db!.collection('organizations').get();
+      const orgIds = orgsSnap.docs.map(d => d.id);
+
+      for (const orgId of orgIds) {
+         let currentBatch = db!.batch();
+         let operationsCount = 0;
+
+         const membersSnap = await db!.collection('organizations').doc(orgId).collection('members').get();
+         
+         for (const docSnap of membersSnap.docs) {
+             const data = docSnap.data();
+             let needsUpdate = false;
+             const updates: any = {};
+
+             // Identifica estrutura de papel antiga no campo role (as vezes preenchido com ministry_function)
+             const validOrgRoles = ['owner', 'admin', 'leader', 'secretary', 'member', 'guest', 'visitor'];
+             const oldRoleStr = (data.role || 'member').toLowerCase();
+             
+             let resolvedOrgRole = validOrgRoles.includes(oldRoleStr) ? oldRoleStr : 'member';
+             
+             // Se o role antigo não era uma das orgRoles validas, era ministry function (ex: 'guitar')
+             if (!validOrgRoles.includes(oldRoleStr)) {
+                 updates.ministryFunction = data.ministryFunction || oldRoleStr;
+             }
+
+             if (data.organizationRole !== resolvedOrgRole) {
+                 updates.organizationRole = resolvedOrgRole;
+                 needsUpdate = true;
+             }
+
+             if (data.role !== resolvedOrgRole) {
+                 updates.role = resolvedOrgRole;
+                 needsUpdate = true;
+             }
+
+             // Initialize MusicScale specific role
+             if (!data.musicscaleRole) {
+                 let msRole = 'member';
+                 if (['owner', 'admin'].includes(resolvedOrgRole)) msRole = 'admin';
+                 else if (resolvedOrgRole === 'leader') msRole = 'leader';
+                 else if (resolvedOrgRole === 'guest' || resolvedOrgRole === 'visitor') msRole = 'viewer';
+                 
+                 updates.musicscaleRole = msRole;
+                 needsUpdate = true;
+             }
+
+             if (needsUpdate) {
+                 currentBatch.update(docSnap.ref, updates);
+                 
+                 const legacyRef = db!.collection('organization_members').doc(`${docSnap.id}_${orgId}`);
+                 currentBatch.set(legacyRef, updates, { merge: true });
+
+                 operationsCount += 2;
+                 migratedCount++;
+
+                 if (operationsCount >= batchLimit) {
+                     await currentBatch.commit();
+                     currentBatch = db!.batch();
+                     operationsCount = 0;
+                 }
+             }
+         }
+
+         if (operationsCount > 0) {
+             await currentBatch.commit();
+         }
+      }
+
+      await db!.collection('audit_logs').add({
+         action: 'system.roles.migration',
+         adminUid: decoded.uid,
+         timestamp: admin.firestore.FieldValue.serverTimestamp(),
+         details: `Migrated ${migratedCount} members to new role structure.`
+      });
+
+      return res.json({ success: true, migratedCount });
+    } catch (e: any) {
+      console.error('Migration failed:', e);
       return res.status(500).json({ error: e.message });
     }
   });
@@ -4445,7 +4534,6 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }, { merge: true });
 
       batch.set(db.collection('users').doc(userId), {
-        organizationRole: 'owner',
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
@@ -4705,7 +4793,6 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       batch.set(db.collection('users').doc(uid), {
           organizationId: orgId,
-          organizationRole: 'owner',
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
@@ -5173,7 +5260,6 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }, { merge: true });
 
         batch.set(admin.firestore().collection('users').doc(uid), {
-          organizationRole: 'owner',
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
       }
