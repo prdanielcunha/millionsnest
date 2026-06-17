@@ -136,6 +136,64 @@ export function Dashboard() {
     }
   }, [user]);
 
+  const [nestFinanceLaunching, setNestFinanceLaunching] = useState(false);
+
+  const handleLaunchNestFinance = async () => {
+    if (!user || !activeContextOrgId || nestFinanceLaunching) return;
+
+    setNestFinanceLaunching(true);
+    const toastId = feedback.loading("Preparando acesso...");
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/ecosystem/nestfinance/handoff/issue', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Cache-Control': 'no-store'
+        },
+        body: JSON.stringify({ organizationId: activeContextOrgId })
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) throw new Error("Sua sessão expirou. Entre novamente.");
+        if (res.status === 403) throw new Error("Você não possui acesso ao NestFinance.");
+        if (res.status === 503) throw new Error("O NestFinance está temporariamente indisponível.");
+        throw new Error("Não foi possível abrir o NestFinance.");
+      }
+
+      const data = await res.json();
+      if (!data.redirectUrl || typeof data.redirectUrl !== 'string') {
+        throw new Error("Não foi possível abrir o NestFinance.");
+      }
+
+      const urlObj = new URL(data.redirectUrl);
+      const isHttps = urlObj.protocol === 'https:';
+      const isLocalhost = urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1';
+      
+      if (!isHttps && !(import.meta.env.DEV && isLocalhost)) {
+        throw new Error("Não foi possível abrir o NestFinance.");
+      }
+      
+      if (!urlObj.pathname.endsWith('/auth/handoff')) {
+         throw new Error("Não foi possível abrir o NestFinance.");
+      }
+
+      const codeParam = urlObj.searchParams.get('code');
+      if (!codeParam || Array.from(urlObj.searchParams.keys()).length !== 1 || !/^[A-Za-z0-9_-]{43}$/.test(codeParam)) {
+          throw new Error("Não foi possível abrir o NestFinance.");
+      }
+
+      window.location.assign(data.redirectUrl);
+    } catch (e: any) {
+      feedback.error(e.message || "Não foi possível abrir o NestFinance.");
+    } finally {
+      setNestFinanceLaunching(false);
+      feedback.dismiss(toastId);
+    }
+  };
+
   const handleRepairAccount = async () => {
     if (!user) return;
     setRepairing(true);
@@ -1341,12 +1399,22 @@ export function Dashboard() {
                             
                             <div className="relative z-10 flex items-center gap-3">
                               {app.id === 'nestfinance' ? (
-                                <button
-                                  disabled
-                                  className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed border border-white/5"
-                                >
-                                  Em preparação
-                                </button>
+                                import.meta.env.VITE_NESTFINANCE_LAUNCH_ENABLED === 'true' ? (
+                                  <button
+                                    onClick={handleLaunchNestFinance}
+                                    disabled={nestFinanceLaunching}
+                                    className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-wait"
+                                  >
+                                    {nestFinanceLaunching ? 'Preparando acesso...' : 'Abrir NestFinance'} <ArrowRight className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    disabled
+                                    className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed border border-white/5"
+                                  >
+                                    Em preparação
+                                  </button>
+                                )
                               ) : isInstalled ? (
                                 <button
                                   onClick={() => handleLaunchEcosystemApp(app, currentUserPerms)}
