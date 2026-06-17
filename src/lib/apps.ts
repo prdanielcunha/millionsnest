@@ -3,10 +3,10 @@ export interface EcosystemApp {
   name: string;
   description: string;
   icon: string; // lucide class or identifier
-  url: string;
+  url?: string;
   internalRoute?: string;
   category: 'core' | 'community' | 'beta';
-  requiredPlan: 'free' | 'starter' | 'pro' | 'enterprise';
+  requiredPlan?: 'free' | 'starter' | 'pro' | 'enterprise';
 }
 
 export const ECOSYSTEM_APPS: EcosystemApp[] = [
@@ -49,6 +49,13 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     internalRoute: undefined,
     category: 'beta',
     requiredPlan: 'pro',
+  },
+  {
+    id: 'nestfinance',
+    name: 'NestFinance',
+    description: 'Gestão financeira, conciliação, relatórios e auditoria.',
+    icon: 'Wallet',
+    category: 'beta',
   }
 ];
 

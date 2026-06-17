@@ -131,13 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const inviteOrgId = localStorage.getItem('invite_org_id');
             const inviteRole = localStorage.getItem('invite_role') || 'member';
 
-            // Auto-assign CEO role to specific email
-            if (currentUser.email === 'pastordanielpcunha@gmail.com') {
-              if (userData.systemRole !== 'ceo') {
-                mergeData.systemRole = 'ceo';
-                userData.systemRole = 'ceo';
-              }
-            }
+            // Automatic promotion by email removed per security audit
 
             if (inviteOrgId) {
               const currentOrgs = userData.organizations || [];
@@ -199,8 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               activeOrganizationId: targetOrgId,
               organizations: [targetOrgId],
               subscriptionStatus: 'none',
-              systemRole: currentUser.email === 'pastordanielpcunha@gmail.com' ? 'ceo' : 
-                          currentUser.email === 'danielcunhapastor@gmail.com' ? 'admin' : undefined
+              systemRole: undefined
             };
             
             await setDoc(userRef, sanitizeForFirestore(newProfile));

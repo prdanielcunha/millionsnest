@@ -5,7 +5,7 @@ import { Navigate, useNavigate, useParams, useLocation } from "react-router-dom"
 import { 
   Music, ArrowRight, Settings, ExternalLink, ShieldCheck, 
   CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight, Building2,
-  Star, Zap, Headphones, Video, ListMusic, Check, Users, Link, Mail, Plus, X, Loader2, Copy
+  Star, Zap, Headphones, Video, ListMusic, Check, Users, Link, Mail, Plus, X, Loader2, Copy, Wallet
 } from "lucide-react";
 import { Navbar } from "../components/Navbar.js";
 import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc, limit, onSnapshot } from "firebase/firestore";
@@ -437,16 +437,6 @@ export function Dashboard() {
               organizationRole: 'owner',
               addedAt: new Date()
             }, { merge: true }).catch(console.error);
-        }
-        
-        // Also ensure pastordanielpcunha@gmail.com is owner if they are looking at their own org
-        if (user.email === 'pastordanielpcunha@gmail.com' && currentOrgData?.id === (profile?.organizationId || user.uid)) {
-            let danielMem = currentMembers.find(m => m.id === user.uid);
-            if (danielMem && danielMem.role !== 'owner') {
-              danielMem.role = 'owner';
-              setDoc(doc(db, `organizations/${orgId}/members`, user.uid), { role: 'owner', organizationRole: 'owner' }, { merge: true }).catch(console.error);
-              setDoc(doc(db, 'organizations', orgId), { ownerUid: user.uid }, { merge: true }).catch(console.error);
-            }
         }
         
         setMembers(currentMembers);
@@ -1322,13 +1312,18 @@ export function Dashboard() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {ECOSYSTEM_APPS.map(app => {
+                      {ECOSYSTEM_APPS.filter(app => {
+                        // Restrict NestFinance preview to global admins
+                        if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
+                        return true;
+                      }).map(app => {
                         const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && hasMusicScaleAccess);
                         // Map internal icon string to lucide icons
                         const Icon = app.icon === 'Music' ? Music : 
                                      app.icon === 'Users' ? Users : 
                                      app.icon === 'ShieldCheck' ? ShieldCheck : 
-                                     app.icon === 'CreditCard' ? CreditCard : LayoutGrid;
+                                     app.icon === 'CreditCard' ? CreditCard : 
+                                     app.icon === 'Wallet' ? Wallet : LayoutGrid;
 
                         return (
                           <div key={app.id} className="bg-[#050505] rounded-3xl p-5 border border-white/10 shadow-lg flex flex-col transition-all hover:border-white/20 relative overflow-hidden group">
@@ -1345,7 +1340,14 @@ export function Dashboard() {
                             <p className="text-[#A0A7B5] text-xs leading-relaxed mb-6 flex-1">{app.description}</p>
                             
                             <div className="relative z-10 flex items-center gap-3">
-                              {isInstalled ? (
+                              {app.id === 'nestfinance' ? (
+                                <button
+                                  disabled
+                                  className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed border border-white/5"
+                                >
+                                  Em preparação
+                                </button>
+                              ) : isInstalled ? (
                                 <button
                                   onClick={() => handleLaunchEcosystemApp(app, currentUserPerms)}
                                   className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95"
@@ -1367,7 +1369,7 @@ export function Dashboard() {
                                   {app.requiredPlan !== 'free' ? `Requer plano ${app.requiredPlan}` : 'Em breve'}
                                 </button>
                               )}
-                              {isInstalled && (isGlobalAdmin || currentUserPerms['organization.billing.manage']) && (
+                              {isInstalled && app.id !== 'nestfinance' && (isGlobalAdmin || currentUserPerms['organization.billing.manage']) && (
                                 <button
                                    onClick={() => setConfigAppModal(app)}
                                    className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/10 transition-colors shrink-0"

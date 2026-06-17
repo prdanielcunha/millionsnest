@@ -108,9 +108,7 @@ service cloud.firestore {
     
     function isSystemAdmin() {
       let userDoc = isAuthenticated() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
-      let emailMatched = request.auth != null && 'email' in request.auth.token && (request.auth.token.email == 'pastordanielpcunha@gmail.com' || request.auth.token.email == 'danielcunhapastor@gmail.com');
-      let roleMatched = userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'admin' || userDoc.data.systemRole == 'global_admin');
-      return emailMatched || roleMatched;
+      return userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'admin' || userDoc.data.systemRole == 'global_admin');
     }
 
     // ==========================================
@@ -429,6 +427,10 @@ service cloud.firestore {
     match /system_settings/{settingId} {
       allow read: if isAuthenticated();
       allow write: if isSystemAdmin();
+    }
+
+    match /ecosystemHandoffs/{handoffId} {
+      allow read, write: if false;
     }
   }
 }

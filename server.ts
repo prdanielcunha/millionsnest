@@ -4,6 +4,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import path from 'path';
+import crypto from 'crypto';
+import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
 import { 
@@ -1411,7 +1413,8 @@ async function startServer() {
   app.get('/api/admin/debug-final-check', async (req, res) => {
      try {
          const db = admin.firestore();
-         const email = req.query.email || 'pastordanielpcunha@gmail.com';
+         const email = req.query.email;
+         if (!email || typeof email !== 'string') return res.status(400).json({error: "Email is required"});
          const p = await db.collection('users').where('email', '==', email).get();
          if(p.empty) return res.json({error: "Not found"});
          const uid = p.docs[0].id;
@@ -3993,6 +3996,137 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
+  app.post('/api/ecosystem/nestfinance/handoff/issue', express.json(), async (req, res) => {
+    try {
+      // 1. Feature Flag & Target URL check (503 Service Unavailable)
+      const isEnabled = process.env.NESTFINANCE_HANDOFF_ENABLED === 'true';
+      const targetUrl = process.env.NESTFINANCE_APP_URL;
+
+      if (!isEnabled) {
+        console.warn('[NESTFINANCE_HANDOFF] Attempted access but handoff is disabled.');
+        return res.status(503).json({ error: 'Service Unavailable: NestFinance handoff is disabled.' });
+      }
+
+      if (!targetUrl) {
+        console.error('[NESTFINANCE_HANDOFF] NestFinance URL is not configured.');
+        return res.status(503).json({ error: 'Service Unavailable: NestFinance URL is not configured.' });
+      }
+
+      try {
+        const parsedUrl = new URL(targetUrl);
+        const isLocalhost = parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
+        const isHttps = parsedUrl.protocol === 'https:';
+        if (!isHttps && !(process.env.NODE_ENV !== 'production' && isLocalhost)) {
+          return res.status(503).json({ error: 'Service Unavailable: NestFinance URL must be HTTPS.' });
+        }
+      } catch (err) {
+        return res.status(503).json({ error: 'Service Unavailable: NestFinance URL is invalid.' });
+      }
+
+      // 2. Authentication check (401 Unauthorized)
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized: Missing or invalid token format.' });
+      }
+
+      const token = authHeader.split('Bearer ')[1];
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid token.' });
+      }
+
+      const uid = decoded.uid;
+
+      // 3. Request parameters check (400 Bad Request)
+      const { organizationId } = req.body;
+      if (!organizationId || typeof organizationId !== 'string' || organizationId.trim() === '') {
+        return res.status(400).json({ error: 'Bad Request: Missing or invalid organizationId.' });
+      }
+
+      const cleanOrgId = organizationId.trim();
+
+      // Ensure database is initialized
+      const databaseInst = getDb();
+      if (!databaseInst) {
+        console.error('[NESTFINANCE_HANDOFF] Database not ready.');
+        return res.status(500).json({ error: 'Internal Server Error' });
+      }
+
+      // 4. Authorization check through EcosystemAccessResolver (403 Forbidden)
+      const access = await resolveEcosystemAppAccess({
+        uid,
+        organizationId: cleanOrgId,
+        appId: 'nestfinance',
+        db: databaseInst
+      });
+
+      if (access.accessible !== true) {
+        const maskedUid = uid ? `${uid.substring(0, 4)}...${uid.substring(uid.length - 4)}` : 'null';
+        console.warn(`[NESTFINANCE_HANDOFF] Access denied for user ${maskedUid} to organization ${cleanOrgId}. Reason: ${access.denialReason || 'denied'}`);
+        return res.status(403).json({ error: 'Forbidden: Access denied to NestFinance of this organization.' });
+      }
+
+      // 5. Code generation (cryptographically secure base64url)
+      let code = '';
+      let codeHash = '';
+      let success = false;
+      const maxRetries = 3;
+
+      for (let i = 0; i < maxRetries && !success; i++) {
+        code = crypto.randomBytes(32).toString('base64url');
+        codeHash = crypto.createHash('sha256').update(code).digest('hex');
+
+        const docRef = databaseInst.collection('ecosystemHandoffs').doc(codeHash);
+        
+        try {
+          await docRef.create({
+            version: 1,
+            appId: 'nestfinance',
+            uid,
+            organizationId: cleanOrgId,
+            status: 'issued',
+            accessSource: access.accessSource,
+            issuedAt: admin.firestore.Timestamp.now(),
+            expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 90000), // 90 seconds
+            consumedAt: null
+          });
+          success = true;
+        } catch (err: any) {
+          if (err.code === 6) { // ALREADY_EXISTS code
+            console.warn(`[NESTFINANCE_HANDOFF] Collision detected on hash, retrying... (${i + 1}/${maxRetries})`);
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!success) {
+        return res.status(500).json({ error: 'Internal Server Error: Failed to generate secure handoff session.' });
+      }
+
+      // 6. Response Construction
+      const cleanBaseUrl = targetUrl.endsWith('/') ? targetUrl.slice(0, -1) : targetUrl;
+      const redirectUrl = `${cleanBaseUrl}/auth/handoff?code=${code}`;
+
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Pragma', 'no-cache');
+
+      const maskedUid = uid ? `${uid.substring(0, 4)}...${uid.substring(uid.length - 4)}` : 'null';
+      console.log(`[NESTFINANCE_HANDOFF_ISSUED] Handoff code issued successfully. appId=nestfinance, organizationId=${cleanOrgId}, source=${access.accessSource}, user=${maskedUid}`);
+
+      return res.status(200).json({
+        redirectUrl,
+        expiresInSeconds: 90
+      });
+
+    } catch (err: any) {
+      console.error('[NESTFINANCE_HANDOFF_ERROR] Error issuing handoff code:', err.message);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
   app.post('/api/ecosystem/create-handoff', express.json(), async (req, res) => {
     let logUid: string | null = null;
     let logOrgId: string | null = null;
@@ -4577,89 +4711,6 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
-  app.get('/api/admin/repair/pastordaniel', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Unauthorized', message: 'Token ausente.' });
-      }
-      
-      const token = authHeader.split('Bearer ')[1];
-      let decodedToken;
-      try {
-        decodedToken = await admin.auth().verifyIdToken(token);
-      } catch (err) {
-        return res.status(401).json({ error: 'Invalid token' });
-      }
-      
-      const adminUid = decodedToken.uid;
-      const adminDoc = await db!.collection('users').doc(adminUid).get();
-      if (!adminDoc.exists) return res.status(403).json({ error: 'Forbidden' });
-      const adminRole = adminDoc.data()?.systemRole;
-      if (adminRole !== 'ceo' && adminRole !== 'admin' && adminRole !== 'global_admin') {
-        return res.status(403).json({ error: 'Forbidden', message: 'Acesso restrito.' });
-      }
-
-      if (!db) return res.status(500).json({ error: 'DB not ready' });
-      const stripe = getStripe();
-      // Encontra a assinatura no Stripe do e-mail usado
-      const customers = await stripe.customers.list({ email: 'danielcunhapastor@gmail.com', limit: 1 });
-      if (customers.data.length === 0) return res.status(404).send('Not found in stripe');
-      
-      const customer = customers.data[0];
-      const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 1 });
-      if (subs.data.length === 0) return res.status(404).send('No sub found');
-      
-      const sub = subs.data[0];
-      const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(sub.status);
-      const cpEnd = admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000);
-      const tEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
-      
-      const userId = '7PUd8TAyXkT2CUkrcUtIGn5btch1';
-      
-      const userDocRef3 = await db.collection('users').doc(userId).get();
-      const orgId3 = (userDocRef3.exists && userDocRef3.data()?.organizationId) ? userDocRef3.data()?.organizationId : userId;
-      
-      const batch = db.batch();
-      batch.set(db.collection('subscriptions').doc(orgId3), {
-        schemaVersion: 1,
-        organizationId: orgId3,
-        status: sub.status,
-        stripeCustomerId: customer.id,
-        stripeSubscriptionId: sub.id,
-        currentPeriodEnd: cpEnd,
-        trialEndsAt: tEnd,
-        plan: 'annual',
-        features: {
-          globalLibrary: hasAccess,
-          musicScale: hasAccess
-        },
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-      
-      batch.set(db.collection('users').doc(userId), {
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
-      batch.set(db.collection('organizations').doc(userId), {
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
-      batch.set(db.collection('organization_members').doc(`${userId}_${userId}`), {
-        uid: userId,
-        organizationId: userId,
-        role: 'owner',
-        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-        permissions: getDefaultPermissions('owner')
-      }, { merge: true });
-
-      await batch.commit();
-
-      res.status(200).json({ success: true, repairedStatus: sub.status });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
 
   // Admin Repair Tool
   const repairSyncHandler = async (req: express.Request, res: express.Response) => {
@@ -5328,7 +5379,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       try {
          const decodedToken = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
-         if (!decodedToken.email || !['pastordanielpcunha@gmail.com', 'danielcunhapastor@gmail.com'].includes(decodedToken.email)) {
+         const userDoc = await db!.collection('users').doc(decodedToken.uid).get();
+         if (!userDoc.exists) return res.status(403).json({ error: 'Forbidden. User not found.' });
+         const systemRole = userDoc.data()?.systemRole;
+         if (systemRole !== 'ceo' && systemRole !== 'admin' && systemRole !== 'global_admin') {
              return res.status(403).json({ error: 'Forbidden. Admin/CEO only.' });
          }
       } catch (e) {
