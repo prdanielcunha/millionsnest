@@ -31,6 +31,8 @@ import { ecosystemPlatform } from "../sdk/ecosystem.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
+const nestFinanceLaunchEnabled = import.meta.env.VITE_NESTFINANCE_LAUNCH_ENABLED === 'true';
+
 export function Dashboard() {
   const { user, profile, loading, logout, switchOrganization } = useAuth();
   const navigate = useNavigate();
@@ -250,6 +252,8 @@ export function Dashboard() {
   const activeContextOrgId = isGlobalAdmin && adminSelectedOrgId 
     ? adminSelectedOrgId 
     : (profile?.organizationId || user?.uid);
+    
+  const canLaunchNestFinance = isGlobalAdmin && nestFinanceLaunchEnabled && !nestFinanceLaunching;
 
   useEffect(() => {
     if (isGlobalAdmin && adminSelectedOrgId && user) {
@@ -1390,8 +1394,15 @@ export function Dashboard() {
                               <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${isInstalled ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 text-[#2B85EB]' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
                                 <Icon className="w-5 h-5" />
                               </div>
-                              <span className={`px-2 py-1 text-[9px] font-bold rounded-md border uppercase tracking-widest shadow-sm ${isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 'bg-white/5 text-[#A0A7B5] border-white/10'}`}>
-                                {isInstalled ? 'Instalado' : app.category === 'beta' ? 'Em Breve' : 'Disponível'}
+                              <span className={`px-2 py-1 text-[9px] font-bold rounded-md border uppercase tracking-widest shadow-sm ${
+                                isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 
+                                (app.id === 'nestfinance' && nestFinanceLaunchEnabled) ? 'bg-[#F5F7FA]/10 text-[#F5F7FA] border-[#F5F7FA]/20' :
+                                'bg-white/5 text-[#A0A7B5] border-white/10'
+                              }`}>
+                                {isInstalled ? 'Instalado' : 
+                                  (app.id === 'nestfinance' && nestFinanceLaunchEnabled) ? 'Disponível' :
+                                  app.category === 'beta' ? 'Em Breve' : 'Disponível'
+                                }
                               </span>
                             </div>
                             <h4 className="text-lg font-semibold text-[#F5F7FA] mb-1">{app.name}</h4>
@@ -1399,10 +1410,10 @@ export function Dashboard() {
                             
                             <div className="relative z-10 flex items-center gap-3">
                               {app.id === 'nestfinance' ? (
-                                import.meta.env.VITE_NESTFINANCE_LAUNCH_ENABLED === 'true' ? (
+                                nestFinanceLaunchEnabled ? (
                                   <button
                                     onClick={handleLaunchNestFinance}
-                                    disabled={nestFinanceLaunching}
+                                    disabled={!canLaunchNestFinance}
                                     className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-wait"
                                   >
                                     {nestFinanceLaunching ? 'Preparando acesso...' : 'Abrir NestFinance'} <ArrowRight className="w-3.5 h-3.5" />
