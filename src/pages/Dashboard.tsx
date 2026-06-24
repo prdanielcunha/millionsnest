@@ -33,6 +33,39 @@ type Tab = "overview" | "organization" | "account" | "billing";
 
 const nestFinanceLaunchEnabled = import.meta.env.VITE_NESTFINANCE_LAUNCH_ENABLED === 'true';
 
+const getVisualState = (sub: any) => {
+  if (!sub) return 'none';
+  const status = sub.status || '';
+  const cancelAtPeriodEnd = sub.cancelAtPeriodEnd === true;
+  
+  let endMs = 0;
+  if (sub.currentPeriodEnd) {
+     endMs = sub.currentPeriodEnd._seconds ? sub.currentPeriodEnd._seconds * 1000 : 
+             (sub.currentPeriodEnd.seconds ? sub.currentPeriodEnd.seconds * 1000 : 
+             new Date(sub.currentPeriodEnd).getTime());
+  }
+
+  const hasAccess = Date.now() < endMs;
+
+  if (status === 'trialing') {
+     if (cancelAtPeriodEnd) return 'cancel_scheduled';
+     return 'trialing';
+  }
+  if (status === 'active') {
+     if (cancelAtPeriodEnd) return 'cancel_scheduled';
+     return 'active';
+  }
+  if (status === 'canceled') {
+     if (hasAccess) return 'canceled_with_access';
+     return 'canceled_expired';
+  }
+  if (status === 'past_due' || status === 'unpaid' || status === 'incomplete') {
+     return 'past_due';
+  }
+  
+  return status; // fallback
+};
+
 export function Dashboard() {
   const { user, profile, loading, logout, switchOrganization } = useAuth();
   const navigate = useNavigate();
@@ -296,6 +329,48 @@ export function Dashboard() {
     } catch (e) {
       console.error(e);
       alert('Erro de comunicação.');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
+  const reactivateSubscription = async () => {
+    if (!user) return;
+    try {
+      setCheckoutLoading(true);
+      const token = await user.getIdToken();
+      const organizationId = activeOrganizationId || profile?.organizationId;
+      
+      const res = await fetch('/api/v1/billing/reactivate', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ organizationId })
+      });
+      
+      const data = await res.json();
+      
+      if (data.action === 'checkout_required') {
+         if (data.url) window.location.href = data.url;
+         return;
+      }
+      
+      if (data.action === 'payment_required') {
+         openBillingPortal(); // Send to portal to update card
+         return;
+      }
+
+      if (res.ok) {
+        alert('Sua assinatura continuará ativa.');
+        await fetchSubscriptionAndOrg(true);
+      } else {
+        alert(data.error || 'Erro ao reativar assinatura.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Erro de comunicação ao reativar.');
     } finally {
       setCheckoutLoading(false);
     }
@@ -1737,21 +1812,44 @@ export function Dashboard() {
                         </div>
                         <div className="text-left md:text-right">
                            <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Status</p>
-                           <span className={`inline-flex px-3 py-1 text-[10px] font-bold rounded-full border uppercase tracking-widest shadow-sm ${
-                             subscription.status === 'active' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' : 
-                             subscription.status === 'trialing' ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 
-                             subscription.status === 'canceled' ? 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20' : 
-                             'bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/20'
-                           }`}>
-                             {subscription.status === 'trialing' ? 'Trial Ativo' : subscription.status === 'active' ? 'Ativo' : subscription.status === 'canceled' ? 'Cancelado' : subscription.status === 'past_due' ? 'Pagamento Atrasado' : subscription.status}
-                           </span>
+                           {(() => {
+                             const visualState = getVisualState(subscription);
+                             const styles: Record<string, string> = {
+                               active: 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20',
+                               cancel_scheduled: 'bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/20',
+                               canceled_with_access: 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20',
+                               canceled_expired: 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20',
+                               past_due: 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20',
+                               trialing: 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20',
+                             };
+                             const labels: Record<string, string> = {
+                               active: 'Ativa',
+                               cancel_scheduled: 'Cancelamento Agendado',
+                               canceled_with_access: 'Assinatura Encerrada',
+                               canceled_expired: 'Encerrada',
+                               past_due: 'Pagamento Pendente',
+                               trialing: 'Período de Avaliação',
+                             };
+                             return (
+                               <span className={`inline-flex px-3 py-1 text-[10px] font-bold rounded-full border uppercase tracking-widest shadow-sm ${styles[visualState] || styles.active}`}>
+                                 {labels[visualState] || visualState}
+                               </span>
+                             );
+                           })()}
                         </div>
                       </div>
 
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center pt-6 border-t border-white/5 gap-4">
                         <div>
                           <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-1">
-                            {subscription.status === 'trialing' ? 'Fim do Trial' : subscription.status === 'canceled' ? 'Acesso até' : 'Próxima Cobrança'}
+                            {(() => {
+                              const visualState = getVisualState(subscription);
+                              if (visualState === 'trialing') return 'Fim do Trial';
+                              if (visualState === 'cancel_scheduled') return 'Sua assinatura continua ativa até';
+                              if (visualState === 'canceled_with_access') return 'Seu acesso permanece disponível até';
+                              if (visualState === 'canceled_expired') return 'Acesso Expirado em';
+                              return 'Próxima Cobrança';
+                            })()}
                           </p>
                           <p className="text-sm font-semibold text-[#F5F7FA]">{formattedRenewal}</p>
                         </div>
@@ -1771,28 +1869,80 @@ export function Dashboard() {
                     </p>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
-                      <button 
-                        onClick={openBillingPortal}
-                        className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold hover:bg-white transition-all shadow-sm active:scale-95"
-                      >
-                        <Settings className="w-4 h-4 ml-1" /> Gerenciar Assinatura
-                      </button>
-                      
-                      {subscription.status === 'canceled' || subscription.status === 'past_due' ? (
-                        <button 
-                          onClick={openBillingPortal}
-                          className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#2B85EB] text-white rounded-xl font-semibold hover:bg-[#2B85EB]/90 transition-all shadow-sm active:scale-95"
-                        >
-                          Reativar Assinatura
-                        </button>
-                      ) : (
-                        <button 
-                          onClick={openBillingPortal}
-                          className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-white/5 text-[#F5F7FA] border border-white/10 rounded-xl font-semibold hover:bg-white/10 transition-all shadow-sm active:scale-95"
-                        >
-                          Fazer Upgrade / Downgrade
-                        </button>
-                      )}
+                      {(() => {
+                         const visualState = getVisualState(subscription);
+                         if (visualState === 'cancel_scheduled') {
+                           return (
+                             <>
+                               <button 
+                                 onClick={openBillingPortal}
+                                 className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold hover:bg-white transition-all shadow-sm active:scale-95"
+                               >
+                                 <Settings className="w-4 h-4 ml-1" /> Gerenciar Assinatura
+                               </button>
+                               <button 
+                                 onClick={reactivateSubscription}
+                                 className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#2B85EB] text-white rounded-xl font-semibold hover:bg-[#2B85EB]/90 transition-all shadow-sm active:scale-95"
+                               >
+                                 Continuar com a assinatura
+                               </button>
+                             </>
+                           );
+                         }
+                         if (visualState === 'canceled_with_access' || visualState === 'canceled_expired') {
+                           return (
+                             <>
+                               <button 
+                                 onClick={openBillingPortal}
+                                 className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold hover:bg-white transition-all shadow-sm active:scale-95"
+                               >
+                                 <Settings className="w-4 h-4 ml-1" /> Histórico de Faturas
+                               </button>
+                               <button 
+                                 onClick={reactivateSubscription}
+                                 className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#2B85EB] text-white rounded-xl font-semibold hover:bg-[#2B85EB]/90 transition-all shadow-sm active:scale-95"
+                               >
+                                 Assinar novamente
+                               </button>
+                             </>
+                           );
+                         }
+                         if (visualState === 'past_due') {
+                           return (
+                             <>
+                               <button 
+                                 onClick={openBillingPortal}
+                                 className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold hover:bg-white transition-all shadow-sm active:scale-95"
+                               >
+                                 <Settings className="w-4 h-4 ml-1" /> Gerenciar Assinatura
+                               </button>
+                               <button 
+                                 onClick={openBillingPortal}
+                                 className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#EF4444] text-white rounded-xl font-semibold hover:bg-[#EF4444]/90 transition-all shadow-sm active:scale-95"
+                               >
+                                 Regularizar pagamento
+                               </button>
+                             </>
+                           );
+                         }
+                         // Active, trialing
+                         return (
+                           <>
+                             <button 
+                               onClick={openBillingPortal}
+                               className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold hover:bg-white transition-all shadow-sm active:scale-95"
+                             >
+                               <Settings className="w-4 h-4 ml-1" /> Gerenciar Assinatura
+                             </button>
+                             <button 
+                               onClick={openBillingPortal}
+                               className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-white/5 text-[#F5F7FA] border border-white/10 rounded-xl font-semibold hover:bg-white/10 transition-all shadow-sm active:scale-95"
+                             >
+                               Fazer Upgrade / Downgrade
+                             </button>
+                           </>
+                         );
+                      })()}
                     </div>
                   </div>
                 ) : (

@@ -5851,6 +5851,159 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
+  app.post('/api/v1/billing/reactivate', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid token' });
+      }
+      
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Token verification failed' });
+      }
+
+      const uid = decodedToken.uid;
+      
+      const { organizationId } = req.body;
+      if (!organizationId) {
+        return res.status(400).json({ error: 'Missing organizationId' });
+      }
+
+      if (!db) {
+         return res.status(500).json({ error: 'Database error' });
+      }
+
+      // Resolve the authenticated user's organization context
+      const orgContext = await resolveUserOrganizationContext(uid);
+      
+      // Verify that the user belongs to the requested organization
+      let isMember = false;
+      if (orgContext.primaryOrganizationId === organizationId || orgContext.activeOrganizationId === organizationId) {
+        isMember = true;
+      }
+      if (!isMember && orgContext.allMemberships) {
+        isMember = orgContext.allMemberships.some((m: any) => m.organizationId === organizationId);
+      }
+      
+      if (!isMember) {
+         return res.status(403).json({ error: 'Você não tem permissão nesta organização.' });
+      }
+
+      // Verify RBAC for billing: Only CEO, Global Admin, or Org Owner/Admin should be able to do this.
+      const userDoc = await db.collection('users').doc(uid).get();
+      const systemRole = userDoc.data()?.systemRole || 'user';
+      const isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole);
+
+      let isOrgAdmin = false;
+      if (orgContext.allMemberships) {
+         const membership = orgContext.allMemberships.find((m: any) => m.organizationId === organizationId);
+         if (membership && ['owner', 'admin'].includes(membership.role)) {
+             isOrgAdmin = true;
+         }
+      }
+      if (orgContext.primaryOrganizationId === organizationId) {
+         if (['owner', 'admin'].includes(orgContext.primaryOrganizationRole || '')) isOrgAdmin = true;
+      }
+      if (orgContext.activeOrganizationId === organizationId) {
+         if (['owner', 'admin'].includes(orgContext.activeOrganizationRole || '')) isOrgAdmin = true;
+      }
+
+      if (!isSystemAdmin && !isOrgAdmin) {
+         return res.status(403).json({ error: 'Apenas administradores podem gerenciar assinaturas.' });
+      }
+
+      // Retrieve the canonical subscription from Firestore
+      const subDoc = await db.collection('subscriptions').doc(organizationId).get();
+      if (!subDoc.exists) {
+         return res.status(404).json({ error: 'Nenhuma assinatura encontrada para esta organização.' });
+      }
+
+      const subData = subDoc.data() as any;
+      const stripeSubscriptionId = subData.stripeSubscriptionId;
+      const stripeCustomerId = subData.stripeCustomerId;
+
+      if (!stripeSubscriptionId || !stripeCustomerId) {
+         return res.status(404).json({ error: 'Dados da assinatura do Stripe ausentes.' });
+      }
+
+      const stripe = getStripe();
+      const isMock = process.env.STRIPE_SECRET_KEY === undefined;
+
+      if (isMock) {
+         return res.status(400).json({ error: 'A variável STRIPE_SECRET_KEY não está configurada no Vercel.' });
+      }
+
+      console.log(`[Reactivate] Fetching stripe subscription ${stripeSubscriptionId} for org ${organizationId}`);
+      const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+
+      if (stripeSub.customer !== stripeCustomerId) {
+         return res.status(400).json({ error: 'Inconsistência de cliente Stripe. Contate o suporte.' });
+      }
+
+      // Identify the real state
+      const status = stripeSub.status;
+      const cancelAtPeriodEnd = stripeSub.cancel_at_period_end;
+
+      if (status === 'canceled' || status === 'unpaid') {
+         // It's really canceled or unpaid, cannot just remove cancel_at_period_end. Needs checkout.
+         return res.json({ 
+           ok: true, 
+           action: 'checkout_required', 
+           url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/checkout` 
+         });
+      }
+
+      if ((status === 'active' || status === 'trialing') && cancelAtPeriodEnd) {
+         // It's active but scheduled to cancel. Undo the cancellation!
+         console.log(`[Reactivate] Removing cancel_at_period_end for sub ${stripeSubscriptionId}`);
+         const updatedSub = await stripe.subscriptions.update(stripeSubscriptionId, {
+            cancel_at_period_end: false
+         });
+
+         // Sync to Firestore immediately so UI updates without waiting for webhook
+         await upsertEcosystemSubscription({
+             db,
+             stripeSubscriptionId: stripeSubscriptionId,
+             eventCreatedTs: Math.floor(Date.now() / 1000),
+             admin
+         });
+
+         return res.json({
+            ok: true,
+            action: 'reactivated',
+            subscriptionStatus: updatedSub.status,
+            cancelAtPeriodEnd: updatedSub.cancel_at_period_end
+         });
+      }
+
+      if ((status === 'active' || status === 'trialing') && !cancelAtPeriodEnd) {
+         // Already active, nothing to do
+         return res.json({
+            ok: true,
+            action: 'already_active'
+         });
+      }
+
+      if (status === 'past_due' || status === 'incomplete') {
+         // Needs to pay
+         return res.json({
+            ok: true,
+            action: 'payment_required'
+         });
+      }
+
+      return res.status(400).json({ error: 'Estado da assinatura desconhecido.' });
+
+    } catch (e: any) {
+      console.error('[Reactivate] Error reactivating subscription:', e);
+      return res.status(500).json({ error: e.message || 'Erro interno ao reativar assinatura.' });
+    }
+  });
+
   app.post('/api/v1/billing/portal', async (req, res) => {
     try {
       const { userId } = req.body;
