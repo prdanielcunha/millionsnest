@@ -339,7 +339,7 @@ export function Dashboard() {
     try {
       setCheckoutLoading(true);
       const token = await user.getIdToken();
-      const organizationId = activeOrganizationId || profile?.organizationId;
+      const organizationId = activeContextOrgId || profile?.organizationId;
       
       const res = await fetch('/api/v1/billing/reactivate', {
         method: 'POST',
