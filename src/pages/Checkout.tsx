@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Check, ArrowRight, ShieldCheck, CreditCard, ChevronLeft, Briefcase, Zap, Layers, Tag, X, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getProductByLookupKey } from '../lib/pricingCatalog.js';
+import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
 
 interface NormalizedProduct {
   id: string; // Stripe Price ID
@@ -256,11 +257,9 @@ export default function Checkout() {
                 <ChevronLeft className="w-4 h-4" />
                 {t('back', 'Voltar ao Dashboard')}
             </button>
-            <div className="mx-auto flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-gradient-to-tr from-[#2B85EB] to-[#6BA6F3] flex items-center justify-center shadow-lg shadow-[#2B85EB]/20">
-                    <Zap className="w-3 h-3 text-white fill-current" />
-                </div>
-                <span className="font-semibold tracking-tight">MillionsNest</span>
+            <div className="mx-auto flex items-center gap-3">
+                <MillionsNestLogo className="h-8 w-auto" />
+                <span className="font-semibold tracking-tight text-lg text-[#F5F7FA]">MillionsNest</span>
             </div>
             <div className="w-32" /> {/* Spacer */}
         </nav>
@@ -339,14 +338,14 @@ export default function Checkout() {
                                <div className="flex justify-between items-start mb-6 relative z-10">
                                    <div>
                                        <h3 className="text-xl md:text-2xl font-medium text-white mb-1 uppercase tracking-widest">{isPro ? 'Pro' : plan.name}</h3>
-                                       <p className="text-[#A0A7B5] text-xs font-light">{plan.description || (isPro ? "Para ministérios que desejam a experiência premium completa." : isAdvanced ? "Para ministérios em crescimento." : "Ideal para começar com simplicidade.")}</p>
+                                       <p className="text-[#A0A7B5] text-xs font-light min-h-[36px]">{plan.description || (isPro ? "Para ministérios que desejam a experiência premium completa." : isAdvanced ? "Para ministérios em crescimento." : "Ideal para começar com simplicidade.")}</p>
                                    </div>
                                    <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors flex-shrink-0 ${isSelected ? 'bg-[#2B85EB] border-[#2B85EB]' : 'border-white/20 group-hover:border-white/40'}`}>
                                        {isSelected && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
                                    </div>
                                </div>
 
-                               <div className="mb-8 relative z-10 mt-auto">
+                               <div className="mb-8 relative z-10">
                                    <div className="flex items-baseline gap-1">
                                        <span className="text-4xl font-semibold tracking-tighter text-white">
                                            R${plan.price.toFixed(2).replace('.',',')}
@@ -375,7 +374,7 @@ export default function Checkout() {
                                    ) : null}
                                </div>
 
-                               <ul className="space-y-4 pt-6 border-t border-white/5 relative z-10 w-full text-left mt-0">
+                               <ul className="space-y-4 pt-6 border-t border-white/5 relative z-10 w-full text-left mt-0 flex-1">
                                    {isPro ? (
                                        <>
                                          {[
