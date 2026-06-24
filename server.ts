@@ -5882,15 +5882,16 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       // Verify that the user belongs to the requested organization
       let isMember = false;
-      if (orgContext.primaryOrganizationId === organizationId || orgContext.activeOrganizationId === organizationId) {
-        isMember = true;
-      }
-      if (!isMember && orgContext.allMemberships) {
-        isMember = orgContext.allMemberships.some((m: any) => m.organizationId === organizationId);
-      }
-      
-      if (!isMember) {
-         return res.status(403).json({ error: 'Você não tem permissão nesta organização.' });
+      let isOrgAdmin = false;
+
+      if (orgContext.allMemberships) {
+         const orgItem = orgContext.allMemberships.find((m: any) => m.id === organizationId);
+         if (orgItem) {
+             isMember = true;
+             if (['owner', 'admin'].includes(orgItem.userRole)) {
+                 isOrgAdmin = true;
+             }
+         }
       }
 
       // Verify RBAC for billing: Only CEO, Global Admin, or Org Owner/Admin should be able to do this.
@@ -5898,18 +5899,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const systemRole = userDoc.data()?.systemRole || 'user';
       const isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole);
 
-      let isOrgAdmin = false;
-      if (orgContext.allMemberships) {
-         const membership = orgContext.allMemberships.find((m: any) => m.organizationId === organizationId);
-         if (membership && ['owner', 'admin'].includes(membership.role)) {
-             isOrgAdmin = true;
-         }
-      }
-      if (orgContext.primaryOrganizationId === organizationId) {
-         if (['owner', 'admin'].includes(orgContext.primaryOrganizationRole || '')) isOrgAdmin = true;
-      }
-      if (orgContext.activeOrganizationId === organizationId) {
-         if (['owner', 'admin'].includes(orgContext.activeOrganizationRole || '')) isOrgAdmin = true;
+      if (!isMember && !isSystemAdmin) {
+         return res.status(403).json({ error: 'Você não tem permissão nesta organização.' });
       }
 
       if (!isSystemAdmin && !isOrgAdmin) {
