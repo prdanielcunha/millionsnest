@@ -5929,8 +5929,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       let isMember = false;
       let isOrgAdmin = false;
 
-      if (orgContext.allMemberships) {
-         const orgItem = orgContext.allMemberships.find((m: any) => m.id === organizationId);
+      if (orgContext.organizations) {
+         const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
          if (orgItem) {
              isMember = true;
              if (['owner', 'admin'].includes(orgItem.userRole)) {
