@@ -119,6 +119,9 @@ export function Dashboard() {
   // Edit Member States
   const [editingMember, setEditingMember] = useState<any>(null);
   const [editingMemberName, setEditingMemberName] = useState("");
+  const [editingMemberPhoto, setEditingMemberPhoto] = useState("");
+  const [editingMemberRole, setEditingMemberRole] = useState("");
+  const [editingMemberAppRole, setEditingMemberAppRole] = useState("");
   const [editingMemberSaving, setEditingMemberSaving] = useState(false);
 
   const [configAppModal, setConfigAppModal] = useState<EcosystemApp | null>(null);
@@ -347,7 +350,7 @@ export function Dashboard() {
     try {
       setCheckoutLoading(true);
       const token = await user.getIdToken();
-      const organizationId = profile?.organizationId;
+      const organizationId = activeContextOrgId;
       
       const res = await fetch('/api/v1/billing/reactivate', {
         method: 'POST',
@@ -361,7 +364,8 @@ export function Dashboard() {
       const data = await res.json();
       
       if (data.action === 'checkout_required') {
-         if (data.url) window.location.href = data.url;
+         const plan = subscription?.plan || 'pro';
+         window.location.href = `/checkout?plan=musicscale_${plan}_monthly`;
          return;
       }
       
@@ -816,7 +820,12 @@ export function Dashboard() {
       const res = await fetch(`/api/organizations/${orgId}/members/${editingMember.id}/profile`, {
          method: 'PUT',
          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-         body: JSON.stringify({ displayName: editingMemberName })
+         body: JSON.stringify({ 
+           displayName: editingMemberName,
+           photoURL: editingMemberPhoto,
+           role: editingMemberRole,
+           appRole: editingMemberAppRole
+         })
       });
 
       if (!res.ok) {
@@ -825,7 +834,13 @@ export function Dashboard() {
          return;
       }
       
-      setMembers(prev => prev.map(m => m.id === editingMember.id ? { ...m, displayName: editingMemberName } : m));
+      setMembers(prev => prev.map(m => m.id === editingMember.id ? { 
+        ...m, 
+        displayName: editingMemberName, 
+        photoURL: editingMemberPhoto,
+        role: editingMemberRole,
+        appRole: editingMemberAppRole
+      } : m));
       setEditingMember(null);
       feedback.success("Dados do membro atualizados.");
     } catch (e) {
@@ -1693,6 +1708,9 @@ export function Dashboard() {
                 onEditMember={(member) => {
                   setEditingMember(member);
                   setEditingMemberName(member.displayName || "");
+                  setEditingMemberPhoto(member.photoURL || "");
+                  setEditingMemberRole(member.role || "member");
+                  setEditingMemberAppRole(member.appRole || "Membro");
                 }}
                 isEditingOrg={isEditingOrg}
                 setIsEditingOrg={setIsEditingOrg}
@@ -2577,7 +2595,7 @@ export function Dashboard() {
                 <X className="w-5 h-5" />
               </button>
 
-              <h3 className="text-xl font-semibold text-white mb-6">Editar Membro</h3>
+               <h3 className="text-xl font-semibold text-white mb-6">Editar Membro</h3>
 
               <div className="space-y-4">
                 <div>
@@ -2586,7 +2604,7 @@ export function Dashboard() {
                     type="text"
                     value={editingMember.email || ""}
                     disabled
-                    className="w-full bg-[#1A1D24]/50 border border-white/5 rounded-xl px-4 py-3 text-white text-sm outline-none opacity-70 cursor-not-allowed"
+                    className="w-full bg-[#1A1D24]/50 border border-white/5 rounded-xl px-4 py-3 text-white text-sm outline-none opacity-70 cursor-not-allowed text-xs"
                   />
                 </div>
 
@@ -2601,12 +2619,88 @@ export function Dashboard() {
                   />
                 </div>
 
-                <div className="pt-2">
-                  <button
-                    onClick={handleSendMemberPasswordReset}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold transition-all bg-[#2B85EB]/10 text-[#2B85EB] hover:bg-[#2B85EB]/20 border border-[#2B85EB]/20"
+                <div>
+                  <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Foto do Membro (URL)</label>
+                  <div className="flex gap-3 items-center">
+                    {editingMemberPhoto ? (
+                      <img 
+                        src={editingMemberPhoto} 
+                        alt="Preview" 
+                        referrerPolicy="no-referrer"
+                        className="w-12 h-12 rounded-full object-cover border border-white/10 bg-white/5"
+                        onError={(e) => { (e.target as HTMLImageElement).src = 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'; }}
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full border border-dashed border-white/20 bg-white/5 flex items-center justify-center text-[#A0A7B5] text-xs">
+                        Foto
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      value={editingMemberPhoto}
+                      onChange={(e) => setEditingMemberPhoto(e.target.value)}
+                      className="flex-1 bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors text-xs"
+                      placeholder="https://exemplo.com/foto.jpg"
+                    />
+                  </div>
+                </div>
+
+                {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin' || profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin') && (
+                  <div>
+                    <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Função no Ecossistema / Organização</label>
+                    <select
+                      value={editingMemberRole}
+                      onChange={(e) => setEditingMemberRole(e.target.value)}
+                      className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
+                    >
+                      <option value="owner">Dono (Owner)</option>
+                      <option value="admin">Administrador (Admin)</option>
+                      <option value="leader">Líder / Ministro</option>
+                      <option value="secretary">Operador / Secretaria</option>
+                      <option value="member">Membro Padrão</option>
+                      <option value="guest">Visitante (Apenas Leitura)</option>
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Função no App MusicScale</label>
+                  <select
+                    value={["Membro", "Administrador", "Ministro / Líder", "Cantor", "Instrumentista", "Operador de Som", "Operador de Projeção"].includes(editingMemberAppRole) ? editingMemberAppRole : "Custom"}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "Custom") {
+                        setEditingMemberAppRole("Outro");
+                      } else {
+                        setEditingMemberAppRole(val);
+                      }
+                    }}
+                    className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
                   >
-                    <Mail className="w-4 h-4" />
+                    {["Membro", "Administrador", "Ministro / Líder", "Cantor", "Instrumentista", "Operador de Som", "Operador de Projeção"].map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                    <option value="Custom">Outra (Personalizada)...</option>
+                  </select>
+                  
+                  {(!["Membro", "Administrador", "Ministro / Líder", "Cantor", "Instrumentista", "Operador de Som", "Operador de Projeção"].includes(editingMemberAppRole) || editingMemberAppRole === "Outro") && (
+                    <input
+                      type="text"
+                      value={editingMemberAppRole === "Outro" ? "" : editingMemberAppRole}
+                      onChange={(e) => setEditingMemberAppRole(e.target.value)}
+                      className="w-full mt-2 bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-[#2B85EB] text-sm outline-none border-[#2B85EB]/30 focus:border-[#2B85EB] transition-colors"
+                      placeholder="Digite a função personalizada no MusicScale"
+                    />
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-white/5 mt-4">
+                  <button
+                    type="button"
+                    onClick={handleSendMemberPasswordReset}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold transition-all bg-white/5 text-[#A0A7B5] hover:bg-white/10 border border-white/10 text-xs"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
                     Enviar Link de Redefinição de Senha
                   </button>
                 </div>

@@ -61,6 +61,16 @@ export function canPurchasePlanAgain({
     };
   }
 
+  // Canceled subscriptions cannot be modified or resumed in portal, must checkout a new subscription
+  if (existingSubscription.status && existingSubscription.status.toLowerCase() === 'canceled') {
+    return {
+      allowed: true,
+      reason: 'subscription_canceled_grace_period',
+      userMessage: 'Sua assinatura anterior foi cancelada e não será renovada automaticamente. Você pode realizar uma nova assinatura para garantir a continuidade do serviço.',
+      action: 'checkout'
+    };
+  }
+
   const normalizedDesired = desiredPlan.replace('musicscale_', '').replace('_monthly', '').replace('_yearly', '');
   const existingPlan = existingSubscription.plan || existingSubscription.tier || 'starter';
   const isValid = isSubscriptionValid(existingSubscription);

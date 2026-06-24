@@ -6002,10 +6002,11 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
          // Sync to Firestore immediately so UI updates without waiting for webhook
          await upsertEcosystemSubscription({
-             db,
-             stripeSubscriptionId: stripeSubscriptionId,
+             userId: uid,
+             orgId: organizationId,
+             subscription: updatedSub,
              eventCreatedTs: Math.floor(Date.now() / 1000),
-             admin
+             event_type: 'customer.subscription.updated'
          });
 
          return res.json({
