@@ -117,7 +117,7 @@ export default {
     faq_q1: "Can I cancel at any time?",
     faq_a1: "Yes, our commitment is to your freedom. You can cancel your subscription directly through the dashboard with no hassle.",
     faq_q2: "Do I need a credit card to try?",
-    faq_a2: "No. The first 7 days are completely free and don't require any prior commitment. We want you to experience the platform safely.",
+    faq_a2: "Yes, a credit card is required to start the trial period, as we use Stripe's secure processing. However, no charges will be made during the first 7 days, and you can cancel at any time before being billed.",
     faq_q3: "What if our team is very large?",
     faq_a3: "The Hub Pro plan is made exactly to cover an unlimited number of members. The engine is scalable and supports everything from small groups to megachurches.",
     faq_q4: "Will there be a native mobile app?",

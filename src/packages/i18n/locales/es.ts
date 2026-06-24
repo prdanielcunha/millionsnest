@@ -117,7 +117,7 @@ export default {
     faq_q1: "¿Puedo cancelar en cualquier momento?",
     faq_a1: "Sí, nuestro compromiso es con tu libertad. Puedes cancelar la suscripción directamente desde el panel sin burocracia.",
     faq_q2: "¿Necesito tarjeta de crédito para probar?",
-    faq_a2: "No. Los primeros 7 días son totalmente gratuitos y no exigen compromiso previo. Queremos que experimentes la plataforma con seguridad.",
+    faq_a2: "Sí, se requiere una tarjeta de crédito para iniciar el período de prueba, ya que utilizamos el procesamiento seguro de Stripe. Sin embargo, no se realizarán cargos durante los primeros 7 días, y puedes cancelar en cualquier momento antes de que se te cobre.",
     faq_q3: "¿Y si nuestro equipo es muy grande?",
     faq_a3: "El plan Hub Pro está hecho exactamente para cubrir un número ilimitado de miembros. El motor es escalable y soporta desde grupos pequeños hasta mega iglesias.",
     faq_q4: "¿Habrá una aplicación celular nativa?",

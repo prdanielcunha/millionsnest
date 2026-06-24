@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Users, LayoutGrid, CreditCard, ShieldCheck, Settings, Check, X, Loader2, Link, Copy } from 'lucide-react';
+import { Building2, Users, LayoutGrid, CreditCard, ShieldCheck, Settings, Check, X, Loader2, Link, Copy, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PremiumEmptyState } from '../packages/ui/empty-state.js';
 import { framerTokens } from '../packages/ui/motion.js';
@@ -19,6 +19,7 @@ export function OrganizationManager({
   onSaveOrg,
   handleUpdateMemberRole,
   handleRemoveMember,
+  onEditMember,
   isEditingOrg,
   setIsEditingOrg,
   orgNameInput,
@@ -347,13 +348,23 @@ export function OrganizationManager({
                           </select>
                           
                           {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
-                            <button
-                               onClick={() => handleRemoveMember(member.id)}
-                               disabled={member.role === 'owner' && (currentUserRole !== 'owner' && !isGlobalAdmin)}
-                               className="text-xs text-red-500/70 hover:text-red-500 font-medium px-2 py-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                               {member.id === user?.uid ? 'Sair' : 'Remover'}
-                            </button>
+                            <>
+                              {onEditMember && (
+                                <button
+                                   onClick={() => onEditMember(member)}
+                                   className="text-xs text-[#A0A7B5] hover:text-[#F5F7FA] font-medium p-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded bg-white/5 hover:bg-white/10"
+                                >
+                                   <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                 onClick={() => handleRemoveMember(member.id)}
+                                 disabled={member.role === 'owner' && (currentUserRole !== 'owner' && !isGlobalAdmin)}
+                                 className="text-xs text-red-500/70 hover:text-red-500 font-medium px-2 py-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                 {member.id === user?.uid ? 'Sair' : 'Remover'}
+                              </button>
+                            </>
                           )}
                         </div>
                       ) : (

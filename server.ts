@@ -1142,6 +1142,51 @@ async function startServer() {
     }
   });
 
+  app.put('/api/organizations/:orgId/members/:memberId/profile', express.json(), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      const actorUid = decodedToken.uid;
+      
+      const { orgId, memberId } = req.params;
+      const { displayName } = req.body;
+      
+      if (!db) return res.status(500).json({ error: 'Database not initialized' });
+
+      // Actor global role
+      const actorUserDoc = await db.collection('users').doc(actorUid).get();
+      const actorSystemRole = actorUserDoc.data()?.systemRole;
+      const isGlobalAdmin = actorSystemRole === 'ceo' || actorSystemRole === 'admin' || actorSystemRole === 'global_admin';
+
+      // Actor local role
+      const actorMemberDoc = await db.collection('organizations').doc(orgId).collection('members').doc(actorUid).get();
+      const actorMemberRole = actorMemberDoc.exists ? actorMemberDoc.data()?.role : 'member';
+      
+      const ORG_RANK: Record<string, number> = { guest: 5, member: 10, secretary: 20, leader: 30, admin: 70, owner: 100 };
+      const actorRank = ORG_RANK[actorMemberRole || 'member'] || 0;
+
+      if (!isGlobalAdmin && actorRank < 70) {
+         return res.status(403).json({ error: 'Você não tem permissão para editar dados dos membros.' });
+      }
+
+      await admin.auth().updateUser(memberId, {
+         displayName: displayName
+      });
+
+      await db.collection('users').doc(memberId).set({
+         displayName: displayName,
+         updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      return res.json({ success: true });
+    } catch (err) {
+      console.error('[Update Member Profile Error]', err);
+      return res.status(500).json({ error: 'Failed to update member profile' });
+    }
+  });
+
   app.post('/api/organizations/:orgId/members/:memberId/role', express.json(), async (req: any, res) => {
     try {
       const authHeader = req.headers.authorization;
@@ -3268,7 +3313,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
           const userDoc = await db!.collection('users').doc(doc.id).get();
           if (userDoc.exists) uData = userDoc.data() || {};
         } catch (e) {}
-        return { id: doc.id, ...data, ...uData };
+        return { id: doc.id, ...uData, ...data };
       }));
 
       return res.json({ members });

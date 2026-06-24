@@ -10,6 +10,8 @@ import {
 import { Navbar } from "../components/Navbar.js";
 import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc, limit, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
+import { auth } from "../lib/firebase.js";
+import { sendPasswordResetEmail } from "firebase/auth";
 import { getDefaultPermissions, normalizePermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.js";
 import { analytics } from "../lib/analytics.js";
 import { eventBus } from "../packages/events/index.js";
@@ -113,6 +115,12 @@ export function Dashboard() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileNameInput, setProfileNameInput] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Edit Member States
+  const [editingMember, setEditingMember] = useState<any>(null);
+  const [editingMemberName, setEditingMemberName] = useState("");
+  const [editingMemberSaving, setEditingMemberSaving] = useState(false);
+
   const [configAppModal, setConfigAppModal] = useState<EcosystemApp | null>(null);
 
   const [repairing, setRepairing] = useState(false);
@@ -478,7 +486,7 @@ export function Dashboard() {
                } catch (userErr: any) {
                  console.warn("Could not fetch user details, fallback to member data:", userErr);
                }
-               return { id: d.id, ...data, ...userData };
+               return { id: d.id, ...userData, ...data };
             });
             
             currentMembers = await Promise.all(memsPromises);
@@ -796,6 +804,46 @@ export function Dashboard() {
     } catch (e) {
       console.error("Erro ao remover membro", e);
       alert("Houve um problema ao remover o membro. Verifique suas permissões.");
+    }
+  };
+
+  const handleSaveMemberEdit = async () => {
+    if (!editingMember || !user) return;
+    setEditingMemberSaving(true);
+    try {
+      const orgId = activeContextOrgId;
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/organizations/${orgId}/members/${editingMember.id}/profile`, {
+         method: 'PUT',
+         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+         body: JSON.stringify({ displayName: editingMemberName })
+      });
+
+      if (!res.ok) {
+         const errorData = await res.json();
+         alert(`Erro: ${errorData.error}`);
+         return;
+      }
+      
+      setMembers(prev => prev.map(m => m.id === editingMember.id ? { ...m, displayName: editingMemberName } : m));
+      setEditingMember(null);
+      feedback.success("Dados do membro atualizados.");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao atualizar o membro.");
+    } finally {
+      setEditingMemberSaving(false);
+    }
+  };
+
+  const handleSendMemberPasswordReset = async () => {
+    if (!editingMember?.email) return;
+    try {
+      await sendPasswordResetEmail(auth, editingMember.email);
+      feedback.success(`E-mail de redefinição de senha enviado para ${editingMember.email}.`);
+    } catch (e: any) {
+      console.error(e);
+      alert("Erro ao enviar e-mail de redefinição de senha.");
     }
   };
 
@@ -1642,6 +1690,10 @@ export function Dashboard() {
                 onSaveOrg={handleSaveOrg}
                 handleUpdateMemberRole={handleUpdateMemberRole}
                 handleRemoveMember={handleRemoveMember}
+                onEditMember={(member) => {
+                  setEditingMember(member);
+                  setEditingMemberName(member.displayName || "");
+                }}
                 isEditingOrg={isEditingOrg}
                 setIsEditingOrg={setIsEditingOrg}
                 adminSelectedOrgId={adminSelectedOrgId}
@@ -2503,6 +2555,89 @@ export function Dashboard() {
           />
         );
       })()}
+      {/* Edit Member Modal */}
+      <AnimatePresence>
+        {editingMember && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0A0A0A] border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl relative overflow-hidden"
+            >
+              <button 
+                onClick={() => setEditingMember(null)}
+                className="absolute top-4 right-4 text-[#A0A7B5] hover:text-white transition-colors p-2"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <h3 className="text-xl font-semibold text-white mb-6">Editar Membro</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">E-mail</label>
+                  <input
+                    type="text"
+                    value={editingMember.email || ""}
+                    disabled
+                    className="w-full bg-[#1A1D24]/50 border border-white/5 rounded-xl px-4 py-3 text-white text-sm outline-none opacity-70 cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Nome de Exibição</label>
+                  <input
+                    type="text"
+                    value={editingMemberName}
+                    onChange={(e) => setEditingMemberName(e.target.value)}
+                    className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
+                    placeholder="Nome do usuário"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={handleSendMemberPasswordReset}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold transition-all bg-[#2B85EB]/10 text-[#2B85EB] hover:bg-[#2B85EB]/20 border border-[#2B85EB]/20"
+                  >
+                    <Mail className="w-4 h-4" />
+                    Enviar Link de Redefinição de Senha
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-8">
+                <button
+                  onClick={() => setEditingMember(null)}
+                  className="flex-1 px-4 py-3 rounded-xl font-semibold text-white bg-white/5 hover:bg-white/10 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveMemberEdit}
+                  disabled={editingMemberSaving}
+                  className="flex-1 px-4 py-3 rounded-xl font-semibold text-white bg-[#2B85EB] hover:bg-[#1E6FD6] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {editingMemberSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Salvando...
+                    </>
+                  ) : (
+                    "Salvar Alterações"
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </EcosystemShell>
   );
 }

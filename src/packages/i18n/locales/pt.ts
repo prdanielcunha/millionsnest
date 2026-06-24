@@ -124,7 +124,7 @@ export default {
     faq_q1: "Posso cancelar a qualquer momento?",
     faq_a1: "Sim, nosso compromisso é com a sua liberdade. Você pode cancelar a assinatura diretamente pelo painel sem burocracia.",
     faq_q2: "Preciso de cartão de crédito para testar?",
-    faq_a2: "Não. Os primeiros 7 dias são totalmente gratuitos e não exigem vínculo prévio. Queremos que você experimente a plataforma com segurança.",
+    faq_a2: "Sim, é necessário um cartão de crédito para iniciar o período de teste, pois utilizamos o processamento seguro da Stripe. No entanto, nenhuma cobrança será feita durante os primeiros 7 dias, e você pode cancelar a qualquer momento antes de ser cobrado.",
     faq_q3: "E se a nossa equipe for muito grande?",
     faq_a3: "O plano Pro é feito exatamente para cobrir um número ilimitado de membros. O motor é escalável e suporta desde grupos pequenos até grandes igrejas.",
     faq_q4: "Haverá um aplicativo nativo para celular?",
