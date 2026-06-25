@@ -1530,7 +1530,11 @@ export function Dashboard() {
                             {isInstalled && <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-0" />}
                             <div className="relative z-10 flex items-start justify-between mb-4">
                               <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${isInstalled ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 text-[#2B85EB]' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
-                                <Icon className="w-5 h-5" />
+                                {app.id === 'musicscale' ? (
+                                  <img src="/LogoIconMusicScale.png" alt="MusicScale" className="w-7 h-7 object-contain" />
+                                ) : (
+                                  <Icon className="w-5 h-5" />
+                                )}
                               </div>
                               <span className={`px-2 py-1 text-[9px] font-bold rounded-md border uppercase tracking-widest shadow-sm ${
                                 isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 
