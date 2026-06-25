@@ -340,6 +340,37 @@ export async function upsertEcosystemSubscription(params: {
   // Idempotency: if all documents exist, check the incoming timestamp
   if (!anyMissing) {
     const existingTs = subDoc.data()?.lastStripeEventTs || orgDoc.data()?.lastStripeEventTs || 0;
+    
+    // Protect against an old canceled subscription overwriting a newer active/trialing one
+    const existingStatus = subDoc.data()?.status;
+    const existingSubId = subDoc.data()?.stripeSubscriptionId;
+    const incomingStatus = subscription.status;
+    const incomingSubId = subscription.id;
+
+    if (existingSubId && existingSubId !== incomingSubId) {
+        if (['active', 'trialing', 'pro'].includes(existingStatus) && ['canceled', 'unpaid', 'past_due', 'incomplete_expired'].includes(incomingStatus)) {
+            console.log(`[UPSERT_ECOSYSTEM_SUBSCRIPTION] Protection Skip: Org ${orgId} has an active/trialing sub (${existingSubId}), ignoring incoming canceled/unpaid event for older sub (${incomingSubId}).`);
+            
+            // Preserve the old sub in history, without overwriting the canonical org subscription
+            const historyRef = db.collection('subscriptions').doc(orgId).collection('history').doc(incomingSubId);
+            await historyRef.set({
+               stripeSubscriptionId: incomingSubId,
+               status: incomingStatus,
+               lastStripeEventTs: eventCreatedTs,
+               updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            return {
+              success: true,
+              skipped: true,
+              createdDocuments: [],
+              updatedDocuments: [],
+              resolvedPlan: subDoc.data()?.plan || 'starter',
+              trialEndsAt: subDoc.data()?.trialEndsAt ? (subDoc.data()?.trialEndsAt instanceof admin.firestore.Timestamp ? subDoc.data()?.trialEndsAt.toDate() : new Date(subDoc.data()?.trialEndsAt)) : null
+            };
+        }
+    }
+
     if (existingTs && existingTs > eventCreatedTs) {
       console.log(`[UPSERT_ECOSYSTEM_SUBSCRIPTION] Idempotency Skip for UID: ${userId}, Org: ${orgId}. Existing event TS ${existingTs} is newer than incoming ${eventCreatedTs} from ${event_type}.`);
       return {
@@ -5640,8 +5671,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         payment_method_types: ['card'],
         line_items,
         client_reference_id: userId,
-        success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
+        success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing`,
       };
 
       if (promoCodeId) {
@@ -5850,8 +5881,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
           productId: planItem ? planItem.lookupKey : 'none',
           source: 'millionsnest_site'
         },
-        success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
+        success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing`,
       };
 
       if (!hasTrialHistory) {
@@ -5886,6 +5917,251 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     } catch (e: any) {
       console.error('[Checkout] Error creating checkout session:', e);
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/v1/billing/checkout/confirm', express.json(), async (req, res) => {
+    try {
+      if (!db) {
+        return res.status(500).json({ error: 'Database not initialized' });
+      }
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      const userId = decoded.uid;
+
+      const { session_id } = req.body;
+      if (!session_id) {
+        return res.status(400).json({ error: 'Missing session_id' });
+      }
+
+      const stripeInstance = getStripe();
+      const session = await stripeInstance.checkout.sessions.retrieve(session_id, {
+        expand: ['subscription', 'customer']
+      });
+
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+
+      const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+      
+      // Validação do tenant e usuário
+      if (session.client_reference_id && session.client_reference_id !== userId) {
+          console.warn(`[Checkout Confirm] Mismatch client_reference_id for user ${userId}. Session has ${session.client_reference_id}`);
+          // Might not block completely if metadata matches, but let's log it
+      }
+
+      const orgId = session.metadata?.organizationId || session.metadata?.orgId || userId;
+
+      if (session.status !== 'complete') {
+        return res.json({
+          ok: false,
+          code: 'CHECKOUT_NOT_COMPLETE',
+          status: session.status
+        });
+      }
+
+      if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') {
+        return res.json({
+          ok: false,
+          code: 'PAYMENT_NOT_RECEIVED',
+          status: session.payment_status
+        });
+      }
+
+      if (session.mode === 'subscription' && session.subscription) {
+        const sub = session.subscription as Stripe.Subscription;
+        
+        if (sub.status === 'active' || sub.status === 'trialing') {
+          console.log(`[Checkout Confirm] Syncing active/trialing subscription for org ${orgId}`);
+          
+          await upsertEcosystemSubscription({
+             userId: userId,
+             orgId: orgId,
+             subscription: sub,
+             eventCreatedTs: Math.floor(Date.now() / 1000),
+             event_type: 'checkout_session_confirm'
+          });
+
+          return res.json({
+            ok: true,
+            action: 'subscription_ready',
+            subscriptionStatus: sub.status,
+            hasAccess: true,
+            organizationId: orgId,
+            app: session.metadata?.appId || 'musicscale'
+          });
+        } else {
+          return res.json({
+            ok: true,
+            action: 'provisioning',
+            subscriptionStatus: sub.status,
+            retryAfterMs: 1500
+          });
+        }
+      }
+
+      // Se for payment mode (ex: addon ou renovação sem sub object)
+      if (session.mode === 'payment') {
+         return res.json({
+            ok: true,
+            action: 'subscription_ready', // ou payment_ready
+            hasAccess: true,
+            organizationId: orgId
+         });
+      }
+
+      return res.json({
+        ok: false,
+        code: 'CHECKOUT_PROVISIONING_FAILED',
+        requestId: session.id
+      });
+
+    } catch (e: any) {
+      console.error('[Checkout Confirm] Error:', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // MusicScale Integration /valid endpoint
+  const validateEcosystemSubscription = async (req: express.Request, res: express.Response) => {
+    try {
+      if (!db) return res.status(500).json({ error: 'Database not initialized' });
+
+      let orgId = req.query.orgId as string || req.body.orgId as string || req.query.organizationId as string || req.body.organizationId as string;
+      const uid = req.query.uid as string || req.body.uid as string;
+      
+      const authHeader = req.headers.authorization;
+      if (!orgId && authHeader?.startsWith('Bearer ')) {
+         try {
+            const token = authHeader.split('Bearer ')[1];
+            const decoded = await admin.auth().verifyIdToken(token);
+            orgId = decoded.orgId || decoded.organizationId || decoded.uid;
+         } catch(e) {}
+      }
+
+      if (!orgId && uid) {
+         orgId = uid; // fallback
+      }
+
+      if (!orgId) {
+         return res.status(400).json({ valid: false, reason: 'missing_organizationId' });
+      }
+
+      const subDoc = await db.collection('subscriptions').doc(orgId).get();
+      if (!subDoc.exists) {
+         // Fallback org check
+         const orgDoc = await db.collection('organizations').doc(orgId).get();
+         if (orgDoc.exists && ['active', 'trialing', 'trial', 'pro'].includes(orgDoc.data()?.subscriptionStatus)) {
+            return res.json({
+               valid: true,
+               reason: `subscription_${orgDoc.data()?.subscriptionStatus}`,
+               plan: orgDoc.data()?.plan || 'pro',
+               organizationId: orgId,
+               accessUntil: orgDoc.data()?.currentPeriodEnd ? new Date(orgDoc.data()?.currentPeriodEnd.seconds * 1000).toISOString() : null
+            });
+         }
+         return res.json({ valid: false, reason: 'subscription_not_found', organizationId: orgId });
+      }
+
+      const data = subDoc.data()!;
+      const status = data.status;
+      const plan = data.plan;
+      const validStatuses = ['active', 'trialing', 'trial', 'pro'];
+      const currentPeriodEnd = data.currentPeriodEnd ? new Date(data.currentPeriodEnd.seconds * 1000).toISOString() : null;
+
+      if (validStatuses.includes(status)) {
+         return res.json({
+            valid: true,
+            reason: `subscription_${status}`,
+            plan: plan,
+            organizationId: orgId,
+            accessUntil: currentPeriodEnd
+         });
+      }
+
+      // Se a assinatura for incompleta ou past_due, não liberar silenciosamente
+      if (['incomplete', 'past_due', 'unpaid', 'paused'].includes(status)) {
+         return res.json({
+            valid: false,
+            reason: `subscription_requires_payment`,
+            status: status,
+            organizationId: orgId
+         });
+      }
+
+      // Check residual access even if canceled
+      if (status === 'canceled' && currentPeriodEnd) {
+         const endMs = new Date(currentPeriodEnd).getTime();
+         if (endMs > Date.now()) {
+            return res.json({
+               valid: true,
+               reason: 'residual_access',
+               plan: plan,
+               organizationId: orgId,
+               accessUntil: currentPeriodEnd
+            });
+         }
+      }
+
+      return res.json({
+         valid: false,
+         reason: `subscription_${status}`,
+         organizationId: orgId
+      });
+
+    } catch (e: any) {
+      console.error('[/valid] Error validating subscription:', e);
+      return res.status(500).json({ valid: false, reason: 'internal_error' });
+    }
+  };
+
+  app.get('/valid', validateEcosystemSubscription);
+  app.post('/valid', validateEcosystemSubscription);
+  app.get('/api/valid', validateEcosystemSubscription);
+  app.post('/api/valid', validateEcosystemSubscription);
+  app.get('/api/v1/billing/valid', validateEcosystemSubscription);
+  app.post('/api/v1/billing/valid', validateEcosystemSubscription);
+
+  app.get('/api/v1/billing/sync-checkout', async (req, res) => {
+    try {
+      const sessionId = req.query.session_id as string;
+      if (!sessionId) return res.status(400).json({ error: 'Missing session_id' });
+
+      const stripeInstance = getStripe();
+      const session = await stripeInstance.checkout.sessions.retrieve(sessionId, {
+        expand: ['subscription', 'customer']
+      });
+
+      if (!session || !session.subscription) {
+        return res.status(404).json({ error: 'Session or subscription not found' });
+      }
+
+      const orgId = session.metadata?.organizationId || session.metadata?.uid || session.client_reference_id;
+      const userId = session.metadata?.userId || session.metadata?.uid || session.client_reference_id;
+      const sub = session.subscription as Stripe.Subscription;
+
+      if (sub.status === 'active' || sub.status === 'trialing') {
+         await upsertEcosystemSubscription({
+             userId: userId as string,
+             orgId: orgId as string,
+             subscription: sub,
+             eventCreatedTs: Math.floor(Date.now() / 1000),
+             event_type: 'manual_reconciliation_admin'
+         });
+
+         return res.json({ ok: true, message: 'Reconciliation complete', session: sessionId, status: sub.status });
+      } else {
+         return res.json({ ok: false, message: 'Subscription is not active/trialing', status: sub.status });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
     }
   });
 

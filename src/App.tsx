@@ -28,6 +28,7 @@ const Login = lazy(() => import('./pages/Login.js').then(module => ({ default: m
 const Join = lazy(() => import('./pages/Join.js').then(module => ({ default: module.Join })));
 const Dashboard = lazy(() => import('./pages/Dashboard.js').then(module => ({ default: module.Dashboard })));
 const Checkout = lazy(() => import('./pages/Checkout.js'));
+const BillingSuccess = lazy(() => import('./pages/BillingSuccess.js'));
 const AdminDebug = lazy(() => import('./pages/AdminDebug.js'));
 const EcosystemAdmin = lazy(() => import('./pages/EcosystemAdmin.js').then(module => ({ default: module.EcosystemAdmin })));
 const EcosystemDataConsole = lazy(() => import('./pages/EcosystemDataConsole.js').then(module => ({ default: module.EcosystemDataConsole })));
@@ -78,6 +79,7 @@ export default function App() {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/dashboard/:tab" element={<Dashboard />} />
                 <Route path="/dashboard/:tab/:subTab" element={<Dashboard />} />
+                <Route path="/dashboard/billing/success" element={<BillingSuccess />} />
                 <Route path="/admin/debug/organization" element={<AdminDebug />} />
                 <Route path="/admin/ecosystem" element={<EcosystemAdmin />} />
                 <Route path="/admin/ecosystem-data" element={<EcosystemDataConsole />} />
