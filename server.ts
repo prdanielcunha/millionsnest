@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import path from 'path';
 import crypto from 'crypto';
+import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
@@ -5571,6 +5572,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       // Find customer
       let customerId: string | undefined;
       let orgId = userId;
+      let hasTrialHistory = false;
+
       if (db) {
          const orgContext = await resolveUserOrganizationContext(userId);
          const userDoc = await db.collection('users').doc(userId).get();
@@ -5582,28 +5585,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          const subDoc = await db.collection('subscriptions').doc(orgId).get();
          if (subDoc.exists) {
             if (!customerId) customerId = subDoc.data()?.stripeCustomerId;
-            const subData = subDoc.data();
-            if (planLookupKey) {
-                const existingPlan = subData?.plan || subData?.tier || 'starter';
-                const status = (subData?.status || '').toLowerCase();
-                const currentPeriodEnd = subData?.currentPeriodEnd;
-                
-                let isValid = false;
-                if (status === 'active' || status === 'trialing') isValid = true;
-                if (status === 'canceled' && currentPeriodEnd) {
-                   const endMs = currentPeriodEnd._seconds ? currentPeriodEnd._seconds * 1000 : (currentPeriodEnd._nanoseconds ? currentPeriodEnd.toMillis?.() : new Date(currentPeriodEnd).getTime());
-                   if (Date.now() < endMs) isValid = true;
-                }
-                
-                if (isValid) {
-                   const normalizedDesired = planLookupKey.replace('musicscale_', '').replace('_monthly', '').replace('_yearly', '');
-                   if (normalizedDesired.includes(existingPlan.toLowerCase()) || existingPlan.toLowerCase().includes(normalizedDesired)) {
-                       return res.status(400).json({ code: 'PLAN_ALREADY_ACTIVE', error: 'Você já possui este plano ativo. Para alterar sua assinatura, acesse a área de assinatura.' });
-                   } else {
-                       return res.status(400).json({ code: 'DIFFERENT_PLAN_ACTIVE', error: 'Você já possui um plano ativo. Para alterar sua assinatura, acesse a área de assinatura.' });
-                   }
-                }
-            }
+            if (subDoc.data()?.trialUsed) hasTrialHistory = true;
          }
       }
 
@@ -5611,6 +5593,41 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         const customers = await stripe.customers.list({ email, limit: 1 });
         if (customers.data.length > 0) {
            customerId = customers.data[0].id;
+        }
+      }
+
+      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId);
+
+      if (planLookupKey) {
+        if (eligibility.decision === 'block_duplicate') {
+          return res.status(400).json({ 
+            ok: false, 
+            code: 'ACTIVE_SUBSCRIPTION_EXISTS', 
+            action: 'manage_existing_subscription',
+            error: 'Sua assinatura já está ativa. Você pode gerenciá-la na área de assinatura.' 
+          });
+        }
+
+        if (eligibility.decision === 'resume_existing') {
+          return res.status(400).json({
+            ok: false,
+            code: 'SUBSCRIPTION_CANCEL_SCHEDULED',
+            action: 'resume_existing_subscription',
+            error: 'Sua assinatura ainda pode ser mantida sem criar uma nova contratação.'
+          });
+        }
+
+        if (eligibility.decision === 'regularize_existing') {
+          return res.status(400).json({
+            ok: false,
+            code: 'SUBSCRIPTION_REQUIRES_PAYMENT',
+            action: 'regularize_existing_subscription',
+            error: 'Existe um pagamento pendente nesta assinatura. Regularize-o antes de contratar novamente.'
+          });
+        }
+
+        if (eligibility.reason === 'previous_subscription_canceled' || eligibility.reason === 'previous_subscription_terminal') {
+          hasTrialHistory = true; // They've had a subscription before, so no trial.
         }
       }
 
@@ -5649,7 +5666,6 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       if (hasRecurring) {
         sessionArgs.mode = 'subscription';
         sessionArgs.subscription_data = {
-          trial_period_days: 7, // 7 days trial
           metadata: {
             uid: userId,
             userId: userId,
@@ -5660,6 +5676,19 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             source: 'millionsnest_site'
           }
         };
+
+        if (!hasTrialHistory) {
+          sessionArgs.subscription_data.trial_period_days = 7;
+        }
+
+        if (eligibility.decision === 'allow_new_subscription' && eligibility.hasResidualAccess && eligibility.accessUntil) {
+          const endMs = new Date(eligibility.accessUntil).getTime();
+          if (endMs > Date.now()) {
+            // Overwrite any 7-day trial with the exact residual access date
+            sessionArgs.subscription_data.trial_end = Math.floor(endMs / 1000);
+            sessionArgs.subscription_data.trial_period_days = undefined;
+          }
+        }
       } else {
         sessionArgs.mode = 'payment';
       }
@@ -5682,7 +5711,12 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          sessionArgs.customer_email = email;
       }
 
-      const session = await stripe.checkout.sessions.create(sessionArgs);
+      const accessUntilStr = eligibility.decision === 'allow_new_subscription' ? (eligibility.accessUntil || 'no_access') : 'no_access';
+      const idempotencyKey = crypto.createHash('sha256').update(
+        `unified-checkout_${orgId}_${planLookupKey || 'none'}_${addonLookupKeys ? addonLookupKeys.join(',') : ''}_${accessUntilStr}`
+      ).digest('hex');
+
+      const session = await stripe.checkout.sessions.create(sessionArgs, { idempotencyKey });
 
       console.log(`[Unified Checkout] Session created successfully for user ${userId}`);
       res.json({ url: session.url });
@@ -5728,6 +5762,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       let customerId: string | undefined;
       let orgId = userId;
+      let hasTrialHistory = false;
+
       if (db) {
          const orgContext = await resolveUserOrganizationContext(userId);
          const userDoc = await db.collection('users').doc(userId).get();
@@ -5736,9 +5772,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          }
          orgId = orgContext.primaryOrganizationId || orgContext.activeOrganizationId || (userDoc.exists ? userDoc.data()?.organizationId : null) || userId;
          
-         if (!customerId) {
-            const subDoc = await db.collection('subscriptions').doc(orgId).get();
-            if (subDoc.exists) customerId = subDoc.data()?.stripeCustomerId;
+         const subDoc = await db.collection('subscriptions').doc(orgId).get();
+         if (subDoc.exists) {
+            if (!customerId) customerId = subDoc.data()?.stripeCustomerId;
+            if (subDoc.data()?.trialUsed) hasTrialHistory = true;
          }
       }
 
@@ -5747,6 +5784,39 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         if (customers.data.length > 0) {
            customerId = customers.data[0].id;
         }
+      }
+
+      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId);
+
+      if (eligibility.decision === 'block_duplicate') {
+        return res.status(400).json({ 
+          ok: false, 
+          code: 'ACTIVE_SUBSCRIPTION_EXISTS', 
+          action: 'manage_existing_subscription',
+          error: 'Sua assinatura já está ativa. Você pode gerenciá-la na área de assinatura.' 
+        });
+      }
+
+      if (eligibility.decision === 'resume_existing') {
+        return res.status(400).json({
+          ok: false,
+          code: 'SUBSCRIPTION_CANCEL_SCHEDULED',
+          action: 'resume_existing_subscription',
+          error: 'Sua assinatura ainda pode ser mantida sem criar uma nova contratação.'
+        });
+      }
+
+      if (eligibility.decision === 'regularize_existing') {
+        return res.status(400).json({
+          ok: false,
+          code: 'SUBSCRIPTION_REQUIRES_PAYMENT',
+          action: 'regularize_existing_subscription',
+          error: 'Existe um pagamento pendente nesta assinatura. Regularize-o antes de contratar novamente.'
+        });
+      }
+
+      if (eligibility.reason === 'previous_subscription_canceled' || eligibility.reason === 'previous_subscription_terminal') {
+        hasTrialHistory = true; // They've had a subscription before, so no trial.
       }
 
       const sessionArgs: Stripe.Checkout.SessionCreateParams = {
@@ -5760,7 +5830,6 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         mode: 'subscription',
         allow_promotion_codes: true, // Permite uso de cupons de desconto para novos planos
         subscription_data: {
-          trial_period_days: 7, // 7 days trial mandatory by requirements
           metadata: {
             uid: userId,
             userId: userId,
@@ -5785,13 +5854,32 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
       };
 
+      if (!hasTrialHistory) {
+        if (sessionArgs.subscription_data) {
+          sessionArgs.subscription_data.trial_period_days = 7;
+        }
+      }
+
+      if (eligibility.decision === 'allow_new_subscription' && eligibility.hasResidualAccess && eligibility.accessUntil && sessionArgs.subscription_data) {
+        const endMs = new Date(eligibility.accessUntil).getTime();
+        if (endMs > Date.now()) {
+          sessionArgs.subscription_data.trial_end = Math.floor(endMs / 1000);
+          sessionArgs.subscription_data.trial_period_days = undefined;
+        }
+      }
+
       if (customerId) {
          sessionArgs.customer = customerId;
       } else {
          sessionArgs.customer_email = email;
       }
 
-      const session = await stripe.checkout.sessions.create(sessionArgs);
+      const accessUntilStr = eligibility.decision === 'allow_new_subscription' ? (eligibility.accessUntil || 'no_access') : 'no_access';
+      const idempotencyKey = crypto.createHash('sha256').update(
+        `checkout_${orgId}_${lookupKey}_${accessUntilStr}`
+      ).digest('hex');
+
+      const session = await stripe.checkout.sessions.create(sessionArgs, { idempotencyKey });
 
       console.log(`[Checkout] Session created successfully for user ${userId}`);
       res.json({ url: session.url });

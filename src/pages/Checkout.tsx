@@ -44,6 +44,10 @@ export default function Checkout() {
   const [appliedCoupon, setAppliedCoupon] = useState<{ id: string, percentOff?: number | null, amountOff?: number | null, duration?: string } | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState('');
+  
+  // Checkout Error State
+  const [checkoutError, setCheckoutError] = useState('');
+  const [checkoutAction, setCheckoutAction] = useState<{ code: string, label: string } | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -192,8 +196,12 @@ export default function Checkout() {
 
   const handleCheckout = async () => {
     if (!user || checkoutLoading) return;
+    
+    setCheckoutError('');
+    setCheckoutAction(null);
+
     if (!selectedPlanLookup) {
-        alert(t('error_plan', 'Por favor, selecione um plano principal.'));
+        setCheckoutError(t('error_plan', 'Por favor, selecione um plano principal.'));
         return;
     }
     
@@ -211,13 +219,20 @@ export default function Checkout() {
         })
       });
       const data = await res.json();
+      
       if (data.url) {
         window.location.href = data.url;
       } else {
-        alert(data.error || 'Erro ao iniciar checkout');
+        setCheckoutError(data.error || 'Erro ao iniciar checkout');
+        if (data.code === 'ACTIVE_SUBSCRIPTION_EXISTS' || data.code === 'SUBSCRIPTION_CANCEL_SCHEDULED' || data.code === 'SUBSCRIPTION_REQUIRES_PAYMENT') {
+          setCheckoutAction({
+            code: data.code,
+            label: 'Acessar Portal do Cliente'
+          });
+        }
       }
     } catch (e: any) {
-      alert("Erro ao iniciar checkout: " + e.message);
+      setCheckoutError("Erro ao iniciar checkout. Tente novamente.");
     } finally {
       setCheckoutLoading(false);
     }
@@ -646,6 +661,22 @@ export default function Checkout() {
                            </motion.div>
                        )}
                     </div>
+
+                    {checkoutError && (
+                       <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex flex-col gap-3">
+                           <div className="text-red-400 text-sm font-medium">
+                               {checkoutError}
+                           </div>
+                           {checkoutAction && (
+                               <button
+                                   onClick={() => navigate('/dashboard/billing')}
+                                   className="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 py-2 px-3 rounded-lg transition-colors font-semibold self-start"
+                               >
+                                   {checkoutAction.label}
+                               </button>
+                           )}
+                       </div>
+                    )}
 
                     <button 
                        onClick={handleCheckout}
