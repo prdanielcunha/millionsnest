@@ -1183,7 +1183,7 @@ async function startServer() {
       const actorUid = decodedToken.uid;
       
       const { orgId, memberId } = req.params;
-      const { displayName } = req.body;
+      const { displayName, photoURL, role, appRole } = req.body;
       
       if (!db) return res.status(500).json({ error: 'Database not initialized' });
 
@@ -1203,14 +1203,46 @@ async function startServer() {
          return res.status(403).json({ error: 'Você não tem permissão para editar dados dos membros.' });
       }
 
-      await admin.auth().updateUser(memberId, {
-         displayName: displayName
-      });
+      // Update Firebase Auth
+      const authUpdate: any = {};
+      if (displayName !== undefined) authUpdate.displayName = displayName;
+      if (photoURL !== undefined) authUpdate.photoURL = photoURL;
+      
+      if (Object.keys(authUpdate).length > 0) {
+        await admin.auth().updateUser(memberId, authUpdate);
+      }
 
-      await db.collection('users').doc(memberId).set({
-         displayName: displayName,
+      // Update central users collection
+      const userUpdate: any = {
          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      };
+      if (displayName !== undefined) userUpdate.displayName = displayName;
+      if (photoURL !== undefined) userUpdate.photoURL = photoURL;
+      
+      await db.collection('users').doc(memberId).set(userUpdate, { merge: true });
+
+      // Update organization membership subcollection doc
+      const memberUpdate: any = {
+         updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      if (displayName !== undefined) memberUpdate.displayName = displayName;
+      if (photoURL !== undefined) memberUpdate.photoURL = photoURL;
+      if (role !== undefined) {
+        memberUpdate.role = role;
+        memberUpdate.organizationRole = role;
+      }
+      if (appRole !== undefined) {
+        memberUpdate.appRole = appRole;
+      }
+
+      await db.collection('organizations').doc(orgId).collection('members').doc(memberId).set(memberUpdate, { merge: true });
+
+      // Update legacy organization_members collection if it exists
+      const legacyDocRef = db.collection('organization_members').doc(`${memberId}_${orgId}`);
+      const legacyDoc = await legacyDocRef.get();
+      if (legacyDoc.exists) {
+        await legacyDocRef.set(memberUpdate, { merge: true });
+      }
 
       return res.json({ success: true });
     } catch (err) {
