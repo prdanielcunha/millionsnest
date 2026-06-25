@@ -69,9 +69,13 @@ const getVisualState = (sub: any) => {
 };
 
 export function Dashboard() {
-  const { user, profile, loading, logout, switchOrganization } = useAuth();
+  const { user, profile, loading, logout, switchOrganization, canonicalContext } = useAuth();
   const navigate = useNavigate();
   const { tab, subTab } = useParams();
+  
+  const activeOrgId = canonicalContext?.activeOrganizationId || profile?.organizationId;
+  const userOrgs = canonicalContext?.organizations || 
+     (profile?.organizations ? profile.organizations.map((id: string) => ({ id, name: `Org ID: ${id.substring(0,8)}` })) : []);
   
   // Mapping specific routes to internal tabs
   let initialTab: Tab = "overview";
@@ -1347,19 +1351,19 @@ export function Dashboard() {
                     Olá, {profile?.displayName?.split(' ')[0] || user.email?.split('@')[0]}
                     
                     {/* Org Switcher for Users with Multiple Orgs */}
-                    {profile?.organizations && profile.organizations.length > 1 && (
+                    {userOrgs.length > 1 && (
                       <div className="relative inline-block ml-4">
                          <select 
-                           value={profile.organizationId}
+                           value={activeOrgId}
                            onChange={(e) => {
                               switchOrganization(e.target.value).then(() => {
                                  window.location.reload();
                               });
                            }}
-                           className="appearance-none bg-white/5 border border-white/10 hover:border-white/20 text-sm rounded-xl px-3 py-1.5 outline-none cursor-pointer text-[#A0A7B5] transition-all"
+                           className="appearance-none bg-white/5 border border-white/10 hover:border-white/20 text-sm rounded-xl px-3 py-1.5 outline-none cursor-pointer text-[#A0A7B5] transition-all max-w-[200px] truncate"
                          >
-                           {profile.organizations.map(org => (
-                             <option key={org} value={org} className="bg-[#0B0F19] text-[#F5F7FA]">Org ID: {org.substring(0,6)}...</option>
+                           {userOrgs.map((org: any) => (
+                             <option key={org.id} value={org.id} className="bg-[#0B0F19] text-[#F5F7FA]">{org.name}</option>
                            ))}
                          </select>
                       </div>
@@ -1796,26 +1800,27 @@ export function Dashboard() {
 
                   <div className="flex flex-col pb-6 border-b border-white/5">
                     <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Trocar Organização Ativa</p>
-                    {profile?.organizations && profile.organizations.length > 0 ? (
+                    {userOrgs.length > 0 ? (
                       <div className="flex flex-col gap-2">
-                        {profile.organizations.map((orgIdStr: string) => (
+                        {userOrgs.map((org: any) => (
                            <button 
-                             key={orgIdStr}
-                             disabled={profile.organizationId === orgIdStr}
+                             key={org.id}
+                             disabled={activeOrgId === org.id}
                              onClick={() => {
-                               switchOrganization(orgIdStr).then(() => {
+                               switchOrganization(org.id).then(() => {
                                   window.location.reload();
                                });
                              }}
-                             className={`flex items-center justify-between p-4 rounded-xl border transition-all text-left ${profile.organizationId === orgIdStr ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 cursor-default' : 'bg-[#050505] border-white/5 hover:border-white/10 cursor-pointer'}`}
+                             className={`flex items-center justify-between p-4 rounded-xl border transition-all text-left ${activeOrgId === org.id ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 cursor-default' : 'bg-[#050505] border-white/5 hover:border-white/10 cursor-pointer'}`}
                            >
                              <div>
                                <p className="text-sm font-semibold text-[#F5F7FA]">
-                                 ID: {orgIdStr}
-                                 {profile.organizationId === orgIdStr && <span className="ml-2 text-[10px] bg-[#2B85EB]/20 text-[#2B85EB] uppercase tracking-widest px-2 py-0.5 rounded font-bold">Ativa</span>}
+                                 {org.name || `ID: ${org.id}`}
+                                 {activeOrgId === org.id && <span className="ml-2 text-[10px] bg-[#2B85EB]/20 text-[#2B85EB] uppercase tracking-widest px-2 py-0.5 rounded font-bold">Ativa</span>}
                                </p>
+                               {org.name && <p className="text-xs text-[#A0A7B5] mt-1 font-mono">{org.id}</p>}
                              </div>
-                             {profile.organizationId !== orgIdStr && (
+                             {activeOrgId !== org.id && (
                                 <span className="text-xs text-[#A0A7B5] group-hover:text-white transition-colors flex items-center gap-1 font-medium bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">Acessar</span>
                              )}
                            </button>
