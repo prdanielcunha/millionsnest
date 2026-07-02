@@ -1206,10 +1206,30 @@ async function startServer() {
       // Update Firebase Auth
       const authUpdate: any = {};
       if (displayName !== undefined) authUpdate.displayName = displayName;
-      if (photoURL !== undefined) authUpdate.photoURL = photoURL;
+      
+      let validPhotoURL: string | null = null;
+      if (photoURL) {
+         try {
+            const urlObj = new URL(photoURL);
+            if (urlObj.protocol === 'http:' || urlObj.protocol === 'https:') {
+               validPhotoURL = photoURL;
+            }
+         } catch (e) {
+            // Not a valid URL, leave as null to avoid FirebaseAuthError
+         }
+      }
+      
+      if (photoURL !== undefined) {
+         authUpdate.photoURL = validPhotoURL;
+      }
       
       if (Object.keys(authUpdate).length > 0) {
-        await admin.auth().updateUser(memberId, authUpdate);
+         try {
+            await admin.auth().updateUser(memberId, authUpdate);
+         } catch (authErr) {
+            console.warn('[Update Member Profile - Firebase Auth Warning]', authErr);
+            // Non-blocking: proceed with updating database even if Firebase Auth update fails (e.g., due to user not existing in auth list or other constraints)
+         }
       }
 
       // Update central users collection
