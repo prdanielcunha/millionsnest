@@ -13,14 +13,7 @@ export function Hero() {
   const { t } = useTranslation(['landing']);
 
   const handleCtaClick = () => {
-    const defaultPlan = 'musicscale_pro_monthly';
-    sessionStorage.setItem('purchase_intent', defaultPlan);
-    
-    if (user) {
-      navigate(`/checkout?plan=${defaultPlan}`);
-    } else {
-      navigate('/login');
-    }
+    navigate('/musicscale');
   };
 
   return (

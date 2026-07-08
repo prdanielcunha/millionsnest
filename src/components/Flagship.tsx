@@ -50,7 +50,7 @@ export function Flagship() {
             className="flex flex-col gap-4 w-full md:w-auto"
           >
             <Link 
-              to="/login" 
+              to="/musicscale" 
               className="px-8 py-4 rounded-xl bg-[#F5F7FA] text-[#050505] font-semibold hover:bg-white transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto"
             >
               {t('flagship_cta')}

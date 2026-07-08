@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Menu, X, LogOut, LayoutDashboard, LayoutGrid, Building, User, ChevronDown, Music, Users, ShieldCheck, CreditCard, ExternalLink } from 'lucide-react';
+import { Search, Menu, X, LogOut, LayoutDashboard, LayoutGrid, Building, User, ChevronDown, Music, Users, ShieldCheck, CreditCard, ExternalLink, Wallet, Calendar, QrCode } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils.js';
 import { useTranslation, Trans } from 'react-i18next';
@@ -51,6 +51,133 @@ export function Navbar() {
     if (!profile || !organization) return;
     await ecosystemPlatform.launchModule(app.id, app.url, user, profile, organization, currentUserPerms);
   };
+
+  const renderCommandCenter = () => (
+    <AnimatePresence>
+      {launcherOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+          transition={{ duration: 0.15 }}
+          className="absolute right-0 top-full mt-3 w-80 md:w-[26rem] bg-[#0B0F19] border border-white/10 shadow-2xl rounded-2xl overflow-hidden flex flex-col z-50 text-left"
+        >
+          <div className="p-4 border-b border-white/5 flex flex-col gap-1 bg-white/[0.02]">
+            <span className="text-sm font-semibold text-[#F5F7FA]">MillionsNest</span>
+            <span className="text-xs text-[#A0A7B5]">{t('common:nav_ecosystem_subtitle', 'Seu ecossistema de apps')}</span>
+          </div>
+          
+          <div className="p-2 overflow-y-auto max-h-[60vh] custom-scrollbar">
+            <div className="px-3 py-2 text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest mt-1 mb-1">
+              {t('common:nav_my_apps', 'Meus apps')}
+            </div>
+            <div className="flex flex-col gap-1">
+              {ECOSYSTEM_APPS.map(app => {
+                 const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || false));
+                 if (!isInstalled && app.status !== 'active') return null;
+                 
+                 const Icon = app.icon === 'Music' ? Music : 
+                              app.icon === 'Users' ? Users : 
+                              app.icon === 'ShieldCheck' ? ShieldCheck : 
+                              app.icon === 'CreditCard' ? CreditCard : 
+                              app.icon === 'Wallet' ? Wallet :
+                              app.icon === 'Calendar' ? Calendar :
+                              app.icon === 'QrCode' ? QrCode : LayoutGrid;
+                 
+                 return (
+                   <div key={`active-${app.id}`} className="group flex flex-col p-2 rounded-xl hover:bg-white/5 transition-colors">
+                     <div className="flex items-center gap-3">
+                       <button
+                         onClick={() => isInstalled ? handleLaunch(app) : null}
+                         className={`flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl transition-all ${isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB] hover:bg-[#2B85EB]/20 cursor-pointer' : 'bg-white/5 text-[#A0A7B5] cursor-default'}`}
+                       >
+                         <Icon className="w-6 h-6" />
+                       </button>
+                       <div className="flex flex-col flex-1 min-w-0">
+                         <div className="flex items-center justify-between gap-2">
+                           <span className="text-sm font-medium text-[#F5F7FA] truncate">{app.name}</span>
+                         </div>
+                         <span className="text-[11px] text-[#A0A7B5] truncate mt-0.5">{app.shortDescription || app.description}</span>
+                       </div>
+                     </div>
+                     <div className="mt-3 flex items-center gap-2 pl-[3.75rem]">
+                       {isInstalled && (
+                         <button
+                           onClick={() => handleLaunch(app)}
+                           className="px-3 py-1.5 bg-[#2B85EB] text-white text-xs font-medium rounded-lg hover:bg-[#3B95FB] transition-colors"
+                         >
+                           {t('common:nav_open', 'Abrir')}
+                         </button>
+                       )}
+                       {app.landingRoute && (
+                         <Link
+                           to={app.landingRoute}
+                           onClick={() => setLauncherOpen(false)}
+                           className="px-3 py-1.5 bg-white/5 text-[#F5F7FA] text-xs font-medium rounded-lg hover:bg-white/10 transition-colors"
+                         >
+                           {t('common:nav_learn', 'Conhecer')}
+                         </Link>
+                       )}
+                     </div>
+                   </div>
+                 );
+              })}
+            </div>
+
+            <div className="px-3 py-2 text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest mt-4 mb-1 border-t border-white/5 pt-4">
+              {t('common:nav_discover', 'Descobrir')}
+            </div>
+            <div className="flex flex-col gap-1">
+              {ECOSYSTEM_APPS.filter(app => {
+                 const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || false));
+                 return !isInstalled && app.status !== 'active';
+              }).map(app => {
+                 const Icon = app.icon === 'Music' ? Music : 
+                              app.icon === 'Users' ? Users : 
+                              app.icon === 'ShieldCheck' ? ShieldCheck : 
+                              app.icon === 'CreditCard' ? CreditCard : 
+                              app.icon === 'Wallet' ? Wallet :
+                              app.icon === 'Calendar' ? Calendar :
+                              app.icon === 'QrCode' ? QrCode : LayoutGrid;
+                 
+                 return (
+                   <div key={`soon-${app.id}`} className="flex items-center gap-3 p-2 rounded-xl opacity-60">
+                     <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 text-[#A0A7B5]">
+                       <Icon className="w-5 h-5" />
+                     </div>
+                     <div className="flex flex-col flex-1 min-w-0">
+                       <div className="flex items-center gap-2">
+                         <span className="text-sm font-medium text-[#F5F7FA] truncate">{app.name}</span>
+                         <span className="text-[9px] bg-white/10 px-1.5 py-0.5 rounded text-[#F5F7FA] uppercase tracking-wider font-medium shrink-0 leading-none">{t('common:nav_coming_soon', 'Em breve')}</span>
+                       </div>
+                       <span className="text-[11px] text-[#A0A7B5] truncate mt-0.5">{app.shortDescription || app.description}</span>
+                     </div>
+                   </div>
+                 );
+              })}
+            </div>
+          </div>
+          
+          <div className="p-3 border-t border-white/5 bg-white/[0.02] flex items-center justify-between">
+            <Link 
+               to="/#ecossistema"
+               onClick={() => setLauncherOpen(false)}
+               className="text-xs font-medium text-[#A0A7B5] hover:text-[#F5F7FA] transition-colors"
+            >
+               {t('common:nav_view_ecosystem', 'Ver ecossistema')}
+            </Link>
+            <Link 
+               to="/dashboard"
+               onClick={() => setLauncherOpen(false)}
+               className="px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium text-[#F5F7FA] flex items-center transition-colors"
+            >
+               {t('common:nav_dashboard', 'Painel Central')}
+            </Link>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 
   return (
     <header
@@ -110,54 +237,7 @@ export function Navbar() {
                   <LayoutGrid className="w-5 h-5" />
                 </button>
                 
-                <AnimatePresence>
-                  {launcherOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-full mt-3 w-80 bg-[#0B0F19] border border-white/10 shadow-2xl rounded-2xl overflow-hidden p-2 grid grid-cols-2 gap-2"
-                    >
-                      <div className="col-span-2 px-3 py-2 text-xs font-semibold text-[#A0A7B5] uppercase tracking-widest border-b border-white/5 mb-1">
-                        Módulos Ativos
-                      </div>
-                      
-                      {ECOSYSTEM_APPS.map(app => {
-                         const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || false));
-                         
-                         const Icon = app.icon === 'Music' ? Music : 
-                                      app.icon === 'Users' ? Users : 
-                                      app.icon === 'ShieldCheck' ? ShieldCheck : 
-                                      app.icon === 'CreditCard' ? CreditCard : LayoutGrid;
-                         
-                         return (
-                           <button
-                             key={app.id}
-                             disabled={!isInstalled}
-                             onClick={() => handleLaunch(app)}
-                             className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl transition-all ${isInstalled ? 'hover:bg-white/5 cursor-pointer text-[#F5F7FA]' : 'opacity-40 cursor-not-allowed text-[#A0A7B5]'}`}
-                           >
-                             <div className={`w-10 h-10 flex items-center justify-center rounded-xl ${isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB]' : 'bg-white/5 text-[#A0A7B5]'}`}>
-                               <Icon className="w-5 h-5" />
-                             </div>
-                             <span className="text-xs font-medium text-center">{app.name}</span>
-                           </button>
-                         );
-                      })}
-                      
-                      <div className="col-span-2 p-2 mt-2">
-                        <Link 
-                           to="/dashboard"
-                           onClick={() => setLauncherOpen(false)}
-                           className="w-full py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium text-[#F5F7FA] flex items-center justify-center transition-colors"
-                        >
-                           Gerenciar Painel
-                        </Link>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {renderCommandCenter()}
               </div>
 
               <Link to="/dashboard" className="px-4 py-2 bg-[#2B85EB] hover:bg-[#3B95FB] text-white text-sm font-semibold rounded-lg shadow-lg flex items-center gap-2 transition-colors">
@@ -187,12 +267,23 @@ export function Navbar() {
         <div className="lg:hidden flex items-center gap-3">
           <LanguageSwitcher />
           {user && (
-            <button 
-              className="text-[#A0A7B5] hover:text-white transition-colors bg-white/5 p-2 rounded-lg"
-              onClick={openSearch}
-            >
-              <Search size={20} />
-            </button>
+            <>
+              <button 
+                className="text-[#A0A7B5] hover:text-white transition-colors bg-white/5 p-2 rounded-lg"
+                onClick={openSearch}
+              >
+                <Search size={20} />
+              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setLauncherOpen(!launcherOpen)}
+                  className="text-[#A0A7B5] hover:text-[#F5F7FA] transition-colors bg-white/5 p-2 rounded-lg flex items-center justify-center"
+                >
+                  <LayoutGrid size={20} />
+                </button>
+                {renderCommandCenter()}
+              </div>
+            </>
           )}
           <button 
             className="text-[#A0A7B5] hover:text-white transition-colors"

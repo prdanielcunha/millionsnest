@@ -1,16 +1,27 @@
 import { motion } from "framer-motion";
 import { CalendarDays, Users, QrCode, Music, MessageSquare, BarChart3, Bot } from "lucide-react";
 import { useTranslation, Trans } from 'react-i18next';
+import { useNavigate } from "react-router-dom";
 
 export function Ecosystem() {
   const { t } = useTranslation(['landing']);
+  const navigate = useNavigate();
+
   const futureApps = [
     {
       title: t('eco_feat1_title'),
       icon: <Music className="w-5 h-5" />,
       desc: t('eco_feat1_desc'),
       features: [t('eco_app1_feat1', 'Disponível agora'), t('eco_app1_feat2', 'Revisão e integração ativa')],
-      active: true
+      active: true,
+      link: '/musicscale'
+    },
+    {
+      title: t('eco_finance_title', 'NestFinance'),
+      icon: <BarChart3 className="w-5 h-5" />,
+      desc: t('eco_finance_desc', 'Gestão financeira clara, transparente e integrada, pensada para ministérios grandes.'),
+      features: [t('eco_finance_feat1', 'Relatórios Inteligentes'), t('eco_finance_feat2', 'Dízimos e Ofertas')],
+      active: false
     },
     {
       title: t('eco_feat2_title'),
@@ -38,7 +49,6 @@ export function Ecosystem() {
   return (
     <section id="ecossistema" className="py-24 md:py-32 bg-[#050505] border-b border-white/5 relative overflow-hidden">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl h-[400px] bg-white/5 rounded-[100%] blur-[120px] pointer-events-none transform-gpu" />
-
       <div className="max-w-7xl mx-auto px-6 relative z-10">
         
         <div className="text-center max-w-3xl mx-auto mb-16 md:mb-24">
@@ -76,7 +86,8 @@ export function Ecosystem() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: idx * 0.05 }}
-              className={`rounded-2xl p-6 border relative overflow-hidden flex flex-col h-full transition-all ${app.active ? 'bg-[#2B85EB]/5 border-[#2B85EB]/20 shadow-[0_0_30px_rgba(43,133,235,0.05)]' : 'bg-[#0B0F19] border-white/5 group hover:border-[#2B85EB]/20 hover:shadow-[0_0_30px_rgba(43,133,235,0.05)]'}`}
+              onClick={() => app.link && navigate(app.link)}
+              className={`rounded-2xl p-6 border relative overflow-hidden flex flex-col h-full transition-all ${app.active ? 'bg-[#2B85EB]/5 border-[#2B85EB]/20 shadow-[0_0_30px_rgba(43,133,235,0.05)]' : 'bg-[#0B0F19] border-white/5 group hover:border-[#2B85EB]/20 hover:shadow-[0_0_30px_rgba(43,133,235,0.05)]'} ${app.link ? 'cursor-pointer hover:border-[#2B85EB]/40' : ''}`}
             >
               <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
 
