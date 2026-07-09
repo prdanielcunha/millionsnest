@@ -5,7 +5,7 @@ import { useTranslation, Trans } from "react-i18next";
 import { Navbar } from "../components/Navbar.js";
 import { Footer } from "../components/Footer.js";
 import { Pricing } from "../components/Pricing.js";
-import { Play, CheckCircle2, CalendarDays, Music, Bell, Library, Mic2, Instagram, ArrowRight, XCircle, LayoutDashboard, ChevronRight } from "lucide-react";
+import { Play, CheckCircle2, CalendarDays, Music, Bell, Library, Mic2, Instagram, ArrowRight, XCircle, LayoutDashboard, ChevronRight, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.js";
 
 // Premium Brand Lockup Component to replace LogoMS_Horiz.png
@@ -21,6 +21,29 @@ const MusicScaleLogo = ({ className = "" }: { className?: string }) => (
     </div>
   </div>
 );
+
+const FAQItem = ({ question, answer }: { question: string, answer: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="border border-white/10 rounded-2xl bg-[#0B0F19] overflow-hidden transition-colors hover:border-white/20">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-6 py-5 flex items-center justify-between text-left focus:outline-none"
+      >
+        <span className="text-lg font-medium text-white pr-4">{question}</span>
+        <ChevronDown className={`w-5 h-5 text-[#A0A7B5] transition-transform duration-300 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      <div 
+        className="px-6 overflow-hidden transition-all duration-300 ease-in-out"
+        style={{ maxHeight: isOpen ? '500px' : '0', opacity: isOpen ? 1 : 0, paddingBottom: isOpen ? '1.25rem' : '0' }}
+      >
+        <p className="text-[#A0A7B5] leading-relaxed">
+          {answer}
+        </p>
+      </div>
+    </div>
+  );
+};
 
 export function MusicScaleLanding() {
   const { t } = useTranslation(["musicscale", "common"]);
@@ -289,6 +312,16 @@ export function MusicScaleLanding() {
               </div>
             </div>
           </div>
+          
+          <div className="mt-20 flex justify-center">
+             <button 
+               onClick={handleStartTrial}
+               className="group relative px-8 py-4 bg-white/5 border border-white/10 text-white text-lg font-semibold rounded-2xl hover:bg-white/10 transition-all shadow-[0_0_20px_rgba(255,255,255,0.02)] flex items-center justify-center gap-3 backdrop-blur-md"
+             >
+               {t('musicscale:chaos_cta', 'Quero organizar minha próxima escala')}
+               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+             </button>
+          </div>
         </div>
       </section>
 
@@ -297,47 +330,54 @@ export function MusicScaleLanding() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-20">
             <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-              {t('musicscale:demo_title', 'Veja como a escala deixa de ser caos e vira fluxo.')}
+              {t('musicscale:demo_title', 'Veja em 60 segundos como o MusicScale organiza sua escala.')}
             </h2>
+            <p className="text-xl text-[#A0A7B5] max-w-2xl mx-auto">
+              {t('musicscale:demo_subtitle', 'Um fluxo simples: monte a escala, defina o repertório, envie para a equipe e acompanhe confirmações.')}
+            </p>
           </div>
           
           <div className="grid lg:grid-cols-12 gap-12 lg:gap-20 items-center">
             <div className="lg:col-span-8">
-               {/* Video Placeholder Premium */}
-               <div className="aspect-video rounded-[2rem] bg-[#0B0F19] border border-white/10 overflow-hidden relative group shadow-2xl">
+               {/* Premium Mockup Guided Demo */}
+               <div className="aspect-[4/3] sm:aspect-video rounded-[2rem] bg-[#0B0F19] border border-white/10 overflow-hidden relative group shadow-2xl">
                   <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/20 via-transparent to-transparent opacity-60" />
-                  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+PHBhdGggZD0iTTAgMGg0MHY0MEgwem0yMCAyMGMwLTExLjA0NiA4Ljk1NC0yMCAyMC0yMHY0MGMtMTEuMDQ2IDAtMjAtOC45NTQtMjAtMjB6bS0yMCAwYzAtMTEuMDQ2IDguOTU0LTIwIDIwLTIwdjQwQzguOTU0IDQwIDAgMzEuMDQ2IDAgMjB6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDMpIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiLz48L3N2Zz4=')] opacity-20" />
+                  <img src="/telas.png" alt="MusicScale em Ação" className="absolute inset-0 w-full h-full object-cover object-top opacity-80" />
                   
-                  <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-                    <button className="w-24 h-24 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white mb-8 group-hover:scale-110 group-hover:bg-[#2B85EB] transition-all duration-500 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-                      <Play className="w-10 h-10 ml-2" />
+                  {/* Subtle overlay to make it look like an interactive demo */}
+                  <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center z-10 transition-colors group-hover:bg-black/20">
+                    <button className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white mb-6 group-hover:scale-110 group-hover:bg-[#2B85EB] transition-all duration-500 shadow-[0_0_30px_rgba(0,0,0,0.5)] cursor-default">
+                       <div className="w-8 h-8 flex items-center justify-center">
+                         <div className="w-2 h-2 rounded-full bg-white animate-ping" />
+                       </div>
                     </button>
                     <div className="overflow-hidden rounded-full p-[1px] bg-gradient-to-r from-white/10 via-white/30 to-white/10">
                       <p className="text-xs font-bold tracking-widest uppercase text-white bg-[#050505]/90 px-6 py-2.5 rounded-full backdrop-blur-md">
-                        {t('musicscale:demo_placeholder', 'Vídeo de demonstração em breve')}
+                        {t('musicscale:demo_placeholder', 'Fluxo de Escala Inteligente')}
                       </p>
                     </div>
                   </div>
                </div>
             </div>
             
-            <div className="lg:col-span-4 flex flex-col gap-10">
+            <div className="lg:col-span-4 flex flex-col gap-8">
                {[
-                 { step: "01", title: t('musicscale:demo_step1_title', 'Monte a escala'), desc: t('musicscale:demo_step1_desc', 'Arraste membros e distribua funções rapidamente.') },
-                 { step: "02", title: t('musicscale:demo_step2_title', 'Defina repertório e tons'), desc: t('musicscale:demo_step2_desc', 'Adicione músicas da biblioteca com links e cifras.') },
-                 { step: "03", title: t('musicscale:demo_step3_title', 'Equipe recebe e confirma'), desc: t('musicscale:demo_step3_desc', 'Notificações automáticas para confirmação de presença.') },
-                 { step: "04", title: t('musicscale:demo_step4_title', 'Tudo pronto para o culto'), desc: t('musicscale:demo_step4_desc', 'Performance mode ligado, excelência garantida.') },
+                 { step: "01", title: t('musicscale:demo_step1_title', 'Crie a escala'), desc: t('musicscale:demo_step1_desc', 'Arraste membros e distribua funções rapidamente.') },
+                 { step: "02", title: t('musicscale:demo_step2_title', 'Adicione repertório e tons'), desc: t('musicscale:demo_step2_desc', 'Anexe músicas da biblioteca com links e cifras.') },
+                 { step: "03", title: t('musicscale:demo_step3_title', 'Notifique a equipe'), desc: t('musicscale:demo_step3_desc', 'Dispare notificações automáticas para todos os envolvidos.') },
+                 { step: "04", title: t('musicscale:demo_step4_title', 'Receba confirmações'), desc: t('musicscale:demo_step4_desc', 'Acompanhe quem confirmou presença no aplicativo.') },
+                 { step: "05", title: t('musicscale:demo_step5_title', 'Use o Performance Mode'), desc: t('musicscale:demo_step5_desc', 'Visual escuro e focado para o momento do culto.') },
                ].map((item, i) => (
                  <div key={i} className="flex gap-6 group">
                    <div className="flex flex-col items-center">
                      <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-sm font-bold text-[#A0A7B5] group-hover:border-[#2B85EB] group-hover:text-[#2B85EB] transition-colors shadow-inner">
                        {item.step}
                      </div>
-                     {i !== 3 && <div className="w-px h-full bg-gradient-to-b from-white/10 to-transparent my-2" />}
+                     {i !== 4 && <div className="w-px h-full bg-gradient-to-b from-white/10 to-transparent my-2" />}
                    </div>
-                   <div className="pt-1.5 pb-4">
-                     <h4 className="text-xl font-semibold text-white mb-2 group-hover:text-[#2B85EB] transition-colors">{item.title}</h4>
-                     <p className="text-[#A0A7B5] leading-relaxed">{item.desc}</p>
+                   <div className="pt-1.5 pb-2">
+                     <h4 className="text-lg font-semibold text-white mb-1.5 group-hover:text-[#2B85EB] transition-colors">{item.title}</h4>
+                     <p className="text-sm text-[#A0A7B5] leading-relaxed">{item.desc}</p>
                    </div>
                  </div>
                ))}
@@ -514,26 +554,27 @@ export function MusicScaleLanding() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,_var(--tw-gradient-stops))] from-white/[0.03] via-[#050505] to-[#050505] pointer-events-none" />
         <div className="max-w-3xl mx-auto relative z-10">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-[#A0A7B5] text-xs font-semibold tracking-widest uppercase mb-10">
-            {t('musicscale:proof_tag', 'Comunidade')}
+            {t('musicscale:proof_tag', 'Arquitetura com Propósito')}
           </div>
+          
           <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-8">
-            {t('musicscale:proof_title', 'Histórias reais em construção.')}
+            {t('musicscale:proof_title', 'Desenhado para o líder que não tem tempo a perder.')}
           </h2>
-          <p className="text-xl md:text-2xl text-[#A0A7B5] font-light italic mb-16 leading-relaxed max-w-2xl mx-auto">
-            {t('musicscale:proof_subtitle', 'Em breve, relatos de ministérios de louvor que transformaram sua organização com o MusicScale.')}
+          <p className="text-xl md:text-2xl text-[#A0A7B5] font-light mb-16 leading-relaxed max-w-2xl mx-auto">
+            {t('musicscale:proof_subtitle', 'Deixamos de lado ferramentas genéricas para construir um fluxo de trabalho focado unicamente na realidade da sua equipe de louvor.')}
           </p>
           
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto border-t border-white/10 pt-16 mt-16">
-             <div className="text-center">
-                <div className="text-3xl font-bold text-white mb-2">Constante</div>
+             <div className="text-center group">
+                <div className="text-3xl font-bold text-white mb-2 group-hover:text-[#2B85EB] transition-colors">Constante</div>
                 <div className="text-sm text-[#A0A7B5] font-medium tracking-wide uppercase">Evolução do Produto</div>
              </div>
-             <div className="text-center">
-                <div className="text-3xl font-bold text-white mb-2">Foco 100%</div>
+             <div className="text-center group">
+                <div className="text-3xl font-bold text-white mb-2 group-hover:text-[#2B85EB] transition-colors">Foco 100%</div>
                 <div className="text-sm text-[#A0A7B5] font-medium tracking-wide uppercase">Em Ministérios</div>
              </div>
-             <div className="text-center">
-                <div className="text-3xl font-bold text-white mb-2">Criado por</div>
+             <div className="text-center group">
+                <div className="text-3xl font-bold text-white mb-2 group-hover:text-[#2B85EB] transition-colors">Criado por</div>
                 <div className="text-sm text-[#A0A7B5] font-medium tracking-wide uppercase">Líderes Reais</div>
              </div>
           </div>
@@ -572,6 +613,52 @@ export function MusicScaleLanding() {
                  </span>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ Específico */}
+      <section className="py-32 bg-[#050505] relative border-t border-white/5">
+        <div className="absolute top-0 right-1/4 w-[800px] h-[400px] bg-[#2B85EB]/5 blur-[120px] rounded-full pointer-events-none z-0" />
+        <div className="max-w-4xl mx-auto px-6 relative z-10">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-6">
+              {t('musicscale:faq_title', 'Perguntas frequentes')}
+            </h2>
+            <p className="text-xl text-[#A0A7B5]">
+              {t('musicscale:faq_subtitle', 'Tudo que você precisa saber antes de organizar sua primeira escala.')}
+            </p>
+          </div>
+          
+          <div className="space-y-4">
+            <FAQItem 
+              question={t('musicscale:faq_q1', 'Minha igreja é pequena. Ainda faz sentido usar o MusicScale?')} 
+              answer={t('musicscale:faq_a1', 'Sim. A falta de organização e o estresse afetam igrejas de todos os tamanhos. O MusicScale foi desenhado para ser simples e rápido, liberando o líder do retrabalho e ajudando a equipe a chegar mais preparada no domingo, independente se você tem 5 ou 50 músicos.')} 
+            />
+            <FAQItem 
+              question={t('musicscale:faq_q2', 'Meus músicos vão precisar instalar algo complicado?')} 
+              answer={t('musicscale:faq_a2', 'Não. O MusicScale funciona perfeitamente pelo navegador do celular. Os músicos acessam as escalas, cifras e confirmam presença de forma fluida, sem precisar baixar aplicativos pesados.')} 
+            />
+            <FAQItem 
+              question={t('musicscale:faq_q3', 'O MusicScale substitui o WhatsApp?')} 
+              answer={t('musicscale:faq_a3', 'O MusicScale substitui a bagunça do WhatsApp. Você ainda pode usar grupos para conversar, mas a informação oficial (quem toca, qual repertório, qual tom, quem confirmou) fica salva e sempre atualizada no MusicScale.')} 
+            />
+            <FAQItem 
+              question={t('musicscale:faq_q4', 'Consigo organizar repertório, tons e cifras?')} 
+              answer={t('musicscale:faq_a4', 'Exatamente! Ao montar a escala, você adiciona as músicas, define o tom para aquele culto e anexa links (YouTube/Spotify) e cifras. A equipe já abre o app e vê tudo pronto para ensaiar.')} 
+            />
+            <FAQItem 
+              question={t('musicscale:faq_q5', 'Dá para confirmar presença na escala?')} 
+              answer={t('musicscale:faq_a5', 'Sim. Assim que a escala é enviada, o músico recebe uma notificação e pode confirmar ou recusar a participação com um clique. Você, como líder, sabe quem estará lá sem precisar cobrar.')} 
+            />
+            <FAQItem 
+              question={t('musicscale:faq_q6', 'O MusicScale é um sistema financeiro ou administrativo?')} 
+              answer={t('musicscale:faq_a6', 'Não. O MusicScale é 100% focado no Ministério de Louvor. Se sua igreja precisar de gestão administrativa ou financeira no futuro, o ecossistema MillionsNest oferecerá outros aplicativos integrados para isso.')} 
+            />
+            <FAQItem 
+              question={t('musicscale:faq_q7', 'Posso testar antes de pagar?')} 
+              answer={t('musicscale:faq_a7', 'Com certeza. Todo plano inclui 7 dias de teste totalmente gratuito, com acesso a todos os recursos premium. Se achar que não ajudou sua equipe, você cancela antes de qualquer cobrança sem burocracia.')} 
+            />
           </div>
         </div>
       </section>

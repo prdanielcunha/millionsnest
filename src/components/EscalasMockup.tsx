@@ -14,7 +14,7 @@ export function EscalasMockup() {
         <div className="flex flex-col gap-5 w-full items-center">
           <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center">
             <img 
-              src="/LogoIconMusicScale.png" 
+              src="/LogoIconMusicScale-1.png" 
               onError={(e) => { e.currentTarget.src = '/logo.png'; }} 
               alt="MusicScale"
               className="w-full h-full object-contain"

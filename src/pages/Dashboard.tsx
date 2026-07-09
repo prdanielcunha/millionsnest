@@ -1535,7 +1535,7 @@ export function Dashboard() {
                             <div className="relative z-10 flex items-start justify-between mb-4">
                               <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${isInstalled ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 text-[#2B85EB]' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
                                 {app.id === 'musicscale' ? (
-                                  <img src="/LogoIconMusicScale.png" alt="MusicScale" className="w-7 h-7 object-contain" />
+                                  <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
                                 ) : (
                                   <Icon className="w-5 h-5" />
                                 )}
