@@ -1,24 +1,19 @@
 import * as admin from 'firebase-admin';
+import { isCanonicalGlobalRole, isLegacyGlobalRole } from '../../../src/lib/permissionService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance';
-
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
-
 export type ResolvedAppAccess = {
   appId: EcosystemAppId;
   organizationId: string;
-
   accessible: boolean;
   isGlobalAccess: boolean;
   accessSource: AppAccessSource;
-
   systemRole?: string;
   organizationRole?: string;
-
   roles: string[];
   permissions: string[];
   scopes?: Record<string, string[]>;
-
   denialReason?: string;
 };
 
@@ -61,6 +56,7 @@ export async function resolveEcosystemAppAccess(params: {
   if (!uid) {
     return { ...defaultDenied, denialReason: DENIAL_REASONS.UNAUTHENTICATED };
   }
+
   if (!organizationId) {
     return { ...defaultDenied, denialReason: DENIAL_REASONS.ORGANIZATION_REQUIRED };
   }
@@ -80,8 +76,7 @@ export async function resolveEcosystemAppAccess(params: {
 
   const systemRole = userData.systemRole;
   
-  const globalAuthorizedRoles = ['ceo', 'admin', 'global_admin'];
-  const hasGlobalRole = typeof systemRole === 'string' && globalAuthorizedRoles.includes(systemRole);
+  const hasGlobalRole = isCanonicalGlobalRole(systemRole) || isLegacyGlobalRole(systemRole);
 
   // Etapa 2 — papel global validation
   // Load target organization
@@ -125,7 +120,6 @@ export async function resolveEcosystemAppAccess(params: {
   }
   
   const organizationRole = memData.role || memData.organizationRole || 'member';
-
   const enabledApps = orgData.enabledApps || [];
   
   if (appId === 'nestfinance') {

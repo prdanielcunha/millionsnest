@@ -1,10 +1,23 @@
+export const CANONICAL_GLOBAL_ROLES = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'];
+export const LEGACY_GLOBAL_ROLES = ['admin'];
+
+export function isCanonicalGlobalRole(systemRole: string | undefined | null): boolean {
+  if (!systemRole) return false;
+  return CANONICAL_GLOBAL_ROLES.includes(systemRole);
+}
+
+export function isLegacyGlobalRole(systemRole: string | undefined | null): boolean {
+  if (!systemRole) return false;
+  return LEGACY_GLOBAL_ROLES.includes(systemRole);
+}
+
 export function isCEO(userProfile: any) {
   return typeof userProfile?.systemRole === 'string' && userProfile.systemRole === 'ceo';
 }
 
 export function isGlobalAdmin(userProfile: any) {
   if (!userProfile?.systemRole || typeof userProfile.systemRole !== 'string') return false;
-  return userProfile.systemRole === 'ceo' || userProfile.systemRole === 'admin' || userProfile.systemRole === 'global_admin';
+  return isCanonicalGlobalRole(userProfile.systemRole) || isLegacyGlobalRole(userProfile.systemRole);
 }
 
 export function isGlobalPrivilegedUser(userProfile: any) {
