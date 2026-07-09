@@ -77,3 +77,48 @@ Criar e padronizar as seguintes coleções principais no Firestore:
 - **Linguagem Focada:** O sistema deve obrigatoriamente comunicar "excelência ministerial", "preparação fluida", "menos caos", "organização do louvor". Nunca use jargões como "ERP genérico de igreja", "gestão corporativa" ou "hub técnico". A comunicação deve permanecer humana, ministerial, elegante, limpa e premium (estilo Apple, Linear, Notion).
 
 **Violation of these constraints will result in breaking the current ecosystem architecture.**
+
+---
+
+# Regras Obrigatórias para IAs Trabalhando Neste Repositório
+
+As regras a seguir são mandatórias para qualquer IA que for modificar, analisar ou sugerir alterações neste repositório:
+
+1. Ler o código e os documentos técnicos antes de alterar qualquer arquivo.
+2. Entender o comportamento atual antes de propor mudança.
+3. Fazer somente alterações dentro do escopo solicitado.
+4. Não realizar refatorações oportunistas.
+5. Não alterar textos, layout, rotas, contratos, permissões, banco ou arquitetura fora do escopo.
+6. Preservar funcionalidades já existentes.
+7. Preservar multi-tenant e isolamento por organização.
+8. Nunca aceitar cegamente organizationId, userId, role, permissões ou contexto enviados pelo frontend.
+9. Autorizações críticas devem ser verificadas no backend.
+10. Firestore Rules devem permanecer compatíveis e seguras quando aplicável.
+11. Nunca criar bypass por e-mail, UID, nome ou valor hardcoded.
+12. Não criar fontes paralelas de identidade, organizações, memberships, RBAC, billing, assinatura ou entitlements.
+13. Respeitar a MillionsNest como plataforma central do ecossistema quando essa integração existir no código.
+14. Diferenciar owner, membro, papel organizacional, papel global e função operacional ou musical.
+15. Preservar a arquitetura de internacionalização.
+16. Todo novo texto visível deve suportar Português, English e Español.
+17. Aplicar Mobile First e Desktop Excellent.
+18. Preservar o design system existente.
+19. Não alterar coleções, documentos, índices, regras, contratos de API ou variáveis de ambiente sem necessidade comprovada.
+20. Não expor segredos, tokens ou credenciais.
+21. Utilizar somente comandos que realmente existam no repositório.
+22. Executar, quando disponíveis:
+   - lint;
+   - typecheck;
+   - build;
+   - testes relacionados.
+23. Revisar o diff completo antes de concluir.
+24. Informar claramente:
+   - arquivos criados;
+   - arquivos modificados;
+   - comportamento anterior;
+   - comportamento novo;
+   - comandos executados;
+   - resultados;
+   - riscos restantes;
+   - configurações manuais;
+   - confirmação de ausência de mudanças fora do escopo.
+25. Nunca afirmar que um teste passou sem evidência da execução.

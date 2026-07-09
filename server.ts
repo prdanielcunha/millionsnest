@@ -1206,10 +1206,30 @@ async function startServer() {
       // Update Firebase Auth
       const authUpdate: any = {};
       if (displayName !== undefined) authUpdate.displayName = displayName;
-      if (photoURL !== undefined) authUpdate.photoURL = photoURL;
+      
+      let validPhotoURL: string | null = null;
+      if (photoURL) {
+         try {
+            const urlObj = new URL(photoURL);
+            if (urlObj.protocol === 'http:' || urlObj.protocol === 'https:') {
+               validPhotoURL = photoURL;
+            }
+         } catch (e) {
+            // Not a valid URL, leave as null to avoid FirebaseAuthError
+         }
+      }
+      
+      if (photoURL !== undefined) {
+         authUpdate.photoURL = validPhotoURL;
+      }
       
       if (Object.keys(authUpdate).length > 0) {
-        await admin.auth().updateUser(memberId, authUpdate);
+         try {
+            await admin.auth().updateUser(memberId, authUpdate);
+         } catch (authErr) {
+            console.warn('[Update Member Profile - Firebase Auth Warning]', authErr);
+            // Non-blocking: proceed with updating database even if Firebase Auth update fails (e.g., due to user not existing in auth list or other constraints)
+         }
       }
 
       // Update central users collection
@@ -1607,9 +1627,9 @@ async function startServer() {
         plan: 'starter',
         subscriptionPlan: 'starter',
         status: 'active',
-        subscriptionStatus: 'active',
+        subscriptionStatus: 'inactive', // Changed to inactive
         enabledApps: ['musicscale'],
-        apps: { musicscale: { access: true, roles: ['owner'] } },
+        apps: { musicscale: { access: false, status: 'inactive', plan: 'starter', roles: ['owner'] } }, // Changed to inactive
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
@@ -5476,6 +5496,92 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     } catch (e: any) {
       console.error('[Validate Coupon] Error:', e.message);
       res.status(500).json({ error: 'Erro ao validar cupom.' });
+    }
+  });
+
+  app.get('/api/admin/billing/musicscale-entitlement-diagnostics', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      
+      const userRef = await db!.collection('users').doc(decoded.uid).get();
+      const userData = userRef.data();
+      
+      if (!userData || !['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(userData.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const orgId = req.query.orgId as string;
+      if (!orgId) return res.status(400).json({ error: 'orgId is required' });
+
+      const subscriptionRef = await db!.collection('subscriptions').doc(orgId).get();
+      const subscriptionData = subscriptionRef.data();
+
+      const orgRef = await db!.collection('organizations').doc(orgId).get();
+      const orgData = orgRef.data();
+
+      if (!orgData) {
+        return res.status(404).json({ error: 'Organization not found', exists: false });
+      }
+
+      const msApp = orgData.apps?.musicscale || {};
+
+      const subStatus = subscriptionData?.status;
+      const msStatus = msApp.status;
+
+      let reason = 'NO_CANONICAL_ENTITLEMENT';
+      let accessWouldBeAllowedByMusicScale = false;
+
+      if (subStatus === 'active') {
+        accessWouldBeAllowedByMusicScale = true;
+        reason = 'SUBSCRIPTION_ACTIVE';
+      } else if (subStatus === 'trialing') {
+        accessWouldBeAllowedByMusicScale = true;
+        reason = 'SUBSCRIPTION_TRIALING';
+      } else if (msStatus === 'active') {
+        accessWouldBeAllowedByMusicScale = true;
+        reason = 'APP_ENTITLEMENT_ACTIVE';
+      } else if (msStatus === 'trialing') {
+        accessWouldBeAllowedByMusicScale = true;
+        reason = 'APP_ENTITLEMENT_TRIALING';
+      } else if (orgData.subscriptionStatus === 'active' || msApp.access === true) {
+        reason = 'LEGACY_ONLY_IGNORED';
+      }
+
+      const warnings = [];
+      if (orgData.subscriptionStatus === 'active' && !accessWouldBeAllowedByMusicScale) {
+        warnings.push('Legacy subscriptionStatus is active, but canonical status is not.');
+      }
+      if (msApp.access === true && !accessWouldBeAllowedByMusicScale) {
+        warnings.push('Legacy apps.musicscale.access is true, but canonical status is not.');
+      }
+
+      return res.json({
+        orgId,
+        exists: true,
+        canonicalSources: {
+          'subscriptions.status': subscriptionData?.status || null,
+          'subscriptions.plan': subscriptionData?.plan || null,
+          'subscriptions.currentPeriodEnd': subscriptionData?.currentPeriodEnd || null,
+          'organizations.apps.musicscale.status': msApp.status || null,
+          'organizations.apps.musicscale.plan': msApp.plan || null,
+          'organizations.apps.musicscale.currentPeriodEnd': msApp.currentPeriodEnd || null,
+        },
+        ignoredLegacySources: {
+          'organizations.subscriptionStatus': orgData.subscriptionStatus || null,
+          'organizations.status': orgData.status || null,
+          'organizations.plan': orgData.plan || null,
+          'organizations.apps.musicscale.access': msApp.access !== undefined ? msApp.access : null,
+        },
+        accessWouldBeAllowedByMusicScale,
+        reason,
+        warnings
+      });
+
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
     }
   });
 

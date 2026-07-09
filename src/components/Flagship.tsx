@@ -1,10 +1,11 @@
 import { motion } from "framer-motion";
 import { Music, LayoutGrid, Smartphone, Database, Users } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { EscalasMockup } from "./EscalasMockup.js";
 import { useTranslation, Trans } from 'react-i18next';
 
 export function Flagship() {
+  const navigate = useNavigate();
   const { t } = useTranslation(['landing']);
   return (
     <section id="funcionalidades" className="py-24 md:py-32 bg-[#050505] text-[#F5F7FA] relative overflow-hidden border-b border-white/5">
@@ -50,7 +51,7 @@ export function Flagship() {
             className="flex flex-col gap-4 w-full md:w-auto"
           >
             <Link 
-              to="/login" 
+              to="/musicscale" 
               className="px-8 py-4 rounded-xl bg-[#F5F7FA] text-[#050505] font-semibold hover:bg-white transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto"
             >
               {t('flagship_cta')}
@@ -64,7 +65,7 @@ export function Flagship() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           className="w-full h-[250px] sm:h-[400px] md:h-[500px] bg-[#0B0F19] rounded-[2rem] border border-white/5 mb-24 relative overflow-hidden flex items-center justify-center group cursor-pointer hover:border-white/10 transition-colors"
-          onClick={() => alert(t('flagship_demo_alert', 'Vídeo prático demonstrando o uso do app na igreja será adicionado aqui em breve!'))}
+          onClick={() => navigate('/musicscale#musicscale-demo')}
         >
           <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent pointer-events-none" />
           <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/5 border border-white/10 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:bg-white/10 transition-all backdrop-blur-sm z-10 shadow-lg">
