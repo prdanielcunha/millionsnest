@@ -7,7 +7,6 @@ const SocialProof = lazy(() => import("../components/SocialProof.js").then((modu
 const Problem = lazy(() => import("../components/Problem.js").then((module) => ({ default: module.Problem })));
 const Ecosystem = lazy(() => import("../components/Ecosystem.js").then((module) => ({ default: module.Ecosystem })));
 const Flagship = lazy(() => import("../components/Flagship.js").then((module) => ({ default: module.Flagship })));
-const Testimonials = lazy(() => import("../components/Testimonials.js").then((module) => ({ default: module.Testimonials })));
 const Pricing = lazy(() => import("../components/Pricing.js").then((module) => ({ default: module.Pricing })));
 const FAQ = lazy(() => import("../components/FAQ.js").then((module) => ({ default: module.FAQ })));
 const Guarantee = lazy(() => import("../components/Guarantee.js").then((module) => ({ default: module.Guarantee })));
@@ -43,7 +42,6 @@ export function Home() {
         <SocialProof />
         <Problem />
         <Flagship />
-        <Testimonials />
         <Pricing />
         <Guarantee />
         <FAQ />
