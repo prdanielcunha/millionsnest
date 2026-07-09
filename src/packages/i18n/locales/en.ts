@@ -14,7 +14,7 @@ export default {
     nav_musicscale: "MusicScale",
     nav_features: "Features",
     nav_ecosystem: "Ecosystem",
-    nav_pricing: "Pricing"
+    nav_pricing: "Plans"
   },
   landing: {
     hero_tag: "The new generation of <1>ministry management</1>.",

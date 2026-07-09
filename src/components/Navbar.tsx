@@ -81,7 +81,10 @@ export function Navbar() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute right-0 md:right-0 -right-[4.5rem] top-full mt-4 w-[90vw] max-w-[400px] bg-[#050505] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.5)] rounded-2xl overflow-hidden flex flex-col z-50 text-left origin-top-right ring-1 ring-white/5"
+            className={cn(
+              "fixed left-3 right-3 top-[88px] w-auto max-w-none max-h-[calc(100dvh-110px)] bg-[#050505] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.5)] rounded-2xl overflow-hidden flex flex-col z-50 text-left ring-1 ring-white/5",
+              "lg:absolute lg:left-auto lg:right-0 lg:top-full lg:mt-4 lg:w-[26rem] lg:max-w-[26rem] lg:origin-top-right"
+            )}
           >
             {/* Header */}
             <div className="p-5 border-b border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent relative overflow-hidden">
@@ -117,7 +120,11 @@ export function Navbar() {
                               onClick={() => app.isInstalled ? handleLaunch(app) : null}
                               className={`flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-[10px] transition-all shadow-inner ${app.isInstalled ? 'bg-gradient-to-br from-[#2B85EB]/20 to-[#2B85EB]/5 text-[#2B85EB] border border-[#2B85EB]/20 cursor-pointer group-hover:scale-105' : 'bg-white/5 text-[#A0A7B5] cursor-default'}`}
                             >
-                              <Icon className="w-6 h-6" />
+                              {app.id === 'musicscale' ? (
+                                <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
+                              ) : (
+                                <Icon className="w-6 h-6" />
+                              )}
                             </button>
                             <div className="flex flex-col flex-1 min-w-0 pt-0.5">
                               <span className="text-sm font-semibold text-white truncate group-hover:text-[#2B85EB] transition-colors">{app.name}</span>
@@ -170,7 +177,11 @@ export function Navbar() {
                       return (
                         <div key={`soon-${app.id}`} className="flex items-start gap-4 p-3 rounded-xl bg-white/[0.02] border border-white/[0.02] opacity-70 hover:opacity-100 transition-opacity">
                           <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-[10px] bg-white/5 text-[#A0A7B5] border border-white/5">
-                            <Icon className="w-5 h-5" />
+                            {app.id === 'musicscale' ? (
+                              <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-6 h-6 object-contain opacity-50 grayscale" />
+                            ) : (
+                              <Icon className="w-5 h-5" />
+                            )}
                           </div>
                           <div className="flex flex-col flex-1 min-w-0 pt-0.5">
                             <div className="flex items-center gap-2">
@@ -217,7 +228,7 @@ export function Navbar() {
               <Link to="/musicscale" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_musicscale', 'MusicScale')}</Link>
               <a href="/#funcionalidades" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_features', 'Funcionalidades')}</a>
               <a href="/#ecossistema" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_ecosystem', 'Ecossistema')}</a>
-              <a href="/#precos" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_pricing', 'Valores')}</a>
+              <a href="/musicscale#pricing-section" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_pricing', 'Planos')}</a>
             </>
           )}
           {user && (
@@ -330,7 +341,7 @@ export function Navbar() {
             <Link to="/musicscale" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_musicscale', 'MusicScale')}</Link>
             <a href="/#funcionalidades" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_features', 'Funcionalidades')}</a>
             <a href="/#ecossistema" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_ecosystem', 'Ecossistema')}</a>
-            <a href="/#precos" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_pricing', 'Preços')}</a>
+            <a href="/musicscale#pricing-section" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_pricing', 'Planos')}</a>
             <hr className="border-white/10 my-2" />
             {user ? (
                <>

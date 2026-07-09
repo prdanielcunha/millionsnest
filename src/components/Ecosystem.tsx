@@ -10,7 +10,7 @@ export function Ecosystem() {
   const futureApps = [
     {
       title: t('eco_feat1_title'),
-      icon: <Music className="w-5 h-5" />,
+      icon: <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-5 h-5 object-contain" />,
       desc: t('eco_feat1_desc'),
       features: [t('eco_app1_feat1', 'Disponível agora'), t('eco_app1_feat2', 'Revisão e integração ativa')],
       active: true,

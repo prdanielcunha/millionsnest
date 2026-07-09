@@ -578,6 +578,7 @@ export function MusicScaleLanding() {
 
       {/* Pricing Section with Premium Transition */}
       <div id="pricing-section" className="pt-32 pb-16 bg-[#050505] relative">
+        <span id="precos" className="absolute -top-24" />
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-[#0B0F19] to-transparent pointer-events-none" />
         <div className="max-w-4xl mx-auto px-6 text-center mb-[-2rem] relative z-10">
            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-xs font-semibold tracking-widest uppercase mb-8">

@@ -23,7 +23,7 @@ export default {
     nav_musicscale: "MusicScale",
     nav_features: "Funciones",
     nav_ecosystem: "Ecosistema",
-    nav_pricing: "Precios"
+    nav_pricing: "Planes"
   },
   landing: {
     hero_tag: "La nueva generación de la <1>gestión ministerial</1>.",
