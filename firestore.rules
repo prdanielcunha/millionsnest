@@ -116,6 +116,14 @@ service cloud.firestore {
     // ==========================================
 
     match /organizations/{orgId} {
+      allow read: if isAuthenticated() && (
+        isSystemAdmin() ||
+        (resource != null && resource.data.get('ownerUid', '') == request.auth.uid) ||
+        (resource != null && resource.data.get('ownerId', '') == request.auth.uid) ||
+        (resource != null && resource.data.get('owner_user_id', '') == request.auth.uid) ||
+        (resource != null && resource.data.get('ownerUserId', '') == request.auth.uid) ||
+        checkMemberExists(orgId)
+      );
       allow create: if isAuthenticated() && isSystemAdmin();
       allow update: if isAuthenticated() && (
         isSystemAdmin() ||
@@ -150,8 +158,9 @@ service cloud.firestore {
       }
 
       match /invites/{inviteId} {
-        allow read: if isAuthenticated(); 
-        allow list: if isAuthenticated();
+        allow read, list: if isAuthenticated() && (
+          checkOrgAccess(orgId) || isSystemAdmin()
+        );
         allow create, update, delete: if isAuthenticated() && (isOrgAdmin(orgId) || isSystemAdmin());
       }
 

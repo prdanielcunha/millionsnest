@@ -3,7 +3,7 @@ import path from 'path';
 
 function runTests() {
   console.log("Starting security governance P0 tests...");
-  
+   
   const serverPath = path.join(process.cwd(), 'server.ts');
   const serverCode = fs.readFileSync(serverPath, 'utf8');
   
@@ -22,6 +22,10 @@ function runTests() {
       failed++;
     }
   }
+
+  // A. test2.ts não existe
+  const test2Path = path.join(process.cwd(), 'test2.ts');
+  assert(!fs.existsSync(test2Path), "test2.ts file does not exist");
 
   // 1. /api/admin/debug-final-check requirements
   const debugFinalCheckIndex = serverCode.indexOf("app.get('/api/admin/debug-final-check'");
@@ -71,11 +75,41 @@ function runTests() {
     assert(false, "hasPermission function not found in firestore.rules");
   }
 
-  const orgCreateRegex = /match \/organizations\/\{orgId\} \{\s*allow create: if isAuthenticated\(\) && isSystemAdmin\(\);/;
+  const orgCreateRegex = /match \/organizations\/\{orgId\} \{[\s\S]*?allow create: if isAuthenticated\(\) && isSystemAdmin\(\);/;
   assert(orgCreateRegex.test(rulesCode), "Organizations create rule requires system admin");
 
-  const invitesMatchRegex = /match \/invitations\/\{inviteId\} \{\s*allow read: if isAuthenticated\(\) && \('organizationId' in resource\.data && checkOrgAccess\(resource\.data\.organizationId\)\);/;
-  assert(invitesMatchRegex.test(rulesCode), "Invitations read rule requires org access");
+  // B, C
+  const orgMatchRegex = /match \/organizations\/\{orgId\} \{([\s\S]*?)allow delete:/;
+  const orgMatch = rulesCode.match(orgMatchRegex);
+  if (orgMatch) {
+    const orgRules = orgMatch[1];
+    
+    // B. contém allow read
+    assert(orgRules.includes('allow read:'), "organizations/{orgId} contains allow read");
+    
+    // C. não contém fallback orgId == request.auth.uid (sem justificativa explícita)
+    const readMatch = orgRules.match(/allow read:([^;]*);/);
+    if (readMatch) {
+      const readRule = readMatch[1];
+      assert(!readRule.includes('orgId == request.auth.uid'), "organizations allow read does not have fallback orgId == request.auth.uid");
+    } else {
+      assert(false, "Could not extract allow read rule for organizations");
+    }
+  } else {
+    assert(false, "match /organizations/{orgId} not found");
+  }
+
+  // D, E. match /invites/{inviteId}
+  const invitesMatchRegex = /match \/invites\/\{inviteId\} \{([\s\S]*?)\}/;
+  const invitesMatch = rulesCode.match(invitesMatchRegex);
+  if (invitesMatch) {
+    const invitesRule = invitesMatch[1];
+    assert(!invitesRule.includes('allow read: if isAuthenticated();'), "invites does not allow broad read");
+    assert(!invitesRule.includes('allow list: if isAuthenticated();'), "invites does not allow broad list");
+    assert(invitesRule.includes('allow read, list: if isAuthenticated() && (') && (invitesRule.includes('checkOrgAccess(orgId)') || invitesRule.includes('isSystemAdmin()')), "invites requires checkOrgAccess or isSystemAdmin for read/list");
+  } else {
+    assert(false, "match /invites/{inviteId} not found in organizations");
+  }
 
   console.log(`\nTests completed: ${passed} passed, ${failed} failed.`);
   if (failed > 0) {
