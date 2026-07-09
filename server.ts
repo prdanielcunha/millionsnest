@@ -1539,31 +1539,54 @@ async function startServer() {
     }
   });
 
-  app.get('/api/admin/debug-final-check', async (req, res) => {
-     try {
-         const db = admin.firestore();
-         const email = req.query.email;
-         if (!email || typeof email !== 'string') return res.status(400).json({error: "Email is required"});
-         const p = await db.collection('users').where('email', '==', email).get();
-         if(p.empty) return res.json({error: "Not found"});
-         const uid = p.docs[0].id;
-         const userData = p.docs[0].data();
+  app.get('/api/admin/debug-final-check', async (req: any, res) => {
+    try {
+        if (process.env.MILLIONSNEST_DEBUG_ENDPOINTS_ENABLED !== 'true') {
+           return res.status(403).json({ error: 'Debug endpoints disabled' });
+        }
+        
+        const authHeader = req.headers.authorization;
+        if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+        const token = authHeader.split('Bearer ')[1];
+        const decoded = await admin.auth().verifyIdToken(token);
+        const db = admin.firestore();
+        
+        const actorDoc = await db.collection('users').doc(decoded.uid).get();
+        if (!actorDoc.exists || !['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(actorDoc.data()?.systemRole)) {
+           return res.status(403).json({ error: 'Forbidden' });
+        }
 
-         const m = await db.collection('organization_members').where('uid', '==', uid).get();
-         const legacyMemberships = m.docs.map(d => ({id: d.id, data: d.data()}));
+        const email = req.query.email;
+        if (!email || typeof email !== 'string') return res.status(400).json({error: "Email is required"});
+        
+        const p = await db.collection('users').where('email', '==', email).get();
+        if(p.empty) return res.json({error: "Not found"});
+        const uid = p.docs[0].id;
+        const userData = p.docs[0].data();
 
-         const context = await resolveUserOrganizationContext(uid);
+        const m = await db.collection('organization_members').where('uid', '==', uid).get();
+        const legacyMemberships = m.docs.map(d => ({id: d.id, role: d.data().role}));
 
-         return res.json({
-            uid,
-            userData,
-            legacyMemberships,
-            context
-         });
-     } catch(e: any) {
-         return res.status(500).json({error: e.message});
-     }
+        const context = await resolveUserOrganizationContext(uid);
+
+        await db.collection('audit_logs').add({
+          action: 'system.debug.final_check_accessed',
+          actorUid: decoded.uid,
+          targetEmail: email,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        return res.json({
+           uid,
+           systemRole: userData.systemRole,
+           legacyMemberships,
+           context
+        });
+    } catch(e: any) {
+        return res.status(500).json({error: e.message});
+    }
   });
+
 
   app.post('/api/admin/users/:uid/create-organization', express.json(), async (req: any, res) => {
     try {
@@ -5207,8 +5230,22 @@ async function autoRepairSingleOrganizationUser(uid: string) {
   });
 
   // Debug Endpoint
-  app.get('/api/debug/subscription-status', async (req, res) => {
+  app.get('/api/debug/subscription-status', async (req: any, res) => {
     try {
+      if (process.env.MILLIONSNEST_DEBUG_ENDPOINTS_ENABLED !== 'true') {
+         return res.status(403).json({ error: 'Debug endpoints disabled' });
+      }
+      
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      
+      const actorDoc = await db!.collection('users').doc(decoded.uid).get();
+      if (!actorDoc.exists || !['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(actorDoc.data()?.systemRole)) {
+         return res.status(403).json({ error: 'Forbidden' });
+      }
+
       const email = req.query.email as string;
       if (!db || !email) return res.status(400).json({ error: 'Missing email' });
 
@@ -5216,41 +5253,57 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const stripe = getStripe();
       const customers = await stripe.customers.list({ email, limit: 1 });
-      if (customers.data.length === 0) return res.json({ error: 'Customer not found in Stripe' });
-
-      const customer = customers.data[0];
-      const subs = await stripe.subscriptions.list({ customer: customer.id, limit: 10, status: 'all' });
+      const foundStripeCustomer = customers.data.length > 0;
+      
+      let subs = [];
+      if (foundStripeCustomer) {
+         const customer = customers.data[0];
+         const subsResp = await stripe.subscriptions.list({ customer: customer.id, limit: 10, status: 'all' });
+         subs = subsResp.data.map(s => s.status);
+      }
       
       const userSnap = await db.collection('users').where('email', '==', email).get();
-      const userData: any = userSnap.empty ? null : { id: userSnap.docs[0].id, ...userSnap.docs[0].data() };
+      const foundUser = !userSnap.empty;
       
-      let subData = null;
-      let orgData = null;
-      if (userData) {
-        const orgId = userData.organizationId || userData.id;
-        const sDoc = await db.collection('subscriptions').doc(orgId).get();
-        subData = sDoc.exists ? sDoc.data() : null;
+      let canonicalSubscriptionStatus = null;
+      let appEntitlementStatus = null;
+      let organizationId = null;
+      const warnings: string[] = [];
+
+      if (foundUser) {
+        const userData: any = userSnap.docs[0].data();
+        organizationId = userData.organizationId || userSnap.docs[0].id;
         
-        const oDoc = await db.collection('organizations').doc(orgId).get();
-        orgData = oDoc.exists ? oDoc.data() : null;
+        const sDoc = await db.collection('subscriptions').doc(organizationId).get();
+        if (sDoc.exists) {
+           canonicalSubscriptionStatus = sDoc.data()?.status;
+        }
+        
+        const oDoc = await db.collection('organizations').doc(organizationId).get();
+        if (oDoc.exists) {
+           appEntitlementStatus = oDoc.data()?.apps?.musicscale?.status;
+           if (oDoc.data()?.subscriptionStatus === 'active' && canonicalSubscriptionStatus !== 'active') {
+             warnings.push('Legacy organization.subscriptionStatus is active but canonical is not');
+           }
+        }
       }
 
+      await db.collection('audit_logs').add({
+        action: 'system.debug.subscription_status_accessed',
+        actorUid: decoded.uid,
+        targetEmail: email,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+
       return res.json({
-        stripe: {
-          customerId: customer.id,
-          subscriptions: subs.data.map(s => ({
-            id: s.id,
-            status: s.status,
-            current_period_end: new Date((s as any).current_period_end * 1000).toISOString(),
-            trial_end: s.trial_end ? new Date(s.trial_end * 1000).toISOString() : null,
-            metadata: s.metadata
-          }))
-        },
-        firestore: {
-          user: userData,
-          subscription: subData,
-          organization: orgData
-        }
+        foundUser,
+        foundStripeCustomer,
+        subscriptionsCount: subs.length,
+        statuses: subs,
+        organizationId,
+        canonicalSubscriptionStatus,
+        appEntitlementStatus,
+        warnings
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

@@ -23,36 +23,17 @@ service cloud.firestore {
     }
 
     function isOrgActive(orgId) {
-      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
       let subDoc = get(/databases/$(database)/documents/subscriptions/$(orgId));
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-
-      let orgData = orgDoc != null ? orgDoc.data : null;
+      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
+      
       let subData = subDoc != null ? subDoc.data : null;
-      let userData = userDoc != null ? userDoc.data : null;
+      let orgData = orgDoc != null ? orgDoc.data : null;
+      
+      let subActive = subData != null && 'status' in subData && (subData.status == 'active' || subData.status == 'trialing');
+      
+      let appActive = orgData != null && 'apps' in orgData && 'musicscale' in orgData.apps && 'status' in orgData.apps.musicscale && (orgData.apps.musicscale.status == 'active' || orgData.apps.musicscale.status == 'trialing');
 
-      let orgActive = orgData != null && (
-        ('subscription_status' in orgData && (orgData.subscription_status == 'active' || orgData.subscription_status == 'trialing')) ||
-        ('subscriptionStatus' in orgData && (orgData.subscriptionStatus == 'active' || orgData.subscriptionStatus == 'trialing')) ||
-        ('status' in orgData && (orgData.status == 'active' || orgData.status == 'trialing')) ||
-        ('plan' in orgData && orgData.plan == 'pro')
-      );
-
-      let subActive = subData != null && (
-        ('status' in subData && (subData.status == 'active' || subData.status == 'trialing' || subData.status == 'pro'))
-      );
-
-      let userActive = userData != null && (
-        ('status' in userData && (userData.status == 'active' || userData.status == 'trialing' || userData.status == 'pro')) ||
-        ('subscription_status' in userData && (userData.subscription_status == 'active' || userData.subscription_status == 'trialing' || userData.subscription_status == 'pro')) ||
-        ('subscriptionStatus' in userData && (userData.subscriptionStatus == 'active' || userData.subscriptionStatus == 'trialing' || userData.subscriptionStatus == 'pro')) ||
-        ('plan' in userData && userData.plan == 'pro') ||
-        ('access' in userData && userData.access == true) ||
-        ('apps' in userData && 'musicscale' in userData.apps && 'status' in userData.apps.musicscale && (userData.apps.musicscale.status == 'active' || userData.apps.musicscale.status == 'trialing' || userData.apps.musicscale.status == 'pro')) ||
-        ('apps' in userData && 'musicscale' in userData.apps && 'access' in userData.apps.musicscale && userData.apps.musicscale.access == true)
-      );
-
-      return orgActive || subActive || userActive || isSystemAdmin();
+      return subActive || appActive || isSystemAdmin();
     }
 
     function checkOrgAccess(orgId) {
@@ -101,14 +82,12 @@ service cloud.firestore {
       let role = memberData != null && 'role' in memberData ? memberData.role : null;
       let hasExplicitPerm = memberData != null && 'permissions' in memberData && permission in memberData.permissions && memberData.permissions[permission] == true;
       
-      // Endurecimento progressivo: liberado para admin/owner/systemAdmin, ou se tiver a permissão explicitamente.
-      // E fallback tolerante para 'member' para não quebrar a produção abruptamente.
-      return isSystemAdmin() || role == 'owner' || role == 'admin' || hasExplicitPerm || role == 'member';
+      return isSystemAdmin() || role == 'owner' || role == 'admin' || hasExplicitPerm;
     }
     
     function isSystemAdmin() {
       let userDoc = isAuthenticated() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
-      return userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'admin' || userDoc.data.systemRole == 'global_admin');
+      return userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'global_admin' || userDoc.data.systemRole == 'ecosystem_owner' || userDoc.data.systemRole == 'founder' || userDoc.data.systemRole == 'admin');
     }
 
     // ==========================================
@@ -137,15 +116,7 @@ service cloud.firestore {
     // ==========================================
 
     match /organizations/{orgId} {
-      allow read: if isAuthenticated() && (
-        isSystemAdmin() ||
-        (resource != null && resource.data.get('ownerUid', '') == request.auth.uid) ||
-        (resource != null && resource.data.get('ownerId', '') == request.auth.uid) ||
-        (resource != null && resource.data.get('owner_user_id', '') == request.auth.uid) ||
-        checkMemberExists(orgId) ||
-        orgId == request.auth.uid
-      );
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && isSystemAdmin();
       allow update: if isAuthenticated() && (
         isSystemAdmin() ||
         resource.data.get('ownerUid', '') == request.auth.uid || 
@@ -244,7 +215,7 @@ service cloud.firestore {
     }
 
     match /invitations/{inviteId} {
-       allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && ('organizationId' in resource.data && checkOrgAccess(resource.data.organizationId));
        allow write: if isAuthenticated() && 
                     checkMemberExists(request.resource.data.get('organizationId', '')) &&
                     isOrgAdmin(request.resource.data.get('organizationId', '')) &&
