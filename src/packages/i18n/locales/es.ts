@@ -258,6 +258,10 @@ export default {
     }
   },
   checkout: {
+    no_active_org: "No se encontró ninguna organización activa.",
+    back_to_dashboard: "Volver al panel",
+    invalid_checkout_url: "URL de checkout inválida.",
+    loading_org_data: "Cargando datos de la organización...",
     active_subscription_msg: "Ya tienes una suscripción activa.",
     subscription_active_until: "Tu suscripción sigue activa hasta el {{date}}.",
     subscription_active_until_unknown: "Tu suscripción sigue activa.",

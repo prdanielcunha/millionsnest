@@ -249,6 +249,10 @@ export default {
     }
   },
   checkout: {
+    no_active_org: "No active organization was found.",
+    back_to_dashboard: "Back to dashboard",
+    invalid_checkout_url: "Invalid checkout URL.",
+    loading_org_data: "Loading organization data...",
     active_subscription_msg: "You already have an active subscription.",
     subscription_active_until: "Your subscription remains active until {{date}}.",
     subscription_active_until_unknown: "Your subscription remains active.",

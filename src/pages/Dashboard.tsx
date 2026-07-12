@@ -251,6 +251,8 @@ export function Dashboard() {
     setRepairing(true);
     try {
       const token = await user.getIdToken(true);
+      if (!activeContextOrgId) { feedback.error("Nenhuma organização ativa encontrada."); return; }
+      if (!activeContextOrgId) { feedback.error("Nenhuma organização ativa encontrada."); return; }
       const res = await fetch(`/api/repair/sync`, {
         method: 'POST',
         headers: {
@@ -261,7 +263,7 @@ export function Dashboard() {
       const data = await res.json();
       if (data.success || data.repaired) {
         feedback.success("Assinatura sincronizada com sucesso.");
-        fetchSubscriptionAndOrg(true); // Sincroniza estado sem reload
+        if(activeContextOrgId) syncSubscriptionWithStripe(activeContextOrgId); // Sincroniza estado sem reload
       } else {
         feedback.error(`Falha ao sincronizar: ${data.message || data.error || 'A conta não possui assinaturas ativas para serem verificadas.'}`);
         console.error("Repair response:", data);
@@ -341,7 +343,7 @@ export function Dashboard() {
       } else {
         if (res.status === 404 || res.status === 500 || data.error?.includes('Stripe não encontrado') || data.error?.includes('No such customer')) {
           feedback.success('Inconsistência identificada na conta. Sincronizando e reparando acesso...');
-          await fetchSubscriptionAndOrg(true);
+          if(activeContextOrgId) await syncSubscriptionWithStripe(activeContextOrgId);
           return;
         }
         feedback.error(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
@@ -390,7 +392,7 @@ export function Dashboard() {
 
       if (res.ok) {
         feedback.success('Sua assinatura continuará ativa.');
-        await fetchSubscriptionAndOrg(true);
+        if(activeContextOrgId) await syncSubscriptionWithStripe(activeContextOrgId);
       } else {
         feedback.error(data.error || 'Erro ao reativar assinatura.');
       }
@@ -402,124 +404,55 @@ export function Dashboard() {
     }
   };
 
-  const fetchSubscriptionAndOrg = async (forceSync = false, passedSessionId?: string) => {
-    if (!user) return;
+  const autoSyncAttemptedRef = useRef<Set<string>>(new Set());
+  const requestSequenceRef = useRef<number>(0);
+  const currentActiveOrgIdRef = useRef<string | null>(null);
+
+  const loadOrganizationData = async (orgId: string, requestId: number) => {
+    if (!user || !orgId) return;
     try {
-      console.log("[Dashboard] Fetching subscription and org for:", user.uid);
-      
-      if (forceSync) {
-        setLoadingSub(true);
-        console.log("[Dashboard] Automatic silent sync with Stripe...");
-        try {
-          const syncRes = await fetch('/api/v1/billing/sync', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${await user.getIdToken()}`
-            },
-            body: JSON.stringify({ organizationId: activeContextOrgId, sessionId: passedSessionId })
-          });
-          
-          if (syncRes.ok) {
-             const syncData = await syncRes.json();
-             console.log("[Dashboard] Sync Result:", syncData.status);
-          }
-        } catch (e) {
-          console.error("[Dashboard] Background sync failed silently.");
-        }
-      }
+      const subRef = doc(db, "subscriptions", orgId);
+      const subSnap = await getDoc(subRef);
 
-      // Org is usually 1:1 right now
-      const orgId = activeContextOrgId;
+      if (requestId !== requestSequenceRef.current || orgId !== currentActiveOrgIdRef.current) return;
 
-      try {
-        const subRef = doc(db, "subscriptions", orgId);
-        console.log("[Dashboard] reading subRef for orgId:", orgId);
-        const subSnap = await getDoc(subRef);
-        
-        if (subSnap.exists()) {
-           const data = subSnap.data();
-           setSubscription(data);
-           // If trialing, we check Stripe one more time silently to see if it moved to active
-           if (data.status === 'trialing' && !forceSync) {
-             user.getIdToken().then(token => fetch('/api/v1/billing/sync', {
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ organizationId: activeContextOrgId })
-             })).then(r => r.json()).then(res => {
-                if (res.organizationId === activeContextOrgId && res.subscriptionStatus === 'active') {
-                  console.log("[Dashboard] Stripe confirmed active status via background sync.");
-                  fetchSubscriptionAndOrg(true);
-                }
-             }).catch(err => console.debug("[Dashboard] Background check ignored."));
-           }
-        } else {
-           setSubscription(null);
-           if (!forceSync) {
-             console.log("[Dashboard] No sub doc found, triggering background auto-repair via sync...");
-             try {
-               user.getIdToken().then(token => fetch('/api/v1/billing/sync', {
-                 method: 'POST',
-                 headers: { 
-                   'Content-Type': 'application/json',
-                   'Authorization': `Bearer ${token}`
-                 },
-                 body: JSON.stringify({ organizationId: activeContextOrgId })
-               })).then(async r => {
-                 if (r.ok) {
-                    const data = await r.json();
-                    if (data.organizationId === activeContextOrgId && (data.ok || data.repaired || data.accessAllowed)) {
-                      console.log("[Dashboard] Background auto-repair successful.");
-                      fetchSubscriptionAndOrg(true);
-                    }
-                 }
-               }).catch(e => console.error("[Dashboard] Auto repair check failed", e));
-             } catch (e) {
-               console.error("[Dashboard] Auto repair check failed", e);
-             }
-           }
-        }
-      } catch (err: any) {
-         console.warn("[Dashboard] Could not fetch subscription (possibly rules/permissions issue):", err);
+      let currentSubData = null;
+      if (subSnap.exists()) {
+         currentSubData = subSnap.data();
+         setSubscription(currentSubData as any);
+      } else {
          setSubscription(null);
       }
 
-      // Org is usually 1:1 right now (orgId === user.uid)
+      if (!autoSyncAttemptedRef.current.has(orgId)) {
+         if (!currentSubData || currentSubData.status === 'trialing') {
+            autoSyncAttemptedRef.current.add(orgId);
+            syncSubscriptionWithStripe(orgId);
+            return; 
+         }
+      }
+
       let currentOrgData: any = null;
       let currentMembers: any[] = [];
-
-      try {
-        const orgRef = doc(db, "organizations", orgId);
-        const orgSnap = await getDoc(orgRef);
-        
-        if (orgSnap.exists()) {
+      const orgRef = doc(db, "organizations", orgId);
+      const orgSnap = await getDoc(orgRef);
+      
+      if (orgSnap.exists()) {
           currentOrgData = { id: orgSnap.id, ...orgSnap.data() };
-          setOrganization(currentOrgData);
-
-          // Fetch org members
           try {
             const membersRef = collection(db, `organizations/${orgId}/members`);
             const membersSnap = await getDocs(membersRef);
-            
-            // Also fetch the user details to get displayName and email if they are not fully populated in member doc
             const memsPromises = membersSnap.docs.map(async (d): Promise<any> => {
                let data = d.data();
                let userData = {};
                try {
                  let userSnap = await getDoc(doc(db, "users", data.uid || d.id));
                  if (userSnap.exists()) userData = userSnap.data();
-               } catch (userErr: any) {
-                 console.warn("Could not fetch user details, fallback to member data:", userErr);
-               }
+               } catch (userErr: any) {}
                return { id: d.id, ...userData, ...data };
             });
-            
             currentMembers = await Promise.all(memsPromises);
           } catch (memErr) {
-            console.warn("Could not fetch members via client SDK:", memErr);
             if (isGlobalAdmin) {
               const token = await user.getIdToken();
               const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
@@ -531,8 +464,7 @@ export function Dashboard() {
               }
             }
           }
-        } else if (isGlobalAdmin) {
-           // Try server API for org data
+      } else if (isGlobalAdmin) {
            const token = await user.getIdToken();
            const res = await fetch(`/api/admin/organizations`, {
               headers: { 'Authorization': `Bearer ${token}` }
@@ -542,8 +474,6 @@ export function Dashboard() {
              const found = adminOrgs.find((o: any) => o.id === orgId);
              if (found) {
                currentOrgData = found;
-               setOrganization(found);
-               // Also fetch members via server
                const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
                   headers: { 'Authorization': `Bearer ${token}` }
                });
@@ -553,43 +483,14 @@ export function Dashboard() {
                }
              }
            }
-        }
-      } catch (err: any) {
-        console.warn("[Dashboard] Client fetch failed for org data:", err);
-        if (isGlobalAdmin) {
-           // Fallback to server API
-           try {
-              const token = await user.getIdToken();
-              const res = await fetch(`/api/admin/organizations`, {
-                 headers: { 'Authorization': `Bearer ${token}` }
-              });
-              if (res.ok) {
-                const { organizations: adminOrgs } = await res.json();
-                const found = adminOrgs.find((o: any) => o.id === orgId);
-                if (found) {
-                  currentOrgData = found;
-                  setOrganization(found);
-                  // Also fetch members via server
-                  const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                  });
-                  if (memRes.ok) {
-                    const { members: adminMembers } = await memRes.json();
-                    currentMembers = adminMembers;
-                  }
-                }
-              }
-           } catch (fallbackErr) {
-              console.error("[Dashboard] Fallback CEO fetch failed:", fallbackErr);
-           }
-        }
       }
 
+      if (requestId !== requestSequenceRef.current || orgId !== currentActiveOrgIdRef.current) return;
+      if (currentOrgData) setOrganization(currentOrgData);
+
       if (currentMembers.length > 0) {
-        // If current user is not in the list but they own the organization, add them virtually
         let currentUserMem = currentMembers.find(m => m.id === user.uid);
         const isOwnerUid = currentOrgData?.ownerUid === user.uid;
-
         if (currentUserMem && isOwnerUid && currentUserMem.role !== 'owner') {
             currentUserMem.role = 'owner';
             setDoc(doc(db, `organizations/${orgId}/members`, user.uid), { role: 'owner', organizationRole: 'owner' }, { merge: true }).catch(console.error);
@@ -597,74 +498,85 @@ export function Dashboard() {
             const currentUserSnap = await getDoc(doc(db, "users", user.uid));
             const currentUserProfile = currentUserSnap.exists() ? currentUserSnap.data() : {};
             currentMembers.push({
-              id: user.uid,
-              uid: user.uid,
-              role: 'owner',
-              ...currentUserProfile
+              id: user.uid, uid: user.uid, role: 'owner', ...currentUserProfile
             });
-            
-            // Also fix the structural issue in background
             setDoc(doc(db, `organizations/${orgId}/members`, user.uid), {
-              uid: user.uid,
-              role: 'owner',
-              organizationRole: 'owner',
-              addedAt: new Date()
+              uid: user.uid, role: 'owner', organizationRole: 'owner', addedAt: new Date()
             }, { merge: true }).catch(console.error);
         }
-        
         setMembers(currentMembers);
       } else {
         setMembers([]);
       }
 
-      // Fetch pending invites
       try {
         const invitesRef = collection(db, `organizations/${orgId}/invites`);
         const invitesQ = query(invitesRef, where('status', '==', 'pending'));
         const invitesSnap = await getDocs(invitesQ);
-        const invs = invitesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setPendingInvites(invs);
-      } catch (err) {
-        console.error("Erro ao buscar convites", err);
-      }
+        setPendingInvites(invitesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {}
 
-      // Fetch pending join requests
       try {
         const joinReqRef = collection(db, `organizations/${orgId}/join_requests`);
         const joinReqQ = query(joinReqRef, where('status', '==', 'pending'));
         const joinReqSnap = await getDocs(joinReqQ);
-        const reqs = joinReqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setJoinRequests(reqs);
-      } catch (err) {
-        console.error("Erro ao buscar solicitacoes de acesso", err);
-      }
+        setJoinRequests(joinReqSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {}
 
-      // Fetch audit logs
       try {
         const auditRef = collection(db, `organizations/${orgId}/audit_logs`);
         const auditQ = query(auditRef, limit(5));
         const auditSnap = await getDocs(auditQ);
         const audits = auditSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        // sort descending since we can't do orderby with where in firestore without index unless we do it client side for now just sort by timestamp
         audits.sort((a: any, b: any) => {
           const tA = a.timestamp?.seconds || 0;
           const tB = b.timestamp?.seconds || 0;
           return tB - tA;
         });
         setAuditLogs(audits);
-      } catch(err) {
-        console.error("Erro ao buscar audit logs", err);
-      }
+      } catch(err) {}
 
     } catch (error) {
-      console.error("[Dashboard] Error fetching data:", error);
-      setSubscription(null);
-      setOrganization(null);
+      if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
+        setSubscription(null);
+        setOrganization(null);
+      }
     } finally {
-      setLoadingSub(false);
+      if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
+        setLoadingSub(false);
+      }
     }
   };
 
+  const syncSubscriptionWithStripe = async (orgId: string, passedSessionId?: string) => {
+     if (!user || !orgId) return;
+     const requestId = ++requestSequenceRef.current;
+     currentActiveOrgIdRef.current = orgId;
+     
+     setLoadingSub(true);
+     try {
+         const token = await user.getIdToken();
+         const syncRes = await fetch('/api/v1/billing/sync', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ organizationId: orgId, sessionId: passedSessionId })
+         });
+         
+         if (syncRes.ok) {
+            const syncData = await syncRes.json();
+            if (syncData.organizationId === orgId) {
+               // Success
+            }
+         }
+     } catch (e) {
+         console.error("[Dashboard] Background sync failed.");
+     }
+
+     await loadOrganizationData(orgId, requestId);
+  };
   useEffect(() => {
     if (organization?.name) {
       setOrgNameInput(organization.name);
@@ -1095,7 +1007,7 @@ export function Dashboard() {
       
       alert(`Compra de ${addonSuccess.replace(/_/g, ' ')} concluída com sucesso! Obrigado!`);
       setLoadingSub(true);
-      fetchSubscriptionAndOrg(true);
+      if(activeContextOrgId) syncSubscriptionWithStripe(activeContextOrgId);
       return;
     }
 
@@ -1121,20 +1033,34 @@ export function Dashboard() {
       // TODO: Criar suporte visual futuro no MillionsNest: "Cupom aplicado com sucesso"
       // Aqui podemos checar se houve desconto na session e exibir uma notificação.
       setLoadingSub(true);
-      fetchSubscriptionAndOrg(true, sessionId); // Forçar sync total ao voltar do Stripe
+      if(activeContextOrgId) syncSubscriptionWithStripe(activeContextOrgId, sessionId); // Forçar sync total ao voltar do Stripe
     }
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
     
-    // Clear state and set loading before fetching new org data
+    if (!activeContextOrgId) {
+      setSubscription(null);
+      setOrganization(null);
+      setMembers([]);
+      setPendingInvites([]);
+      setJoinRequests([]);
+      setAuditLogs([]);
+      return;
+    }
+
     setSubscription(null);
+    setOrganization(null);
+    setMembers([]);
+    setPendingInvites([]);
+    setJoinRequests([]);
+    setAuditLogs([]);
     setLoadingSub(true);
     
-    // Initial manual/background fetch of all dependencies (members, subscriptions, legacy config)
-    fetchSubscriptionAndOrg();
-
+    const requestId = ++requestSequenceRef.current;
+    currentActiveOrgIdRef.current = activeContextOrgId;
+    loadOrganizationData(activeContextOrgId, requestId);
     // Subscribe to real-time organization updates for immediate database sync
     const orgId = activeContextOrgId;
     const orgRef = doc(db, "organizations", orgId);
@@ -1313,8 +1239,8 @@ export function Dashboard() {
       });
       const data = await res.json();
       
-      if (fetchSubscriptionAndOrg) {
-        await fetchSubscriptionAndOrg(true);
+      if (activeContextOrgId) {
+        await syncSubscriptionWithStripe(activeContextOrgId);
       }
       
       if (data.organizationId === activeContextOrgId && data.ok && data.accessAllowed) {
