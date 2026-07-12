@@ -408,8 +408,11 @@ export function Dashboard() {
         try {
           const syncRes = await fetch('/api/v1/billing/sync', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.uid, sessionId: passedSessionId })
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${await user.getIdToken()}`
+            },
+            body: JSON.stringify({ organizationId: activeContextOrgId, sessionId: passedSessionId })
           });
           
           if (syncRes.ok) {
@@ -434,11 +437,14 @@ export function Dashboard() {
            setSubscription(data);
            // If trialing, we check Stripe one more time silently to see if it moved to active
            if (data.status === 'trialing' && !forceSync) {
-             fetch('/api/v1/billing/sync', {
+             user.getIdToken().then(token => fetch('/api/v1/billing/sync', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: user.uid })
-             }).then(r => r.json()).then(res => {
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ organizationId: activeContextOrgId })
+             })).then(r => r.json()).then(res => {
                 if (res.stripeStatus === 'active') {
                   console.log("[Dashboard] Stripe confirmed active status via background sync.");
                   fetchSubscriptionAndOrg(false);
@@ -450,11 +456,14 @@ export function Dashboard() {
            if (!forceSync) {
              console.log("[Dashboard] No sub doc found, triggering background auto-repair via sync...");
              try {
-               fetch('/api/v1/billing/sync', {
+               user.getIdToken().then(token => fetch('/api/v1/billing/sync', {
                  method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({ userId: user.uid })
-               }).then(async r => {
+                 headers: { 
+                   'Content-Type': 'application/json',
+                   'Authorization': `Bearer ${token}`
+                 },
+                 body: JSON.stringify({ organizationId: activeContextOrgId })
+               })).then(async r => {
                  if (r.ok) {
                     const data = await r.json();
                     if (data.status === 'success' || data.stripeStatus) {
@@ -1243,29 +1252,25 @@ export function Dashboard() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ userId: user.uid })
+        body: JSON.stringify({ organizationId: activeContextOrgId })
       });
       const data = await res.json();
       
-      if (data.status === 'reset' || data.status === 'canceled' || data.status === 'none' || !data.status) {
-        feedback.dismiss(toastId);
-        feedback.error("Não encontramos nenhuma assinatura ativa no Stripe para esta organização. Certifique-se de convalidar o pagamento ou assinar um plano.");
-      } else {
+      if (fetchSubscriptionAndOrg) {
+        await fetchSubscriptionAndOrg(true);
+      }
+      
+      if (data.ok && data.accessAllowed) {
         feedback.dismiss(toastId);
         feedback.success("Assinatura ativa identificada com sucesso!");
-        
-        if (fetchSubscriptionAndOrg) {
-          await fetchSubscriptionAndOrg(true);
-        }
-        
         setSubscriptionBlockedApp(null);
         setSubscriptionBlockedReason(null);
-        
         if (subscriptionBlockedApp) {
-          setTimeout(() => {
             handleLaunchEcosystemApp(subscriptionBlockedApp, currentUserPerms);
-          }, 300);
         }
+      } else {
+        feedback.dismiss(toastId);
+        feedback.error("Não encontramos nenhuma assinatura ativa no Stripe para esta organização. Certifique-se de convalidar o pagamento ou assinar um plano.");
       }
     } catch (err: any) {
       feedback.dismiss(toastId);
@@ -1984,7 +1989,7 @@ export function Dashboard() {
                                  <Settings className="w-4 h-4 ml-1" /> Histórico de Faturas
                                </button>
                                <button 
-                                 onClick={reactivateSubscription}
+                                 onClick={() => navigate('/checkout')}
                                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#2B85EB] text-white rounded-xl font-semibold hover:bg-[#2B85EB]/90 transition-all shadow-sm active:scale-95"
                                >
                                  Assinar novamente
@@ -2036,6 +2041,11 @@ export function Dashboard() {
                        <div>
                          <h3 className="text-xl font-semibold text-[#F5F7FA]">Escolha seu Plano</h3>
                          <p className="text-[#A0A7B5] text-sm">Assinatura unificada para todo o ministério.</p>
+                         {subscription && subscription.status !== 'none' && getVisualState(subscription) === 'canceled_expired' && (
+                           <button onClick={openBillingPortal} className="mt-2 text-xs text-[#2B85EB] hover:text-[#3B95FB] underline flex items-center gap-1">
+                             <Settings className="w-3.5 h-3.5" /> Ver histórico de faturas
+                           </button>
+                         )}
                        </div>
                        <div className="bg-[#0B0F19] p-1.5 rounded-xl border border-white/10 flex relative shadow-sm">
                          <button 
@@ -2544,7 +2554,7 @@ export function Dashboard() {
                       onClick={() => {
                         setSubscriptionBlockedApp(null);
                         setSubscriptionBlockedReason(null);
-                        setActiveTab("billing");
+                        navigate('/checkout');
                       }}
                       className="flex-1 py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 active:scale-[0.98] text-white rounded-xl text-xs font-semibold transition-all"
                     >

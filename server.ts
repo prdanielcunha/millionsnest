@@ -4686,59 +4686,58 @@ async function autoRepairSingleOrganizationUser(uid: string) {
   // Forçar sincronização com Stripe
   app.post('/api/v1/billing/sync', async (req, res) => {
     try {
-      const { userId, sessionId } = req.body;
-      if (!userId || !db) {
-        console.error('[SYNC_FATAL_ERROR]', { error: 'Missing params', dbReady: !!db });
-        return res.status(400).json({ error: 'Missing uid or db' });
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid token' });
+      }
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Token verification failed' });
+      }
+      const uid = decodedToken.uid;
+      
+      const { organizationId, sessionId } = req.body;
+      if (!organizationId) {
+          return res.status(400).json({ error: 'Missing organizationId' });
       }
 
-      console.log('[SYNC_START]', {
-        userId: userId,
-        sessionId: sessionId || null,
-        timestamp: new Date().toISOString()
-      });
+      if (!db) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      // 1. Resolve user organization context
+      const orgContext = await resolveUserOrganizationContext(uid);
+      let isMember = false;
+      let isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(orgContext.systemRole || 'user');
+      if (orgContext.organizations) {
+         const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
+         if (orgItem) {
+             isMember = true;
+         }
+      }
+      
+      if (!isMember && !isSystemAdmin) {
+         return res.status(403).json({ error: 'Você não tem permissão nesta organização.' });
+      }
 
       const stripe = getStripe();
       const isLiveKey = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live');
 
-      const userDoc = await db.collection('users').doc(userId).get();
-      if (!userDoc.exists) {
-        console.error('[SYNC_FATAL_ERROR]', { error: 'User not found' });
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      const userData = userDoc.data()!;
-      const userEmail = userData.email;
-      let customerId = userData.stripeCustomerId;
-
-      const orgIdBase = userData.organizationId || userId;
-      
-      console.log('[SYNC_FIREBASE_USER]', {
-        found: true,
-        uid: userId,
-        organizationId: orgIdBase,
-        hasEmail: !!userEmail,
-        stripeCustomerId: customerId || null
-      });
-
-      const subDocBase = await db.collection('subscriptions').doc(orgIdBase).get();
-      if (!customerId && subDocBase.exists) {
-        customerId = subDocBase.data()?.stripeCustomerId;
-      }
+      // Check current subscription in Firestore
+      const subDocBase = await db.collection('subscriptions').doc(organizationId).get();
+      let customerId = subDocBase.data()?.stripeCustomerId;
 
       let subscriptions: Stripe.ApiList<Stripe.Subscription> | null = null;
-      
       try {
         if (sessionId) {
-            console.log('[SYNC_STRIPE_SESSION_LOOKUP]', { sessionId });
             const session = await stripe.checkout.sessions.retrieve(sessionId);
-            if (session.customer) {
-                customerId = session.customer as string;
-            }
+            if (session.customer) customerId = session.customer as string;
             if (session.subscription) {
                 const sessionSub = await stripe.subscriptions.retrieve(session.subscription as string);
                 subscriptions = { data: [sessionSub], has_more: false, object: 'list', url: '' };
-                console.log('[SYNC_STRIPE_SESSION_FOUND]', { subscriptionId: sessionSub.id });
             }
         }
       } catch (e) {
@@ -4747,37 +4746,28 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       try {
         if (customerId && !subscriptions) {
-          // Detect mismatch before calling Stripe if possible
           if (isLiveKey && customerId.includes('test')) {
-             console.warn('[SYNC_ENV_MISMATCH]', { customerId, environment: 'live' });
              customerId = null; 
-          } else {
-            // Attempt to list by ID
+           } else {
             subscriptions = await stripe.subscriptions.list({
               customer: customerId,
               limit: 1,
               status: 'all'
             });
-            console.log('[SYNC_STRIPE_CUSTOMER_LOOKUP]', {
-              customerId,
-              subscriptionsFound: subscriptions.data.length
-            });
           }
         }
       } catch (stripeErr: any) {
-        // Handle Environment Mismatch at runtime
         if (stripeErr.type === 'StripeInvalidRequestError' && (stripeErr.message.includes('No such customer') || stripeErr.message.includes('test mode') || stripeErr.message.includes('live mode'))) {
-          console.warn('[SYNC_ENV_MISMATCH]', { error: stripeErr.message, email: userEmail });
           customerId = null; 
         } else {
           throw stripeErr;
         }
       }
 
-      // Self-Healing Logic: Use Email to find the correct customer ID in the CURRENT environment
+      // Self-Healing Logic via email (using org context email)
+      const userEmail = orgContext.email;
       if (!customerId || (subscriptions && subscriptions.data.length === 0)) {
         if (userEmail) {
-          console.log('[SYNC_HEALING_START]', { userEmail });
           const customers = await stripe.customers.list({ email: userEmail, limit: 100 });
           if (customers.data.length > 0) {
             let foundValidCustomer = false;
@@ -4787,88 +4777,56 @@ async function autoRepairSingleOrganizationUser(uid: string) {
                     customerId = cust.id;
                     subscriptions = tempSubs;
                     foundValidCustomer = true;
-                    console.log('[SYNC_HEALING_SUCCESS]', { customerId });
                     break;
                 }
             }
             if (!foundValidCustomer) {
-                 // Fallback to the latest customer if none had subscriptions
                  customerId = customers.data[0].id;
-                 console.log('[SYNC_HEALING_FALLBACK]', { customerId });
             }
-          } else {
-            console.log('[SYNC_HEALING_FAILED]', { reason: 'No customer found for email' });
           }
         }
       }
 
       if (!subscriptions || subscriptions.data.length === 0) {
-        console.warn('[SYNC_NO_SUBSCRIPTION]', { userId });
-        
-        const userDocRef = await db.collection('users').doc(userId).get();
-        const orgId = (userDocRef.exists && userDocRef.data()?.organizationId) ? userDocRef.data()?.organizationId : userId;
-
-        console.log('[SYNC_FIRESTORE_WRITE]', {
-           path: `subscriptions/${orgId}`,
-           operation: 'reset'
-        });
-
         const batch = db.batch();
-        batch.set(db.collection('subscriptions').doc(orgId), {
+        batch.set(db.collection('subscriptions').doc(organizationId), {
           status: 'none',
-          stripeCustomerId: null,
+          stripeCustomerId: customerId || null,
           stripeSubscriptionId: null,
           trialEndsAt: null,
           currentPeriodEnd: null,
-          features: {
-            globalLibrary: false,
-            musicScale: false
-          },
+          features: { globalLibrary: false, musicScale: false },
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
-
-        batch.set(db.collection('organizations').doc(orgId), {
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-
-        batch.set(db.collection('users').doc(userId), {
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-
         await batch.commit();
-
-        const envName = isLiveKey ? 'LIVE (Produção)' : 'TEST (Testes)';
-        return res.status(200).json({ 
-          status: 'reset',
-          message: 'Local state reset because no subscription was found in Stripe.',
-          details: `Você está no modo ${envName}. Como não encontramos assinatura neste modo, resetamos seu status para você poder assinar novamente.`,
-          currentMode: isLiveKey ? 'live' : 'test'
+        
+        return res.json({ 
+           ok: true, 
+           organizationId,
+           accessAllowed: false,
+           subscriptionStatus: 'none',
+           reason: 'no_subscription_found',
+           currentPeriodEnd: null,
+           repaired: true
         });
       }
 
       const sub = subscriptions.data[0];
-      const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(sub.status);
-      const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000);
+      const endMs = sub.current_period_end ? sub.current_period_end * 1000 : 0;
+      const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(sub.status) || (sub.status === 'canceled' && Date.now() < endMs);
+
+      const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(sub.current_period_end * 1000);
       const trialEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
       
       const priceId = sub.items?.data?.[0]?.price?.id || null;
       const metadataPlan = sub.metadata?.plan || 'starter';
       const resolvedPlan = priceIdToMusicScalePlan(priceId) || normalizeMusicScalePlan(metadataPlan);
-      const planDetails = MUSIC_SCALE_PLANS[resolvedPlan];
+      const planDetails = MUSIC_SCALE_PLANS[resolvedPlan] || MUSIC_SCALE_PLANS['starter'];
       const cancelAtPeriodEnd = sub.cancel_at_period_end || false;
-
-      console.log('[SYNC_SUCCESS_PREP]', {
-        userId,
-        status: sub.status,
-        plan: resolvedPlan
-      });
-
-      const userDocRef2 = await db.collection('users').doc(userId).get();
-      const orgId2 = (userDocRef2.exists && userDocRef2.data()?.organizationId) ? userDocRef2.data()?.organizationId : userId;
 
       const subPayload = {
         schemaVersion: 2,
-        organizationId: orgId2,
+        organizationId: organizationId,
         app: 'musicscale',
         status: sub.status,
         plan: resolvedPlan,
@@ -4888,21 +4846,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
 
-      console.log('[SYNC_FIRESTORE_WRITE]', {
-        path: `subscriptions/${orgId2}`,
-        payload: subPayload,
-        operation: 'set (merge)'
-      });
-
       const batch = db.batch();
-      batch.set(db.collection('subscriptions').doc(orgId2), subPayload, { merge: true });
-
-      batch.set(db.collection('organizations').doc(orgId2), {
+      batch.set(db.collection('subscriptions').doc(organizationId), subPayload, { merge: true });
+      batch.set(db.collection('organizations').doc(organizationId), {
         plan: resolvedPlan,
         subscriptionPlan: resolvedPlan,
         subscriptionStatus: sub.status,
         enabledApps: admin.firestore.FieldValue.arrayUnion('musicscale'),
-        
         'apps.musicscale.access': hasAccess,
         'apps.musicscale.status': sub.status,
         'apps.musicscale.plan': resolvedPlan,
@@ -4913,60 +4863,27 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         'apps.musicscale.trialEndsAt': trialEnd,
         'apps.musicscale.updatedAt': admin.firestore.FieldValue.serverTimestamp(),
         'apps.musicscale.planUpdatedAt': admin.firestore.FieldValue.serverTimestamp(),
-        
         planUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         entitlementsVersion: 2,
-
-        ownerUid: userId,
-        ownerId: userId,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
-
-      batch.set(db.collection('users').doc(userId), {
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
-      batch.set(db.collection('organization_members').doc(`${userId}_${orgId2}`), {
-        uid: userId,
-        organizationId: orgId2,
-        role: 'owner',
-        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-        permissions: getDefaultPermissions('owner')
-      }, { merge: true });
-
       await batch.commit();
-
-      console.log('[OWNERSHIP_SYNC]', {
-        uid: userId,
-        organizationId: orgId2,
-        role_anterior: 'unknown',
-        role_nova: 'owner',
-        motivo: 'billing/sync'
+      
+      return res.json({ 
+         ok: true, 
+         organizationId,
+         accessAllowed: hasAccess,
+         subscriptionStatus: sub.status,
+         reason: hasAccess ? 'access_granted' : 'subscription_inactive',
+         currentPeriodEnd: sub.current_period_end * 1000,
+         repaired: true 
       });
-
-      if (hasAccess) {
-        await db.collection('users').doc(userId).update({
-          organizationId: orgId2,
-          activeOrganizationId: orgId2
-        });
-      }
-
-      return res.json({ status: 'synced', stripeStatus: sub.status, hasAccess, customerId, environment: isLiveKey ? 'live' : 'test' });
 
     } catch (err: any) {
-      console.error('[SYNC_FATAL_ERROR]', {
-        error: err.message,
-        stack: err.stack,
-        code: err.code || 'unknown'
-      });
-      res.status(500).json({ 
-        error: 'Erro na sincronização com Stripe.',
-        details: err.message 
-      });
+      console.error('[SYNC_FATAL_ERROR]', err);
+      res.status(500).json({ error: 'Erro na sincronização com Stripe.', details: err.message });
     }
   });
-
-
   // Admin Repair Tool
   const repairSyncHandler = async (req: express.Request, res: express.Response) => {
     try {
