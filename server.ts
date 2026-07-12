@@ -4715,6 +4715,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const syncSystemRole = syncUserDoc.data()?.systemRole || 'user';
       let isMember = false;
       let isSystemAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(syncSystemRole);
+      
       if (orgContext.organizations) {
          const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
          if (orgItem) {
@@ -4737,13 +4738,31 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       let allStripeSubs: Stripe.Subscription[] = [];
 
+      // Validate Checkout Session
+      let validatedSessionSubId: string | null = null;
       try {
         if (sessionId) {
             const session = await stripe.checkout.sessions.retrieve(sessionId);
+            
+            // Strong Session Validation
+            const sessionOrgId = session.metadata?.organizationId;
+            const sessionApp = session.metadata?.app;
+            const sessionUserId = session.metadata?.userId || session.metadata?.uid || session.client_reference_id;
+            
+            if (sessionOrgId !== organizationId || sessionApp !== 'musicscale' || sessionUserId !== uid) {
+                 console.error('[SYNC_SESSION_VALIDATION_FAILED]', {
+                     expectedOrg: organizationId, sessionOrg: sessionOrgId,
+                     expectedApp: 'musicscale', sessionApp: sessionApp,
+                     expectedUser: uid, sessionUser: sessionUserId
+                 });
+                 return res.status(403).json({ error: 'Sessão de checkout inválida ou não pertence a esta organização/usuário.' });
+            }
+
             if (session.customer) customerId = session.customer as string;
             if (session.subscription) {
                 const sessionSub = await stripe.subscriptions.retrieve(session.subscription as string);
                 allStripeSubs.push(sessionSub);
+                validatedSessionSubId = sessionSub.id;
             }
         }
       } catch (e) {
@@ -4780,15 +4799,17 @@ async function autoRepairSingleOrganizationUser(uid: string) {
            potentialSubs.push(...cSubs);
         }
         
-        // Filter by canonical link
+        // Filter by canonical strong link
         allStripeSubs = potentialSubs.filter(s => {
-          const hasOrgId = s.metadata?.organizationId === organizationId;
-          const hasApp = s.metadata?.app === 'musicscale';
+          const hasOrgIdAndApp = s.metadata?.organizationId === organizationId && s.metadata?.app === 'musicscale';
           const isHistorical = s.id === knownSubId;
-          return hasOrgId || hasApp || isHistorical;
+          const isValidSession = validatedSessionSubId !== null && s.id === validatedSessionSubId;
+          
+          return hasOrgIdAndApp || isHistorical || isValidSession;
         });
 
         if (allStripeSubs.length === 0 && potentialSubs.length > 0) {
+           // We found candidates but no strong link, don't overwrite with 'none', ask for repair
            return res.json({
              ok: false,
              accessAllowed: false,
@@ -4803,16 +4824,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }
       }
 
-      // Filter to only matching subscriptions
+      // Final Filter to only matching subscriptions
       const matchingSubs = allStripeSubs.filter(s => {
-          const hasOrgId = s.metadata?.organizationId === organizationId;
-          const hasApp = s.metadata?.app === 'musicscale';
+          const hasOrgIdAndApp = s.metadata?.organizationId === organizationId && s.metadata?.app === 'musicscale';
           const isHistorical = s.id === knownSubId;
-          // If the subscription has no metadata and is historical, it's valid.
-          // If we are looking at session, we should trust it if we just checked out.
-          if (sessionId && s.id === allStripeSubs[0]?.id) return true;
-          if (hasOrgId || hasApp || isHistorical) return true;
-          return false;
+          const isValidSession = validatedSessionSubId !== null && s.id === validatedSessionSubId;
+          
+          return hasOrgIdAndApp || isHistorical || isValidSession;
       });
 
       if (matchingSubs.length === 0) {
@@ -4866,6 +4884,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const topPriority = getStatusPriority(matchingSubs[0]);
       const validConcurrent = matchingSubs.filter(s => getStatusPriority(s) === topPriority && topPriority <= 3);
       if (validConcurrent.length > 1) {
+         console.warn('[SYNC_CONFLICT_DETECTED]', { organizationId, count: validConcurrent.length });
          return res.json({
            ok: false,
            accessAllowed: false,
@@ -4886,6 +4905,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const metadataPlan = sub.metadata?.plan || 'starter';
       const resolvedPlan = priceIdToMusicScalePlan(priceId) || normalizeMusicScalePlan(metadataPlan);
       const planDetails = MUSIC_SCALE_PLANS[resolvedPlan] || MUSIC_SCALE_PLANS['starter'];
+
       const cancelAtPeriodEnd = sub.cancel_at_period_end || false;
 
       const subPayload = {
@@ -4937,6 +4957,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       
       batch.set(db.collection('organizations').doc(organizationId), orgPayload, { merge: true });
+
       await batch.commit();
       
       return res.json({ 
@@ -4946,7 +4967,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          subscriptionStatus: sub.status,
          reason: hasAccess ? 'access_granted' : 'subscription_inactive',
          currentPeriodEnd: (sub as any).current_period_end * 1000,
-         repaired: true 
+         repaired: true
       });
 
     } catch (err: any) {
