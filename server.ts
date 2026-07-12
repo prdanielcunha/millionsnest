@@ -4740,8 +4740,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       // Validate Checkout Session
       let validatedSessionSubId: string | null = null;
-      try {
-        if (sessionId) {
+      if (sessionId) {
+        try {
             const session = await stripe.checkout.sessions.retrieve(sessionId);
             
             // Strong Session Validation
@@ -4751,22 +4751,50 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             
             if (sessionOrgId !== organizationId || sessionApp !== 'musicscale' || sessionUserId !== uid) {
                  console.error('[SYNC_SESSION_VALIDATION_FAILED]', {
-                     expectedOrg: organizationId, sessionOrg: sessionOrgId,
-                     expectedApp: 'musicscale', sessionApp: sessionApp,
-                     expectedUser: uid, sessionUser: sessionUserId
+                     expectedOrg: organizationId,
+                     expectedApp: 'musicscale'
                  });
                  return res.status(403).json({ error: 'Sessão de checkout inválida ou não pertence a esta organização/usuário.' });
             }
 
             if (session.customer) customerId = session.customer as string;
-            if (session.subscription) {
-                const sessionSub = await stripe.subscriptions.retrieve(session.subscription as string);
-                allStripeSubs.push(sessionSub);
-                validatedSessionSubId = sessionSub.id;
+            
+            if (!session.subscription) {
+                return res.status(409).json({
+                  ok: false,
+                  accessAllowed: false,
+                  subscriptionStatus: "unknown",
+                  reason: "checkout_provisioning",
+                  repaired: false,
+                  retryable: true
+                });
+            }
+
+            const sessionSub = await stripe.subscriptions.retrieve(session.subscription as string);
+            allStripeSubs.push(sessionSub);
+            validatedSessionSubId = sessionSub.id;
+            
+        } catch (e: any) {
+            console.error('[SYNC_STRIPE_SESSION_ERROR]', { errorType: e.type, statusCode: e.statusCode });
+            if (e.type === 'StripeInvalidRequestError' || e.statusCode === 404 || e.statusCode === 400) {
+               return res.status(400).json({
+                 ok: false,
+                 accessAllowed: false,
+                 subscriptionStatus: "unknown",
+                 reason: "invalid_checkout_session",
+                 repaired: false
+               });
+            } else {
+               return res.status(502).json({
+                 ok: false,
+                 accessAllowed: false,
+                 subscriptionStatus: "unknown",
+                 reason: "stripe_unavailable",
+                 repaired: false,
+                 retryable: true
+               });
             }
         }
-      } catch (e) {
-          console.error('[SYNC_STRIPE_SESSION_ERROR]', { sessionId, error: e });
       }
 
       const fetchSubsForCustomer = async (cid: string) => {
