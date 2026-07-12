@@ -1579,7 +1579,9 @@ export function Dashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {ECOSYSTEM_APPS.filter(app => {
                         // Restrict NestFinance preview to global admins
-                                   }).map(app => {
+                        if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
+                        return true;
+                      }).map(app => {
                         const isMusicScale = app.id === 'musicscale';
                         const isInstalled = isMusicScale ? msIsInstalled : organization?.enabledApps?.includes(app.id);
 
