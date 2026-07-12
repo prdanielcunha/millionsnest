@@ -7,6 +7,9 @@ import { Footer } from "../components/Footer.js";
 import { Pricing } from "../components/Pricing.js";
 import { Play, CheckCircle2, CalendarDays, Music, Bell, Library, Mic2, Instagram, ArrowRight, XCircle, LayoutDashboard, ChevronRight, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.js";
+import { useOrganization } from "../contexts/OrganizationContext.js";
+import { isSubscriptionValid } from "../lib/subscriptionHelpers.js";
+import { openEcosystemModule } from "../lib/ecosystemLauncher.js";
 
 // Premium Brand Lockup Component to replace LogoMS_Horiz.png
 const MusicScaleLogo = ({ className = "" }: { className?: string }) => (
@@ -48,12 +51,26 @@ const FAQItem = ({ question, answer }: { question: string, answer: string }) => 
 export function MusicScaleLanding() {
   const { t } = useTranslation(["musicscale", "common"]);
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { organization, subscription, currentUserPerms } = useOrganization();
   const [activeBentoCard, setActiveBentoCard] = useState<number | null>(null);
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  const isSubscribed = isSubscriptionValid(subscription);
+
+  const handleLaunch = () => {
+    if (!user || !profile || !organization) {
+      navigate('/login');
+      return;
+    }
+    openEcosystemModule('musicscale', user, profile, organization, currentUserPerms).catch((err) => {
+      console.error(err);
+      navigate('/dashboard');
+    });
+  };
 
   const handleStartTrial = () => {
     const intent = "musicscale_starter_monthly";
@@ -128,16 +145,29 @@ export function MusicScaleLanding() {
               transition={{ delay: 0.4 }}
               className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto z-20"
             >
-              <button 
-                onClick={handleStartTrial}
-                className="group relative w-full sm:w-auto px-8 py-4 bg-[#2B85EB] text-white text-lg font-bold rounded-2xl shadow-[0_0_40px_rgba(43,133,235,0.4)] hover:shadow-[0_0_60px_rgba(43,133,235,0.6)] transition-all overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
-                <div className="relative flex items-center justify-center gap-2">
-                  {t('musicscale:hero_cta_primary', 'Começar teste grátis')}
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
+              {isSubscribed ? (
+                <button 
+                  onClick={handleLaunch}
+                  className="group relative w-full sm:w-auto px-8 py-4 bg-[#2B85EB] text-white text-lg font-bold rounded-2xl shadow-[0_0_40px_rgba(43,133,235,0.4)] hover:shadow-[0_0_60px_rgba(43,133,235,0.6)] transition-all overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
+                  <div className="relative flex items-center justify-center gap-2">
+                    Abrir MusicScale
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+              ) : (
+                <button 
+                  onClick={handleStartTrial}
+                  className="group relative w-full sm:w-auto px-8 py-4 bg-[#2B85EB] text-white text-lg font-bold rounded-2xl shadow-[0_0_40px_rgba(43,133,235,0.4)] hover:shadow-[0_0_60px_rgba(43,133,235,0.6)] transition-all overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
+                  <div className="relative flex items-center justify-center gap-2">
+                    {t('musicscale:hero_cta_primary', 'Começar teste grátis')}
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+              )}
               
               <button 
                 onClick={scrollToDemo}
@@ -314,13 +344,23 @@ export function MusicScaleLanding() {
           </div>
           
           <div className="mt-20 flex justify-center">
-             <button 
-               onClick={handleStartTrial}
-               className="group relative px-8 py-4 bg-white/5 border border-white/10 text-white text-lg font-semibold rounded-2xl hover:bg-white/10 transition-all shadow-[0_0_20px_rgba(255,255,255,0.02)] flex items-center justify-center gap-3 backdrop-blur-md"
-             >
-               {t('musicscale:chaos_cta', 'Quero organizar minha próxima escala')}
-               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-             </button>
+             {isSubscribed ? (
+               <button 
+                 onClick={handleLaunch}
+                 className="group relative px-8 py-4 bg-white/5 border border-white/10 text-white text-lg font-semibold rounded-2xl hover:bg-white/10 transition-all shadow-[0_0_20px_rgba(255,255,255,0.02)] flex items-center justify-center gap-3 backdrop-blur-md"
+               >
+                 Abrir MusicScale
+                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+               </button>
+             ) : (
+               <button 
+                 onClick={handleStartTrial}
+                 className="group relative px-8 py-4 bg-white/5 border border-white/10 text-white text-lg font-semibold rounded-2xl hover:bg-white/10 transition-all shadow-[0_0_20px_rgba(255,255,255,0.02)] flex items-center justify-center gap-3 backdrop-blur-md"
+               >
+                 {t('musicscale:chaos_cta', 'Quero organizar minha próxima escala')}
+                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+               </button>
+             )}
           </div>
         </div>
       </section>
