@@ -4710,8 +4710,11 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       // 1. Resolve user organization context
       const orgContext = await resolveUserOrganizationContext(uid);
+      const syncUserDoc = await db.collection('users').doc(uid).get();
+      const syncUserEmail = syncUserDoc.data()?.email;
+      const syncSystemRole = syncUserDoc.data()?.systemRole || 'user';
       let isMember = false;
-      let isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(orgContext.systemRole || 'user');
+      let isSystemAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(syncSystemRole);
       if (orgContext.organizations) {
          const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
          if (orgItem) {
@@ -4728,66 +4731,91 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       // Check current subscription in Firestore
       const subDocBase = await db.collection('subscriptions').doc(organizationId).get();
-      let customerId = subDocBase.data()?.stripeCustomerId;
+      const subData = subDocBase.data();
+      let customerId = subData?.stripeCustomerId;
+      let knownSubId = subData?.stripeSubscriptionId;
 
-      let subscriptions: Stripe.ApiList<Stripe.Subscription> | null = null;
+      let allStripeSubs: Stripe.Subscription[] = [];
+
       try {
         if (sessionId) {
             const session = await stripe.checkout.sessions.retrieve(sessionId);
             if (session.customer) customerId = session.customer as string;
             if (session.subscription) {
                 const sessionSub = await stripe.subscriptions.retrieve(session.subscription as string);
-                subscriptions = { data: [sessionSub], has_more: false, object: 'list', url: '' };
+                allStripeSubs.push(sessionSub);
             }
         }
       } catch (e) {
           console.error('[SYNC_STRIPE_SESSION_ERROR]', { sessionId, error: e });
       }
 
-      try {
-        if (customerId && !subscriptions) {
-          if (isLiveKey && customerId.includes('test')) {
-             customerId = null; 
-           } else {
-            subscriptions = await stripe.subscriptions.list({
-              customer: customerId,
-              limit: 1,
-              status: 'all'
-            });
+      const fetchSubsForCustomer = async (cid: string) => {
+        try {
+          const subs = await stripe.subscriptions.list({ customer: cid, limit: 100, status: 'all' });
+          return subs.data;
+        } catch (e: any) {
+          if (e.type === 'StripeInvalidRequestError' && (e.message.includes('No such customer') || e.message.includes('test mode') || e.message.includes('live mode'))) {
+            return [];
           }
+          throw e;
         }
-      } catch (stripeErr: any) {
-        if (stripeErr.type === 'StripeInvalidRequestError' && (stripeErr.message.includes('No such customer') || stripeErr.message.includes('test mode') || stripeErr.message.includes('live mode'))) {
+      };
+
+      if (customerId && allStripeSubs.length === 0) {
+        if (isLiveKey && customerId.includes('test')) {
           customerId = null; 
         } else {
-          throw stripeErr;
+          allStripeSubs = await fetchSubsForCustomer(customerId);
         }
       }
 
       // Self-Healing Logic via email (using org context email)
-      const userEmail = orgContext.email;
-      if (!customerId || (subscriptions && subscriptions.data.length === 0)) {
-        if (userEmail) {
-          const customers = await stripe.customers.list({ email: userEmail, limit: 100 });
-          if (customers.data.length > 0) {
-            let foundValidCustomer = false;
-            for (const cust of customers.data) {
-                const tempSubs = await stripe.subscriptions.list({ customer: cust.id, limit: 1, status: 'all' });
-                if (tempSubs.data.length > 0) {
-                    customerId = cust.id;
-                    subscriptions = tempSubs;
-                    foundValidCustomer = true;
-                    break;
-                }
-            }
-            if (!foundValidCustomer) {
-                 customerId = customers.data[0].id;
-            }
-          }
+      const userEmail = syncUserEmail;
+      if ((!customerId || allStripeSubs.length === 0) && userEmail) {
+        const customers = await stripe.customers.list({ email: userEmail, limit: 10 });
+        let potentialSubs: Stripe.Subscription[] = [];
+        for (const cust of customers.data) {
+           const cSubs = await fetchSubsForCustomer(cust.id);
+           potentialSubs.push(...cSubs);
+        }
+        
+        // Filter by canonical link
+        allStripeSubs = potentialSubs.filter(s => {
+          const hasOrgId = s.metadata?.organizationId === organizationId;
+          const hasApp = s.metadata?.app === 'musicscale';
+          const isHistorical = s.id === knownSubId;
+          return hasOrgId || hasApp || isHistorical;
+        });
+
+        if (allStripeSubs.length === 0 && potentialSubs.length > 0) {
+           return res.json({
+             ok: false,
+             accessAllowed: false,
+             subscriptionStatus: "unknown",
+             reason: "repair_required",
+             repairRequired: true
+           });
+        }
+        
+        if (allStripeSubs.length > 0) {
+           customerId = allStripeSubs[0].customer as string;
         }
       }
 
-      if (!subscriptions || subscriptions.data.length === 0) {
+      // Filter to only matching subscriptions
+      const matchingSubs = allStripeSubs.filter(s => {
+          const hasOrgId = s.metadata?.organizationId === organizationId;
+          const hasApp = s.metadata?.app === 'musicscale';
+          const isHistorical = s.id === knownSubId;
+          // If the subscription has no metadata and is historical, it's valid.
+          // If we are looking at session, we should trust it if we just checked out.
+          if (sessionId && s.id === allStripeSubs[0]?.id) return true;
+          if (hasOrgId || hasApp || isHistorical) return true;
+          return false;
+      });
+
+      if (matchingSubs.length === 0) {
         const batch = db.batch();
         batch.set(db.collection('subscriptions').doc(organizationId), {
           status: 'none',
@@ -4798,6 +4826,15 @@ async function autoRepairSingleOrganizationUser(uid: string) {
           features: { globalLibrary: false, musicScale: false },
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
+        
+        // Only update org status, not access/apps
+        batch.set(db.collection('organizations').doc(organizationId), {
+          subscriptionStatus: 'none',
+          'apps.musicscale.access': false,
+          'apps.musicscale.status': 'none',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
         await batch.commit();
         
         return res.json({ 
@@ -4811,11 +4848,38 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         });
       }
 
-      const sub = subscriptions.data[0];
-      const endMs = sub.current_period_end ? sub.current_period_end * 1000 : 0;
+      // Priority ordering
+      const getStatusPriority = (s: Stripe.Subscription) => {
+        const endMs = (s as any).current_period_end ? (s as any).current_period_end * 1000 : 0;
+        const hasFutureGrace = s.status === 'canceled' && Date.now() < endMs;
+        if (s.status === 'active') return 1;
+        if (s.status === 'trialing') return 2;
+        if (hasFutureGrace) return 3;
+        if (s.status === 'past_due' || s.status === 'incomplete') return 4;
+        if (s.status === 'canceled') return 5;
+        return 6;
+      };
+
+      matchingSubs.sort((a, b) => getStatusPriority(a) - getStatusPriority(b));
+
+      // Check for conflict
+      const topPriority = getStatusPriority(matchingSubs[0]);
+      const validConcurrent = matchingSubs.filter(s => getStatusPriority(s) === topPriority && topPriority <= 3);
+      if (validConcurrent.length > 1) {
+         return res.json({
+           ok: false,
+           accessAllowed: false,
+           subscriptionStatus: "unknown",
+           reason: "repair_required",
+           repairRequired: true
+         });
+      }
+
+      const sub = matchingSubs[0];
+      const endMs = (sub as any).current_period_end ? (sub as any).current_period_end * 1000 : 0;
       const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(sub.status) || (sub.status === 'canceled' && Date.now() < endMs);
 
-      const currentPeriodEnd = admin.firestore.Timestamp.fromMillis(sub.current_period_end * 1000);
+      const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000);
       const trialEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
       
       const priceId = sub.items?.data?.[0]?.price?.id || null;
@@ -4831,7 +4895,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         status: sub.status,
         plan: resolvedPlan,
         priceId: priceId,
-        stripeCustomerId: customerId,
+        stripeCustomerId: typeof sub.customer === 'string' ? sub.customer : customerId,
         stripeSubscriptionId: sub.id,
         trialEndsAt: trialEnd,
         currentPeriodEnd: currentPeriodEnd,
@@ -4848,11 +4912,11 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const batch = db.batch();
       batch.set(db.collection('subscriptions').doc(organizationId), subPayload, { merge: true });
-      batch.set(db.collection('organizations').doc(organizationId), {
+      
+      const orgPayload: any = {
         plan: resolvedPlan,
         subscriptionPlan: resolvedPlan,
         subscriptionStatus: sub.status,
-        enabledApps: admin.firestore.FieldValue.arrayUnion('musicscale'),
         'apps.musicscale.access': hasAccess,
         'apps.musicscale.status': sub.status,
         'apps.musicscale.plan': resolvedPlan,
@@ -4866,7 +4930,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         planUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         entitlementsVersion: 2,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      };
+      
+      if (hasAccess) {
+        orgPayload.enabledApps = admin.firestore.FieldValue.arrayUnion('musicscale');
+      }
+      
+      batch.set(db.collection('organizations').doc(organizationId), orgPayload, { merge: true });
       await batch.commit();
       
       return res.json({ 
@@ -4875,7 +4945,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          accessAllowed: hasAccess,
          subscriptionStatus: sub.status,
          reason: hasAccess ? 'access_granted' : 'subscription_inactive',
-         currentPeriodEnd: sub.current_period_end * 1000,
+         currentPeriodEnd: (sub as any).current_period_end * 1000,
          repaired: true 
       });
 
@@ -4884,6 +4954,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       res.status(500).json({ error: 'Erro na sincronização com Stripe.', details: err.message });
     }
   });
+
   // Admin Repair Tool
   const repairSyncHandler = async (req: express.Request, res: express.Response) => {
     try {
@@ -6561,10 +6632,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          }
       }
 
-      // Verify RBAC for billing: Only CEO, Global Admin, or Org Owner/Admin should be able to do this.
+      // Verify RBAC for billing: Only authorized global roles or Org Owner/Admin should be able to do this.
       const userDoc = await db.collection('users').doc(uid).get();
       const systemRole = userDoc.data()?.systemRole || 'user';
-      const isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole);
+      const isSystemAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(systemRole);
 
       if (!isMember && !isSystemAdmin) {
          return res.status(403).json({ error: 'Você não tem permissão nesta organização.' });
