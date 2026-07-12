@@ -1,3 +1,4 @@
+import { isSubscriptionValid } from '../lib/subscriptionHelpers.js';
 import React, { useState, useEffect, ReactNode, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, LayoutGrid, LayoutDashboard, Building2, ChevronDown, Check, LogOut, ArrowRight, Loader2, User, AlertTriangle, Music, Calendar, Users, QrCode, Database, Shield } from 'lucide-react';
@@ -294,7 +295,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                             {ECOSYSTEM_APPS.map(app => {
                                // Safe check in case organization is not loaded yet
                                const isGlobalAdmin = isGlobalPrivilegedUser(profile);
-                               const hasMusicScalePlan = organization?.subscriptionPlan && organization?.subscriptionPlan !== 'free';
+                                                              const hasMusicScalePlan = isSubscriptionValid(orgContext.subscription) || (organization?.subscriptionPlan && organization?.subscriptionPlan !== 'free');
                                const hasAccess = profile?.products?.includes('musicscale') || isGlobalAdmin || hasMusicScalePlan;
                                
                                const isSoon = app.category === 'beta' || app.url === '#';

@@ -61,15 +61,15 @@ export function Navbar() {
 
   const renderCommandCenter = () => {
     const myApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || false));
+      const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)));
       return isInstalled || app.status === 'active';
     }).map(app => {
-      const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || false));
+      const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)));
       return { ...app, isInstalled };
     }).filter(app => app.isInstalled || app.id === 'musicscale'); // ensure we show installed or flagship
 
     const discoverApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || false));
+      const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)));
       return !isInstalled && app.status !== 'active';
     });
 

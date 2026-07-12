@@ -597,6 +597,7 @@ async function startServer() {
 
   // Webhook Stripe tem que usar express.raw
   
+  
   app.post('/api/internal/repair-subscription', async (req: any, res) => {
     try {
       const authHeader = req.headers.authorization;
@@ -655,7 +656,7 @@ async function startServer() {
       }
 
       const stripeSubscriptions = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 5 });
-      const activeSub = stripeSubscriptions.data.find(s => s.status === 'active' || s.status === 'trialing');
+      const activeSub = stripeSubscriptions.data.find(s => s.status === 'active' || s.status === 'trialing' || (s.status === 'canceled' && s.current_period_end > Date.now() / 1000));
 
       if (!activeSub) {
          logs.push('No active subscription found in Stripe for customer');
