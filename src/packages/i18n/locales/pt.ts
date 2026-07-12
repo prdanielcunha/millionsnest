@@ -265,6 +265,15 @@ export default {
     }
   },
   checkout: {
+    active_subscription_msg: "Você já possui uma assinatura ativa.",
+    subscription_active_until: "Sua assinatura continua ativa até {{date}}.",
+    subscription_active_until_unknown: "Sua assinatura continua ativa.",
+    payment_issue_msg: "Há uma pendência de pagamento na sua assinatura.",
+    resolve_payment: "Regularizar pagamento",
+    inconsistency_msg: "Encontramos uma inconsistência na assinatura.",
+    update_status: "Atualize o status da assinatura",
+    manage_subscription: "Gerenciar assinatura",
+    loading_sub: "Carregando sua assinatura...",
     back: "Voltar ao Dashboard",
     title: "Evolua com o plano ideal para você.",
     subtitle: "Acesso total às ferramentas MusicScale. Teste por 7 dias grátis, cancele quando quiser com 1 clique no painel.",

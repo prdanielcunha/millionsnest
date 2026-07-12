@@ -249,6 +249,15 @@ export default {
     }
   },
   checkout: {
+    active_subscription_msg: "You already have an active subscription.",
+    subscription_active_until: "Your subscription remains active until {{date}}.",
+    subscription_active_until_unknown: "Your subscription remains active.",
+    payment_issue_msg: "There is a pending payment on your subscription.",
+    resolve_payment: "Resolve payment",
+    inconsistency_msg: "We found an inconsistency in your subscription.",
+    update_status: "Update subscription status",
+    manage_subscription: "Manage subscription",
+    loading_sub: "Loading your subscription...",
     back: "Back to Dashboard",
     title: "Elevate with the ideal plan for your team.",
     subtitle: "Complete access to MusicScale tools. Try 7 days free, cancel anytime with 1 click in your panel.",

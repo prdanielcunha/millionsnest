@@ -301,7 +301,10 @@ export function Dashboard() {
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
   const activeContextOrgId = isGlobalAdmin && adminSelectedOrgId 
     ? adminSelectedOrgId 
-    : (profile?.organizationId || user?.uid);
+    : canonicalContext?.activeOrganizationId 
+      || profile?.activeOrganizationId 
+      || profile?.primaryOrganizationId 
+      || profile?.organizationId;
     
   const canLaunchNestFinance = isGlobalAdmin && nestFinanceLaunchEnabled && !nestFinanceLaunching;
 
@@ -447,9 +450,9 @@ export function Dashboard() {
                 },
                 body: JSON.stringify({ organizationId: activeContextOrgId })
              })).then(r => r.json()).then(res => {
-                if (res.stripeStatus === 'active') {
+                if (res.organizationId === activeContextOrgId && res.subscriptionStatus === 'active') {
                   console.log("[Dashboard] Stripe confirmed active status via background sync.");
-                  fetchSubscriptionAndOrg(false);
+                  fetchSubscriptionAndOrg(true);
                 }
              }).catch(err => console.debug("[Dashboard] Background check ignored."));
            }
@@ -468,12 +471,12 @@ export function Dashboard() {
                })).then(async r => {
                  if (r.ok) {
                     const data = await r.json();
-                    if (data.status === 'success' || data.stripeStatus) {
+                    if (data.organizationId === activeContextOrgId && (data.ok || data.repaired || data.accessAllowed)) {
                       console.log("[Dashboard] Background auto-repair successful.");
                       fetchSubscriptionAndOrg(true);
                     }
                  }
-               });
+               }).catch(e => console.error("[Dashboard] Auto repair check failed", e));
              } catch (e) {
                console.error("[Dashboard] Auto repair check failed", e);
              }
@@ -1125,6 +1128,10 @@ export function Dashboard() {
   useEffect(() => {
     if (!user) return;
     
+    // Clear state and set loading before fetching new org data
+    setSubscription(null);
+    setLoadingSub(true);
+    
     // Initial manual/background fetch of all dependencies (members, subscriptions, legacy config)
     fetchSubscriptionAndOrg();
 
@@ -1213,7 +1220,7 @@ export function Dashboard() {
     | "loading";
 
   const getMusicScaleCatalogState = (): MusicScaleCatalogState => {
-    if (loading) return "loading";
+    if (loadingSub || loading) return "loading";
     if (isGlobalAdmin) return "administrative";
     
     if (!subscription || !subscription.status) return "available";
@@ -1310,7 +1317,7 @@ export function Dashboard() {
         await fetchSubscriptionAndOrg(true);
       }
       
-      if (data.ok && data.accessAllowed) {
+      if (data.organizationId === activeContextOrgId && data.ok && data.accessAllowed) {
         feedback.dismiss(toastId);
         feedback.success("Assinatura ativa identificada com sucesso!");
         setSubscriptionBlockedApp(null);
@@ -1590,6 +1597,7 @@ export function Dashboard() {
 
                         if (isMusicScale) {
                            switch (msCatalogState) {
+                              case 'loading': cardStatusText = t('loading', 'Carregando...'); break;
                               case 'trialing': cardStatusText = t('dashboard.apps.trialing', 'Em teste'); break;
                               case 'active': cardStatusText = t('dashboard.apps.active', 'Ativo'); break;
                               case 'cancel_scheduled': cardStatusText = t('dashboard.apps.cancel_scheduled', 'Cancelamento agendado'); break;
@@ -1661,7 +1669,15 @@ export function Dashboard() {
                                   </button>
                                 )
                               ) : isMusicScale ? (
-                                msCatalogState === 'payment_issue' ? (
+                                msCatalogState === 'loading' ? (
+                                  <button
+                                    disabled
+                                    className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-wait border border-white/5"
+                                  >
+                                    <div className="w-3.5 h-3.5 border border-[#A0A7B5]/30 border-t-[#A0A7B5] rounded-full animate-spin" />
+                                    {t('loading', 'Carregando...')}
+                                  </button>
+                                ) : msCatalogState === 'payment_issue' ? (
                                   <button
                                     onClick={() => navigate('/dashboard/billing')}
                                     className="flex-1 w-full py-2.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-red-500/20 transition-all shadow-sm active:scale-95"

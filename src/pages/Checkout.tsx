@@ -47,7 +47,7 @@ export default function Checkout() {
   
   // Checkout Error State
   const [checkoutError, setCheckoutError] = useState('');
-  const [checkoutAction, setCheckoutAction] = useState<{ code: string, label: string } | null>(null);
+  const [checkoutAction, setCheckoutAction] = useState<{ code: string, label: string, url?: string } | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -234,12 +234,35 @@ export default function Checkout() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        setCheckoutError(data.error || t('checkout_error', 'Erro ao iniciar checkout'));
-        if (data.code === 'ACTIVE_SUBSCRIPTION_EXISTS' || data.code === 'SUBSCRIPTION_CANCEL_SCHEDULED' || data.code === 'SUBSCRIPTION_REQUIRES_PAYMENT') {
-          setCheckoutAction({
-            code: data.code,
-            label: t('portal_access', 'Acessar Portal do Cliente')
-          });
+        const { decision, reason, managementUrl, accessUntil, repairRequired, error, code } = data;
+        
+        let errorMessage = error || t('checkout_error', 'Erro ao iniciar checkout');
+        let actionLabel = '';
+        let actionUrl = (managementUrl && managementUrl.startsWith('/')) ? managementUrl : '/dashboard/billing';
+
+        if (decision === 'block_duplicate' || reason === 'active_subscription_exists') {
+           errorMessage = t('active_subscription_msg', 'Você já possui uma assinatura ativa.');
+           actionLabel = t('manage_subscription', 'Gerenciar assinatura');
+        } else if (decision === 'resume_existing' || reason === 'cancel_scheduled' || reason === 'canceled_with_residual_access') {
+           errorMessage = accessUntil ? t('subscription_active_until', 'Sua assinatura continua ativa até {{date}}').replace('{{date}}', new Date(accessUntil).toLocaleDateString()) : t('subscription_active_until_unknown', 'Sua assinatura continua ativa.');
+           actionLabel = t('manage_subscription', 'Gerenciar assinatura');
+        } else if (decision === 'regularize_existing' || ['past_due', 'unpaid', 'incomplete', 'paused'].includes(reason)) {
+           errorMessage = t('payment_issue_msg', 'Há uma pendência de pagamento na sua assinatura.');
+           actionLabel = t('resolve_payment', 'Regularizar pagamento');
+        } else if (reason === 'multiple_subscriptions_conflict' || repairRequired) {
+           errorMessage = t('inconsistency_msg', 'Encontramos uma inconsistência na assinatura.');
+           actionLabel = t('update_status', 'Atualize o status da assinatura');
+        } else if (code === 'ACTIVE_SUBSCRIPTION_EXISTS' || code === 'SUBSCRIPTION_CANCEL_SCHEDULED' || code === 'SUBSCRIPTION_REQUIRES_PAYMENT') {
+           actionLabel = t('portal_access', 'Acessar Portal do Cliente');
+        }
+
+        setCheckoutError(errorMessage);
+        if (actionLabel) {
+           setCheckoutAction({
+             code: decision || code || 'error',
+             label: actionLabel,
+             url: actionUrl
+           });
         }
       }
     } catch (e: any) {
@@ -680,7 +703,7 @@ export default function Checkout() {
                            </div>
                            {checkoutAction && (
                                <button
-                                   onClick={() => navigate('/dashboard/billing')}
+                                   onClick={() => navigate(checkoutAction.url || '/dashboard/billing')}
                                    className="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 py-2 px-3 rounded-lg transition-colors font-semibold self-start"
                                >
                                    {checkoutAction.label}

@@ -58,7 +58,7 @@ export function canPurchasePlanAgain({
   desiredPlan: string;
   existingSubscription?: any;
 }): PurchaseCheckResult {
-  if (!existingSubscription) {
+  if (!existingSubscription || !existingSubscription.status) {
     return {
       allowed: true,
       reason: 'no_subscription',
@@ -67,7 +67,17 @@ export function canPurchasePlanAgain({
     };
   }
 
-  const status = existingSubscription.status?.toLowerCase() || '';
+  const status = existingSubscription.status.toLowerCase().trim();
+
+  // Explicitly allow missing or inactive statuses
+  if (['none', 'inactive', 'incomplete_expired', 'expired', ''].includes(status)) {
+    return {
+      allowed: true,
+      reason: 'inactive_subscription',
+      userMessage: 'Pronto para assinar.',
+      action: 'checkout'
+    };
+  }
 
   if (['past_due', 'unpaid', 'incomplete', 'paused'].includes(status)) {
     return {
@@ -100,33 +110,43 @@ export function canPurchasePlanAgain({
     };
   }
 
-  if (['active', 'trialing'].includes(status) && existingSubscription.cancelAtPeriodEnd) {
+  if (['active', 'trialing', 'trial', 'pro'].includes(status)) {
+    if (existingSubscription.cancelAtPeriodEnd || existingSubscription.cancel_at_period_end) {
+      return {
+        allowed: false,
+        reason: 'cancel_scheduled',
+        userMessage: 'Você já possui uma assinatura com cancelamento agendado. Acesse a área de gerenciamento.',
+        action: 'manage_existing'
+      };
+    }
+
+    const normalizedDesired = desiredPlan.replace('musicscale_', '').replace('_monthly', '').replace('_yearly', '');
+    const existingPlan = existingSubscription.plan || existingSubscription.tier || 'starter';
+
+    // If valid, check if it's the exact same plan
+    if (normalizedDesired.includes(existingPlan.toLowerCase()) || existingPlan.toLowerCase().includes(normalizedDesired)) {
+      return {
+        allowed: false,
+        reason: 'plan_already_active',
+        userMessage: 'Você já possui uma assinatura ativa deste plano. Você pode gerenciar sua assinatura atual ou escolher outro plano disponível.',
+        action: 'manage_existing'
+      };
+    }
+
+    // Valid, but a different plan (upgrade/downgrade)
     return {
-      allowed: false,
-      reason: 'cancel_scheduled',
-      userMessage: 'Você já possui uma assinatura com cancelamento agendado. Acesse a área de gerenciamento.',
-      action: 'manage_existing'
+      allowed: false, // We block direct duplicate checkout for other plans too, force them to Stripe Portal or Upgrade Flow
+      reason: 'different_plan_active',
+      userMessage: 'Você já possui um plano ativo. Para alterar sua assinatura (upgrade ou downgrade), acesse a área de Gerenciar Assinatura.',
+      action: 'upgrade_or_manage'
     };
   }
 
-  const normalizedDesired = desiredPlan.replace('musicscale_', '').replace('_monthly', '').replace('_yearly', '');
-  const existingPlan = existingSubscription.plan || existingSubscription.tier || 'starter';
-
-  // If valid, check if it's the exact same plan
-  if (normalizedDesired.includes(existingPlan.toLowerCase()) || existingPlan.toLowerCase().includes(normalizedDesired)) {
-    return {
-      allowed: false,
-      reason: 'plan_already_active',
-      userMessage: 'Você já possui uma assinatura ativa deste plano. Você pode gerenciar sua assinatura atual ou escolher outro plano disponível.',
-      action: 'manage_existing'
-    };
-  }
-
-  // Valid, but a different plan (upgrade/downgrade)
+  // Unknown status
   return {
-    allowed: false, // We block direct duplicate checkout for other plans too, force them to Stripe Portal or Upgrade Flow
-    reason: 'different_plan_active',
-    userMessage: 'Você já possui um plano ativo. Para alterar sua assinatura (upgrade ou downgrade), acesse a área de Gerenciar Assinatura.',
-    action: 'upgrade_or_manage'
+    allowed: false,
+    reason: 'unknown_subscription_status',
+    userMessage: 'Status da assinatura desconhecido. Por favor, atualize o status ou contate o suporte.',
+    action: 'blocked'
   };
 }
