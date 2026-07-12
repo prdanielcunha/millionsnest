@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext.js";
@@ -251,7 +251,6 @@ export function Dashboard() {
     setRepairing(true);
     try {
       const token = await user.getIdToken(true);
-      if (!activeContextOrgId) { feedback.error("Nenhuma organização ativa encontrada."); return; }
       if (!activeContextOrgId) { feedback.error("Nenhuma organização ativa encontrada."); return; }
       const res = await fetch(`/api/repair/sync`, {
         method: 'POST',
