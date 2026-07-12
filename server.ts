@@ -656,7 +656,7 @@ async function startServer() {
       }
 
       const stripeSubscriptions = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 5 });
-      const activeSub = stripeSubscriptions.data.find(s => s.status === 'active' || s.status === 'trialing' || (s.status === 'canceled' && s.current_period_end > Date.now() / 1000));
+      const activeSub = stripeSubscriptions.data.find((s: any) => s.status === 'active' || s.status === 'trialing' || (s.status === 'canceled' && s.current_period_end > Date.now() / 1000));
 
       if (!activeSub) {
          logs.push('No active subscription found in Stripe for customer');
@@ -6668,7 +6668,11 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const stripeCustomerId = subData.stripeCustomerId;
 
       if (!stripeSubscriptionId || !stripeCustomerId) {
-         return res.status(404).json({ error: 'Dados da assinatura do Stripe ausentes.' });
+         return res.json({ 
+            ok: true,
+            action: 'checkout_required',
+            url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/checkout`
+          });
       }
 
       const stripe = getStripe();

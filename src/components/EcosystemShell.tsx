@@ -25,10 +25,12 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
   
   let organization: any = null;
   let currentUserPerms: any = {};
+  let subscription: any = null;
   try {
     const orgContext = useOrganization();
     organization = orgContext.organization;
     currentUserPerms = orgContext.currentUserPerms;
+    subscription = orgContext.subscription;
   } catch(e) {}
 
   const [launcherOpen, setLauncherOpen] = useState(false);
@@ -295,11 +297,11 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                             {ECOSYSTEM_APPS.map(app => {
                                // Safe check in case organization is not loaded yet
                                const isGlobalAdmin = isGlobalPrivilegedUser(profile);
-                                                              const hasMusicScalePlan = isSubscriptionValid(orgContext.subscription) || (organization?.subscriptionPlan && organization?.subscriptionPlan !== 'free');
+                                                              const hasMusicScalePlan = isSubscriptionValid(subscription) || (organization?.subscriptionPlan && organization?.subscriptionPlan !== 'free');
                                const hasAccess = profile?.products?.includes('musicscale') || isGlobalAdmin || hasMusicScalePlan;
                                
                                const isSoon = app.category === 'beta' || app.url === '#';
-                               const isInstalled = !isSoon && (organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && hasAccess));
+                               const isInstalled = !isSoon && (app.id === 'musicscale' ? hasAccess : organization?.enabledApps?.includes(app.id));
                                const isActiveApp = activeAppId === app.id;
                                
                                return (
