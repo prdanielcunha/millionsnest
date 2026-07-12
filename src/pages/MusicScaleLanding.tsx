@@ -7,6 +7,7 @@ import { Footer } from "../components/Footer.js";
 import { Pricing } from "../components/Pricing.js";
 import { Play, CheckCircle2, CalendarDays, Music, Bell, Library, Mic2, Instagram, ArrowRight, XCircle, LayoutDashboard, ChevronRight, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.js";
+import { useOrganization } from "../contexts/OrganizationContext.js";
 
 // Premium Brand Lockup Component to replace LogoMS_Horiz.png
 const MusicScaleLogo = ({ className = "" }: { className?: string }) => (
@@ -49,11 +50,20 @@ export function MusicScaleLanding() {
   const { t } = useTranslation(["musicscale", "common"]);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { organization, subscription } = useOrganization();
   const [activeBentoCard, setActiveBentoCard] = useState<number | null>(null);
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  
+  const isSubscribed = organization?.enabledApps?.includes('musicscale') || subscription?.status === 'active' || subscription?.status === 'trialing';
+
+  const handleLaunch = () => {
+    // Basic redirect for now
+    navigate('/dashboard');
+  };
 
   const handleStartTrial = () => {
     const intent = "musicscale_starter_monthly";

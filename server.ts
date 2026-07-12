@@ -596,6 +596,108 @@ async function startServer() {
     app.use(cors());
 
   // Webhook Stripe tem que usar express.raw
+  
+  app.post('/api/internal/repair-subscription', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      const dbInstance = db;
+      if (!dbInstance) return res.status(500).json({ error: 'DB not initialized' });
+
+      const userDoc = await dbInstance.collection('users').doc(decodedToken.uid).get();
+      const systemRole = userDoc.data()?.systemRole;
+      if (systemRole !== 'ceo' && systemRole !== 'admin' && systemRole !== 'global_admin') {
+         return res.status(403).json({ error: 'Forbidden. Admin only.' });
+      }
+
+      const { orgId, dryRun = false } = req.body;
+      if (!orgId) return res.status(400).json({ error: 'Missing orgId' });
+
+      console.log(`[Repair] Starting repair for orgId: ${orgId} (dryRun: ${dryRun})`);
+      const logs: string[] = [];
+      const orgDoc = await dbInstance.collection('organizations').doc(orgId).get();
+      const subDoc = await dbInstance.collection('subscriptions').doc(orgId).get();
+
+      if (!orgDoc.exists) {
+        return res.status(404).json({ error: 'Organization not found', logs });
+      }
+
+      const orgData = orgDoc.data()!;
+      const subData = subDoc.exists ? subDoc.data() : null;
+
+      let customerId = subData?.stripeCustomerId || orgData.stripeCustomerId;
+      let subscriptionId = subData?.stripeSubscriptionId || orgData.stripeSubscriptionId;
+      
+      const stripe = getStripe();
+      const isMock = process.env.STRIPE_SECRET_KEY === undefined;
+      if (isMock) {
+         return res.status(400).json({ error: 'Stripe is mocked' });
+      }
+
+      if (!customerId && orgData.ownerUid) {
+         const ownerDoc = await dbInstance.collection('users').doc(orgData.ownerUid).get();
+         if (ownerDoc.exists && ownerDoc.data()?.stripeCustomerId) {
+           customerId = ownerDoc.data()?.stripeCustomerId;
+           logs.push(`Found customerId ${customerId} from ownerUid ${orgData.ownerUid}`);
+         }
+      }
+
+      if (!customerId) {
+         return res.status(404).json({ error: 'Stripe customer not found', logs });
+      }
+
+      const stripeSubscriptions = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 5 });
+      const activeSub = stripeSubscriptions.data.find(s => s.status === 'active' || s.status === 'trialing');
+
+      if (!activeSub) {
+         logs.push('No active subscription found in Stripe for customer');
+         return res.json({ success: false, logs, error: 'No active subscription found' });
+      }
+
+      subscriptionId = activeSub.id;
+      logs.push(`Active subscription ${subscriptionId} found with status ${activeSub.status}`);
+
+      let planId = '';
+      if (activeSub.items.data.length > 0) {
+        planId = activeSub.items.data[0].price.id;
+      }
+      const app = 'musicscale'; 
+      // Upsert using the existing robust logic
+      if (!dryRun) {
+         await upsertEcosystemSubscription({
+           userId: orgData.ownerUid || decodedToken.uid,
+           orgId,
+           subscription: activeSub,
+           eventCreatedTs: Date.now() / 1000,
+           event_type: 'repair'
+         });
+         logs.push(`upsertEcosystemSubscription completed`);
+         
+         await dbInstance.collection('audit_logs').add({
+           action: 'repair_subscription',
+           orgId,
+           userId: decodedToken.uid,
+           timestamp: admin.firestore.FieldValue.serverTimestamp(),
+           logs
+         });
+      }
+
+      return res.json({ success: true, dryRun, orgId, customerId, subscriptionId, logs });
+    } catch (e: any) {
+      console.error(e);
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+
   app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -5738,9 +5840,21 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
-  app.post('/api/v1/billing/unified-checkout', async (req, res) => {
+  app.post('/api/v1/billing/unified-checkout', async (req: any, res) => {
     try {
-      const { userId, email, planLookupKey, addonLookupKeys, promoCodeId } = req.body;
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+      
+      const { planLookupKey, addonLookupKeys, promoCodeId } = req.body;
+      const userId = decodedToken.uid;
+      const email = decodedToken.email || req.body.email;
 
       if (!userId || !email) {
         res.status(400).json({ error: 'Missing userId or email' });
@@ -5804,6 +5918,16 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          }
          orgId = orgContext.primaryOrganizationId || orgContext.activeOrganizationId || (userDoc.exists ? userDoc.data()?.organizationId : null) || userId;
          
+         const isOwner = orgContext.ownedOrganizations.some((org: any) => org.id === orgId);
+         const membership = orgContext.memberships.find((m: any) => m.organizationId === orgId);
+         const hasBillingPerm = membership?.permissions?.['organization.billing.manage'] === true || membership?.role === 'owner' || membership?.role === 'admin';
+         const systemRole = userDoc.data()?.systemRole;
+         const isGlobalAdmin = systemRole === 'ceo' || systemRole === 'admin' || systemRole === 'global_admin';
+         
+         if (!isOwner && !hasBillingPerm && !isGlobalAdmin) {
+           return res.status(403).json({ error: 'Você não tem permissão para gerenciar o faturamento desta organização.' });
+         }
+         
          const subDoc = await db.collection('subscriptions').doc(orgId).get();
          if (subDoc.exists) {
             if (!customerId) customerId = subDoc.data()?.stripeCustomerId;
@@ -5826,7 +5950,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             ok: false, 
             code: 'ACTIVE_SUBSCRIPTION_EXISTS', 
             action: 'manage_existing_subscription',
-            error: 'Sua assinatura já está ativa. Você pode gerenciá-la na área de assinatura.' 
+            error: 'Sua assinatura já está ativa. Você pode gerenciá-la na área de assinatura.',
+            repairRequired: eligibility.repairRequired,
+            managementUrl: eligibility.managementUrl,
+            orgId: eligibility.orgId
           });
         }
 
@@ -5948,9 +6075,21 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
-  app.post('/api/v1/billing/checkout', async (req, res) => {
+  app.post('/api/v1/billing/checkout', async (req: any, res) => {
     try {
-      const { userId, email, lookupKey } = req.body;
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+      const token = authHeader.split('Bearer ')[1];
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(token);
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      const { lookupKey } = req.body;
+      const userId = decodedToken.uid;
+      const email = decodedToken.email || req.body.email;
 
       if (!userId || !email || !lookupKey) {
         res.status(400).json({ error: 'Missing userId, email, or lookupKey' });
@@ -5993,6 +6132,16 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             customerId = userDoc.data()?.stripeCustomerId;
          }
          orgId = orgContext.primaryOrganizationId || orgContext.activeOrganizationId || (userDoc.exists ? userDoc.data()?.organizationId : null) || userId;
+         
+         const isOwner = orgContext.ownedOrganizations.some((org: any) => org.id === orgId);
+         const membership = orgContext.memberships.find((m: any) => m.organizationId === orgId);
+         const hasBillingPerm = membership?.permissions?.['organization.billing.manage'] === true || membership?.role === 'owner' || membership?.role === 'admin';
+         const systemRole = userDoc.data()?.systemRole;
+         const isGlobalAdmin = systemRole === 'ceo' || systemRole === 'admin' || systemRole === 'global_admin';
+         
+         if (!isOwner && !hasBillingPerm && !isGlobalAdmin) {
+           return res.status(403).json({ error: 'Você não tem permissão para gerenciar o faturamento desta organização.' });
+         }
          
          const subDoc = await db.collection('subscriptions').doc(orgId).get();
          if (subDoc.exists) {

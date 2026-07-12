@@ -1,38 +1,20 @@
 import Stripe from 'stripe';
 
-export type SubscriptionPurchaseEligibility =
-  | {
-      decision: "allow_new_subscription";
-      reason:
-        | "no_subscription"
-        | "previous_subscription_canceled"
-        | "previous_subscription_terminal";
-      hasResidualAccess: boolean;
-      accessUntil: string | null;
-      stripeCustomerId?: string;
-    }
-  | {
-      decision: "resume_existing";
-      reason: "cancel_scheduled";
-      subscriptionId: string;
-      stripeCustomerId?: string;
-    }
-  | {
-      decision: "block_duplicate";
-      reason: "active_subscription_exists";
-      subscriptionId: string;
-      stripeCustomerId?: string;
-    }
-  | {
-      decision: "regularize_existing";
-      reason:
-        | "past_due"
-        | "unpaid"
-        | "incomplete"
-        | "paused";
-      subscriptionId: string;
-      stripeCustomerId?: string;
-    };
+export type SubscriptionPurchaseEligibility = {
+  allowed: boolean;
+  reason: string;
+  orgId: string;
+  canonicalSubscriptionStatus: string | null;
+  stripeSubscriptionId?: string;
+  entitlementMaterialized: boolean;
+  repairRequired: boolean;
+  managementUrl: string;
+  decision: "allow_new_subscription" | "resume_existing" | "block_duplicate" | "regularize_existing";
+  hasResidualAccess?: boolean;
+  accessUntil?: string | null;
+  stripeCustomerId?: string;
+  subscriptionId?: string;
+};
 
 export async function resolveSubscriptionPurchaseEligibility(
   stripe: Stripe,
@@ -40,8 +22,44 @@ export async function resolveSubscriptionPurchaseEligibility(
   organizationId: string,
   stripeCustomerId?: string
 ): Promise<SubscriptionPurchaseEligibility> {
+  const managementUrl = '/musicscale#musicscale-demo';
+
+  let canonicalSubscriptionStatus: string | null = null;
+  let entitlementMaterialized = false;
+
+  try {
+    const [subDoc, orgDoc] = await Promise.all([
+      db.collection('subscriptions').doc(organizationId).get(),
+      db.collection('organizations').doc(organizationId).get()
+    ]);
+    if (subDoc.exists) {
+      canonicalSubscriptionStatus = subDoc.data()?.status || null;
+    }
+    if (orgDoc.exists) {
+      const musicscaleStatus = orgDoc.data()?.apps?.musicscale?.status;
+      if (canonicalSubscriptionStatus === 'active' || canonicalSubscriptionStatus === 'trialing') {
+        if (musicscaleStatus === 'active' || musicscaleStatus === 'trialing') {
+          entitlementMaterialized = true;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching entitlement status for eligibility:', err);
+  }
+
+  const baseResponse = {
+    orgId: organizationId,
+    canonicalSubscriptionStatus,
+    entitlementMaterialized,
+    repairRequired: false,
+    managementUrl,
+    stripeCustomerId
+  };
+
   if (!stripeCustomerId) {
     return {
+      ...baseResponse,
+      allowed: true,
       decision: "allow_new_subscription",
       reason: "no_subscription",
       hasResidualAccess: false,
@@ -77,66 +95,57 @@ export async function resolveSubscriptionPurchaseEligibility(
   }
 
   if (activeSub) {
+    const repairRequired = !entitlementMaterialized;
     if (activeSub.cancel_at_period_end) {
       return {
+        ...baseResponse,
+        allowed: false,
+        repairRequired,
         decision: "resume_existing",
         reason: "cancel_scheduled",
         subscriptionId: activeSub.id,
-        stripeCustomerId
+        stripeSubscriptionId: activeSub.id
       };
     } else {
       return {
+        ...baseResponse,
+        allowed: false,
+        repairRequired,
         decision: "block_duplicate",
         reason: "active_subscription_exists",
         subscriptionId: activeSub.id,
-        stripeCustomerId
+        stripeSubscriptionId: activeSub.id
       };
     }
   }
 
   if (pendingSub) {
     return {
+      ...baseResponse,
+      allowed: false,
       decision: "regularize_existing",
       reason: pendingSub.status as any,
       subscriptionId: pendingSub.id,
-      stripeCustomerId
+      stripeSubscriptionId: pendingSub.id
     };
   }
 
   let hasResidualAccess = false;
   let accessUntil: string | null = null;
 
-  try {
-    const orgDoc = await db.collection('organizations').doc(organizationId).get();
-    if (orgDoc.exists) {
-      const orgData = orgDoc.data();
-      const accessEnd = orgData?.accessUntil;
-      
-      if (accessEnd) {
-        let endMs = 0;
-        if (accessEnd.toDate) {
-          endMs = accessEnd.toDate().getTime();
-        } else if (accessEnd._seconds) {
-          endMs = accessEnd._seconds * 1000;
-        } else {
-          endMs = new Date(accessEnd).getTime();
-        }
-
-        if (endMs > Date.now()) {
-          hasResidualAccess = true;
-          accessUntil = new Date(endMs).toISOString();
-        }
-      }
+  if (latestCanceledSub) {
+    hasResidualAccess = (latestCanceledSub as any).current_period_end * 1000 > Date.now();
+    if (hasResidualAccess) {
+      accessUntil = new Date((latestCanceledSub as any).current_period_end * 1000).toISOString();
     }
-  } catch (err) {
-    console.error('Error resolving organization access', err);
   }
 
   return {
+    ...baseResponse,
+    allowed: true,
     decision: "allow_new_subscription",
     reason: latestCanceledSub ? "previous_subscription_canceled" : "no_subscription",
     hasResidualAccess,
-    accessUntil,
-    stripeCustomerId
+    accessUntil
   };
 }
