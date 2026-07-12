@@ -61,16 +61,18 @@ export function Navbar() {
   };
 
   const renderCommandCenter = () => {
+    const isGlobalAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(profile?.systemRole || 'user');
+
     const myApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = app.id === 'musicscale' ? (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)) : organization?.enabledApps?.includes(app.id);
+      const isInstalled = app.id === 'musicscale' ? (isSubscriptionValid(subscription) || isGlobalAdmin) : organization?.enabledApps?.includes(app.id);
       return isInstalled || app.status === 'active';
     }).map(app => {
-      const isInstalled = app.id === 'musicscale' ? (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)) : organization?.enabledApps?.includes(app.id);
+      const isInstalled = app.id === 'musicscale' ? (isSubscriptionValid(subscription) || isGlobalAdmin) : organization?.enabledApps?.includes(app.id);
       return { ...app, isInstalled };
     }).filter(app => app.isInstalled || app.id === 'musicscale'); // ensure we show installed or flagship
 
     const discoverApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = app.id === 'musicscale' ? (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)) : organization?.enabledApps?.includes(app.id);
+      const isInstalled = app.id === 'musicscale' ? (isSubscriptionValid(subscription) || isGlobalAdmin) : organization?.enabledApps?.includes(app.id);
       return !isInstalled && app.status !== 'active';
     });
 
@@ -141,7 +143,7 @@ export function Navbar() {
                                 {t('common:nav_open', 'Abrir')}
                               </button>
                             )}
-                            {app.landingRoute && (
+                            {app.landingRoute && !app.isInstalled && (
                               <Link
                                 to={app.landingRoute}
                                 onClick={() => setLauncherOpen(false)}
@@ -339,11 +341,15 @@ export function Navbar() {
             exit={{ opacity: 0, y: -10 }}
             className="absolute top-full left-0 right-0 bg-[#050505] border-b border-white/10 shadow-2xl p-6 flex flex-col gap-5 lg:hidden"
           >
-            <Link to="/musicscale" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_musicscale', 'MusicScale')}</Link>
-            <a href="/#funcionalidades" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_features', 'Funcionalidades')}</a>
-            <a href="/#ecossistema" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_ecosystem', 'Ecossistema')}</a>
-            <a href="/musicscale#pricing-section" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_pricing', 'Planos')}</a>
-            <hr className="border-white/10 my-2" />
+            {!user && (
+              <>
+                <Link to="/musicscale" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_musicscale', 'MusicScale')}</Link>
+                <a href="/#funcionalidades" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_features', 'Funcionalidades')}</a>
+                <a href="/#ecossistema" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_ecosystem', 'Ecossistema')}</a>
+                <a href="/musicscale#pricing-section" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_pricing', 'Planos')}</a>
+                <hr className="border-white/10 my-2" />
+              </>
+            )}
             {user ? (
                <>
                  <div className="flex items-center justify-between text-[#F5F7FA] font-medium px-2">
