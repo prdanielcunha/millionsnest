@@ -47,6 +47,7 @@ interface OrganizationContextType {
   hasPermission: (permissionName: string) => boolean;
   musicScalePlan: MusicScalePlan;
   musicScaleEntitlements: any;
+  subscription?: any | null;
 }
 
 const OrganizationContext = createContext<OrganizationContextType>({
@@ -56,6 +57,7 @@ const OrganizationContext = createContext<OrganizationContextType>({
   hasPermission: () => false,
   musicScalePlan: 'starter',
   musicScaleEntitlements: MUSIC_SCALE_PLANS.starter,
+  subscription: null,
 });
 
 export function OrganizationProvider({ children }: { children: ReactNode }) {
@@ -75,6 +77,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [memberRole, setMemberRole] = useState<MemberRole | null>(cachedContext?.memberRole || null);
   const [musicScalePlan, setMusicScalePlan] = useState<MusicScalePlan>(cachedContext?.musicScalePlan || 'starter');
   const [musicScaleEntitlements, setMusicScaleEntitlements] = useState<any>(cachedContext?.musicScaleEntitlements || MUSIC_SCALE_PLANS.starter);
+  const [subscriptionData, setSubscriptionData] = useState<any>(null);
   const [loadingOrg, setLoadingOrg] = useState(!cachedContext);
 
   useEffect(() => {
@@ -198,8 +201,9 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     loadingOrg,
     hasPermission,
     musicScalePlan,
-    musicScaleEntitlements
-  }), [organization, memberRole, loadingOrg, hasPermission, musicScalePlan, musicScaleEntitlements]);
+    musicScaleEntitlements,
+    subscription: subscriptionData
+  }), [organization, memberRole, loadingOrg, hasPermission, musicScalePlan, musicScaleEntitlements, subscriptionData]);
 
   return (
     <OrganizationContext.Provider value={contextValue}>

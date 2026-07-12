@@ -248,7 +248,7 @@ export function Dashboard() {
     if (!user) return;
     setRepairing(true);
     try {
-      const token = await user.getIdToken();
+      const token = await user.getIdToken(true);
       const res = await fetch(`/api/repair/sync`, {
         method: 'POST',
         headers: {
@@ -258,14 +258,14 @@ export function Dashboard() {
       });
       const data = await res.json();
       if (data.success || data.repaired) {
-        alert("Assinatura sincronizada com sucesso.");
+        feedback.success("Assinatura sincronizada com sucesso.");
         fetchSubscriptionAndOrg(true); // Sincroniza estado sem reload
       } else {
-        alert(`Falha ao sincronizar: ${data.message || data.error || 'A conta não possui assinaturas ativas para serem verificadas.'}`);
+        feedback.error(`Falha ao sincronizar: ${data.message || data.error || 'A conta não possui assinaturas ativas para serem verificadas.'}`);
         console.error("Repair response:", data);
       }
     } catch (e: any) {
-      alert(`Falha na comunicação para verificar a conta: ${e.message}`);
+      feedback.error(`Falha na comunicação para verificar a conta: ${e.message}`);
     } finally {
       setRepairing(false);
     }
@@ -335,15 +335,15 @@ export function Dashboard() {
         window.location.href = data.url;
       } else {
         if (res.status === 404 || res.status === 500 || data.error?.includes('Stripe não encontrado') || data.error?.includes('No such customer')) {
-          alert('Inconsistência identificada na conta. Sincronizando e reparando acesso...');
+          feedback.success('Inconsistência identificada na conta. Sincronizando e reparando acesso...');
           await fetchSubscriptionAndOrg(true);
           return;
         }
-        alert(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
+        feedback.error(data.error || 'Erro ao carregar o portal. Verifique sua assinatura.');
       }
     } catch (e) {
       console.error(e);
-      alert('Erro de comunicação.');
+      feedback.error('Erro de comunicação.');
     } finally {
       setCheckoutLoading(false);
     }
@@ -365,6 +365,11 @@ export function Dashboard() {
         body: JSON.stringify({ organizationId })
       });
       
+      if (res.status === 401) {
+        feedback.error('Sua sessão expirou. Atualize a página e tente novamente.');
+        setCheckoutLoading(false);
+        return;
+      }
       const data = await res.json();
       
       if (data.action === 'checkout_required') {
@@ -379,14 +384,14 @@ export function Dashboard() {
       }
 
       if (res.ok) {
-        alert('Sua assinatura continuará ativa.');
+        feedback.success('Sua assinatura continuará ativa.');
         await fetchSubscriptionAndOrg(true);
       } else {
-        alert(data.error || 'Erro ao reativar assinatura.');
+        feedback.error(data.error || 'Erro ao reativar assinatura.');
       }
     } catch (e) {
       console.error(e);
-      alert('Erro de comunicação ao reativar.');
+      feedback.error('Erro de comunicação ao reativar.');
     } finally {
       setCheckoutLoading(false);
     }
@@ -421,6 +426,7 @@ export function Dashboard() {
 
       try {
         const subRef = doc(db, "subscriptions", orgId);
+        console.log("[Dashboard] reading subRef for orgId:", orgId);
         const subSnap = await getDoc(subRef);
         
         if (subSnap.exists()) {
@@ -1521,7 +1527,7 @@ export function Dashboard() {
                         if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
                         return true;
                       }).map(app => {
-                        const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && hasMusicScaleAccess);
+                        const isInstalled = app.id === 'musicscale' ? hasMusicScaleAccess : organization?.enabledApps?.includes(app.id);
                         // Map internal icon string to lucide icons
                         const Icon = app.icon === 'Music' ? Music : 
                                      app.icon === 'Users' ? Users : 

@@ -172,7 +172,10 @@ export default function Checkout() {
      try {
         const res = await fetch('/api/v1/billing/validate-coupon', {
            method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
+           headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await user.getIdToken(true)}`
+        },
            body: JSON.stringify({ code: couponCode.trim() })
         });
         const data = await res.json();
@@ -209,7 +212,10 @@ export default function Checkout() {
     try {
       const res = await fetch('/api/v1/billing/unified-checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await user.getIdToken(true)}`
+        },
         body: JSON.stringify({
           userId: user.uid,
           email: user.email,
@@ -218,6 +224,11 @@ export default function Checkout() {
           promoCodeId: appliedCoupon ? appliedCoupon.id : undefined
         })
       });
+      if (res.status === 401) {
+        setCheckoutError('Sua sessão expirou. Atualize a página e tente novamente.');
+        setCheckoutLoading(false);
+        return;
+      }
       const data = await res.json();
       
       if (data.url) {

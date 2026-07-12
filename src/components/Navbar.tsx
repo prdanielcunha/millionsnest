@@ -9,11 +9,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils.js';
 import { useTranslation } from 'react-i18next';
 import { ECOSYSTEM_APPS, type EcosystemApp } from '../lib/apps.js';
+import { isSubscriptionValid } from '../lib/subscriptionHelpers.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 
 export function Navbar() {
   const { user, profile, logout } = useAuth();
-  const { organization, currentUserPerms } = useOrganization();
+  const { organization, currentUserPerms, subscription } = useOrganization();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
@@ -61,15 +62,15 @@ export function Navbar() {
 
   const renderCommandCenter = () => {
     const myApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)));
+      const isInstalled = app.id === 'musicscale' ? (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)) : organization?.enabledApps?.includes(app.id);
       return isInstalled || app.status === 'active';
     }).map(app => {
-      const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)));
+      const isInstalled = app.id === 'musicscale' ? (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)) : organization?.enabledApps?.includes(app.id);
       return { ...app, isInstalled };
     }).filter(app => app.isInstalled || app.id === 'musicscale'); // ensure we show installed or flagship
 
     const discoverApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = organization?.enabledApps?.includes(app.id) || (app.id === 'musicscale' && (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)));
+      const isInstalled = app.id === 'musicscale' ? (profile?.products?.includes('musicscale') || isSubscriptionValid(subscription)) : organization?.enabledApps?.includes(app.id);
       return !isInstalled && app.status !== 'active';
     });
 
