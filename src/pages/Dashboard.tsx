@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext.js";
 import { Navigate, useNavigate, useParams, useLocation } from "react-router-dom";
@@ -18,7 +19,7 @@ import { eventBus } from "../packages/events/index.js";
 import { feedback } from '../packages/ui/feedback.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from "../lib/musicScalePlans.js";
-import { canPurchasePlanAgain, isSubscriptionValid } from "../lib/subscriptionHelpers.js";
+import { canPurchasePlanAgain, isSubscriptionValid, normalizeDateToMs } from "../lib/subscriptionHelpers.js";
 import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
 import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
@@ -69,6 +70,7 @@ const getVisualState = (sub: any) => {
 };
 
 export function Dashboard() {
+  const { t } = useTranslation(['dashboard', 'common']);
   const { user, profile, loading, logout, switchOrganization, canonicalContext } = useAuth();
   const navigate = useNavigate();
   const { tab, subTab } = useParams();
@@ -1200,12 +1202,60 @@ export function Dashboard() {
   const isTrialing = subscription?.status === "trialing" || subscription?.status === "trial";
   const isActive = subscription?.status === "active" || subscription?.status === "pro";
   const isCanceled = subscription?.status === "canceled";
-  const hasValidSubscription = isSubscriptionValid(subscription) || isGlobalAdmin;
-  const hasMusicScaleAccess = profile?.products?.includes("musicscale") || hasValidSubscription || false;
-  const showMusicScaleCard = hasMusicScaleAccess || subscription != null;
+
+  type MusicScaleCatalogState =
+    | "available"
+    | "trialing"
+    | "active"
+    | "cancel_scheduled"
+    | "payment_issue"
+    | "administrative"
+    | "loading";
+
+  const getMusicScaleCatalogState = (): MusicScaleCatalogState => {
+    if (loading) return "loading";
+    if (isGlobalAdmin) return "administrative";
+    
+    if (!subscription || !subscription.status) return "available";
+    
+    const status = subscription.status.toLowerCase();
+    
+    if (['past_due', 'unpaid', 'incomplete', 'paused'].includes(status)) {
+       return "payment_issue";
+    }
+    
+    if (status === 'canceled') {
+       if (subscription.currentPeriodEnd) {
+          const endMs = normalizeDateToMs(subscription.currentPeriodEnd);
+          if (Date.now() < endMs) {
+             return "cancel_scheduled";
+          }
+       }
+       return "available"; // Expired
+    }
+    
+    if (status === 'trialing' || status === 'trial') {
+       if (subscription.cancelAtPeriodEnd || subscription.cancel_at_period_end) {
+          return "cancel_scheduled";
+       }
+       return "trialing";
+    }
+    
+    if (status === 'active' || status === 'pro') {
+       if (subscription.cancelAtPeriodEnd || subscription.cancel_at_period_end) {
+          return "cancel_scheduled";
+       }
+       return "active";
+    }
+    
+    return "available";
+  };
+
+  const msCatalogState = getMusicScaleCatalogState();
+  const msIsInstalled = ["trialing", "active", "cancel_scheduled", "administrative"].includes(msCatalogState);
 
   const formattedRenewal = subscription?.currentPeriodEnd 
-    ? new Date((subscription.currentPeriodEnd.seconds || subscription.currentPeriodEnd._seconds || 0) * 1000).toLocaleDateString('pt-BR') 
+    ? new Date(normalizeDateToMs(subscription.currentPeriodEnd)).toLocaleDateString('pt-BR') 
     : null;
 
   const handleAddonCheckout = async (lookupKey: string) => {
@@ -1497,7 +1547,7 @@ export function Dashboard() {
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
                              <LayoutGrid className="w-3.5 h-3.5" /> Apps Ativos
                           </p>
-                          <p className="text-2xl font-semibold text-[#F5F7FA]">{organization?.enabledApps?.length || (showMusicScaleCard ? 1 : 0)}</p>
+                          <p className="text-2xl font-semibold text-[#F5F7FA]">{organization?.enabledApps?.length || (msIsInstalled ? 1 : 0)}</p>
                         </div>
                         <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
@@ -1529,10 +1579,32 @@ export function Dashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {ECOSYSTEM_APPS.filter(app => {
                         // Restrict NestFinance preview to global admins
-                        if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
-                        return true;
-                      }).map(app => {
-                        const isInstalled = app.id === 'musicscale' ? hasMusicScaleAccess : organization?.enabledApps?.includes(app.id);
+                                   }).map(app => {
+                        const isMusicScale = app.id === 'musicscale';
+                        const isInstalled = isMusicScale ? msIsInstalled : organization?.enabledApps?.includes(app.id);
+
+                        let cardStatusText = t('dashboard.apps.available', 'Disponível');
+                        let isWarningState = false;
+
+                        if (isMusicScale) {
+                           switch (msCatalogState) {
+                              case 'trialing': cardStatusText = t('dashboard.apps.trialing', 'Em teste'); break;
+                              case 'active': cardStatusText = t('dashboard.apps.active', 'Ativo'); break;
+                              case 'cancel_scheduled': cardStatusText = t('dashboard.apps.cancel_scheduled', 'Cancelamento agendado'); break;
+                              case 'payment_issue': 
+                                 cardStatusText = t('dashboard.apps.payment_issue', 'Pagamento pendente'); 
+                                 isWarningState = true;
+                                 break;
+                              case 'administrative': cardStatusText = t('dashboard.apps.administrative', 'Acesso administrativo'); break;
+                              case 'available': cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
+                              default: cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
+                           }
+                        } else {
+                           cardStatusText = isInstalled ? 'Instalado' : 
+                                            (app.id === 'nestfinance' && nestFinanceLaunchEnabled) ? 'Disponível' :
+                                            app.category === 'beta' ? 'Em Breve' : 'Disponível';
+                        }
+
                         // Map internal icon string to lucide icons
                         const Icon = app.icon === 'Music' ? Music : 
                                      app.icon === 'Users' ? Users : 
@@ -1544,7 +1616,7 @@ export function Dashboard() {
                           <div key={app.id} className="bg-[#050505] rounded-3xl p-5 border border-white/10 shadow-lg flex flex-col transition-all hover:border-white/20 relative overflow-hidden group">
                             {isInstalled && <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-0" />}
                             <div className="relative z-10 flex items-start justify-between mb-4">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${isInstalled ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 text-[#2B85EB]' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${isInstalled ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 text-[#2B85EB]' : isWarningState ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
                                 {app.id === 'musicscale' ? (
                                   <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
                                 ) : (
@@ -1553,17 +1625,20 @@ export function Dashboard() {
                               </div>
                               <span className={`px-2 py-1 text-[9px] font-bold rounded-md border uppercase tracking-widest shadow-sm ${
                                 isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 
+                                isWarningState ? 'bg-red-500/10 text-red-400 border-red-500/20' :
                                 (app.id === 'nestfinance' && nestFinanceLaunchEnabled) ? 'bg-[#F5F7FA]/10 text-[#F5F7FA] border-[#F5F7FA]/20' :
                                 'bg-white/5 text-[#A0A7B5] border-white/10'
                               }`}>
-                                {isInstalled ? 'Instalado' : 
-                                  (app.id === 'nestfinance' && nestFinanceLaunchEnabled) ? 'Disponível' :
-                                  app.category === 'beta' ? 'Em Breve' : 'Disponível'
-                                }
+                                {cardStatusText}
                               </span>
                             </div>
                             <h4 className="text-lg font-semibold text-[#F5F7FA] mb-1">{app.name}</h4>
-                            <p className="text-[#A0A7B5] text-xs leading-relaxed mb-6 flex-1">{app.description}</p>
+                            <p className="text-[#A0A7B5] text-xs leading-relaxed mb-6 flex-1">
+                              {app.description}
+                              {isMusicScale && msCatalogState === 'cancel_scheduled' && formattedRenewal && (
+                                <span className="block mt-2 text-white/40">Acesso até {formattedRenewal}</span>
+                              )}
+                            </p>
                             
                             <div className="relative z-10 flex items-center gap-3">
                               {app.id === 'nestfinance' ? (
@@ -1583,19 +1658,35 @@ export function Dashboard() {
                                     Em preparação
                                   </button>
                                 )
+                              ) : isMusicScale ? (
+                                msCatalogState === 'payment_issue' ? (
+                                  <button
+                                    onClick={() => navigate('/dashboard/billing')}
+                                    className="flex-1 w-full py-2.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-red-500/20 transition-all shadow-sm active:scale-95"
+                                  >
+                                    {t('dashboard.apps.resolve_payment', 'Regularizar pagamento')}
+                                  </button>
+                                ) : isInstalled ? (
+                                  <button
+                                    onClick={() => handleLaunchEcosystemApp(app, currentUserPerms)}
+                                    className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95"
+                                  >
+                                    Abrir App <ArrowRight className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => navigate('/checkout')}
+                                    className="flex-1 py-2.5 bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-[#2B85EB]/20 hover:bg-[#2B85EB]/20 transition-colors"
+                                  >
+                                    Ver planos
+                                  </button>
+                                )
                               ) : isInstalled ? (
                                 <button
                                   onClick={() => handleLaunchEcosystemApp(app, currentUserPerms)}
                                   className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95"
                                 >
                                   Abrir App <ArrowRight className="w-3.5 h-3.5" />
-                                </button>
-                              ) : app.id === 'musicscale' ? (
-                                <button
-                                  onClick={() => window.location.href = '/checkout?plan=musicscale_starter_monthly'}
-                                  className="flex-1 py-2.5 bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-[#2B85EB]/20 hover:bg-[#2B85EB]/20 transition-colors"
-                                >
-                                  Obter MusicScale
                                 </button>
                               ) : (
                                 <button
@@ -1605,7 +1696,7 @@ export function Dashboard() {
                                   {app.requiredPlan !== 'free' ? `Requer plano ${app.requiredPlan}` : 'Em breve'}
                                 </button>
                               )}
-                              {isInstalled && app.id !== 'nestfinance' && (isGlobalAdmin || currentUserPerms['organization.billing.manage']) && (
+                              {((isInstalled && !isMusicScale && app.id !== 'nestfinance') || (isMusicScale && msIsInstalled)) && (isGlobalAdmin || currentUserPerms['organization.billing.manage']) && (
                                 <button
                                    onClick={() => setConfigAppModal(app)}
                                    className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/10 transition-colors shrink-0"
@@ -2010,7 +2101,7 @@ export function Dashboard() {
                                  onClick={openBillingPortal}
                                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#EF4444] text-white rounded-xl font-semibold hover:bg-[#EF4444]/90 transition-all shadow-sm active:scale-95"
                                >
-                                 Regularizar pagamento
+                                 {t('dashboard.apps.resolve_payment', 'Regularizar pagamento')}
                                </button>
                              </>
                            );

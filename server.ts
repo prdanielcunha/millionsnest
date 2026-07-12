@@ -5984,31 +5984,39 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       if (planLookupKey) {
         if (eligibility.decision === 'block_duplicate') {
-          return res.status(400).json({ 
+          return res.status(409).json({ 
             ok: false, 
-            code: 'ACTIVE_SUBSCRIPTION_EXISTS', 
-            action: 'manage_existing_subscription',
-            error: 'Sua assinatura já está ativa. Você pode gerenciá-la na área de assinatura.',
-            repairRequired: eligibility.repairRequired,
+            checkoutCreated: false,
+            decision: eligibility.decision,
+            reason: eligibility.reason,
             managementUrl: eligibility.managementUrl,
+            accessUntil: eligibility.accessUntil,
+            repairRequired: eligibility.repairRequired,
+            error: 'Sua assinatura já está ativa. Você pode gerenciá-la na área de assinatura.',
             orgId: eligibility.orgId
           });
         }
 
         if (eligibility.decision === 'resume_existing') {
-          return res.status(400).json({
+          return res.status(409).json({
             ok: false,
-            code: 'SUBSCRIPTION_CANCEL_SCHEDULED',
-            action: 'resume_existing_subscription',
+            checkoutCreated: false,
+            decision: eligibility.decision,
+            reason: eligibility.reason,
+            managementUrl: eligibility.managementUrl,
+            accessUntil: eligibility.accessUntil,
             error: 'Sua assinatura ainda pode ser mantida sem criar uma nova contratação.'
           });
         }
 
         if (eligibility.decision === 'regularize_existing') {
-          return res.status(400).json({
+          return res.status(409).json({
             ok: false,
-            code: 'SUBSCRIPTION_REQUIRES_PAYMENT',
-            action: 'regularize_existing_subscription',
+            checkoutCreated: false,
+            decision: eligibility.decision,
+            reason: eligibility.reason,
+            managementUrl: eligibility.managementUrl,
+            accessUntil: eligibility.accessUntil,
             error: 'Existe um pagamento pendente nesta assinatura. Regularize-o antes de contratar novamente.'
           });
         }
@@ -6198,28 +6206,39 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId);
 
       if (eligibility.decision === 'block_duplicate') {
-        return res.status(400).json({ 
+        return res.status(409).json({ 
           ok: false, 
-          code: 'ACTIVE_SUBSCRIPTION_EXISTS', 
-          action: 'manage_existing_subscription',
-          error: 'Sua assinatura já está ativa. Você pode gerenciá-la na área de assinatura.' 
+          checkoutCreated: false,
+          decision: eligibility.decision,
+          reason: eligibility.reason,
+          managementUrl: eligibility.managementUrl,
+          accessUntil: eligibility.accessUntil,
+          repairRequired: eligibility.repairRequired,
+          error: 'Sua assinatura já está ativa. Você pode gerenciá-la na área de assinatura.',
+          orgId: eligibility.orgId
         });
       }
 
       if (eligibility.decision === 'resume_existing') {
-        return res.status(400).json({
+        return res.status(409).json({
           ok: false,
-          code: 'SUBSCRIPTION_CANCEL_SCHEDULED',
-          action: 'resume_existing_subscription',
+          checkoutCreated: false,
+          decision: eligibility.decision,
+          reason: eligibility.reason,
+          managementUrl: eligibility.managementUrl,
+          accessUntil: eligibility.accessUntil,
           error: 'Sua assinatura ainda pode ser mantida sem criar uma nova contratação.'
         });
       }
 
       if (eligibility.decision === 'regularize_existing') {
-        return res.status(400).json({
+        return res.status(409).json({
           ok: false,
-          code: 'SUBSCRIPTION_REQUIRES_PAYMENT',
-          action: 'regularize_existing_subscription',
+          checkoutCreated: false,
+          decision: eligibility.decision,
+          reason: eligibility.reason,
+          managementUrl: eligibility.managementUrl,
+          accessUntil: eligibility.accessUntil,
           error: 'Existe um pagamento pendente nesta assinatura. Regularize-o antes de contratar novamente.'
         });
       }

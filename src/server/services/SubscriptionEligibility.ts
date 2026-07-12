@@ -22,9 +22,9 @@ export async function resolveSubscriptionPurchaseEligibility(
   organizationId: string,
   stripeCustomerId?: string
 ): Promise<SubscriptionPurchaseEligibility> {
-  const managementUrl = '/musicscale#musicscale-demo';
-
+  const managementUrl = '/dashboard/billing';
   let canonicalSubscriptionStatus: string | null = null;
+  let canonicalSubscriptionId: string | null = null;
   let entitlementMaterialized = false;
 
   try {
@@ -32,9 +32,13 @@ export async function resolveSubscriptionPurchaseEligibility(
       db.collection('subscriptions').doc(organizationId).get(),
       db.collection('organizations').doc(organizationId).get()
     ]);
+
     if (subDoc.exists) {
-      canonicalSubscriptionStatus = subDoc.data()?.status || null;
+      const data = subDoc.data();
+      canonicalSubscriptionStatus = data?.status || null;
+      canonicalSubscriptionId = data?.stripeSubscriptionId || data?.id || null;
     }
+
     if (orgDoc.exists) {
       const musicscaleStatus = orgDoc.data()?.apps?.musicscale?.status;
       if (canonicalSubscriptionStatus === 'active' || canonicalSubscriptionStatus === 'trialing') {
@@ -71,7 +75,7 @@ export async function resolveSubscriptionPurchaseEligibility(
   const subscriptions = await stripe.subscriptions.list({
     customer: stripeCustomerId,
     status: 'all',
-    limit: 10
+    limit: 100
   });
 
   const activeStatuses = ['active', 'trialing'];
@@ -80,11 +84,24 @@ export async function resolveSubscriptionPurchaseEligibility(
   let activeSub: Stripe.Subscription | null = null;
   let pendingSub: Stripe.Subscription | null = null;
   let latestCanceledSub: Stripe.Subscription | null = null;
+  
+  let multipleActiveConflict = false;
+  let activeCount = 0;
 
   for (const sub of subscriptions.data) {
+    // Multi-tenant check
+    const isCanonical = canonicalSubscriptionId && sub.id === canonicalSubscriptionId;
+    const isAppMatch = sub.metadata?.app === 'musicscale';
+    const isOrgMatch = (sub.metadata?.organizationId === organizationId || sub.metadata?.orgId === organizationId || sub.metadata?.uid === organizationId);
+    
+    // We consider it relevant if it's explicitly matched or if it's the canonical one.
+    if (!isCanonical && !(isOrgMatch && isAppMatch)) {
+      continue;
+    }
+
     if (activeStatuses.includes(sub.status)) {
+      activeCount++;
       activeSub = sub;
-      break; 
     } else if (pendingStatuses.includes(sub.status)) {
       if (!pendingSub) pendingSub = sub;
     } else if (sub.status === 'canceled' || sub.status === 'incomplete_expired') {
@@ -92,6 +109,16 @@ export async function resolveSubscriptionPurchaseEligibility(
         latestCanceledSub = sub;
       }
     }
+  }
+
+  if (activeCount > 1) {
+    return {
+      ...baseResponse,
+      allowed: false,
+      repairRequired: true,
+      decision: "block_duplicate",
+      reason: "multiple_subscriptions_conflict"
+    };
   }
 
   if (activeSub) {
@@ -137,6 +164,16 @@ export async function resolveSubscriptionPurchaseEligibility(
     hasResidualAccess = (latestCanceledSub as any).current_period_end * 1000 > Date.now();
     if (hasResidualAccess) {
       accessUntil = new Date((latestCanceledSub as any).current_period_end * 1000).toISOString();
+      return {
+        ...baseResponse,
+        allowed: false,
+        decision: "block_duplicate",
+        reason: "canceled_with_residual_access",
+        hasResidualAccess,
+        accessUntil,
+        subscriptionId: latestCanceledSub.id,
+        stripeSubscriptionId: latestCanceledSub.id
+      };
     }
   }
 
@@ -144,8 +181,8 @@ export async function resolveSubscriptionPurchaseEligibility(
     ...baseResponse,
     allowed: true,
     decision: "allow_new_subscription",
-    reason: latestCanceledSub ? "previous_subscription_canceled" : "no_subscription",
-    hasResidualAccess,
-    accessUntil
+    reason: latestCanceledSub ? "previous_subscription_expired" : "no_subscription",
+    hasResidualAccess: false,
+    accessUntil: null
   };
 }

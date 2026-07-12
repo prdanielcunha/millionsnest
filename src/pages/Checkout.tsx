@@ -234,16 +234,16 @@ export default function Checkout() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        setCheckoutError(data.error || 'Erro ao iniciar checkout');
+        setCheckoutError(data.error || t('checkout_error', 'Erro ao iniciar checkout'));
         if (data.code === 'ACTIVE_SUBSCRIPTION_EXISTS' || data.code === 'SUBSCRIPTION_CANCEL_SCHEDULED' || data.code === 'SUBSCRIPTION_REQUIRES_PAYMENT') {
           setCheckoutAction({
             code: data.code,
-            label: 'Acessar Portal do Cliente'
+            label: t('portal_access', 'Acessar Portal do Cliente')
           });
         }
       }
     } catch (e: any) {
-      setCheckoutError("Erro ao iniciar checkout. Tente novamente.");
+      setCheckoutError(t('checkout_error_retry', 'Erro ao iniciar checkout. Tente novamente.'));
     } finally {
       setCheckoutLoading(false);
     }
@@ -695,7 +695,10 @@ export default function Checkout() {
                        className="w-full py-4 px-6 bg-[#E8ECEF] hover:bg-white text-black transition-all rounded-2xl font-semibold text-lg flex items-center justify-center gap-2 shadow-lg shadow-white/5 disabled:opacity-50 disabled:cursor-not-allowed group"
                     >
                        {checkoutLoading ? (
-                           <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                           <>
+                               <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                               {t('processing', 'Processando...')}
+                           </>
                        ) : (
                            <>
                               {t('cta', 'Iniciar Teste de 7 Dias')} 
