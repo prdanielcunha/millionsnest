@@ -165,6 +165,16 @@ service cloud.firestore {
         allow read: if isAuthenticated() && checkOrgAccess(orgId);
         allow write: if isAuthenticated() && checkOrgAccess(orgId);
       }
+      match /timeline/{document=**} {
+        allow read: if isAuthenticated() && checkOrgAccess(orgId);
+        allow write: if isAuthenticated() && checkOrgAccess(orgId);
+      }
+
+      match /{app}/{document=**} {
+        allow read: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+      }
     }
 
     match /organization_members/{id} {

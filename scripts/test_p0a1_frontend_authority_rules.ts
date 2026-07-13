@@ -28,7 +28,6 @@ if (orgMembersCreateMatch) {
   assertCondition("1. organization_members create blocks self UID", 
     !createRule.includes("request.auth.uid") || !createRule.includes("request.resource.data.get('uid'"));
 } else {
-  // If we can't find it easily via regex, just check if the bad pattern exists in the whole file
   const badOrgMemberRule = rules.includes("request.resource.data.get('uid', '') == request.auth.uid");
   assertCondition("1. organization_members create blocks self UID", !badOrgMemberRule);
 }
@@ -78,11 +77,17 @@ assertCondition("9. Login restricts redirect to /join", login.includes("url.path
 
 // 10. Nenhum arquivo patch_*.py existe na raiz
 const files = fs.readdirSync(rootDir);
-const patchFiles = files.filter(f => f.startsWith('patch_') && f.endsWith('.py'));
-assertCondition("10. No patch_*.py files in root", patchFiles.length === 0);
+const tempFiles = files.filter(f => (f.startsWith('patch_') || f.startsWith('fix_') || f.startsWith('temp_') || f.startsWith('update_')) && f.endsWith('.py'));
+assertCondition("10. No temp python files in root", tempFiles.length === 0);
 
 // 11. test_results.txt não existe
 assertCondition("11. test_results.txt does not exist", !files.includes('test_results.txt'));
+
+// 12. bloco timeline restaurado
+assertCondition("12. Timeline wildcard block exists", rules.includes("match /timeline/{document=**} {"));
+
+// 13. bloco app restaurado
+assertCondition("13. App wildcard block exists", rules.includes("match /{app}/{document=**} {"));
 
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
