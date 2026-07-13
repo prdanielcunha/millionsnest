@@ -1,8 +1,19 @@
-export function normalizeInvitationEmail(value: any): string | null {
+export function normalizeInvitationEmail(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toLowerCase();
   if (!trimmed) return null;
   return trimmed;
+}
+
+export type InvitationRole = 'admin' | 'member';
+export type ExistingMembershipRole = 'owner' | 'admin' | 'member';
+
+export function isInvitationRole(value: unknown): value is InvitationRole {
+  return value === 'admin' || value === 'member';
+}
+
+export function isExistingMembershipRole(value: unknown): value is ExistingMembershipRole {
+  return value === 'owner' || value === 'admin' || value === 'member';
 }
 
 export type AuthenticatedInvitationIdentity = {
@@ -58,9 +69,27 @@ export type InvitationAcceptanceSuccess = {
   reasonCode: 'INVITATION_CAN_BE_ACCEPTED' | 'ALREADY_MEMBER';
 };
 
+export type InvitationAcceptanceFailureReason =
+  | 'AUTHENTICATED_EMAIL_REQUIRED'
+  | 'ORGANIZATION_NOT_FOUND'
+  | 'ORGANIZATION_INACTIVE'
+  | 'INVITE_NOT_FOUND'
+  | 'INVITE_STATE_INCONSISTENT'
+  | 'INVITE_REVOKED'
+  | 'INVITE_EXPIRED'
+  | 'INVITE_IDENTITY_MISMATCH'
+  | 'INVALID_INVITE_ROLE'
+  | 'INVITE_MAX_USES_REACHED'
+  | 'MEMBERSHIP_INACTIVE'
+  | 'MEMBERSHIP_STATE_INCONSISTENT'
+  | 'INVITE_ALREADY_CONSUMED'
+  | 'MEMBER_LIMIT_UNAVAILABLE'
+  | 'MEMBER_LIMIT_INVALID'
+  | 'MEMBER_LIMIT_REACHED';
+
 export type InvitationAcceptanceFailure = {
   success: false;
-  reasonCode: string;
+  reasonCode: InvitationAcceptanceFailureReason;
 };
 
 export type InvitationAcceptanceResult = InvitationAcceptanceSuccess | InvitationAcceptanceFailure;
@@ -86,7 +115,9 @@ export function planInvitationAcceptance(input: InvitationAcceptanceInput, nowMs
   if (!inv.exists) {
     return { success: false, reasonCode: 'INVITE_NOT_FOUND' };
   }
-  if (!inv.organizationId) {
+  
+  const orgId = inv.organizationId;
+  if (typeof orgId !== 'string' || orgId.trim() === '') {
     return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
   }
 
@@ -95,6 +126,10 @@ export function planInvitationAcceptance(input: InvitationAcceptanceInput, nowMs
   }
 
   if (inv.status !== 'pending' && inv.status !== 'accepted') {
+    return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
+  }
+
+  if (typeof nowMs !== 'number' || !Number.isFinite(nowMs) || nowMs < 0) {
     return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
   }
 
@@ -119,7 +154,7 @@ export function planInvitationAcceptance(input: InvitationAcceptanceInput, nowMs
   }
 
   const inviteRole = inv.role;
-  if (inviteRole !== 'admin' && inviteRole !== 'member') {
+  if (!isInvitationRole(inviteRole)) {
     return { success: false, reasonCode: 'INVALID_INVITE_ROLE' };
   }
 
@@ -135,10 +170,16 @@ export function planInvitationAcceptance(input: InvitationAcceptanceInput, nowMs
 
   const existing = input.existingMembership;
   let isActiveMembership = false;
+  let activeRole: ExistingMembershipRole | undefined = undefined;
 
   if (existing.exists) {
     if (!existing.status || existing.status === 'active') {
-      isActiveMembership = true;
+      if (isExistingMembershipRole(existing.role)) {
+        isActiveMembership = true;
+        activeRole = existing.role;
+      } else {
+        return { success: false, reasonCode: 'MEMBERSHIP_STATE_INCONSISTENT' };
+      }
     } else if (['suspended', 'inactive', 'removed', 'revoked', 'deleted'].includes(existing.status)) {
       return { success: false, reasonCode: 'MEMBERSHIP_INACTIVE' };
     } else {
@@ -159,15 +200,11 @@ export function planInvitationAcceptance(input: InvitationAcceptanceInput, nowMs
     }
   }
 
-  if (isActiveMembership) {
-    let roleToUse: 'owner' | 'admin' | 'member' = inviteRole as any;
-    if (existing.role === 'owner' || existing.role === 'admin' || existing.role === 'member') {
-      roleToUse = existing.role;
-    }
+  if (isActiveMembership && activeRole) {
     return {
       success: true,
       action: 'ALREADY_MEMBER',
-      membershipRole: roleToUse,
+      membershipRole: activeRole,
       consumeInviteUse: false,
       reasonCode: 'ALREADY_MEMBER'
     };
@@ -198,7 +235,7 @@ export function planInvitationAcceptance(input: InvitationAcceptanceInput, nowMs
   return {
     success: true,
     action: 'CREATE_MEMBERSHIP',
-    membershipRole: inviteRole as any,
+    membershipRole: inviteRole,
     consumeInviteUse: true,
     reasonCode: 'INVITATION_CAN_BE_ACCEPTED'
   };

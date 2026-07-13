@@ -251,6 +251,79 @@ const r40a = planInvitationAcceptance(i40a, nowMs);
 const r40b = planInvitationAcceptance(i40b, nowMs);
 assertCondition('40. resultado não muda com o mesmo nowMs e mesma entrada', JSON.stringify(r40a) === JSON.stringify(r40b));
 
+// 41. normalizeInvitationEmail recebe número e retorna null
+assertCondition('41. normalizeInvitationEmail recebe número e retorna null', normalizeInvitationEmail(123) === null);
+
+// 42. normalizeInvitationEmail recebe string vazia e retorna null
+assertCondition('42. normalizeInvitationEmail recebe string vazia e retorna null', normalizeInvitationEmail('   ') === null);
+
+// 43. organizationId contendo somente espaços gera INVITE_STATE_INCONSISTENT
+const i43 = createBaseInput();
+i43.invitation.organizationId = '   ';
+assertCondition('43. organizationId contendo somente espaços gera INVITE_STATE_INCONSISTENT', (planInvitationAcceptance(i43, nowMs) as InvitationAcceptanceFailure).reasonCode === 'INVITE_STATE_INCONSISTENT');
+
+// 44. nowMs NaN gera INVITE_STATE_INCONSISTENT
+const i44 = createBaseInput();
+assertCondition('44. nowMs NaN gera INVITE_STATE_INCONSISTENT', (planInvitationAcceptance(i44, NaN) as InvitationAcceptanceFailure).reasonCode === 'INVITE_STATE_INCONSISTENT');
+
+// 45. nowMs negativo gera INVITE_STATE_INCONSISTENT
+const i45 = createBaseInput();
+assertCondition('45. nowMs negativo gera INVITE_STATE_INCONSISTENT', (planInvitationAcceptance(i45, -1) as InvitationAcceptanceFailure).reasonCode === 'INVITE_STATE_INCONSISTENT');
+
+// 46. membership ativa sem role gera MEMBERSHIP_STATE_INCONSISTENT
+const i46 = createBaseInput();
+i46.existingMembership = { exists: true, status: 'active', role: undefined };
+assertCondition('46. membership ativa sem role gera MEMBERSHIP_STATE_INCONSISTENT', (planInvitationAcceptance(i46, nowMs) as InvitationAcceptanceFailure).reasonCode === 'MEMBERSHIP_STATE_INCONSISTENT');
+
+// 47. membership ativa com role ceo gera MEMBERSHIP_STATE_INCONSISTENT
+const i47 = createBaseInput();
+i47.existingMembership = { exists: true, status: 'active', role: 'ceo' };
+assertCondition('47. membership ativa com role ceo gera MEMBERSHIP_STATE_INCONSISTENT', (planInvitationAcceptance(i47, nowMs) as InvitationAcceptanceFailure).reasonCode === 'MEMBERSHIP_STATE_INCONSISTENT');
+
+// 48. membership legada sem status e sem role gera MEMBERSHIP_STATE_INCONSISTENT
+const i48 = createBaseInput();
+i48.existingMembership = { exists: true, role: undefined };
+assertCondition('48. membership legada sem status e sem role gera MEMBERSHIP_STATE_INCONSISTENT', (planInvitationAcceptance(i48, nowMs) as InvitationAcceptanceFailure).reasonCode === 'MEMBERSHIP_STATE_INCONSISTENT');
+
+// 49. convite accepted pelo mesmo UID com membership ativa de role inválido gera MEMBERSHIP_STATE_INCONSISTENT
+const i49 = createBaseInput();
+i49.invitation.status = 'accepted';
+i49.invitation.acceptedBy = 'user123';
+i49.existingMembership = { exists: true, status: 'active', role: 'invalid_role' };
+assertCondition('49. convite accepted pelo mesmo UID com membership ativa de role inválido gera MEMBERSHIP_STATE_INCONSISTENT', (planInvitationAcceptance(i49, nowMs) as InvitationAcceptanceFailure).reasonCode === 'MEMBERSHIP_STATE_INCONSISTENT');
+
+// 50. membership ativa admin preserva admin
+const i50 = createBaseInput();
+i50.invitation.role = 'member';
+i50.existingMembership = { exists: true, status: 'active', role: 'admin' };
+const r50 = planInvitationAcceptance(i50, nowMs) as InvitationAcceptanceSuccess;
+assertCondition('50. membership ativa admin preserva admin', r50.success && r50.membershipRole === 'admin');
+
+// 51. membership ativa owner preserva owner
+const i51 = createBaseInput();
+i51.invitation.role = 'member';
+i51.existingMembership = { exists: true, status: 'active', role: 'owner' };
+const r51 = planInvitationAcceptance(i51, nowMs) as InvitationAcceptanceSuccess;
+assertCondition('51. membership ativa owner preserva owner', r51.success && r51.membershipRole === 'owner');
+
+// 52. papel do convite nunca substitui papel inválido da membership existente
+const i52 = createBaseInput();
+i52.invitation.role = 'member';
+i52.existingMembership = { exists: true, status: 'active', role: 'invalid_role' };
+assertCondition('52. papel do convite nunca substitui papel inválido da membership existente', (planInvitationAcceptance(i52, nowMs) as InvitationAcceptanceFailure).reasonCode === 'MEMBERSHIP_STATE_INCONSISTENT');
+
+// 53. InvitationAcceptancePlanner.ts não contém a palavra de tipo any em declaração ou cast
+// We use a regex to ensure it catches actual usages as type or cast, but not words containing any.
+assertCondition('53. InvitationAcceptancePlanner.ts não contém a palavra de tipo any em declaração ou cast', !/\bany\b/.test(content));
+
+// 54. InvitationAcceptanceFailure.reasonCode não é string
+assertCondition('54. InvitationAcceptanceFailure.reasonCode não é string', !content.includes("reasonCode: string;"));
+
+// 55. não existem casts as any
+assertCondition('55. não existem casts as any', !content.includes("as any"));
+
+// 56. não existe fallback de membershipRole para inviteRole quando a membership já existe
+assertCondition('56. não existe fallback de membershipRole para inviteRole quando a membership já existe', !content.includes("existing.role || inv.role"));
 
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
