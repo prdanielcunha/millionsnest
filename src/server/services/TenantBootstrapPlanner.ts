@@ -11,7 +11,7 @@ export type Invite = {
   email?: string;
   emailNormalized?: string;
   status?: string;
-  expiresAt?: Date;
+  expiresAtMs?: number;
 };
 
 export type UserContext = {
@@ -25,7 +25,9 @@ export type LockStatus = {
   completed: boolean;
   organizationId?: string;
   orgExists?: boolean;
+  orgActive?: boolean;
   memberExists?: boolean;
+  memberActive?: boolean;
 };
 
 export enum BootstrapDecisionCode {
@@ -50,11 +52,12 @@ export function planBootstrap(
   pendingInvites: Invite[],
   userContext: UserContext,
   lockStatus: LockStatus,
-  userEmail: string | null
+  userEmail: string | null,
+  nowMs: number
 ): BootstrapDecision {
 
   if (lockStatus.exists) {
-    if (lockStatus.completed && lockStatus.organizationId && lockStatus.orgExists && lockStatus.memberExists) {
+    if (lockStatus.completed && lockStatus.organizationId && lockStatus.orgExists && lockStatus.orgActive && lockStatus.memberExists && lockStatus.memberActive) {
       return {
         code: BootstrapDecisionCode.REUSE_BOOTSTRAP_LOCK,
         organizationId: lockStatus.organizationId,
@@ -67,7 +70,6 @@ export function planBootstrap(
     };
   }
 
-  // canonical memberships
   const activeCanonical = canonicalMemberships.filter(m => 
     !m.status || m.status === 'active'
   );
@@ -92,7 +94,6 @@ export function planBootstrap(
     };
   }
 
-  // legacy memberships deduplication
   const uniqueLegacyOrgs = new Set<string>();
   const validLegacyMemberships = [];
   for (const m of legacyMemberships) {
@@ -117,14 +118,13 @@ export function planBootstrap(
     };
   }
 
-  // Check invites
   if (userEmail) {
     const normalizedEmail = userEmail.toLowerCase().trim();
     const activeInvites = pendingInvites.filter(i => {
       const em = i.emailNormalized || i.email;
       const emailMatches = em && em.toLowerCase().trim() === normalizedEmail;
       const isPending = i.status === 'pending';
-      const notExpired = !i.expiresAt || i.expiresAt.getTime() > Date.now();
+      const notExpired = !i.expiresAtMs || i.expiresAtMs > nowMs;
       return emailMatches && isPending && notExpired;
     });
 

@@ -34,12 +34,27 @@ export async function bootstrapUserContext(req: Request, res: Response) {
   const db = getFirestore();
   const auth = getAuth();
 
+  let userEmail: string | null = null;
+  try {
+    const userRecord = await auth.getUser(uid);
+    userEmail = userRecord.email || null;
+  } catch (e) {
+    // Ignore error
+  }
+
+  const parseTimeMs = (val: any): number | undefined => {
+    if (!val) return undefined;
+    if (typeof val.toMillis === 'function') return val.toMillis();
+    if (typeof val.getTime === 'function') return val.getTime();
+    if (typeof val === 'number') return val;
+    return undefined;
+  };
+
   try {
     const result = await db.runTransaction(async (t) => {
       const userRef = db.collection('users').doc(uid);
       const userSnap = await t.get(userRef);
       let userData = userSnap.data();
-      const userEmail = userData?.email || (await auth.getUser(uid)).email || null;
 
       // Check lock
       const lockRef = db.collection('tenantBootstrapLocks').doc(uid);
@@ -50,13 +65,22 @@ export async function bootstrapUserContext(req: Request, res: Response) {
       let lockCompleted = lockExists && lockData?.status === 'completed';
       let lockOrgId = lockData?.organizationId;
       let lockOrgExists = false;
+      let lockOrgActive = false;
       let lockMemberExists = false;
+      let lockMemberActive = false;
 
       if (lockCompleted && lockOrgId) {
         const checkOrg = await t.get(db.collection('organizations').doc(lockOrgId));
-        lockOrgExists = checkOrg.exists;
+        if (checkOrg.exists) {
+           lockOrgExists = true;
+           lockOrgActive = checkOrg.data()?.status === 'active';
+        }
         const checkMem = await t.get(db.collection(`organizations/${lockOrgId}/members`).doc(uid));
-        lockMemberExists = checkMem.exists;
+        if (checkMem.exists) {
+           lockMemberExists = true;
+           const st = checkMem.data()?.status;
+           lockMemberActive = !st || st === 'active';
+        }
       }
 
       const lockStatus = {
@@ -64,40 +88,81 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         completed: lockCompleted,
         organizationId: lockOrgId,
         orgExists: lockOrgExists,
-        memberExists: lockMemberExists
+        orgActive: lockOrgActive,
+        memberExists: lockMemberExists,
+        memberActive: lockMemberActive
       };
 
       // Get Canonical Memberships
-      // We can't query collectionGroups inside transaction, so we must rely on what we can. 
-      // Actually, we CAN query but not with transactions.
-      // Wait, Firestore transactions in Node SDK allow queries if they are read before writes.
       const membersQuery = await t.get(
         db.collectionGroup('members').where('uid', '==', uid)
       );
-      const activeCanonical = membersQuery.docs
+      const allCanonical = membersQuery.docs
         .filter(d => d.ref.path.includes('/organizations/') && !d.ref.path.includes('organization_members'))
         .map(d => ({ ...d.data(), organizationId: d.ref.parent.parent!.id } as any));
 
+      const candidateCanonical = allCanonical.filter(m => !m.status || m.status === 'active');
+      const validCanonical = [];
+      for (const m of candidateCanonical) {
+         const orgSnap = await t.get(db.collection('organizations').doc(m.organizationId));
+         if (orgSnap.exists && orgSnap.data()?.status === 'active') {
+            validCanonical.push(m);
+         }
+      }
+
+      if (candidateCanonical.length > 0 && validCanonical.length === 0) {
+         throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
+      }
+
       // Get Legacy Memberships
-      const legacyQuery = await t.get(
-        db.collection('organization_members').where('uid', '==', uid)
-      );
-      const legacyMemberships = legacyQuery.docs.map(d => d.data() as any);
+      const legacyQueryUid = await t.get(db.collection('organization_members').where('uid', '==', uid));
+      const legacyQueryUserId = await t.get(db.collection('organization_members').where('user_id', '==', uid));
+      
+      const legacyMap = new Map();
+      [...legacyQueryUid.docs, ...legacyQueryUserId.docs].forEach(d => {
+         const data = d.data();
+         if (data.organizationId) {
+             legacyMap.set(data.organizationId, data);
+         }
+      });
+      const allLegacy = Array.from(legacyMap.values());
+      const excludedStatuses = ['removed', 'revoked', 'suspended', 'inactive', 'deleted'];
+      const candidateLegacy = allLegacy.filter(m => !excludedStatuses.includes(m.status));
+      
+      const validLegacy = [];
+      const allowedRoles = ['owner', 'admin', 'member'];
+      for (const m of candidateLegacy) {
+         const orgSnap = await t.get(db.collection('organizations').doc(m.organizationId));
+         const orgValid = orgSnap.exists && orgSnap.data()?.status === 'active';
+         const role = m.organizationRole || m.role || 'member';
+         const roleValid = allowedRoles.includes(role);
+         
+         if (!orgValid || !roleValid) {
+            throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
+         }
+         validLegacy.push(m);
+      }
 
       // Get Invites
-      const normalizedEmail = userEmail?.toLowerCase().trim();
       let pendingInvites: any[] = [];
+      const normalizedEmail = userEmail?.toLowerCase().trim();
       if (normalizedEmail) {
-        // Can't do multiple where clauses easily with 'OR' in firestore, so just query by email
-        const invitesQuery = await t.get(
-          db.collectionGroup('invites').where('email', '==', normalizedEmail).where('status', '==', 'pending')
-        );
-        pendingInvites = invitesQuery.docs.map(d => ({ ...d.data(), id: d.id } as any));
+        const iQ1 = await t.get(db.collectionGroup('invites').where('emailNormalized', '==', normalizedEmail).where('status', '==', 'pending'));
+        const originalEmail = userEmail!.trim();
+        const iQ2 = await t.get(db.collectionGroup('invites').where('email', '==', originalEmail).where('status', '==', 'pending'));
+        const iQ3 = await t.get(db.collectionGroup('invites').where('email', '==', normalizedEmail).where('status', '==', 'pending'));
         
-        const invitesQuery2 = await t.get(
-          db.collectionGroup('invites').where('emailNormalized', '==', normalizedEmail).where('status', '==', 'pending')
-        );
-        pendingInvites.push(...invitesQuery2.docs.map(d => ({ ...d.data(), id: d.id } as any)));
+        const inviteMap = new Map();
+        [...iQ1.docs, ...iQ2.docs, ...iQ3.docs].forEach(d => {
+           inviteMap.set(d.id, d.data());
+        });
+        
+        pendingInvites = Array.from(inviteMap.values()).map((d: any) => ({
+           email: d.email,
+           emailNormalized: d.emailNormalized,
+           status: d.status,
+           expiresAtMs: parseTimeMs(d.expiresAt)
+        }));
       }
 
       const userContext = {
@@ -106,13 +171,15 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         organizationId: userData?.organizationId,
       };
 
+      const nowMs = Date.now();
       const decision = planBootstrap(
-        activeCanonical,
-        legacyMemberships,
+        validCanonical,
+        validLegacy,
         pendingInvites,
         userContext,
         lockStatus,
-        userEmail
+        userEmail,
+        nowMs
       );
 
       if (decision.code === BootstrapDecisionCode.INCONSISTENT_BOOTSTRAP_STATE) {
@@ -128,19 +195,23 @@ export async function bootstrapUserContext(req: Request, res: Response) {
       // Action execution
       if (decision.code === BootstrapDecisionCode.REUSE_BOOTSTRAP_LOCK || decision.code === BootstrapDecisionCode.REUSE_CANONICAL_MEMBERSHIP) {
         const orgId = decision.organizationId!;
+        
+        let finalPrimaryId = orgId;
+        if (userData?.primaryOrganizationId && validCanonical.some(m => m.organizationId === userData.primaryOrganizationId)) {
+           finalPrimaryId = userData.primaryOrganizationId;
+        }
+
         const updates: any = {
           lastLoginAt: FieldValue.serverTimestamp(),
-          activeOrganizationId: orgId
+          activeOrganizationId: orgId,
+          primaryOrganizationId: finalPrimaryId,
+          organizationId: orgId,
+          organizations: FieldValue.arrayUnion(orgId),
+          updatedAt: FieldValue.serverTimestamp()
         };
-        if (!userData?.primaryOrganizationId) {
-          updates.primaryOrganizationId = orgId;
-        }
-        if (userData?.organizationId) {
-          updates.organizationId = orgId;
-        }
         
         if (!userSnap.exists) {
-           t.set(userRef, { uid, email: userEmail, displayName: null, photoURL: null, organizations: [], createdAt: FieldValue.serverTimestamp(), ...updates });
+           t.set(userRef, { uid, email: userEmail, displayName: null, photoURL: null, createdAt: FieldValue.serverTimestamp(), ...updates });
         } else {
            t.update(userRef, updates);
         }
@@ -149,10 +220,12 @@ export async function bootstrapUserContext(req: Request, res: Response) {
           status: 200,
           payload: {
             success: true,
-            reusedExistingContext: true,
             activeOrganizationId: orgId,
-            primaryOrganizationId: updates.primaryOrganizationId || userData?.primaryOrganizationId || orgId,
-            organizationId: updates.organizationId || userData?.organizationId,
+            primaryOrganizationId: finalPrimaryId,
+            organizationId: orgId,
+            createdOrganization: false,
+            reusedExistingContext: true,
+            repairedLegacyMembership: false,
             reasonCode: decision.reasonCode
           }
         };
@@ -160,16 +233,20 @@ export async function bootstrapUserContext(req: Request, res: Response) {
 
       if (decision.code === BootstrapDecisionCode.REPAIR_LEGACY_MEMBERSHIP) {
         const orgId = decision.organizationId!;
-        const legacyData = legacyMemberships.find(m => m.organizationId === orgId);
+        const legacyData = validLegacy.find(m => m.organizationId === orgId);
         
         const newMemberRef = db.doc(`organizations/${orgId}/members/${uid}`);
+        
+        const validTime = parseTimeMs(legacyData?.createdAt) ? legacyData.createdAt : FieldValue.serverTimestamp();
+        
         t.set(newMemberRef, {
-           ...legacyData,
            uid,
            organizationId: orgId,
            role: legacyData?.role || 'member',
            organizationRole: legacyData?.organizationRole || legacyData?.role || 'member',
-           status: 'active'
+           status: 'active',
+           createdAt: validTime,
+           updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
 
         const auditRef = db.collection(`organizations/${orgId}/audit_logs`).doc();
@@ -179,19 +256,22 @@ export async function bootstrapUserContext(req: Request, res: Response) {
           timestamp: FieldValue.serverTimestamp()
         });
 
-        const updates: any = {
-          lastLoginAt: FieldValue.serverTimestamp(),
-          activeOrganizationId: orgId
-        };
-        if (!userData?.primaryOrganizationId) {
-          updates.primaryOrganizationId = orgId;
-        }
-        if (userData?.organizationId) {
-          updates.organizationId = orgId;
+        let finalPrimaryId = orgId;
+        if (userData?.primaryOrganizationId && validCanonical.some(m => m.organizationId === userData.primaryOrganizationId)) {
+           finalPrimaryId = userData.primaryOrganizationId;
         }
 
+        const updates: any = {
+          lastLoginAt: FieldValue.serverTimestamp(),
+          activeOrganizationId: orgId,
+          primaryOrganizationId: finalPrimaryId,
+          organizationId: orgId,
+          organizations: FieldValue.arrayUnion(orgId),
+          updatedAt: FieldValue.serverTimestamp()
+        };
+
         if (!userSnap.exists) {
-           t.set(userRef, { uid, email: userEmail, displayName: null, photoURL: null, organizations: [], createdAt: FieldValue.serverTimestamp(), ...updates });
+           t.set(userRef, { uid, email: userEmail, displayName: null, photoURL: null, createdAt: FieldValue.serverTimestamp(), ...updates });
         } else {
            t.update(userRef, updates);
         }
@@ -200,10 +280,12 @@ export async function bootstrapUserContext(req: Request, res: Response) {
           status: 200,
           payload: {
             success: true,
-            repairedLegacyMembership: true,
             activeOrganizationId: orgId,
-            primaryOrganizationId: updates.primaryOrganizationId || userData?.primaryOrganizationId || orgId,
-            organizationId: updates.organizationId || userData?.organizationId,
+            primaryOrganizationId: finalPrimaryId,
+            organizationId: orgId,
+            createdOrganization: false,
+            reusedExistingContext: false,
+            repairedLegacyMembership: true,
             reasonCode: decision.reasonCode
           }
         };
@@ -260,16 +342,19 @@ export async function bootstrapUserContext(req: Request, res: Response) {
           timestamp: FieldValue.serverTimestamp()
         });
 
+        let finalPrimaryId = targetOrgId;
+        if (userData?.primaryOrganizationId && validCanonical.some(m => m.organizationId === userData.primaryOrganizationId)) {
+           finalPrimaryId = userData.primaryOrganizationId;
+        }
+
         const updates: any = {
           lastLoginAt: FieldValue.serverTimestamp(),
-          activeOrganizationId: targetOrgId
+          activeOrganizationId: targetOrgId,
+          primaryOrganizationId: finalPrimaryId,
+          organizationId: targetOrgId,
+          organizations: FieldValue.arrayUnion(targetOrgId),
+          updatedAt: FieldValue.serverTimestamp()
         };
-        if (!userData?.primaryOrganizationId) {
-          updates.primaryOrganizationId = targetOrgId;
-        }
-        if (userData?.organizationId || !userSnap.exists) {
-          updates.organizationId = targetOrgId;
-        }
 
         if (!userSnap.exists) {
            t.set(userRef, { 
@@ -277,13 +362,10 @@ export async function bootstrapUserContext(req: Request, res: Response) {
              email: userEmail, 
              displayName: null, 
              photoURL: null, 
-             organizations: [targetOrgId], 
              createdAt: FieldValue.serverTimestamp(), 
-             updatedAt: FieldValue.serverTimestamp(),
              ...updates 
            });
         } else {
-           updates.organizations = FieldValue.arrayUnion(targetOrgId);
            t.update(userRef, updates);
         }
 
@@ -291,10 +373,12 @@ export async function bootstrapUserContext(req: Request, res: Response) {
           status: 200,
           payload: {
             success: true,
-            createdOrganization: true,
             activeOrganizationId: targetOrgId,
-            primaryOrganizationId: updates.primaryOrganizationId || userData?.primaryOrganizationId || targetOrgId,
-            organizationId: updates.organizationId || userData?.organizationId,
+            primaryOrganizationId: finalPrimaryId,
+            organizationId: targetOrgId,
+            createdOrganization: true,
+            reusedExistingContext: false,
+            repairedLegacyMembership: false,
             reasonCode: decision.reasonCode
           }
         };
