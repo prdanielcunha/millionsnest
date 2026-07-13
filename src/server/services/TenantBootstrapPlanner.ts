@@ -4,6 +4,7 @@ export type Membership = {
   status?: string;
   role?: string;
   organizationRole?: string;
+  sanitizedRole?: string | null;
 };
 
 export type Invite = {
@@ -45,6 +46,23 @@ export type BootstrapDecision = {
   organizationId?: string;
   reasonCode: string;
 };
+
+export function normalizeLegacyOrganizationRole(role?: any, organizationRole?: any): 'owner' | 'admin' | 'member' | null {
+  const hasRole = typeof role === 'string' && role.length > 0;
+  const hasOrgRole = typeof organizationRole === 'string' && organizationRole.length > 0;
+
+  if (hasRole && hasOrgRole && role !== organizationRole) {
+    return null;
+  }
+
+  const candidate = hasRole ? role : (hasOrgRole ? organizationRole : null);
+  
+  if (candidate === 'owner' || candidate === 'admin' || candidate === 'member') {
+    return candidate;
+  }
+  
+  return null;
+}
 
 export function planBootstrap(
   canonicalMemberships: Membership[],

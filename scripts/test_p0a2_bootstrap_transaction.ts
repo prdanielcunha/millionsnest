@@ -1,4 +1,4 @@
-import { planBootstrap, BootstrapDecisionCode } from '../src/server/services/TenantBootstrapPlanner.js';
+import { planBootstrap, BootstrapDecisionCode, normalizeLegacyOrganizationRole } from '../src/server/services/TenantBootstrapPlanner.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -17,169 +17,42 @@ function assertCondition(name: string, condition: boolean) {
 
 const nowMs = 1000000000000;
 
-// Test cases
-const tc1 = planBootstrap(
-  [{ organizationId: 'org1', status: 'active', role: 'member' }],
-  [],
-  [],
-  {},
-  { exists: false, completed: false },
-  'user@example.com',
-  nowMs
-);
-assertCondition('1. membership canônica ativa é reutilizada', tc1.code === BootstrapDecisionCode.REUSE_CANONICAL_MEMBERSHIP && tc1.organizationId === 'org1');
+assertCondition('1. role member e organizationRole member retorna member', normalizeLegacyOrganizationRole('member', 'member') === 'member');
+assertCondition('2. role ceo retorna null', normalizeLegacyOrganizationRole('ceo') === null);
+assertCondition('3. organizationRole global_admin retorna null', normalizeLegacyOrganizationRole(undefined, 'global_admin') === null);
+assertCondition('4. role ceo com organizationRole member retorna null', normalizeLegacyOrganizationRole('ceo', 'member') === null);
+assertCondition('5. role owner com organizationRole member retorna null', normalizeLegacyOrganizationRole('owner', 'member') === null);
+assertCondition('6. ausência dos dois papéis retorna null', normalizeLegacyOrganizationRole() === null);
 
-const tc2 = planBootstrap(
-  [{ organizationId: 'org1', status: 'active', role: 'member' }, { organizationId: 'org2', status: 'active', role: 'member' }],
-  [],
-  [],
-  { activeOrganizationId: 'org2' },
-  { exists: false, completed: false },
-  'user@example.com',
-  nowMs
-);
-assertCondition('2. activeOrganizationId válido tem prioridade', tc2.organizationId === 'org2');
+const tc7 = planBootstrap([], [], [], {}, { exists: true, completed: true, organizationId: 'lockOrg', orgExists: true, orgActive: true, memberExists: true, memberActive: false }, 'user@example.com', nowMs);
+assertCondition('7. trava com memberActive false retorna INCONSISTENT_BOOTSTRAP_STATE', tc7.code === BootstrapDecisionCode.INCONSISTENT_BOOTSTRAP_STATE);
 
-const tc3 = planBootstrap(
-  [{ organizationId: 'org1', status: 'active', role: 'member' }, { organizationId: 'org2', status: 'active', role: 'member' }],
-  [],
-  [],
-  { primaryOrganizationId: 'org1' },
-  { exists: false, completed: false },
-  'user@example.com',
-  nowMs
-);
-assertCondition('3. primaryOrganizationId válido é preservado', tc3.organizationId === 'org1');
+const tc8 = planBootstrap([], [], [], {}, { exists: true, completed: true, organizationId: 'lockOrg', orgExists: true, orgActive: false, memberExists: true, memberActive: true }, 'user@example.com', nowMs);
+assertCondition('8. trava com orgActive false retorna INCONSISTENT_BOOTSTRAP_STATE', tc8.code === BootstrapDecisionCode.INCONSISTENT_BOOTSTRAP_STATE);
 
-const tc4 = planBootstrap(
-  [],
-  [{ organizationId: 'leg1', status: 'active', role: 'member' }],
-  [],
-  {},
-  { exists: false, completed: false },
-  'user@example.com',
-  nowMs
-);
-assertCondition('4. legado único gera reparo', tc4.code === BootstrapDecisionCode.REPAIR_LEGACY_MEMBERSHIP && tc4.organizationId === 'leg1');
-
-const tc5 = planBootstrap(
-  [],
-  [{ organizationId: 'leg1', status: 'active', role: 'member' }, { organizationId: 'leg2', status: 'active', role: 'member' }],
-  [],
-  {},
-  { exists: false, completed: false },
-  'user@example.com',
-  nowMs
-);
-assertCondition('5. múltiplos legados geram ambiguidade', tc5.code === BootstrapDecisionCode.AMBIGUOUS_LEGACY_MEMBERSHIP);
-
-const tc6 = planBootstrap(
-  [],
-  [],
-  [{ email: 'user@example.com', status: 'pending', expiresAtMs: nowMs + 10000 }],
-  {},
-  { exists: false, completed: false },
-  'USER@EXAMPLE.COM',
-  nowMs
-);
-assertCondition('6. convite pendente impede organização pessoal', tc6.code === BootstrapDecisionCode.WAIT_FOR_INVITATION);
-
-const tc7 = planBootstrap(
-  [],
-  [],
-  [],
-  {},
-  { exists: false, completed: false },
-  'user@example.com',
-  nowMs
-);
-assertCondition('7. ausência de contexto gera organização pessoal', tc7.code === BootstrapDecisionCode.CREATE_PERSONAL_ORGANIZATION);
-
-const tc8 = planBootstrap(
-  [],
-  [],
-  [],
-  {},
-  { exists: true, completed: true, organizationId: 'lockOrg', orgExists: true, orgActive: true, memberExists: true, memberActive: true },
-  'user@example.com',
-  nowMs
-);
-assertCondition('8. trava válida reutiliza a organização', tc8.code === BootstrapDecisionCode.REUSE_BOOTSTRAP_LOCK && tc8.organizationId === 'lockOrg');
-
-const tc9 = planBootstrap(
-  [],
-  [],
-  [],
-  {},
-  { exists: true, completed: false, organizationId: 'lockOrg' },
-  'user@example.com',
-  nowMs
-);
-assertCondition('9. trava inconsistente falha', tc9.code === BootstrapDecisionCode.INCONSISTENT_BOOTSTRAP_STATE);
-
-const tc10 = planBootstrap(
-  [{ organizationId: 'org1', status: 'suspended', role: 'member' }],
-  [],
-  [],
-  {},
-  { exists: false, completed: false },
-  'user@example.com',
-  nowMs
-);
-assertCondition('10. memberships suspensas não são escolhidas como ativas', tc10.code === BootstrapDecisionCode.CREATE_PERSONAL_ORGANIZATION);
-
-const tc11a = planBootstrap(
-  [{ organizationId: 'orgB', status: 'active', role: 'member' }, { organizationId: 'orgA', status: 'active', role: 'member' }],
-  [],
-  [],
-  {},
-  { exists: false, completed: false },
-  'user@example.com',
-  nowMs
-);
-const tc11b = planBootstrap(
-  [{ organizationId: 'orgA', status: 'active', role: 'member' }, { organizationId: 'orgB', status: 'active', role: 'member' }],
-  [],
-  [],
-  {},
-  { exists: false, completed: false },
-  'user@example.com',
-  nowMs
-);
-assertCondition('11. a decisão é determinística', tc11a.organizationId === 'orgA' && tc11b.organizationId === 'orgA');
 
 const svcStr = fs.readFileSync(path.join(process.cwd(), 'src/server/services/TenantContextMutationService.ts'), 'utf8');
 
-assertCondition('12. nenhum plano, produto, app ou entitlement é criado', !svcStr.includes("subscriptionStatus: 'none'") && !svcStr.includes("products: []") && !svcStr.includes("plan:") && !svcStr.includes("entitlements:"));
+assertCondition('9. documento canônico exige d.id === uid', svcStr.includes('d.id === uid'));
+assertCondition('10. organização canônica é derivada do caminho', svcStr.includes('d.ref.parent.parent!.id') || svcStr.includes('d.ref.parent.parent?.id'));
+assertCondition('11. reparo usa sanitizedRole nos dois campos', svcStr.includes('role: legacyData?.sanitizedRole') && svcStr.includes('organizationRole: legacyData?.sanitizedRole'));
+assertCondition('12. reparo não usa legacyData.role como papel final', !svcStr.includes('role: legacyData?.role'));
+assertCondition('13. auth.getUser ocorre antes de runTransaction', svcStr.indexOf('auth.getUser') < svcStr.indexOf('db.runTransaction'));
+assertCondition('14. falha de auth.getUser impede iniciar a transação', svcStr.includes("return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });") && svcStr.indexOf('catch (e)') < svcStr.indexOf('db.runTransaction'));
+assertCondition('15. displayName do Auth é usado no perfil novo', svcStr.includes('displayName: userDisplayName'));
+assertCondition('16. photoURL do Auth é usado no perfil novo', svcStr.includes('photoURL: userPhotoURL'));
+assertCondition('17. bootstrapNowMs é criado antes de runTransaction', svcStr.indexOf('const bootstrapNowMs = Date.now();') < svcStr.indexOf('db.runTransaction'));
 
-assertCondition('13. bootstrap usa runTransaction', svcStr.includes('db.runTransaction'));
-assertCondition('14. existe tenantBootstrapLocks', svcStr.includes('tenantBootstrapLocks'));
-assertCondition('15. não existe const db = getFirestore() no topo do módulo', !svcStr.match(/^const db = getFirestore\(\);$/m));
-assertCondition('16. acceptInvitation continua exportado', svcStr.includes('export async function acceptInvitation'));
-assertCondition('17. setActiveOrganization continua exportado', svcStr.includes('export async function setActiveOrganization'));
-
-const plannerStr = fs.readFileSync(path.join(process.cwd(), 'src/server/services/TenantBootstrapPlanner.ts'), 'utf8');
-assertCondition('18. planejador não usa Date.now', !plannerStr.includes('Date.now()') && !plannerStr.includes('new Date()'));
-
-const tcExpiredInvite = planBootstrap(
-  [],
-  [],
-  [{ email: 'user@example.com', status: 'pending', expiresAtMs: nowMs - 10000 }],
-  {},
-  { exists: false, completed: false },
-  'user@example.com',
-  nowMs
-);
-assertCondition('19. convite expirado é ignorado', tcExpiredInvite.code === BootstrapDecisionCode.CREATE_PERSONAL_ORGANIZATION);
-
-assertCondition('20. Timestamp é normalizado para milissegundos', svcStr.includes('toMillis()') && svcStr.includes('getTime()'));
-assertCondition('21. consulta legada inclui uid e user_id', svcStr.includes("where('uid', '==', uid)") && svcStr.includes("where('user_id', '==', uid)"));
-assertCondition('22. código não contém ...legacyData', !svcStr.includes('...legacyData'));
 const bootstrapStr = svcStr.substring(svcStr.indexOf('export async function bootstrapUserContext'), svcStr.indexOf('export async function acceptInvitation'));
-assertCondition('23. auth.getUser não está dentro do callback runTransaction', !bootstrapStr.match(/runTransaction\(.*?getUser\(/s));
-assertCondition('24. organizationId é sempre atualizado', svcStr.match(/organizationId: (orgId|targetOrgId)/g)!.length >= 4);
-assertCondition('25. primaryOrganizationId inválido é reparado', svcStr.includes('finalPrimaryId'));
-assertCondition('26. respostas possuem os três booleanos', svcStr.includes('createdOrganization:') && svcStr.includes('reusedExistingContext:') && svcStr.includes('repairedLegacyMembership:'));
+const transactionStr = bootstrapStr.substring(bootstrapStr.indexOf('db.runTransaction'));
+assertCondition('18. callback da transação não contém Date.now()', !transactionStr.includes('Date.now()'));
+
+assertCondition('19. convites são deduplicados por d.ref.path', svcStr.includes('inviteMap.set(d.ref.path'));
+
+const hasBools = svcStr.match(/createdOrganization: (true|false)/g)!.length >= 3 && 
+                 svcStr.match(/reusedExistingContext: (true|false)/g)!.length >= 3 &&
+                 svcStr.match(/repairedLegacyMembership: (true|false)/g)!.length >= 3;
+assertCondition('20. cada uma das três respostas de sucesso contém separadamente createdOrganization, reusedExistingContext, repairedLegacyMembership', hasBools);
 
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

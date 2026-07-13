@@ -1,4 +1,4 @@
-import { planBootstrap, BootstrapDecisionCode } from './TenantBootstrapPlanner.js';
+import { planBootstrap, BootstrapDecisionCode, normalizeLegacyOrganizationRole } from './TenantBootstrapPlanner.js';
 import { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -35,11 +35,15 @@ export async function bootstrapUserContext(req: Request, res: Response) {
   const auth = getAuth();
 
   let userEmail: string | null = null;
+  let userDisplayName: string | null = null;
+  let userPhotoURL: string | null = null;
   try {
     const userRecord = await auth.getUser(uid);
     userEmail = userRecord.email || null;
+    userDisplayName = userRecord.displayName || null;
+    userPhotoURL = userRecord.photoURL || null;
   } catch (e) {
-    // Ignore error
+    return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
   }
 
   const parseTimeMs = (val: any): number | undefined => {
@@ -49,6 +53,8 @@ export async function bootstrapUserContext(req: Request, res: Response) {
     if (typeof val === 'number') return val;
     return undefined;
   };
+
+  const bootstrapNowMs = Date.now();
 
   try {
     const result = await db.runTransaction(async (t) => {
@@ -98,7 +104,11 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         db.collectionGroup('members').where('uid', '==', uid)
       );
       const allCanonical = membersQuery.docs
-        .filter(d => d.ref.path.includes('/organizations/') && !d.ref.path.includes('organization_members'))
+        .filter(d => 
+           d.id === uid && 
+           d.ref.parent.id === 'members' && 
+           d.ref.parent.parent?.parent?.id === 'organizations'
+        )
         .map(d => ({ ...d.data(), organizationId: d.ref.parent.parent!.id } as any));
 
       const candidateCanonical = allCanonical.filter(m => !m.status || m.status === 'active');
@@ -118,29 +128,62 @@ export async function bootstrapUserContext(req: Request, res: Response) {
       const legacyQueryUid = await t.get(db.collection('organization_members').where('uid', '==', uid));
       const legacyQueryUserId = await t.get(db.collection('organization_members').where('user_id', '==', uid));
       
-      const legacyMap = new Map();
+      const legacyByOrg = new Map<string, any[]>();
       [...legacyQueryUid.docs, ...legacyQueryUserId.docs].forEach(d => {
          const data = d.data();
          if (data.organizationId) {
-             legacyMap.set(data.organizationId, data);
+             const list = legacyByOrg.get(data.organizationId) || [];
+             list.push(data);
+             legacyByOrg.set(data.organizationId, list);
          }
       });
-      const allLegacy = Array.from(legacyMap.values());
-      const excludedStatuses = ['removed', 'revoked', 'suspended', 'inactive', 'deleted'];
-      const candidateLegacy = allLegacy.filter(m => !excludedStatuses.includes(m.status));
       
       const validLegacy = [];
-      const allowedRoles = ['owner', 'admin', 'member'];
-      for (const m of candidateLegacy) {
-         const orgSnap = await t.get(db.collection('organizations').doc(m.organizationId));
-         const orgValid = orgSnap.exists && orgSnap.data()?.status === 'active';
-         const role = m.organizationRole || m.role || 'member';
-         const roleValid = allowedRoles.includes(role);
+      const excludedStatuses = ['removed', 'revoked', 'suspended', 'inactive', 'deleted'];
+      
+      for (const [orgId, docs] of legacyByOrg.entries()) {
+         let activeFound = false;
+         let excludedFound = false;
+         let firstValidRole = null;
+         let hasConflict = false;
+         let selectedDoc = null;
          
-         if (!orgValid || !roleValid) {
+         for (const data of docs) {
+             const normalized = normalizeLegacyOrganizationRole(data.role, data.organizationRole);
+             if (firstValidRole === null && normalized !== null) {
+                 firstValidRole = normalized;
+             } else if (firstValidRole !== null && normalized !== null && firstValidRole !== normalized) {
+                 hasConflict = true;
+             }
+             
+             if (excludedStatuses.includes(data.status)) {
+                 excludedFound = true;
+             } else {
+                 activeFound = true;
+                 selectedDoc = data;
+             }
+         }
+         
+         if (hasConflict) {
             throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
          }
-         validLegacy.push(m);
+         if (activeFound && excludedFound) {
+            throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
+         }
+         
+         if (activeFound && selectedDoc) {
+             const sanitizedRole = normalizeLegacyOrganizationRole(selectedDoc.role, selectedDoc.organizationRole);
+             if (!sanitizedRole) {
+                 throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
+             }
+             
+             const orgSnap = await t.get(db.collection('organizations').doc(orgId));
+             const orgValid = orgSnap.exists && orgSnap.data()?.status === 'active';
+             if (!orgValid) {
+                 throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
+             }
+             validLegacy.push({ ...selectedDoc, sanitizedRole });
+         }
       }
 
       // Get Invites
@@ -154,7 +197,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         
         const inviteMap = new Map();
         [...iQ1.docs, ...iQ2.docs, ...iQ3.docs].forEach(d => {
-           inviteMap.set(d.id, d.data());
+           inviteMap.set(d.ref.path, d.data());
         });
         
         pendingInvites = Array.from(inviteMap.values()).map((d: any) => ({
@@ -171,7 +214,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         organizationId: userData?.organizationId,
       };
 
-      const nowMs = Date.now();
+      
       const decision = planBootstrap(
         validCanonical,
         validLegacy,
@@ -179,7 +222,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         userContext,
         lockStatus,
         userEmail,
-        nowMs
+        bootstrapNowMs
       );
 
       if (decision.code === BootstrapDecisionCode.INCONSISTENT_BOOTSTRAP_STATE) {
@@ -211,7 +254,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         };
         
         if (!userSnap.exists) {
-           t.set(userRef, { uid, email: userEmail, displayName: null, photoURL: null, createdAt: FieldValue.serverTimestamp(), ...updates });
+           t.set(userRef, { uid, email: userEmail, displayName: userDisplayName, photoURL: userPhotoURL, createdAt: FieldValue.serverTimestamp(), ...updates });
         } else {
            t.update(userRef, updates);
         }
@@ -242,8 +285,8 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         t.set(newMemberRef, {
            uid,
            organizationId: orgId,
-           role: legacyData?.role || 'member',
-           organizationRole: legacyData?.organizationRole || legacyData?.role || 'member',
+           role: legacyData?.sanitizedRole,
+           organizationRole: legacyData?.sanitizedRole,
            status: 'active',
            createdAt: validTime,
            updatedAt: FieldValue.serverTimestamp()
@@ -271,7 +314,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         };
 
         if (!userSnap.exists) {
-           t.set(userRef, { uid, email: userEmail, displayName: null, photoURL: null, createdAt: FieldValue.serverTimestamp(), ...updates });
+           t.set(userRef, { uid, email: userEmail, displayName: userDisplayName, photoURL: userPhotoURL, createdAt: FieldValue.serverTimestamp(), ...updates });
         } else {
            t.update(userRef, updates);
         }
@@ -360,8 +403,8 @@ export async function bootstrapUserContext(req: Request, res: Response) {
            t.set(userRef, { 
              uid, 
              email: userEmail, 
-             displayName: null, 
-             photoURL: null, 
+             displayName: userDisplayName, 
+             photoURL: userPhotoURL, 
              createdAt: FieldValue.serverTimestamp(), 
              ...updates 
            });
