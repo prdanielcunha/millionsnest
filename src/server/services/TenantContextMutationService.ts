@@ -1,4 +1,4 @@
-import { planBootstrap, BootstrapDecisionCode, normalizeLegacyOrganizationRole } from './TenantBootstrapPlanner.js';
+import { planBootstrap, BootstrapDecisionCode, normalizeLegacyOrganizationRole, resolveLegacyMembershipCandidates } from './TenantBootstrapPlanner.js';
 import { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -128,62 +128,34 @@ export async function bootstrapUserContext(req: Request, res: Response) {
       const legacyQueryUid = await t.get(db.collection('organization_members').where('uid', '==', uid));
       const legacyQueryUserId = await t.get(db.collection('organization_members').where('user_id', '==', uid));
       
-      const legacyByOrg = new Map<string, any[]>();
+      const rawLegacyCandidates: any[] = [];
       [...legacyQueryUid.docs, ...legacyQueryUserId.docs].forEach(d => {
          const data = d.data();
          if (data.organizationId) {
-             const list = legacyByOrg.get(data.organizationId) || [];
-             list.push(data);
-             legacyByOrg.set(data.organizationId, list);
+             rawLegacyCandidates.push({
+                 organizationId: data.organizationId,
+                 sourcePath: d.ref.path,
+                 status: data.status,
+                 role: data.role,
+                 organizationRole: data.organizationRole,
+                 createdAtMs: parseTimeMs(data.createdAt)
+             });
          }
       });
       
-      const validLegacy = [];
-      const excludedStatuses = ['removed', 'revoked', 'suspended', 'inactive', 'deleted'];
+      const resolveResult = resolveLegacyMembershipCandidates(rawLegacyCandidates);
+      if (!resolveResult.ok) {
+          throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
+      }
       
-      for (const [orgId, docs] of legacyByOrg.entries()) {
-         let activeFound = false;
-         let excludedFound = false;
-         let firstValidRole = null;
-         let hasConflict = false;
-         let selectedDoc = null;
-         
-         for (const data of docs) {
-             const normalized = normalizeLegacyOrganizationRole(data.role, data.organizationRole);
-             if (firstValidRole === null && normalized !== null) {
-                 firstValidRole = normalized;
-             } else if (firstValidRole !== null && normalized !== null && firstValidRole !== normalized) {
-                 hasConflict = true;
-             }
-             
-             if (excludedStatuses.includes(data.status)) {
-                 excludedFound = true;
-             } else {
-                 activeFound = true;
-                 selectedDoc = data;
-             }
-         }
-         
-         if (hasConflict) {
-            throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
-         }
-         if (activeFound && excludedFound) {
-            throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
-         }
-         
-         if (activeFound && selectedDoc) {
-             const sanitizedRole = normalizeLegacyOrganizationRole(selectedDoc.role, selectedDoc.organizationRole);
-             if (!sanitizedRole) {
-                 throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
-             }
-             
-             const orgSnap = await t.get(db.collection('organizations').doc(orgId));
-             const orgValid = orgSnap.exists && orgSnap.data()?.status === 'active';
-             if (!orgValid) {
-                 throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
-             }
-             validLegacy.push({ ...selectedDoc, sanitizedRole });
-         }
+      const validLegacy = [];
+      for (const m of resolveResult.memberships) {
+          const orgSnap = await t.get(db.collection('organizations').doc(m.organizationId));
+          const orgValid = orgSnap.exists && orgSnap.data()?.status === 'active';
+          if (!orgValid) {
+              throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
+          }
+          validLegacy.push(m);
       }
 
       // Get Invites
@@ -280,7 +252,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         
         const newMemberRef = db.doc(`organizations/${orgId}/members/${uid}`);
         
-        const validTime = parseTimeMs(legacyData?.createdAt) ? legacyData.createdAt : FieldValue.serverTimestamp();
+        const validTime = legacyData?.createdAtMs ? new Date(legacyData.createdAtMs) : FieldValue.serverTimestamp();
         
         t.set(newMemberRef, {
            uid,

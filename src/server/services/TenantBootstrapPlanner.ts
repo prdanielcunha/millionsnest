@@ -7,6 +7,30 @@ export type Membership = {
   sanitizedRole?: string | null;
 };
 
+export type LegacyCandidate = {
+  organizationId: string;
+  sourcePath: string;
+  status?: string;
+  role?: string;
+  organizationRole?: string;
+  createdAtMs?: number;
+};
+
+export type ConsolidatedLegacy = {
+  organizationId: string;
+  sourcePath: string;
+  sanitizedRole: 'owner' | 'admin' | 'member';
+  createdAtMs?: number;
+};
+
+export type ResolveLegacyResult = {
+  ok: true;
+  memberships: ConsolidatedLegacy[];
+} | {
+  ok: false;
+  reasonCode: 'BOOTSTRAP_STATE_INCONSISTENT';
+};
+
 export type Invite = {
   id?: string;
   email?: string;
@@ -64,9 +88,77 @@ export function normalizeLegacyOrganizationRole(role?: any, organizationRole?: a
   return null;
 }
 
+export function resolveLegacyMembershipCandidates(candidates: LegacyCandidate[]): ResolveLegacyResult {
+  const grouped = new Map<string, LegacyCandidate[]>();
+  for (const c of candidates) {
+    const list = grouped.get(c.organizationId) || [];
+    list.push(c);
+    grouped.set(c.organizationId, list);
+  }
+
+  const resultMemberships: ConsolidatedLegacy[] = [];
+  const excludedStatuses = ['removed', 'revoked', 'suspended', 'inactive', 'deleted'];
+
+  for (const [orgId, list] of grouped.entries()) {
+    list.sort((a, b) => a.sourcePath.localeCompare(b.sourcePath));
+
+    let activeFound = false;
+    let excludedFound = false;
+    let inconsistent = false;
+    let firstValidRole: 'owner' | 'admin' | 'member' | null = null;
+    let selectedDoc: LegacyCandidate | null = null;
+
+    for (const data of list) {
+      const st = data.status;
+      const isActive = !st || st === 'active';
+      const isExcluded = st && excludedStatuses.includes(st);
+
+      if (!isActive && !isExcluded) {
+        inconsistent = true;
+        break;
+      }
+
+      if (isActive) {
+        activeFound = true;
+        const normalized = normalizeLegacyOrganizationRole(data.role, data.organizationRole);
+        if (normalized === null) {
+          inconsistent = true;
+          break;
+        }
+        if (firstValidRole === null) {
+          firstValidRole = normalized;
+          if (!selectedDoc) {
+             selectedDoc = data;
+          }
+        } else if (firstValidRole !== normalized) {
+          inconsistent = true;
+          break;
+        }
+      } else if (isExcluded) {
+        excludedFound = true;
+      }
+    }
+
+    if (inconsistent || (activeFound && excludedFound)) {
+      return { ok: false, reasonCode: 'BOOTSTRAP_STATE_INCONSISTENT' };
+    }
+
+    if (activeFound && selectedDoc && firstValidRole) {
+      resultMemberships.push({
+        organizationId: selectedDoc.organizationId,
+        sourcePath: selectedDoc.sourcePath,
+        sanitizedRole: firstValidRole,
+        createdAtMs: selectedDoc.createdAtMs
+      });
+    }
+  }
+
+  return { ok: true, memberships: resultMemberships };
+}
+
 export function planBootstrap(
   canonicalMemberships: Membership[],
-  legacyMemberships: Membership[],
+  legacyMemberships: ConsolidatedLegacy[],
   pendingInvites: Invite[],
   userContext: UserContext,
   lockStatus: LockStatus,
