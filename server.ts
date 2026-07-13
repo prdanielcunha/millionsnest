@@ -1,4 +1,6 @@
 import express from 'express';
+import { bootstrapUserContext, acceptInvitation, setActiveOrganization } from './src/server/services/TenantContextMutationService.js';
+
 import Stripe from 'stripe';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -598,6 +600,12 @@ async function startServer() {
   // Webhook Stripe tem que usar express.raw
   
   
+  
+  // P0-A Security and Governance Routes
+  app.post('/api/v1/onboarding/bootstrap', express.json(), bootstrapUserContext);
+  app.post('/api/v1/invitations/accept', express.json(), acceptInvitation);
+  app.post('/api/v1/user/active-organization', express.json(), setActiveOrganization);
+
   app.post('/api/internal/repair-subscription', async (req: any, res) => {
     try {
       const authHeader = req.headers.authorization;

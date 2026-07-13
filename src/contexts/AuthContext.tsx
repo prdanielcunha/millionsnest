@@ -59,17 +59,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const switchOrganization = async (orgId: string) => {
     if (!user || !profile) return;
     try {
-      const userRef = doc(db, "users", user.uid);
-      await setDoc(userRef, { 
-        organizationId: orgId,
-        activeOrganizationId: orgId
-      }, { merge: true });
+      const idToken = await user.getIdToken(true);
+      const res = await fetch('/api/v1/user/active-organization', {
+         method: 'POST',
+         headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+         },
+         body: JSON.stringify({ organizationId: orgId })
+      });
+      
+      if (!res.ok) {
+         throw new Error('Failed to switch active organization');
+      }
+
       const updatedProfile = { ...profile, organizationId: orgId, activeOrganizationId: orgId };
       setProfile(updatedProfile);
       localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
       localStorage.removeItem('mn_support_session');
-      
-      // We must reload the page or tell OrganizationContext to refetch, changing profile.organizationId should trigger OrganizationContext's useEffect
       
       analytics.track('app_usage', {
         userId: user.uid,
@@ -128,42 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               console.error('Falha ao buscar contexto canônico no AuthContext:', ctxErr);
             }
 
-            const inviteOrgId = localStorage.getItem('invite_org_id');
-            const inviteRole = localStorage.getItem('invite_role') || 'member';
-
-            // Automatic promotion by email removed per security audit
-
-            if (inviteOrgId) {
-              const currentOrgs = userData.organizations || [];
-              if (!currentOrgs.includes(inviteOrgId)) {
-                mergeData.organizations = [...currentOrgs, inviteOrgId];
-                userData.organizations = mergeData.organizations;
-                
-                // Add member doc to org
-                const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${inviteOrgId}`);
-                const newMemberRef = doc(db, `organizations/${inviteOrgId}/members`, currentUser.uid);
-                const memberData = sanitizeForFirestore({
-                  uid: currentUser.uid,
-                  organizationId: inviteOrgId,
-                  role: inviteRole,
-                  organizationRole: inviteRole,
-                  permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-                  permissions: getDefaultPermissions(inviteRole),
-                  createdAt: serverTimestamp()
-                });
-                await setDoc(orgMemberRef, memberData, { merge: true });
-                await setDoc(newMemberRef, memberData, { merge: true });
-              }
-              // Switch active org to the invited org
-              mergeData.organizationId = inviteOrgId;
-              mergeData.activeOrganizationId = inviteOrgId;
-              mergeData.primaryOrganizationId = inviteOrgId;
-              userData.organizationId = inviteOrgId;
-              userData.activeOrganizationId = inviteOrgId;
-              userData.primaryOrganizationId = inviteOrgId;
-              localStorage.removeItem('invite_org_id');
-              localStorage.removeItem('invite_role');
-            }
+            // Automatic promotion by email and localStorage invites removed per security audit P0-A
 
             await setDoc(userRef, sanitizeForFirestore(mergeData), { merge: true });
             
@@ -176,67 +148,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               organizationId: updatedProfile.activeOrganizationId || updatedProfile.organizationId
             });
           } else {
-            // Criar novo usuário e usa um ID único para seu workspace pessoal
-            const targetOrgId = doc(collection(db, 'organizations')).id;
-
-            const newProfile: Partial<UserProfile> = {
-              uid: currentUser.uid,
-              email: currentUser.email,
-              displayName: currentUser.displayName,
-              photoURL: currentUser.photoURL,
-              products: [],
-              lastLoginAt: serverTimestamp(),
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-              organizationId: targetOrgId,
-              primaryOrganizationId: targetOrgId,
-              activeOrganizationId: targetOrgId,
-              organizations: [targetOrgId],
-              subscriptionStatus: 'none',
-              systemRole: undefined
-            };
+            // New user without profile
+            const inviteRedirect = sessionStorage.getItem('mn_invite_redirect');
+            if (inviteRedirect && inviteRedirect.startsWith('/join')) {
+                // Let Login/App handle the redirect to /join
+                // Do not bootstrap automatically. Just set loading false and return.
+                setProfile(null); // Or minimal profile if needed, but null forces them to stay in the flow
+            } else {
+                try {
+                   const idToken = await currentUser.getIdToken(true);
+                   const bootRes = await fetch('/api/v1/onboarding/bootstrap', {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${idToken}` }
+                   });
+                   if (bootRes.ok) {
+                      // Re-fetch user profile
+                      const newUserSnap = await getDoc(userRef);
+                      if (newUserSnap.exists()) {
+                         const newProfileData = newUserSnap.data() as UserProfile;
+                         setProfile(newProfileData);
+                         localStorage.setItem('mn_user_profile', JSON.stringify(newProfileData));
+                         
+                         analytics.track('signup', {
+                           userId: currentUser.uid,
+                           organizationId: newProfileData.activeOrganizationId
+                         });
+                      }
+                   }
+                } catch (bootErr) {
+                   console.error("Erro no bootstrap do usuário:", bootErr);
+                }
+            }
             
-            await setDoc(userRef, sanitizeForFirestore(newProfile));
-
-            // Cria a organization default dele
-            const orgRef = doc(db, 'organizations', targetOrgId as string);
-            await setDoc(orgRef, sanitizeForFirestore({
-              id: targetOrgId,
-              name: `Organização de ${currentUser.displayName || currentUser.email?.split('@')[0]}`,
-              slug: targetOrgId, // default slug
-              ownerUid: currentUser.uid, // standardized field
-              enabledApps: ['musicscale'], // default apps access
-              subscriptionPlan: 'monthly',
-              subscriptionStatus: 'none',
-              status: 'active',
-              createdAt: serverTimestamp()
-            }), { merge: true });
-
-            const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${targetOrgId}`);
-            const newMemberRef = doc(db, `organizations/${targetOrgId}/members`, currentUser.uid);
-            const memberData = sanitizeForFirestore({
-              uid: currentUser.uid,
-              organizationId: targetOrgId,
-              role: 'owner',
-              organizationRole: 'owner',
-              permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-              permissions: getDefaultPermissions('owner'),
-              createdAt: serverTimestamp()
-            });
-            await setDoc(orgMemberRef, memberData, { merge: true });
-            await setDoc(newMemberRef, memberData, { merge: true });
-
-            setProfile(newProfile as UserProfile);
-            localStorage.setItem('mn_user_profile', JSON.stringify(newProfile));
-            
-            // Cleanup any residual local storage invites
+            // Cleanup any residual local storage invites just in case
             localStorage.removeItem('invite_org_id');
             localStorage.removeItem('invite_role');
-
-            analytics.track('signup', {
-              userId: currentUser.uid,
-              organizationId: targetOrgId
-            });
           }
         } catch (error) {
           console.error("Erro ao carregar ou criar perfil do usuário:", error);

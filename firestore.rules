@@ -45,7 +45,7 @@ service cloud.firestore {
         ('ownerUserId' in orgDoc.data && orgDoc.data.ownerUserId == request.auth.uid)
       );
       
-      return (checkMemberExists(orgId) || orgId == request.auth.uid || isOwner || isSystemAdmin());
+      return (checkMemberExists(orgId) || isOwner || isSystemAdmin());
     }
 
     function hasOrgContext(data) {
@@ -59,12 +59,12 @@ service cloud.firestore {
 
     function isOrgAdmin(orgId) {
       let role = getMemberRole(orgId);
-      return role == 'admin' || role == 'owner' || orgId == request.auth.uid || isSystemAdmin();
+      return role == 'admin' || role == 'owner' || isSystemAdmin();
     }
 
     function isOrgOwner(orgId) {
       let role = getMemberRole(orgId);
-      return role == 'owner' || orgId == request.auth.uid || isSystemAdmin();
+      return role == 'owner' || isSystemAdmin();
     }
 
     function getMemberPermissions(orgId) {
@@ -87,7 +87,7 @@ service cloud.firestore {
     
     function isSystemAdmin() {
       let userDoc = isAuthenticated() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
-      return userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'global_admin' || userDoc.data.systemRole == 'ecosystem_owner' || userDoc.data.systemRole == 'founder' || userDoc.data.systemRole == 'admin');
+      return userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'global_admin' || userDoc.data.systemRole == 'ecosystem_owner' || userDoc.data.systemRole == 'founder');
     }
 
     // ==========================================
@@ -96,7 +96,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuthenticated() && (userId == request.auth.uid || isSystemAdmin() || ('organizationId' in resource.data && checkOrgAccess(resource.data.organizationId)));
-      allow create: if isAuthenticated() && (userId == request.auth.uid || isSystemAdmin() || hasOrgContext(incoming()));
+      allow create: if isAuthenticated() && isSystemAdmin();
       allow update: if isAuthenticated() && (
         isSystemAdmin() ||
         (
@@ -149,9 +149,7 @@ service cloud.firestore {
           uid == request.auth.uid || checkOrgAccess(orgId) || isSystemAdmin()
         );
         allow list: if isAuthenticated() && (checkOrgAccess(orgId) || isSystemAdmin());
-        allow create: if isAuthenticated() && (
-          uid == request.auth.uid || isOrgAdmin(orgId) || isSystemAdmin()
-        );
+        allow create: if isAuthenticated() && (isOrgAdmin(orgId) || isSystemAdmin());
         allow update, delete: if isAuthenticated() && (
           isOrgAdmin(orgId) || isSystemAdmin()
         );
