@@ -1,4 +1,4 @@
-import { planBootstrap, BootstrapDecisionCode, normalizeLegacyOrganizationRole, resolveLegacyMembershipCandidates } from './TenantBootstrapPlanner.js';
+import { planBootstrap, BootstrapDecisionCode, resolveLegacyMembershipCandidates } from './TenantBootstrapPlanner.js';
 import { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';

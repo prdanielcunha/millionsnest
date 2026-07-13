@@ -99,7 +99,10 @@ export function resolveLegacyMembershipCandidates(candidates: LegacyCandidate[])
   const resultMemberships: ConsolidatedLegacy[] = [];
   const excludedStatuses = ['removed', 'revoked', 'suspended', 'inactive', 'deleted'];
 
-  for (const [orgId, list] of grouped.entries()) {
+  const organizationIds = [...grouped.keys()].sort((a, b) => a.localeCompare(b));
+
+  for (const orgId of organizationIds) {
+    const list = grouped.get(orgId)!;
     list.sort((a, b) => a.sourcePath.localeCompare(b.sourcePath));
 
     let activeFound = false;

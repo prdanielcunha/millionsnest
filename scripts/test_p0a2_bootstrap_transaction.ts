@@ -114,19 +114,23 @@ assertCondition('22. resultado contém apenas campos sanitizados', r10.ok && Obj
 
 // Structural tests
 const svcStr = fs.readFileSync(path.join(process.cwd(), 'src/server/services/TenantContextMutationService.ts'), 'utf8');
+const bootstrapStr = svcStr.substring(svcStr.indexOf('export async function bootstrapUserContext'), svcStr.indexOf('export async function acceptInvitation'));
 
-assertCondition('23. bootstrap usa runTransaction', svcStr.includes('db.runTransaction'));
+assertCondition('23. bootstrap usa runTransaction', bootstrapStr.includes('db.runTransaction'));
 assertCondition('24. tenantBootstrapLocks continua presente', svcStr.includes('tenantBootstrapLocks'));
 assertCondition('25. não existe const db = getFirestore() no topo do módulo', !svcStr.match(/^const db = getFirestore\(\);$/m));
 assertCondition('26. acceptInvitation continua exportado', svcStr.includes('export async function acceptInvitation'));
 assertCondition('27. setActiveOrganization continua exportado', svcStr.includes('export async function setActiveOrganization'));
-assertCondition('28. bootstrap não cria plan, products, appsAccess, entitlements, subscriptionStatus ou lifetimeAccess', !svcStr.includes("subscriptionStatus: 'none'") && !svcStr.includes("products: []") && !svcStr.includes("plan:") && !svcStr.includes("entitlements:"));
-assertCondition('29. não existe ...legacyData', !svcStr.includes('...legacyData'));
-assertCondition('30. consultas legadas incluem uid e user_id', svcStr.includes("where('uid', '==', uid)") && svcStr.includes("where('user_id', '==', uid)"));
 
-const hasBools = svcStr.match(/createdOrganization: (true|false)/g)!.length >= 3 && 
-                 svcStr.match(/reusedExistingContext: (true|false)/g)!.length >= 3 &&
-                 svcStr.match(/repairedLegacyMembership: (true|false)/g)!.length >= 3;
+const hasForbidden = ['plan:', 'products:', 'appsAccess:', 'enabledApps:', 'entitlements:', 'subscription:', 'subscriptionStatus:', 'lifetimeAccess:'].some(f => bootstrapStr.includes(f));
+assertCondition('28. bootstrap não cria campos proibidos (plan, products, appsAccess, enabledApps, entitlements, subscription, subscriptionStatus, lifetimeAccess)', !hasForbidden);
+
+assertCondition('29. não existe ...legacyData', !bootstrapStr.includes('...legacyData'));
+assertCondition('30. consultas legadas incluem uid e user_id', bootstrapStr.includes("where('uid', '==', uid)") && bootstrapStr.includes("where('user_id', '==', uid)"));
+
+const hasBools = bootstrapStr.match(/createdOrganization: (true|false)/g)!.length >= 3 && 
+                 bootstrapStr.match(/reusedExistingContext: (true|false)/g)!.length >= 3 &&
+                 bootstrapStr.match(/repairedLegacyMembership: (true|false)/g)!.length >= 3;
 assertCondition('31. respostas de sucesso possuem os três booleanos', hasBools);
 
 assertCondition('32. role member e organizationRole member retorna member', normalizeLegacyOrganizationRole('member', 'member') === 'member');
@@ -135,7 +139,23 @@ assertCondition('34. organizationRole global_admin retorna null', normalizeLegac
 assertCondition('35. role ceo com organizationRole member retorna null', normalizeLegacyOrganizationRole('ceo', 'member') === null);
 assertCondition('36. role owner com organizationRole member retorna null', normalizeLegacyOrganizationRole('owner', 'member') === null);
 assertCondition('37. ausência dos dois papéis retorna null', normalizeLegacyOrganizationRole() === null);
-assertCondition('38. trava com memberActive false retorna INCONSISTENT_BOOTSTRAP_STATE', tc7.code === BootstrapDecisionCode.AMBIGUOUS_LEGACY_MEMBERSHIP || true); 
+
+const tc38 = planBootstrap([], [], [], {}, { exists: true, completed: true, organizationId: 'lockOrg', orgExists: true, orgActive: true, memberExists: true, memberActive: false }, 'user@example.com', nowMs);
+assertCondition('38. trava com memberActive false retorna INCONSISTENT_BOOTSTRAP_STATE', tc38.code === BootstrapDecisionCode.INCONSISTENT_BOOTSTRAP_STATE);
+
+const tc39 = planBootstrap([], [], [], {}, { exists: true, completed: true, organizationId: 'lockOrg', orgExists: true, orgActive: false, memberExists: true, memberActive: true }, 'user@example.com', nowMs);
+assertCondition('39. trava com orgActive false retorna INCONSISTENT_BOOTSTRAP_STATE', tc39.code === BootstrapDecisionCode.INCONSISTENT_BOOTSTRAP_STATE);
+
+const r40a = resolveLegacyMembershipCandidates([
+  { organizationId: 'orgA', sourcePath: 'a', role: 'member', status: 'active' },
+  { organizationId: 'orgB', sourcePath: 'b', role: 'member', status: 'active' }
+]);
+const r40b = resolveLegacyMembershipCandidates([
+  { organizationId: 'orgB', sourcePath: 'b', role: 'member', status: 'active' },
+  { organizationId: 'orgA', sourcePath: 'a', role: 'member', status: 'active' }
+]);
+assertCondition('40. a ordem do resultado de resolveLegacyMembershipCandidates é idêntica independentemente da ordem de entrada', r40a.ok && r40b.ok && JSON.stringify(r40a.memberships) === JSON.stringify(r40b.memberships) && r40a.memberships[0].organizationId === 'orgA' && r40a.memberships[1].organizationId === 'orgB');
 
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
+
