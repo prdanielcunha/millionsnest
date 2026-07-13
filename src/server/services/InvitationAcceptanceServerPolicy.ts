@@ -107,3 +107,26 @@ export function resolveCanonicalInvitationCapacity(input: CanonicalInvitationEnt
     };
   }
 }
+
+export function normalizeInvitationTemporalMs(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return value.getTime();
+  }
+  if (value !== null && typeof value === 'object' && 'toMillis' in value) {
+    const toMillisFn = (value as { toMillis?: unknown }).toMillis;
+    if (typeof toMillisFn === 'function') {
+      try {
+        const ms = toMillisFn.call(value);
+        if (typeof ms === 'number' && Number.isFinite(ms)) {
+          return ms;
+        }
+      } catch (e) {
+        return undefined;
+      }
+    }
+  }
+  return undefined;
+}

@@ -227,8 +227,10 @@ assertCondition('28. exige caminho organizations/{orgId}/invites', endpointConte
 assertCondition('29. getAuth().getUser ocorre antes de runTransaction', endpointContent.indexOf('getAuth().getUser') < endpointContent.indexOf('runTransaction'));
 assertCondition('30. acceptanceNowMs ocorre antes de runTransaction', endpointContent.indexOf('acceptanceNowMs =') < endpointContent.indexOf('runTransaction'));
 
-const transactionMatch = endpointContent.match(/runTransaction\s*\(\s*async\s*\([^)]*\)\s*=>\s*\{([\s\S]*?)\}\s*\)/);
-const txBody = transactionMatch ? transactionMatch[1] : '';
+const startTx = endpointContent.indexOf('const result = await db.runTransaction(async (t) => {');
+const endTx = endpointContent.indexOf('return res.status(result.status).json(result.data);');
+const txBody = (startTx !== -1 && endTx !== -1 && endTx > startTx) ? endpointContent.slice(startTx, endTx) : '';
+assertCondition('58. extração de txBody não vazia', txBody.length > 0);
 
 assertCondition('31. callback não contém Date.now', !txBody.includes('Date.now()'));
 assertCondition('32. callback não contém new Date', !txBody.includes('new Date('));
@@ -261,6 +263,64 @@ assertCondition('50. acceptInvitation não chama assertCanAddOrganizationMember'
 assertCondition('51. bootstrapUserContext permanece exportado', serviceContent.includes('export async function bootstrapUserContext'));
 assertCondition('52. setActiveOrganization permanece exportado', serviceContent.includes('export async function setActiveOrganization'));
 
+
+
+// 53. número finito é normalizado
+import { normalizeInvitationTemporalMs } from '../src/server/services/InvitationAcceptanceServerPolicy.js';
+assertCondition('53. número finito é normalizado', normalizeInvitationTemporalMs(123) === 123);
+
+// 54. Date válida é normalizada
+const d = new Date(1000);
+assertCondition('54. Date válida é normalizada', normalizeInvitationTemporalMs(d) === 1000);
+
+// 55. objeto toMillis válido é normalizado
+assertCondition('55. objeto toMillis válido é normalizado', normalizeInvitationTemporalMs({ toMillis: () => 2000 }) === 2000);
+
+// 56. toMillis que lança retorna undefined
+assertCondition('56. toMillis que lança retorna undefined', normalizeInvitationTemporalMs({ toMillis: () => { throw new Error('fail'); } }) === undefined);
+
+// 57. número NaN retorna undefined
+assertCondition('57. número NaN retorna undefined', normalizeInvitationTemporalMs(NaN) === undefined);
+
+// 58. arquivos temporários não existem
+const tmpFilesExist = fs.existsSync('patch_service.cjs') || fs.existsSync('patch_tests.cjs') || fs.existsSync('patch_tests2.cjs');
+assertCondition('58. arquivos temporários não existem', tmpFilesExist === false);
+
+// 59. endpoint usa hasOwnProperty para organizationId
+assertCondition('59. endpoint usa hasOwnProperty para organizationId', endpointContent.includes("hasOwnProperty.call(inviteData, 'organizationId')"));
+
+// 60. endpoint não usa fallback de e-mail
+assertCondition('60. endpoint não usa fallback de e-mail', !endpointContent.includes("emailNormalized: normalizeInvitationEmail(authUser.email) || ''") && !endpointContent.includes("emailNormalized: inviteData.emailNormalized || ''"));
+
+// 61. endpoint não usa fallback de useCount
+assertCondition('61. endpoint não usa fallback de useCount', !endpointContent.includes("inviteData.useCount || 0"));
+
+// 62. endpoint possui guarda de overflow
+assertCondition('62. endpoint possui guarda de overflow', endpointContent.includes("nextUseCount > maxUses"));
+
+// 63. endpoint usa igualdade exata no uso final
+assertCondition('63. endpoint usa igualdade exata no uso final', endpointContent.includes("nextUseCount === maxUses"));
+
+// 64. endpoint não contém any explícito
+assertCondition('64. endpoint não contém any explícito', !endpointContent.includes(": any") && !endpointContent.includes(" as any"));
+
+// 65. extração do callback transacional cobre a criação da membership e o audit log
+assertCondition('65. extração do callback transacional cobre a criação da membership e o audit log', txBody.includes("organizations/${orgId}/members") && txBody.includes("audit_logs"));
+
+// 66. última leitura transacional ocorre antes da primeira escrita
+// txBody has get() and set()/update()/delete()
+const firstWriteIdxTx = Math.min(
+  txBody.indexOf('.set(') === -1 ? Infinity : txBody.indexOf('.set('),
+  txBody.indexOf('.update(') === -1 ? Infinity : txBody.indexOf('.update('),
+  txBody.indexOf('.delete(') === -1 ? Infinity : txBody.indexOf('.delete(')
+);
+const lastReadIdxTx = txBody.lastIndexOf('.get(');
+assertCondition('66. última leitura transacional ocorre antes da primeira escrita', lastReadIdxTx < firstWriteIdxTx);
+
+// 67. acceptedBy aparece somente dentro do bloco de uso final
+// "acceptedBy =" ou "acceptedBy:" only inside "if (nextUseCount === maxUses) {"
+const partsAccept = endpointContent.split("nextUseCount === maxUses");
+assertCondition('67. acceptedBy aparece somente dentro do bloco de uso final', partsAccept.length === 2 && !partsAccept[0].includes("acceptedBy =") && partsAccept[1].includes("acceptedBy ="));
 
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

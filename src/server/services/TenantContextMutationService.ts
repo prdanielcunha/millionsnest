@@ -4,7 +4,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import { planInvitationAcceptance, normalizeInvitationEmail, InvitationAcceptanceInput } from './InvitationAcceptancePlanner.js';
-import { resolveCanonicalInvitationCapacity } from './InvitationAcceptanceServerPolicy.js';
+import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './InvitationAcceptanceServerPolicy.js';
 
 
 
@@ -438,6 +438,11 @@ export async function acceptInvitation(req: Request, res: Response) {
     } catch (e) {
       return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
     }
+    
+    const normalizedAuthenticatedEmail = normalizeInvitationEmail(authUser.email);
+    if (normalizedAuthenticatedEmail === null) {
+      return res.status(400).json({ success: false, reasonCode: 'AUTHENTICATED_EMAIL_REQUIRED' });
+    }
 
     const token = req.body?.token;
     if (typeof token !== 'string' || token.trim() === '') {
@@ -469,8 +474,10 @@ export async function acceptInvitation(req: Request, res: Response) {
       const inviteData = inviteDoc.data();
       const orgId = inviteDoc.ref.parent.parent!.id;
 
-      if (inviteData.organizationId && inviteData.organizationId !== orgId) {
-        return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
+      if (Object.prototype.hasOwnProperty.call(inviteData, 'organizationId')) {
+        if (typeof inviteData.organizationId !== 'string' || inviteData.organizationId !== orgId) {
+          return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
+        }
       }
 
       const orgRef = db.collection('organizations').doc(orgId);
@@ -511,13 +518,16 @@ export async function acceptInvitation(req: Request, res: Response) {
       });
 
       if (capacityResult.success === false) {
-         const code = capacityResult.success === false ? capacityResult.reasonCode : 'MEMBER_LIMIT_INVALID';
+         const code = capacityResult.reasonCode;
          const httpStatus = code === 'MEMBER_LIMIT_UNAVAILABLE' ? 503 : 409;
          return { status: httpStatus, data: { success: false, reasonCode: code } };
       }
 
-      const expiresMs = inviteData.expiresAt?.toMillis ? inviteData.expiresAt.toMillis() : (typeof inviteData.expiresAt === 'number' ? inviteData.expiresAt : -1);
-      const revokedMs = inviteData.revokedAt?.toMillis ? inviteData.revokedAt.toMillis() : (typeof inviteData.revokedAt === 'number' ? inviteData.revokedAt : undefined);
+      const expiresMs = normalizeInvitationTemporalMs(inviteData.expiresAt);
+      let revokedMs = normalizeInvitationTemporalMs(inviteData.revokedAt);
+      if (Object.prototype.hasOwnProperty.call(inviteData, 'revokedAt') && revokedMs === undefined) {
+        revokedMs = acceptanceNowMs;
+      }
 
       const input: InvitationAcceptanceInput = {
         identity: {
@@ -585,12 +595,22 @@ export async function acceptInvitation(req: Request, res: Response) {
       }
 
       // CREATE_MEMBERSHIP
+      const previousUseCount = inviteData.useCount;
+      const maxUses = inviteData.maxUses;
+      if (typeof previousUseCount !== 'number' || !Number.isInteger(previousUseCount) || typeof maxUses !== 'number' || !Number.isInteger(maxUses)) {
+        return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
+      }
+      const nextUseCount = previousUseCount + 1;
+      if (nextUseCount > maxUses) {
+        return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
+      }
+
       const userData = userSnap.data() || {};
       const newPrimary = (!userData.primaryOrganizationId || typeof userData.primaryOrganizationId !== 'string' || userData.primaryOrganizationId.trim() === '') ? orgId : userData.primaryOrganizationId;
 
       t.set(memRef, {
         uid: authUser.uid,
-        emailNormalized: normalizeInvitationEmail(authUser.email) || '',
+        emailNormalized: normalizedAuthenticatedEmail,
         organizationId: orgId,
         role: planResult.membershipRole,
         organizationRole: planResult.membershipRole,
@@ -603,7 +623,7 @@ export async function acceptInvitation(req: Request, res: Response) {
       const legacyRef = db.collection('organization_members').doc(`${authUser.uid}_${orgId}`);
       t.set(legacyRef, {
         uid: authUser.uid,
-        emailNormalized: normalizeInvitationEmail(authUser.email) || '',
+        emailNormalized: normalizedAuthenticatedEmail,
         organizationId: orgId,
         role: planResult.membershipRole,
         organizationRole: planResult.membershipRole,
@@ -618,13 +638,20 @@ export async function acceptInvitation(req: Request, res: Response) {
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true });
 
-      const nextUseCount = (inviteData.useCount || 0) + 1;
-      const inviteUpdates: any = {
+      type InviteUpdate = {
+        useCount: number;
+        updatedAt: FieldValue;
+        status?: string;
+        acceptedBy?: string;
+        acceptedAt?: FieldValue;
+      };
+
+      const inviteUpdates: InviteUpdate = {
         useCount: nextUseCount,
         updatedAt: FieldValue.serverTimestamp()
       };
 
-      if (nextUseCount >= inviteData.maxUses) {
+      if (nextUseCount === maxUses) {
          inviteUpdates.status = 'accepted';
          inviteUpdates.acceptedBy = authUser.uid;
          inviteUpdates.acceptedAt = FieldValue.serverTimestamp();
@@ -638,7 +665,7 @@ export async function acceptInvitation(req: Request, res: Response) {
         actorUid: authUser.uid,
         invitationId: inviteDoc.id,
         membershipRole: planResult.membershipRole,
-        previousUseCount: inviteData.useCount || 0,
+        previousUseCount: previousUseCount,
         newUseCount: nextUseCount,
         timestamp: FieldValue.serverTimestamp()
       });
