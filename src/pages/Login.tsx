@@ -23,22 +23,30 @@ export function Login() {
     // invite_org_id injection removed to prevent blindly trusting invalid organization ids bypassing Join.tsx validations
     if (authLoading) return;
     
-    if (user && profile) {
+    if (user) {
       // Check for invite redirect first
       const inviteRedirect = sessionStorage.getItem('mn_invite_redirect');
-      if (inviteRedirect) {
-        // Keep it in session to be picked up by Join, but navigate there first
-        navigate(inviteRedirect);
-        return;
+      if (inviteRedirect && typeof inviteRedirect === 'string') {
+        try {
+          const url = new URL(inviteRedirect, window.location.origin);
+          if (url.origin === window.location.origin && url.pathname.startsWith('/join')) {
+            navigate(url.pathname + url.search);
+            return;
+          }
+        } catch (e) {
+          // Invalid URL, ignore
+        }
       }
       
-      // UX Optimized: Check if user was trying to buy something before login
-      const purchaseIntent = sessionStorage.getItem('purchase_intent');
-      if (purchaseIntent) {
-        sessionStorage.removeItem('purchase_intent');
-        navigate(`/checkout?plan=${purchaseIntent}`);
-      } else {
-        navigate('/dashboard');
+      if (profile) {
+          // UX Optimized: Check if user was trying to buy something before login
+          const purchaseIntent = sessionStorage.getItem('purchase_intent');
+          if (purchaseIntent) {
+            sessionStorage.removeItem('purchase_intent');
+            navigate(`/checkout?plan=${purchaseIntent}`);
+          } else {
+            navigate('/dashboard');
+          }
       }
     }
   }, [user, profile, authLoading, navigate]);

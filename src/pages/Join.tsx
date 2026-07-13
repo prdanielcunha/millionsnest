@@ -1,13 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase.js';
 import { motion } from 'framer-motion';
 import { Loader2, CheckCircle2, XCircle, ArrowRight } from 'lucide-react';
 import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
-import { CURRENT_PERMISSIONS_VERSION, getDefaultPermissions } from '../lib/rbac.js';
-import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from '../lib/musicScalePlans.js';
 
 export function Join() {
   const { orgId } = useParams();

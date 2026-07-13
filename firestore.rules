@@ -101,7 +101,7 @@ service cloud.firestore {
         isSystemAdmin() ||
         (
           (isOwner(userId) || (resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId))) &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['systemRole', 'lifetimeAccess', 'capabilities', 'globalRole'])
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['organizationId', 'activeOrganizationId', 'primaryOrganizationId', 'defaultOrganizationId', 'lastOrganizationId', 'organizations', 'organizationIds', 'memberships', 'organizationRole', 'systemRole', 'globalRole', 'capabilities', 'appsAccess', 'products', 'lifetimeAccess'])
         )
       );
       allow delete: if isAuthenticated() && (isSystemAdmin() || (resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId)));
@@ -130,7 +130,6 @@ service cloud.firestore {
         resource.data.get('ownerUid', '') == request.auth.uid || 
         resource.data.get('ownerId', '') == request.auth.uid || 
         resource.data.get('owner_user_id', '') == request.auth.uid || 
-        orgId == request.auth.uid ||
         (checkMemberExists(orgId) && isOrgOwner(orgId))
       );
       allow delete: if false; 
@@ -166,17 +165,6 @@ service cloud.firestore {
         allow read: if isAuthenticated() && checkOrgAccess(orgId);
         allow write: if isAuthenticated() && checkOrgAccess(orgId);
       }
-
-      match /timeline/{document=**} {
-        allow read: if isAuthenticated() && checkOrgAccess(orgId);
-        allow write: if isAuthenticated() && checkOrgAccess(orgId);
-      }
-
-      match /{app}/{document=**} {
-        allow read: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow create: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-      }
     }
 
     match /organization_members/{id} {
@@ -187,11 +175,7 @@ service cloud.firestore {
         checkOrgAccess(id.split('_')[0])
       );
       allow list: if isAuthenticated();
-      allow create: if isAuthenticated() && (
-        request.resource.data.get('uid', '') == request.auth.uid || 
-        request.resource.data.get('user_id', '') == request.auth.uid || 
-        isOrgAdmin(request.resource.data.get('organizationId', ''))
-      );
+      allow create: if isAuthenticated() && (isOrgAdmin(request.resource.data.get('organizationId', '')) || isSystemAdmin());
       allow update: if isAuthenticated() && (
         isSystemAdmin() || 
         (checkOrgAccess(resource.data.get('organizationId', '')) && isOrgAdmin(resource.data.get('organizationId', '')))

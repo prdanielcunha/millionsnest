@@ -1,1 +1,0 @@
-Lint and Build executed successfully.

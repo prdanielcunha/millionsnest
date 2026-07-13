@@ -19,7 +19,7 @@ interface UserProfile {
   activeOrganizationId?: string;
   organizations?: string[]; // Standardized ecosystem field
   subscriptionStatus?: string; // Standardized ecosystem field
-  systemRole?: 'ceo' | 'admin' | 'global_admin' | 'user';
+  systemRole?: 'ceo' | 'global_admin' | 'ecosystem_owner' | 'founder' | 'user';
   lastLoginAt: any;
   createdAt: any;
   updatedAt?: any;
@@ -118,16 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const canonicalCtx = await res.json();
                 setCanonicalContext(canonicalCtx);
                 if (canonicalCtx.activeOrganizationId && canonicalCtx.activeOrganizationId !== userData.activeOrganizationId) {
-                  mergeData.activeOrganizationId = canonicalCtx.activeOrganizationId;
                   userData.activeOrganizationId = canonicalCtx.activeOrganizationId;
                 }
                 if (canonicalCtx.primaryOrganizationId && canonicalCtx.primaryOrganizationId !== userData.primaryOrganizationId) {
-                  mergeData.primaryOrganizationId = canonicalCtx.primaryOrganizationId;
                   userData.primaryOrganizationId = canonicalCtx.primaryOrganizationId;
                 }
-                // Avoid using legacy userData.organizationId locally if activeOrganizationId exists
                 if (canonicalCtx.activeOrganizationId) {
-                  mergeData.organizationId = canonicalCtx.activeOrganizationId;
                   userData.organizationId = canonicalCtx.activeOrganizationId;
                 }
               }
