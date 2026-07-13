@@ -424,22 +424,26 @@ export async function acceptInvitation(req: Request, res: Response) {
     }
 
     const idToken = authHeader.split('Bearer ')[1];
-    let decodedToken;
+    let uid: string | null = null;
     try {
-      decodedToken = await getAuth().verifyIdToken(idToken);
+      const decoded = await getAuth().verifyIdToken(idToken);
+      uid = decoded.uid;
     } catch (e) {
       return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
     }
 
-    const uid = decodedToken.uid;
-    let authUser;
+    if (!uid || typeof uid !== 'string' || uid.trim() === '') {
+      return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+    }
+
+    let normalizedAuthenticatedEmail: string | null = null;
     try {
-      authUser = await getAuth().getUser(uid);
+      const authUser = await getAuth().getUser(uid);
+      normalizedAuthenticatedEmail = normalizeInvitationEmail(normalizedAuthenticatedEmail);
     } catch (e) {
       return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
     }
     
-    const normalizedAuthenticatedEmail = normalizeInvitationEmail(authUser.email);
     if (normalizedAuthenticatedEmail === null) {
       return res.status(400).json({ success: false, reasonCode: 'AUTHENTICATED_EMAIL_REQUIRED' });
     }
@@ -517,12 +521,6 @@ export async function acceptInvitation(req: Request, res: Response) {
         memberStatuses
       });
 
-      if (capacityResult.success === false) {
-         const code = capacityResult.reasonCode;
-         const httpStatus = code === 'MEMBER_LIMIT_UNAVAILABLE' ? 503 : 409;
-         return { status: httpStatus, data: { success: false, reasonCode: code } };
-      }
-
       const expiresMs = normalizeInvitationTemporalMs(inviteData.expiresAt);
       let revokedMs = normalizeInvitationTemporalMs(inviteData.revokedAt);
       if (Object.prototype.hasOwnProperty.call(inviteData, 'revokedAt') && revokedMs === undefined) {
@@ -531,8 +529,8 @@ export async function acceptInvitation(req: Request, res: Response) {
 
       const input: InvitationAcceptanceInput = {
         identity: {
-          uid: authUser.uid,
-          email: authUser.email
+          uid: uid,
+          email: normalizedAuthenticatedEmail
         },
         organization: {
           exists: orgSnap.exists,
@@ -556,14 +554,18 @@ export async function acceptInvitation(req: Request, res: Response) {
           status: memSnap.data()?.status,
           role: memSnap.data()?.role
         },
-        capacity: capacityResult.capacity
+        capacity: capacityResult.success ? capacityResult.capacity : { resolved: false }
       };
 
       const planResult = planInvitationAcceptance(input, acceptanceNowMs);
 
       if (!planResult.success) {
+         let reasonCode = planResult.reasonCode;
+         if (reasonCode === 'MEMBER_LIMIT_UNAVAILABLE' && capacityResult.success === false) {
+           reasonCode = capacityResult.reasonCode;
+         }
          let httpStatus = 409;
-         switch (planResult.reasonCode) {
+         switch (reasonCode) {
            case 'AUTHENTICATED_EMAIL_REQUIRED':
            case 'INVALID_INVITE_ROLE':
              httpStatus = 400; break;
@@ -575,7 +577,7 @@ export async function acceptInvitation(req: Request, res: Response) {
            case 'MEMBER_LIMIT_UNAVAILABLE':
              httpStatus = 503; break;
          }
-         return { status: httpStatus, data: { success: false, reasonCode: planResult.reasonCode } };
+         return { status: httpStatus, data: { success: false, reasonCode: reasonCode } };
       }
 
       if (planResult.action === 'ALREADY_MEMBER') {
@@ -609,7 +611,7 @@ export async function acceptInvitation(req: Request, res: Response) {
       const newPrimary = (!userData.primaryOrganizationId || typeof userData.primaryOrganizationId !== 'string' || userData.primaryOrganizationId.trim() === '') ? orgId : userData.primaryOrganizationId;
 
       t.set(memRef, {
-        uid: authUser.uid,
+        uid: uid,
         emailNormalized: normalizedAuthenticatedEmail,
         organizationId: orgId,
         role: planResult.membershipRole,
@@ -620,9 +622,9 @@ export async function acceptInvitation(req: Request, res: Response) {
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true });
 
-      const legacyRef = db.collection('organization_members').doc(`${authUser.uid}_${orgId}`);
+      const legacyRef = db.collection('organization_members').doc(`${uid}_${orgId}`);
       t.set(legacyRef, {
-        uid: authUser.uid,
+        uid: uid,
         emailNormalized: normalizedAuthenticatedEmail,
         organizationId: orgId,
         role: planResult.membershipRole,
@@ -653,7 +655,7 @@ export async function acceptInvitation(req: Request, res: Response) {
 
       if (nextUseCount === maxUses) {
          inviteUpdates.status = 'accepted';
-         inviteUpdates.acceptedBy = authUser.uid;
+         inviteUpdates.acceptedBy = uid;
          inviteUpdates.acceptedAt = FieldValue.serverTimestamp();
       }
       
@@ -662,7 +664,7 @@ export async function acceptInvitation(req: Request, res: Response) {
       const auditRef = db.collection(`organizations/${orgId}/audit_logs`).doc();
       t.set(auditRef, {
         action: 'invitation.accepted',
-        actorUid: authUser.uid,
+        actorUid: uid,
         invitationId: inviteDoc.id,
         membershipRole: planResult.membershipRole,
         previousUseCount: previousUseCount,

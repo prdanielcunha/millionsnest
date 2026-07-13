@@ -1,4 +1,5 @@
 import { resolveCanonicalInvitationCapacity } from '../src/server/services/InvitationAcceptanceServerPolicy.js';
+import { planInvitationAcceptance } from '../src/server/services/InvitationAcceptancePlanner.js';
 import fs from 'fs';
 
 let passed = 0;
@@ -223,7 +224,7 @@ assertCondition('24. consulta somente hash SHA-256', endpointContent.includes('c
 assertCondition('25. não consulta token bruto', !endpointContent.includes("where('token',") && !endpointContent.includes("legacyQuery"));
 assertCondition('26. não contém legacyMigrated true', !endpointContent.includes("legacyMigrated = true") && !endpointContent.includes("legacyMigrated: true"));
 assertCondition('27. não usa limit(1)', !endpointContent.includes(".limit(1)"));
-assertCondition('28. exige caminho organizations/{orgId}/invites', endpointContent.includes("parts.length === 4") || endpointContent.includes("organizations/{orgId}/invites"));
+assertCondition('28. exige caminho organizations/{orgId}/invites', endpointContent.includes("parts.length === 4 && parts[0] === 'organizations' && parts[2] === 'invites'"));
 assertCondition('29. getAuth().getUser ocorre antes de runTransaction', endpointContent.indexOf('getAuth().getUser') < endpointContent.indexOf('runTransaction'));
 assertCondition('30. acceptanceNowMs ocorre antes de runTransaction', endpointContent.indexOf('acceptanceNowMs =') < endpointContent.indexOf('runTransaction'));
 
@@ -239,11 +240,11 @@ assertCondition('34. lê subscriptions/{orgId}', txBody.includes("subscriptions"
 assertCondition('35. lê organizations/{orgId}/members', txBody.includes("members") || endpointContent.includes('/members'));
 
 const firstWriteIdx = Math.min(
-  txBody.indexOf('.set(') === -1 ? Infinity : txBody.indexOf('.set('),
-  txBody.indexOf('.update(') === -1 ? Infinity : txBody.indexOf('.update('),
-  txBody.indexOf('.delete(') === -1 ? Infinity : txBody.indexOf('.delete(')
+  txBody.indexOf('t.set(') === -1 ? Infinity : txBody.indexOf('t.set('),
+  txBody.indexOf('t.update(') === -1 ? Infinity : txBody.indexOf('t.update('),
+  txBody.indexOf('t.delete(') === -1 ? Infinity : txBody.indexOf('t.delete(')
 );
-const lastReadIdx = txBody.lastIndexOf('.get(');
+const lastReadIdx = txBody.lastIndexOf('await t.get(');
 assertCondition('36. nenhuma leitura transacional ocorre após a primeira escrita', lastReadIdx < firstWriteIdx);
 
 assertCondition('37. grava membership status active', endpointContent.includes("status: 'active'"));
@@ -310,17 +311,74 @@ assertCondition('65. extração do callback transacional cobre a criação da me
 // 66. última leitura transacional ocorre antes da primeira escrita
 // txBody has get() and set()/update()/delete()
 const firstWriteIdxTx = Math.min(
-  txBody.indexOf('.set(') === -1 ? Infinity : txBody.indexOf('.set('),
-  txBody.indexOf('.update(') === -1 ? Infinity : txBody.indexOf('.update('),
-  txBody.indexOf('.delete(') === -1 ? Infinity : txBody.indexOf('.delete(')
+  txBody.indexOf('t.set(') === -1 ? Infinity : txBody.indexOf('t.set('),
+  txBody.indexOf('t.update(') === -1 ? Infinity : txBody.indexOf('t.update('),
+  txBody.indexOf('t.delete(') === -1 ? Infinity : txBody.indexOf('t.delete(')
 );
-const lastReadIdxTx = txBody.lastIndexOf('.get(');
+const lastReadIdxTx = txBody.lastIndexOf('await t.get(');
 assertCondition('66. última leitura transacional ocorre antes da primeira escrita', lastReadIdxTx < firstWriteIdxTx);
 
 // 67. acceptedBy aparece somente dentro do bloco de uso final
 // "acceptedBy =" ou "acceptedBy:" only inside "if (nextUseCount === maxUses) {"
 const partsAccept = endpointContent.split("nextUseCount === maxUses");
-assertCondition('67. acceptedBy aparece somente dentro do bloco de uso final', partsAccept.length === 2 && !partsAccept[0].includes("acceptedBy =") && partsAccept[1].includes("acceptedBy ="));
+const isAcceptedByInsideBlock = endpointContent.indexOf('inviteUpdates.acceptedBy =') > endpointContent.indexOf('if (nextUseCount === maxUses)') && endpointContent.indexOf('inviteUpdates.acceptedBy =') < endpointContent.indexOf('t.update(inviteDoc.ref, inviteUpdates)');
+assertCondition('67. acceptedBy aparece somente dentro do bloco de uso final', partsAccept.length === 2 && !partsAccept[0].includes("acceptedBy =") && partsAccept[1].includes("acceptedBy =") && isAcceptedByInsideBlock);
+
+
+// 68-70 direct tests
+const directIdemp1 = planInvitationAcceptance({
+  identity: { uid: 'u1', email: 'u1@test.com' },
+  organization: { exists: true, status: 'active' },
+  invitation: { exists: true, organizationId: 'org1', status: 'pending', email: 'u1@test.com', role: 'member', maxUses: 10, useCount: 1, emailNormalized: 'u1@test.com', expiresAtMs: 2000, revokedAtMs: undefined },
+  existingMembership: { exists: true, status: 'active', role: 'member' },
+  capacity: { resolved: false }
+}, 1000);
+assertCondition('68. direct ALREADY_MEMBER with unresolved capacity (member)', directIdemp1.success && directIdemp1.action === 'ALREADY_MEMBER' && directIdemp1.consumeInviteUse === false);
+
+const directIdemp2 = planInvitationAcceptance({
+  identity: { uid: 'u1', email: 'u1@test.com' },
+  organization: { exists: true, status: 'active' },
+  invitation: { exists: true, organizationId: 'org1', status: 'pending', email: 'u1@test.com', role: 'member', maxUses: 10, useCount: 1, emailNormalized: 'u1@test.com', expiresAtMs: 2000, revokedAtMs: undefined },
+  existingMembership: { exists: true, status: 'active', role: 'owner' },
+  capacity: { resolved: false }
+}, 1000);
+assertCondition('69. direct ALREADY_MEMBER preserves owner with unresolved capacity', directIdemp2.success && directIdemp2.action === 'ALREADY_MEMBER' && directIdemp2.membershipRole === 'owner' && directIdemp2.consumeInviteUse === false);
+
+const directCreateFail = planInvitationAcceptance({
+  identity: { uid: 'u1', email: 'u1@test.com' },
+  organization: { exists: true, status: 'active' },
+  invitation: { exists: true, organizationId: 'org1', status: 'pending', email: 'u1@test.com', role: 'member', maxUses: 10, useCount: 1, emailNormalized: 'u1@test.com', expiresAtMs: 2000, revokedAtMs: undefined },
+  existingMembership: { exists: false },
+  capacity: { resolved: false }
+}, 1000);
+assertCondition('70. direct creation fails MEMBER_LIMIT_UNAVAILABLE with unresolved capacity', directCreateFail.success === false && directCreateFail.reasonCode === 'MEMBER_LIMIT_UNAVAILABLE');
+
+assertCondition('71. não existe let decodedToken', !endpointContent.includes('let decodedToken;'));
+assertCondition('72. não existe let authUser', !endpointContent.includes('let authUser;'));
+const hasUntypedLet = /let\s+[a-zA-Z0-9_]+\s*;/.test(endpointContent);
+assertCondition('73. não existe let sem tipo ou inicialização dentro de acceptInvitation', hasUntypedLet === false);
+
+const planIdx = endpointContent.indexOf('planInvitationAcceptance(');
+const capacityReasonIdx = endpointContent.indexOf('capacityResult.reasonCode');
+assertCondition('74. planInvitationAcceptance antes de usar capacityResult.reasonCode', planIdx !== -1 && capacityReasonIdx !== -1 && planIdx < capacityReasonIdx);
+
+assertCondition('75. capacityResult com falha convertido em { resolved: false }', endpointContent.includes('capacityResult.success ? capacityResult.capacity : { resolved: false }'));
+
+assertCondition('76. ALREADY_MEMBER sem exigir capacityResult.success', endpointContent.includes("planResult.action === 'ALREADY_MEMBER'"));
+
+assertCondition('77. MEMBER_LIMIT_INVALID da política é preservado', endpointContent.includes("reasonCode = capacityResult.reasonCode;"));
+
+const alreadyMemberBlock = endpointContent.split("planResult.action === 'ALREADY_MEMBER'")[1].split("CREATE_MEMBERSHIP")[0];
+assertCondition('78. nenhuma escrita ocorre no ramo ALREADY_MEMBER', !alreadyMemberBlock.includes('t.set(') && !alreadyMemberBlock.includes('t.update('));
+
+const getMatches = txBody.match(/await t\.get\(/g) || [];
+const setMatches = txBody.match(/t\.set\(/g) || [];
+const updateMatches = txBody.match(/t\.update\(/g) || [];
+const deleteMatches = txBody.match(/t\.delete\(/g) || [];
+assertCondition('80. pelo menos uma leitura e uma escrita transacional', getMatches.length > 0 && (setMatches.length + updateMatches.length + deleteMatches.length) > 0);
+
+const acceptedByMatches = endpointContent.match(/inviteUpdates\.acceptedBy =/g) || [];
+assertCondition('81. acceptedBy atribuído exatamente uma vez', acceptedByMatches.length === 1);
 
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
