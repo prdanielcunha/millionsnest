@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation, Trans } from "react-i18next";
 import { Navbar } from "../components/Navbar.js";
@@ -51,8 +51,8 @@ const FAQItem = ({ question, answer }: { question: string, answer: string }) => 
 export function MusicScaleLanding() {
   const { t } = useTranslation(["musicscale", "common"]);
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
-  const { organization, subscription, currentUserPerms } = useOrganization();
+  const { user, profile, loading: authLoading } = useAuth();
+  const { organization, subscription, currentUserPerms, loadingOrg } = useOrganization();
   const [activeBentoCard, setActiveBentoCard] = useState<number | null>(null);
 
   useEffect(() => {
@@ -60,6 +60,23 @@ export function MusicScaleLanding() {
   }, []);
 
   const isSubscribed = isSubscriptionValid(subscription);
+  const isGlobalAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(profile?.systemRole || 'user');
+  const hasAccess = isSubscribed || isGlobalAdmin;
+
+  if (authLoading || (user && loadingOrg)) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 rounded-full border-2 border-[#2B85EB]/30 border-t-[#2B85EB] animate-spin" aria-live="polite" />
+          <span className="text-[#A1A1AA] text-sm font-medium">{t('common:loadingDashboard', 'Abrindo seu painel...')}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && hasAccess) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleLaunch = () => {
     if (!user || !profile || !organization) {

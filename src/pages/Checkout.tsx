@@ -25,10 +25,9 @@ interface NormalizedProduct {
 }
 
 export default function Checkout() {
-  const { user } = useAuth();
+  const { user, profile, canonicalContext, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const { t } = useTranslation(['checkout']);
-
+  const { t, i18n } = useTranslation(['checkout']);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [plans, setPlans] = useState<NormalizedProduct[]>([]);
@@ -47,10 +46,16 @@ export default function Checkout() {
   
   // Checkout Error State
   const [checkoutError, setCheckoutError] = useState('');
-  const [checkoutAction, setCheckoutAction] = useState<{ code: string, label: string } | null>(null);
+  const [checkoutAction, setCheckoutAction] = useState<{ code: string, label: string, url?: string } | null>(null);
+
+  const activeOrganizationId = canonicalContext?.activeOrganizationId 
+    || profile?.activeOrganizationId 
+    || profile?.primaryOrganizationId 
+    || profile?.organizationId 
+    || null;
 
   useEffect(() => {
-    if (!user) {
+    if (!authLoading && !user) {
       navigate('/login');
       return;
     }
@@ -196,12 +201,21 @@ export default function Checkout() {
       setAppliedCoupon(null);
       setCouponError('');
   };
-
   const handleCheckout = async () => {
     if (!user || checkoutLoading) return;
     
     setCheckoutError('');
     setCheckoutAction(null);
+
+    if (!activeOrganizationId) {
+       setCheckoutError(t('no_active_org', 'Nenhuma organização ativa foi encontrada.'));
+       setCheckoutAction({
+         code: 'no_active_org',
+         label: t('back_to_dashboard', 'Voltar ao painel'),
+         url: '/dashboard'
+       });
+       return;
+    }
 
     if (!selectedPlanLookup) {
         setCheckoutError(t('error_plan', 'Por favor, selecione um plano principal.'));
@@ -217,33 +231,87 @@ export default function Checkout() {
           'Authorization': `Bearer ${await user.getIdToken(true)}`
         },
         body: JSON.stringify({
-          userId: user.uid,
-          email: user.email,
+          organizationId: activeOrganizationId,
           planLookupKey: selectedPlanLookup,
           addonLookupKeys: selectedAddonsLookup,
           promoCodeId: appliedCoupon ? appliedCoupon.id : undefined
         })
       });
+
       if (res.status === 401) {
         setCheckoutError('Sua sessão expirou. Atualize a página e tente novamente.');
         setCheckoutLoading(false);
         return;
       }
+
       const data = await res.json();
+      const { checkoutCreated, decision, reason, managementUrl, accessUntil, repairRequired, error, code, url } = data;
       
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        setCheckoutError(data.error || 'Erro ao iniciar checkout');
-        if (data.code === 'ACTIVE_SUBSCRIPTION_EXISTS' || data.code === 'SUBSCRIPTION_CANCEL_SCHEDULED' || data.code === 'SUBSCRIPTION_REQUIRES_PAYMENT') {
-          setCheckoutAction({
-            code: data.code,
-            label: 'Acessar Portal do Cliente'
-          });
+      const isBlocked = 
+        !res.ok || 
+        checkoutCreated === false || 
+        ['block_duplicate', 'resume_existing', 'regularize_existing'].includes(decision) || 
+        repairRequired === true ||
+        (reason && ['active_subscription_exists', 'cancel_scheduled', 'canceled_with_residual_access', 'past_due', 'unpaid', 'incomplete', 'paused', 'multiple_subscriptions_conflict', 'unknown_subscription_status'].includes(reason)) ||
+        ['ACTIVE_SUBSCRIPTION_EXISTS', 'SUBSCRIPTION_CANCEL_SCHEDULED', 'SUBSCRIPTION_REQUIRES_PAYMENT'].includes(code);
+
+      if (isBlocked) {
+        let errorMessage = error || t('checkout_error', 'Erro ao iniciar checkout');
+        let actionLabel = '';
+        
+        const ALLOWED_MANAGEMENT_PATHS = ['/dashboard', '/dashboard/billing', '/dashboard/overview'];
+        let actionUrl = '/dashboard/billing';
+        if (managementUrl) {
+            try {
+                const tempUrl = new URL(managementUrl, window.location.origin);
+                if (ALLOWED_MANAGEMENT_PATHS.includes(tempUrl.pathname)) {
+                    actionUrl = tempUrl.pathname;
+                }
+            } catch (e) {
+                // Ignore invalid url, use fallback
+            }
         }
+
+        if (decision === 'block_duplicate' || reason === 'active_subscription_exists') {
+           errorMessage = t('active_subscription_msg', 'Você já possui uma assinatura ativa.');
+           actionLabel = t('manage_subscription', 'Gerenciar assinatura');
+        } else if (decision === 'resume_existing' || reason === 'cancel_scheduled' || reason === 'canceled_with_residual_access') {
+           errorMessage = accessUntil ? t('subscription_active_until', 'Sua assinatura continua ativa até {{date}}').replace('{{date}}', new Date(accessUntil).toLocaleDateString(i18n.language || 'pt-BR')) : t('subscription_active_until_unknown', 'Sua assinatura continua ativa.');
+           actionLabel = t('manage_subscription', 'Gerenciar assinatura');
+        } else if (decision === 'regularize_existing' || ['past_due', 'unpaid', 'incomplete', 'paused'].includes(reason)) {
+           errorMessage = t('payment_issue_msg', 'Há uma pendência de pagamento na sua assinatura.');
+           actionLabel = t('resolve_payment', 'Regularizar pagamento');
+        } else if (reason === 'multiple_subscriptions_conflict' || repairRequired) {
+           errorMessage = t('inconsistency_msg', 'Encontramos uma inconsistência na assinatura.');
+           actionLabel = t('update_status', 'Atualize o status da assinatura');
+        } else if (code === 'ACTIVE_SUBSCRIPTION_EXISTS' || code === 'SUBSCRIPTION_CANCEL_SCHEDULED' || code === 'SUBSCRIPTION_REQUIRES_PAYMENT') {
+           actionLabel = t('portal_access', 'Acessar Portal do Cliente');
+        }
+
+        setCheckoutError(errorMessage);
+        if (actionLabel) {
+           setCheckoutAction({
+             code: decision || code || 'error',
+             label: actionLabel,
+             url: actionUrl
+           });
+        }
+      } else if (url && res.ok && checkoutCreated !== false) {
+          try {
+             const checkoutUrlObj = new URL(url);
+             if (checkoutUrlObj.protocol === 'https:' && (checkoutUrlObj.hostname === 'checkout.stripe.com' || checkoutUrlObj.hostname.endsWith('stripe.com'))) {
+                 window.location.href = url;
+             } else {
+                 setCheckoutError(t('invalid_checkout_url', 'URL de checkout inválida.'));
+             }
+          } catch(e) {
+             setCheckoutError(t('invalid_checkout_url', 'URL de checkout inválida.'));
+          }
+      } else {
+        setCheckoutError(error || t('checkout_error', 'Erro ao iniciar checkout'));
       }
     } catch (e: any) {
-      setCheckoutError("Erro ao iniciar checkout. Tente novamente.");
+      setCheckoutError(t('checkout_error_retry', 'Erro ao iniciar checkout. Tente novamente.'));
     } finally {
       setCheckoutLoading(false);
     }
@@ -680,7 +748,7 @@ export default function Checkout() {
                            </div>
                            {checkoutAction && (
                                <button
-                                   onClick={() => navigate('/dashboard/billing')}
+                                   onClick={() => navigate(checkoutAction.url || '/dashboard/billing')}
                                    className="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 py-2 px-3 rounded-lg transition-colors font-semibold self-start"
                                >
                                    {checkoutAction.label}
@@ -695,7 +763,10 @@ export default function Checkout() {
                        className="w-full py-4 px-6 bg-[#E8ECEF] hover:bg-white text-black transition-all rounded-2xl font-semibold text-lg flex items-center justify-center gap-2 shadow-lg shadow-white/5 disabled:opacity-50 disabled:cursor-not-allowed group"
                     >
                        {checkoutLoading ? (
-                           <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                           <>
+                               <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                               {t('processing', 'Processando...')}
+                           </>
                        ) : (
                            <>
                               {t('cta', 'Iniciar Teste de 7 Dias')} 
