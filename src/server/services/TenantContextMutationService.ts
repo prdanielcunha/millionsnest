@@ -1,9 +1,10 @@
+import { planBootstrap, BootstrapDecisionCode } from './TenantBootstrapPlanner.js';
 import { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 
-const db = getFirestore();
+
 
 // Helper to verify Firebase ID token
 async function verifyToken(req: Request): Promise<string | null> {
@@ -22,154 +23,300 @@ async function verifyToken(req: Request): Promise<string | null> {
 
 // ... other implementations
 
+
+
 export async function bootstrapUserContext(req: Request, res: Response) {
   const uid = await verifyToken(req);
   if (!uid) {
     return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
   }
 
+  const db = getFirestore();
+  const auth = getAuth();
+
   try {
-    const userRef = db.collection('users').doc(uid);
-    const userSnap = await userRef.get();
-    let userData = userSnap.data();
+    const result = await db.runTransaction(async (t) => {
+      const userRef = db.collection('users').doc(uid);
+      const userSnap = await t.get(userRef);
+      let userData = userSnap.data();
+      const userEmail = userData?.email || (await auth.getUser(uid)).email || null;
 
-    // Create minimal profile if not exists
-    if (!userSnap.exists) {
-      const userRecord = await getAuth().getUser(uid);
-      userData = {
-        uid,
-        email: userRecord.email || null,
-        displayName: userRecord.displayName || null,
-        photoURL: userRecord.photoURL || null,
-        products: [],
-        organizations: [],
-        subscriptionStatus: 'none',
-        createdAt: FieldValue.serverTimestamp(),
-        lastLoginAt: FieldValue.serverTimestamp()
+      // Check lock
+      const lockRef = db.collection('tenantBootstrapLocks').doc(uid);
+      const lockSnap = await t.get(lockRef);
+      const lockData = lockSnap.data();
+      
+      let lockExists = lockSnap.exists;
+      let lockCompleted = lockExists && lockData?.status === 'completed';
+      let lockOrgId = lockData?.organizationId;
+      let lockOrgExists = false;
+      let lockMemberExists = false;
+
+      if (lockCompleted && lockOrgId) {
+        const checkOrg = await t.get(db.collection('organizations').doc(lockOrgId));
+        lockOrgExists = checkOrg.exists;
+        const checkMem = await t.get(db.collection(`organizations/${lockOrgId}/members`).doc(uid));
+        lockMemberExists = checkMem.exists;
+      }
+
+      const lockStatus = {
+        exists: lockExists,
+        completed: lockCompleted,
+        organizationId: lockOrgId,
+        orgExists: lockOrgExists,
+        memberExists: lockMemberExists
       };
-      await userRef.set(userData);
-    } else {
-      await userRef.update({ lastLoginAt: FieldValue.serverTimestamp() });
-      userData = (await userRef.get()).data();
-    }
 
-    // 5. Query active canonical memberships
-    const membersQuery = await db.collectionGroup('members')
-      .where('uid', '==', uid)
-      .get();
-      
-    const activeMemberships = membersQuery.docs.filter(d => d.ref.path.includes('/organizations/') && !d.ref.path.includes('organization_members'));
+      // Get Canonical Memberships
+      // We can't query collectionGroups inside transaction, so we must rely on what we can. 
+      // Actually, we CAN query but not with transactions.
+      // Wait, Firestore transactions in Node SDK allow queries if they are read before writes.
+      const membersQuery = await t.get(
+        db.collectionGroup('members').where('uid', '==', uid)
+      );
+      const activeCanonical = membersQuery.docs
+        .filter(d => d.ref.path.includes('/organizations/') && !d.ref.path.includes('organization_members'))
+        .map(d => ({ ...d.data(), organizationId: d.ref.parent.parent!.id } as any));
 
-    if (activeMemberships.length > 0) {
-       const firstMember = activeMemberships[0];
-       const orgId = firstMember.ref.parent.parent?.id;
-       if (!orgId) throw new Error("Invalid membership path");
-       
-       return res.status(200).json({
-         success: true,
-         reusedExistingContext: true,
-         activeOrganizationId: userData?.activeOrganizationId || orgId,
-         primaryOrganizationId: userData?.primaryOrganizationId || orgId,
-         organizationId: userData?.organizationId || orgId,
-         reasonCode: 'EXISTING_CONTEXT_REUSED'
-       });
-    }
+      // Get Legacy Memberships
+      const legacyQuery = await t.get(
+        db.collection('organization_members').where('uid', '==', uid)
+      );
+      const legacyMemberships = legacyQuery.docs.map(d => d.data() as any);
 
-    // 8. Check for legacy memberships
-    const legacyMembersQuery = await db.collection('organization_members')
-      .where('uid', '==', uid)
-      .get();
-      
-    if (legacyMembersQuery.docs.length === 1) {
-       const legacyDoc = legacyMembersQuery.docs[0];
-       const legacyData = legacyDoc.data();
-       const orgId = legacyData.organizationId;
-       
-       if (orgId) {
-          // Repair
-          const newMemberRef = db.doc(`organizations/${orgId}/members/${uid}`);
-          await newMemberRef.set({
-             ...legacyData,
-             role: legacyData.role || 'member',
-             organizationRole: legacyData.organizationRole || legacyData.role || 'member'
-          }, { merge: true });
-          
-          await db.collection(`organizations/${orgId}/audit_logs`).add({
-            action: 'tenant.bootstrap.legacy_membership_repaired',
-            actorUid: uid,
-            timestamp: FieldValue.serverTimestamp()
-          });
+      // Get Invites
+      const normalizedEmail = userEmail?.toLowerCase().trim();
+      let pendingInvites: any[] = [];
+      if (normalizedEmail) {
+        // Can't do multiple where clauses easily with 'OR' in firestore, so just query by email
+        const invitesQuery = await t.get(
+          db.collectionGroup('invites').where('email', '==', normalizedEmail).where('status', '==', 'pending')
+        );
+        pendingInvites = invitesQuery.docs.map(d => ({ ...d.data(), id: d.id } as any));
+        
+        const invitesQuery2 = await t.get(
+          db.collectionGroup('invites').where('emailNormalized', '==', normalizedEmail).where('status', '==', 'pending')
+        );
+        pendingInvites.push(...invitesQuery2.docs.map(d => ({ ...d.data(), id: d.id } as any)));
+      }
 
-          return res.status(200).json({
-             success: true,
-             repairedLegacyMembership: true,
-             activeOrganizationId: orgId,
-             primaryOrganizationId: orgId,
-             organizationId: orgId,
-             reasonCode: 'LEGACY_REPAIRED'
-          });
-       }
-    }
+      const userContext = {
+        activeOrganizationId: userData?.activeOrganizationId,
+        primaryOrganizationId: userData?.primaryOrganizationId,
+        organizationId: userData?.organizationId,
+      };
 
-    // 9. If no membership and no pending invite (we assume no invite if they hit bootstrap without token)
-    const targetOrgRef = db.collection('organizations').doc();
-    const targetOrgId = targetOrgRef.id;
+      const decision = planBootstrap(
+        activeCanonical,
+        legacyMemberships,
+        pendingInvites,
+        userContext,
+        lockStatus,
+        userEmail
+      );
 
-    // Create organization
-    await targetOrgRef.set({
-      id: targetOrgId,
-      name: `Organização de ${userData?.displayName || userData?.email?.split('@')[0] || 'Usuário'}`,
-      slug: targetOrgId,
-      ownerUid: uid,
-      enabledApps: [], // Rule 10: Empty
-      subscriptionStatus: 'none',
-      status: 'active',
-      createdAt: FieldValue.serverTimestamp()
+      if (decision.code === BootstrapDecisionCode.INCONSISTENT_BOOTSTRAP_STATE) {
+        throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
+      }
+      if (decision.code === BootstrapDecisionCode.AMBIGUOUS_LEGACY_MEMBERSHIP) {
+        throw new Error('AMBIGUOUS_LEGACY_MEMBERSHIP');
+      }
+      if (decision.code === BootstrapDecisionCode.WAIT_FOR_INVITATION) {
+        throw new Error('INVITATION_PENDING');
+      }
+
+      // Action execution
+      if (decision.code === BootstrapDecisionCode.REUSE_BOOTSTRAP_LOCK || decision.code === BootstrapDecisionCode.REUSE_CANONICAL_MEMBERSHIP) {
+        const orgId = decision.organizationId!;
+        const updates: any = {
+          lastLoginAt: FieldValue.serverTimestamp(),
+          activeOrganizationId: orgId
+        };
+        if (!userData?.primaryOrganizationId) {
+          updates.primaryOrganizationId = orgId;
+        }
+        if (userData?.organizationId) {
+          updates.organizationId = orgId;
+        }
+        
+        if (!userSnap.exists) {
+           t.set(userRef, { uid, email: userEmail, displayName: null, photoURL: null, organizations: [], createdAt: FieldValue.serverTimestamp(), ...updates });
+        } else {
+           t.update(userRef, updates);
+        }
+
+        return {
+          status: 200,
+          payload: {
+            success: true,
+            reusedExistingContext: true,
+            activeOrganizationId: orgId,
+            primaryOrganizationId: updates.primaryOrganizationId || userData?.primaryOrganizationId || orgId,
+            organizationId: updates.organizationId || userData?.organizationId,
+            reasonCode: decision.reasonCode
+          }
+        };
+      }
+
+      if (decision.code === BootstrapDecisionCode.REPAIR_LEGACY_MEMBERSHIP) {
+        const orgId = decision.organizationId!;
+        const legacyData = legacyMemberships.find(m => m.organizationId === orgId);
+        
+        const newMemberRef = db.doc(`organizations/${orgId}/members/${uid}`);
+        t.set(newMemberRef, {
+           ...legacyData,
+           uid,
+           organizationId: orgId,
+           role: legacyData?.role || 'member',
+           organizationRole: legacyData?.organizationRole || legacyData?.role || 'member',
+           status: 'active'
+        }, { merge: true });
+
+        const auditRef = db.collection(`organizations/${orgId}/audit_logs`).doc();
+        t.set(auditRef, {
+          action: 'tenant.bootstrap.legacy_membership_repaired',
+          actorUid: uid,
+          timestamp: FieldValue.serverTimestamp()
+        });
+
+        const updates: any = {
+          lastLoginAt: FieldValue.serverTimestamp(),
+          activeOrganizationId: orgId
+        };
+        if (!userData?.primaryOrganizationId) {
+          updates.primaryOrganizationId = orgId;
+        }
+        if (userData?.organizationId) {
+          updates.organizationId = orgId;
+        }
+
+        if (!userSnap.exists) {
+           t.set(userRef, { uid, email: userEmail, displayName: null, photoURL: null, organizations: [], createdAt: FieldValue.serverTimestamp(), ...updates });
+        } else {
+           t.update(userRef, updates);
+        }
+
+        return {
+          status: 200,
+          payload: {
+            success: true,
+            repairedLegacyMembership: true,
+            activeOrganizationId: orgId,
+            primaryOrganizationId: updates.primaryOrganizationId || userData?.primaryOrganizationId || orgId,
+            organizationId: updates.organizationId || userData?.organizationId,
+            reasonCode: decision.reasonCode
+          }
+        };
+      }
+
+      if (decision.code === BootstrapDecisionCode.CREATE_PERSONAL_ORGANIZATION) {
+        const targetOrgRef = db.collection('organizations').doc();
+        const targetOrgId = targetOrgRef.id;
+
+        t.set(targetOrgRef, {
+          id: targetOrgId,
+          name: 'My Workspace',
+          slug: targetOrgId,
+          ownerUid: uid,
+          status: 'active',
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
+        });
+
+        const memberRef = db.doc(`organizations/${targetOrgId}/members/${uid}`);
+        t.set(memberRef, {
+          uid,
+          organizationId: targetOrgId,
+          role: 'owner',
+          organizationRole: 'owner',
+          status: 'active',
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
+        });
+
+        const legacyMemberRef = db.doc(`organization_members/${uid}_${targetOrgId}`);
+        t.set(legacyMemberRef, {
+          uid,
+          organizationId: targetOrgId,
+          role: 'owner',
+          organizationRole: 'owner',
+          status: 'active',
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
+        });
+
+        t.set(lockRef, {
+          uid,
+          organizationId: targetOrgId,
+          status: 'completed',
+          version: 1,
+          completedAt: FieldValue.serverTimestamp()
+        });
+
+        const auditRef = db.collection(`organizations/${targetOrgId}/audit_logs`).doc();
+        t.set(auditRef, {
+          action: 'tenant.bootstrap.personal_organization_created',
+          actorUid: uid,
+          timestamp: FieldValue.serverTimestamp()
+        });
+
+        const updates: any = {
+          lastLoginAt: FieldValue.serverTimestamp(),
+          activeOrganizationId: targetOrgId
+        };
+        if (!userData?.primaryOrganizationId) {
+          updates.primaryOrganizationId = targetOrgId;
+        }
+        if (userData?.organizationId || !userSnap.exists) {
+          updates.organizationId = targetOrgId;
+        }
+
+        if (!userSnap.exists) {
+           t.set(userRef, { 
+             uid, 
+             email: userEmail, 
+             displayName: null, 
+             photoURL: null, 
+             organizations: [targetOrgId], 
+             createdAt: FieldValue.serverTimestamp(), 
+             updatedAt: FieldValue.serverTimestamp(),
+             ...updates 
+           });
+        } else {
+           updates.organizations = FieldValue.arrayUnion(targetOrgId);
+           t.update(userRef, updates);
+        }
+
+        return {
+          status: 200,
+          payload: {
+            success: true,
+            createdOrganization: true,
+            activeOrganizationId: targetOrgId,
+            primaryOrganizationId: updates.primaryOrganizationId || userData?.primaryOrganizationId || targetOrgId,
+            organizationId: updates.organizationId || userData?.organizationId,
+            reasonCode: decision.reasonCode
+          }
+        };
+      }
+
+      throw new Error('UNKNOWN_DECISION');
     });
 
-    // Create canonical membership
-    const memberData = {
-      uid,
-      organizationId: targetOrgId,
-      role: 'owner',
-      organizationRole: 'owner',
-      createdAt: FieldValue.serverTimestamp()
-    };
-    await db.doc(`organizations/${targetOrgId}/members/${uid}`).set(memberData);
-
-    // Create legacy projection
-    await db.collection('organization_members').doc(`${uid}_${targetOrgId}`).set(memberData);
-
-    // Update user
-    await userRef.update({
-      organizationId: targetOrgId,
-      primaryOrganizationId: userData?.primaryOrganizationId || targetOrgId,
-      activeOrganizationId: targetOrgId,
-      organizations: FieldValue.arrayUnion(targetOrgId)
-    });
-    
-    await db.collection(`organizations/${targetOrgId}/audit_logs`).add({
-      action: 'tenant.bootstrap.completed',
-      actorUid: uid,
-      timestamp: FieldValue.serverTimestamp()
-    });
-
-    return res.status(200).json({
-      success: true,
-      createdOrganization: true,
-      activeOrganizationId: targetOrgId,
-      primaryOrganizationId: userData?.primaryOrganizationId || targetOrgId,
-      organizationId: targetOrgId,
-      reasonCode: 'CREATED_NEW_ORGANIZATION'
-    });
+    return res.status(result.status).json(result.payload);
 
   } catch (error: any) {
+    const reason = error.message;
+    if (reason === 'BOOTSTRAP_STATE_INCONSISTENT' || reason === 'AMBIGUOUS_LEGACY_MEMBERSHIP' || reason === 'INVITATION_PENDING') {
+      return res.status(409).json({ success: false, reasonCode: reason });
+    }
     console.error('Bootstrap error:', error);
     return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
   }
 }
 
 export async function acceptInvitation(req: Request, res: Response) {
+  const db = getFirestore();
   const uid = await verifyToken(req);
   if (!uid) {
     return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
@@ -353,6 +500,7 @@ export async function acceptInvitation(req: Request, res: Response) {
 }
 
 export async function setActiveOrganization(req: Request, res: Response) {
+  const db = getFirestore();
   const uid = await verifyToken(req);
   if (!uid) {
     return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
