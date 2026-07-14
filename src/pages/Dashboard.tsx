@@ -403,7 +403,6 @@ export function Dashboard() {
     }
   };
 
-  const autoSyncAttemptedRef = useRef<Set<string>>(new Set());
   const requestSequenceRef = useRef<number>(0);
   const currentActiveOrgIdRef = useRef<string | null>(null);
 
@@ -421,14 +420,6 @@ export function Dashboard() {
          setSubscription(currentSubData as any);
       } else {
          setSubscription(null);
-      }
-
-      if (!autoSyncAttemptedRef.current.has(orgId)) {
-         if (!currentSubData || currentSubData.status === 'trialing') {
-            autoSyncAttemptedRef.current.add(orgId);
-            syncSubscriptionWithStripe(orgId);
-            return; 
-         }
       }
 
       let currentOrgData: any = null;
@@ -543,6 +534,7 @@ export function Dashboard() {
     } finally {
       if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
         setLoadingSub(false);
+        window.performance?.mark?.('dashboard_interactive');
       }
     }
   };

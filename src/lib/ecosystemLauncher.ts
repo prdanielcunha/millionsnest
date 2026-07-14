@@ -24,9 +24,8 @@ export async function openEcosystemModule(
   console.debug('[EcosystemLaunch] Starting module handoff launch', { moduleKey, uid: user.uid, orgId: organization.id });
   
   let attempts = 0;
-  const maxAttempts = 5;
-  const retryDelayMs = 3000;
-
+  const maxAttempts = 1;
+  const retryDelayMs = 1000;
   let isSupportMode = false;
   try {
      const supportStr = localStorage.getItem('mn_support_session');
@@ -39,15 +38,30 @@ export async function openEcosystemModule(
   } catch (e) {}
 
   const attemptHandoff = async (): Promise<any> => {
+    window.performance?.mark?.('handoff_started');
     const idToken = await auth.currentUser!.getIdToken();
-    const response = await fetch('/api/ecosystem/create-handoff', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`
-        },
-        body: JSON.stringify({ appId: moduleKey, orgId: organization.id, supportMode: isSupportMode })
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    let response;
+    try {
+      response = await fetch('/api/ecosystem/create-handoff', {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({ appId: moduleKey, orgId: organization.id, supportMode: isSupportMode }),
+          signal: controller.signal
+      });
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new Error('Tempo limite esgotado. Verifique sua conexão e tente novamente.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
     
     if (!response.ok) {
         const errorData = await response.json();
@@ -58,13 +72,6 @@ export async function openEcosystemModule(
                 console.warn(`[EcosystemLaunch] Not ready yet, retrying in ${retryDelayMs}ms... (Attempt ${attempts}/${maxAttempts})`);
                 await new Promise(resolve => setTimeout(resolve, retryDelayMs));
                 
-                // Triggers a server-side sync request just in case
-                await fetch('/api/v1/billing/sync', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: user.uid })
-                }).catch(() => {});
-                
                 return attemptHandoff();
             }
             throw new Error('Não encontramos uma assinatura ativa para esta organização. Se você acabou de assinar, estamos finalizando a ativação. Tente novamente em alguns segundos.');
@@ -73,6 +80,7 @@ export async function openEcosystemModule(
         throw new Error(errorData.error || 'Falha ao obter contexto de handoff');
     }
     
+    window.performance?.mark?.('handoff_completed');
     return response.json();
   };
 

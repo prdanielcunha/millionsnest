@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const switchOrganization = async (orgId: string) => {
     if (!user || !profile) return;
     try {
-      const idToken = await user.getIdToken(true);
+      const idToken = await user.getIdToken();
       const res = await fetch('/api/v1/user/active-organization', {
          method: 'POST',
          headers: {
@@ -111,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             let mergeData: any = { lastLoginAt: serverTimestamp() };
             
             try {
-              const idToken = await currentUser.getIdToken(true);
+              const idToken = await currentUser.getIdToken();
               const res = await fetch('/api/user/organization-context', {
                 headers: { 'Authorization': `Bearer ${idToken}` }
               });
@@ -133,16 +133,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
 
             // Automatic promotion by email and localStorage invites removed per security audit P0-A
-
-            await setDoc(userRef, sanitizeForFirestore(mergeData), { merge: true });
+            setDoc(userRef, sanitizeForFirestore(mergeData), { merge: true }).catch(err => {
+               console.error("Falha silenciosa ao atualizar lastLoginAt:", err);
+            });
             
             const updatedProfile = { ...userData, lastLoginAt: new Date() };
             setProfile(updatedProfile);
             localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
             
-            analytics.track('login', {
-              userId: currentUser.uid,
-              organizationId: updatedProfile.activeOrganizationId || updatedProfile.organizationId
+            // Fire and forget analytics
+            Promise.resolve().then(() => {
+              analytics.track('login', {
+                userId: currentUser.uid,
+                organizationId: updatedProfile.activeOrganizationId || updatedProfile.organizationId
+              });
             });
           } else {
             // New user without profile
@@ -171,9 +175,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                          setProfile(newProfileData);
                          localStorage.setItem('mn_user_profile', JSON.stringify(newProfileData));
                          
-                         analytics.track('signup', {
-                           userId: currentUser.uid,
-                           organizationId: newProfileData.activeOrganizationId
+                         Promise.resolve().then(() => {
+                           analytics.track('signup', {
+                             userId: currentUser.uid,
+                             organizationId: newProfileData.activeOrganizationId
+                           });
                          });
                       }
                    }
@@ -196,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       setLoading(false);
+      window.performance?.mark?.('auth_restored');
     });
 
     return unsubscribe;
