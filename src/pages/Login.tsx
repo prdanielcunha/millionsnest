@@ -5,6 +5,7 @@ import { auth, googleProvider } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
+import { parseInvitationRedirectPath } from "../lib/InvitationRedirectPolicy.js";
 import { useTranslation } from "react-i18next";
 import { MillionsNestLogo } from "../components/MillionsNestLogo.js";
 
@@ -27,14 +28,12 @@ export function Login() {
       // Check for invite redirect first
       const inviteRedirect = sessionStorage.getItem('mn_invite_redirect');
       if (inviteRedirect && typeof inviteRedirect === 'string') {
-        try {
-          const url = new URL(inviteRedirect, window.location.origin);
-          if (url.origin === window.location.origin && url.pathname.startsWith('/join')) {
-            navigate(url.pathname + url.search);
-            return;
-          }
-        } catch (e) {
-          // Invalid URL, ignore
+        const parsed = parseInvitationRedirectPath(inviteRedirect);
+        if (parsed.valid) {
+          navigate(parsed.data.path);
+          return;
+        } else {
+          sessionStorage.removeItem('mn_invite_redirect');
         }
       }
       

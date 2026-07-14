@@ -110,6 +110,33 @@ async function runTests() {
   assertCondition('66. arquivo report.txt não existe', !fs.existsSync(path.join(rootDir, 'report.txt')));
   assertCondition('67. nenhum relatório de validação proibido existe na raiz', prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
 
+  const loginContent = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/Login.tsx'), 'utf-8');
+  const authContextContent = fs.readFileSync(path.resolve(process.cwd(), 'src/contexts/AuthContext.tsx'), 'utf-8');
+
+  assertCondition('68. Login importa InvitationRedirectPolicy', loginContent.includes('InvitationRedirectPolicy'));
+  assertCondition('69. AuthContext importa InvitationRedirectPolicy', authContextContent.includes('InvitationRedirectPolicy'));
+  assertCondition('70. Login usa parseInvitationRedirectPath', loginContent.includes('parseInvitationRedirectPath('));
+  assertCondition('71. AuthContext usa parseInvitationRedirectPath', authContextContent.includes('parseInvitationRedirectPath('));
+  assertCondition('72. Login não usa startsWith(\'/join\')', !loginContent.includes("startsWith('/join')"));
+  assertCondition('73. AuthContext não usa startsWith(\'/join\')', !authContextContent.includes("startsWith('/join')"));
+  assertCondition('74. Login não usa new URL', !loginContent.includes('new URL('));
+  assertCondition('75. Login não usa pathname.startsWith', !loginContent.includes('pathname.startsWith'));
+  assertCondition('76. AuthContext não usa pathname.startsWith', !authContextContent.includes('pathname.startsWith'));
+  assertCondition('77. Login remove redirect inválido', loginContent.includes('sessionStorage.removeItem(\'mn_invite_redirect\')') && loginContent.includes('} else {'));
+  assertCondition('78. AuthContext remove redirect inválido', authContextContent.includes('sessionStorage.removeItem(\'mn_invite_redirect\')') && authContextContent.includes('} else {'));
+
+  const joinContent = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/Join.tsx'), 'utf-8');
+  assertCondition('79. Join não foi modificado', joinContent.includes('InvitationJoinClientPolicy'));
+  assertCondition('80. InvitationRedirectPolicy não foi modificado', policyContent.includes('export type InvitationRedirectData'));
+
+  assertCondition('81. Nenhum parser duplicado permanece em Login', !loginContent.includes('window.location.origin') && !loginContent.includes('url.origin') && !loginContent.includes('url.pathname'));
+  assertCondition('82. Nenhum parser duplicado permanece em AuthContext', !authContextContent.includes('inviteRedirect.startsWith') && !authContextContent.includes('new URL'));
+
+  assertCondition('83. Nenhum any novo foi introduzido', !loginContent.includes(' as any ') && !authContextContent.includes(' as any '));
+  assertCondition('84. Nenhum as any foi introduzido', !loginContent.includes('as any') && !authContextContent.includes('as any'));
+  assertCondition('85. Nenhum unknown as foi introduzido', !loginContent.includes('unknown as') && !authContextContent.includes('unknown as'));
+  assertCondition('86. Nenhum arquivo proibido existe na raiz', prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
+
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exitCode = 1;

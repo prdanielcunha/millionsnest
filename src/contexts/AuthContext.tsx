@@ -6,6 +6,7 @@ import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.
 import { analytics } from "../lib/analytics.js";
 import { withTimeout } from "../lib/utils.js";
 import { sanitizeForFirestore } from "../lib/firestoreUtils.js";
+import { parseInvitationRedirectPath } from "../lib/InvitationRedirectPolicy.js";
 
 interface UserProfile {
   uid: string;
@@ -146,11 +147,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             // New user without profile
             const inviteRedirect = sessionStorage.getItem('mn_invite_redirect');
-            if (inviteRedirect && inviteRedirect.startsWith('/join')) {
+            const parsedRedirect = inviteRedirect ? parseInvitationRedirectPath(inviteRedirect) : { valid: false as const, reasonCode: 'MISSING_VALUE' as const };
+            
+            if (parsedRedirect.valid) {
                 // Let Login/App handle the redirect to /join
                 // Do not bootstrap automatically. Just set loading false and return.
                 setProfile(null); // Or minimal profile if needed, but null forces them to stay in the flow
             } else {
+                if (inviteRedirect) {
+                    sessionStorage.removeItem('mn_invite_redirect');
+                }
                 try {
                    const idToken = await currentUser.getIdToken(true);
                    const bootRes = await fetch('/api/v1/onboarding/bootstrap', {
