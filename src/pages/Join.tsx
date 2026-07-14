@@ -6,11 +6,11 @@ import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw } from 'lucide-re
 import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
 import {
   InvitationJoinLanguage,
-  InvitationJoinFailureReason,
   normalizeInvitationJoinLanguage,
   parseInvitationJoinPayload,
   getInvitationJoinMessage,
-  getInvitationJoinSuccessCopy
+  getInvitationJoinSuccessCopy,
+  getInvitationJoinUiCopy
 } from '../lib/InvitationJoinClientPolicy.js';
 
 type JoinStatus = 'validating' | 'success' | 'already_member' | 'error';
@@ -26,9 +26,11 @@ export function Join() {
   const [errorMessage, setErrorMessage] = useState<{ title: string; description: string; retryable: boolean } | null>(null);
   const [inviteData, setInviteData] = useState<{ organizationName: string } | null>(null);
   
-  const requestFiredRef = useRef(false);
+  const automaticAttemptKeyRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const attemptVersionRef = useRef(0);
+  const isActiveRef = useRef(false);
 
   const getLanguage = (): InvitationJoinLanguage => {
     return normalizeInvitationJoinLanguage(document.documentElement.lang || navigator.language);
@@ -43,47 +45,79 @@ export function Join() {
       return;
     }
 
-    if (requestFiredRef.current) return;
-    requestFiredRef.current = true;
+    const currentKey = `${user.uid}:${orgId}:${token}`;
+    if (automaticAttemptKeyRef.current === currentKey) {
+      return;
+    }
+    
+    automaticAttemptKeyRef.current = currentKey;
 
-    validateAndAcceptInvite();
+    let disposed = false;
+    Promise.resolve().then(() => {
+      if (disposed) return;
+      validateAndAcceptInvite();
+    });
 
     return () => {
+      disposed = true;
+      attemptVersionRef.current += 1;
+      isActiveRef.current = false;
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
+      if (automaticAttemptKeyRef.current === currentKey) {
+        automaticAttemptKeyRef.current = null;
+      }
     };
   }, [user, authLoading, orgId, token, navigate]);
 
   const validateAndAcceptInvite = async () => {
+    if (isActiveRef.current) return;
+    isActiveRef.current = true;
+    attemptVersionRef.current += 1;
+    const currentVersion = attemptVersionRef.current;
+    
     const lang = getLanguage();
     
     if (!orgId) {
-      setStatus('error');
-      setErrorMessage(getInvitationJoinMessage('INVALID_RESPONSE', lang));
+      if (currentVersion === attemptVersionRef.current && (!abortControllerRef.current?.signal.aborted)) {
+        setStatus('error');
+        setErrorMessage(getInvitationJoinMessage('INVALID_RESPONSE', lang));
+        isActiveRef.current = false;
+      }
       return;
     }
 
-    const trimmedToken = token?.trim() || '';
-    if (!trimmedToken) {
-      setStatus('error');
-      setErrorMessage(getInvitationJoinMessage('INVALID_TOKEN', lang));
+    if (!token || !token.trim()) {
+      if (currentVersion === attemptVersionRef.current && (!abortControllerRef.current?.signal.aborted)) {
+        setStatus('error');
+        setErrorMessage(getInvitationJoinMessage('INVALID_TOKEN', lang));
+        isActiveRef.current = false;
+      }
       return;
     }
 
     if (!user) {
-      setStatus('error');
-      setErrorMessage(getInvitationJoinMessage('UNAUTHENTICATED', lang));
+      if (currentVersion === attemptVersionRef.current && (!abortControllerRef.current?.signal.aborted)) {
+        setStatus('error');
+        setErrorMessage(getInvitationJoinMessage('UNAUTHENTICATED', lang));
+        isActiveRef.current = false;
+      }
       return;
     }
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     abortControllerRef.current = new AbortController();
+    const currentSignal = abortControllerRef.current.signal;
 
     try {
       const idToken = await user.getIdToken();
+      if (currentVersion !== attemptVersionRef.current || currentSignal.aborted) return;
       
       const res = await fetch('/api/v1/invitations/accept', {
         method: 'POST',
@@ -91,48 +125,53 @@ export function Join() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ token: trimmedToken }),
-        signal: abortControllerRef.current.signal
+        body: JSON.stringify({ token }),
+        signal: currentSignal
       });
+      if (currentVersion !== attemptVersionRef.current || currentSignal.aborted) return;
       
       const rawData = await res.json().catch(() => null);
+      if (currentVersion !== attemptVersionRef.current || currentSignal.aborted) return;
+
       const parsed = parseInvitationJoinPayload(rawData);
       
-      if (parsed.success) {
-        setInviteData({ organizationName: parsed.organizationName });
-        setStatus(parsed.alreadyMember ? 'already_member' : 'success');
-        sessionStorage.removeItem('mn_invite_redirect');
-        
-        timeoutRef.current = setTimeout(() => {
-          window.location.href = '/dashboard';
-        }, 2500);
-      } else {
+      if (!parsed.success) {
         setStatus('error');
-        setErrorMessage(getInvitationJoinMessage(parsed.reasonCode as InvitationJoinFailureReason, lang));
+        setErrorMessage(getInvitationJoinMessage(parsed.reasonCode, lang));
+        return;
       }
+      
+      setInviteData({ organizationName: parsed.organizationName });
+      setStatus(parsed.alreadyMember ? 'already_member' : 'success');
+      sessionStorage.removeItem('mn_invite_redirect');
+      
+      timeoutRef.current = setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 2500);
     } catch (e: unknown) {
+      if (currentVersion !== attemptVersionRef.current || currentSignal.aborted) return;
+
       if (e instanceof Error && e.name === 'AbortError') {
         return;
       }
       setStatus('error');
       setErrorMessage(getInvitationJoinMessage('NETWORK_ERROR', lang));
+    } finally {
+      if (currentVersion === attemptVersionRef.current) {
+        isActiveRef.current = false;
+      }
     }
   };
 
   const handleRetry = () => {
+    if (isActiveRef.current || !errorMessage?.retryable) return;
     setStatus('validating');
     setErrorMessage(null);
-    requestFiredRef.current = true;
     validateAndAcceptInvite();
   };
 
   const lang = getLanguage();
-  const uiTexts = {
-    pt: { validating: 'Validando convite...', wait: 'Por favor, aguarde um momento.', retry: 'Tentar novamente', dashboard: 'Ir para o meu Painel' },
-    en: { validating: 'Validating invitation...', wait: 'Please wait a moment.', retry: 'Try again', dashboard: 'Go to my Dashboard' },
-    es: { validating: 'Validando invitación...', wait: 'Por favor, espera un momento.', retry: 'Intentar de nuevo', dashboard: 'Ir a mi Panel' }
-  };
-  const t = uiTexts[lang];
+  const t = getInvitationJoinUiCopy(lang);
 
   return (
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4">
@@ -152,8 +191,8 @@ export function Join() {
         {status === 'validating' && (
           <div className="flex flex-col items-center py-8">
             <Loader2 className="w-12 h-12 text-[#2B85EB] animate-spin mb-4" />
-            <h2 className="text-[#F5F7FA] font-semibold text-lg">{t.validating}</h2>
-            <p className="text-[#A0A7B5] text-sm mt-2">{t.wait}</p>
+            <h2 className="text-[#F5F7FA] font-semibold text-lg">{t.validatingTitle}</h2>
+            <p className="text-[#A0A7B5] text-sm mt-2">{t.validatingDescription}</p>
           </div>
         )}
 
@@ -189,17 +228,17 @@ export function Join() {
             {errorMessage.retryable ? (
               <button 
                 onClick={handleRetry}
-                disabled={status === 'validating'}
+                disabled={isActiveRef.current}
                 className="w-full py-3 bg-[#2B85EB] text-white text-sm font-semibold rounded-xl hover:bg-[#2B85EB]/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <RefreshCw className="w-4 h-4" /> {t.retry}
+                <RefreshCw className="w-4 h-4" /> {t.retryLabel}
               </button>
             ) : (
               <Link 
                 to="/dashboard"
                 className="w-full py-3 bg-white/5 text-[#F5F7FA] text-sm font-semibold rounded-xl hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
               >
-                {t.dashboard} <ArrowRight className="w-4 h-4" />
+                {t.dashboardLabel} <ArrowRight className="w-4 h-4" />
               </Link>
             )}
           </div>

@@ -48,6 +48,19 @@ export type InvitationJoinFailurePayload = {
   reasonCode: InvitationJoinFailureReason;
 };
 
+export function isInvitationJoinFailureReason(value: unknown): value is InvitationJoinFailureReason {
+  if (typeof value !== 'string') return false;
+  const reasonsMap: Record<string, boolean> = {
+    UNAUTHENTICATED: true, INVALID_TOKEN: true, AUTHENTICATED_EMAIL_REQUIRED: true, INVALID_INVITE_ROLE: true,
+    INVITE_IDENTITY_MISMATCH: true, INVITE_NOT_FOUND: true, ORGANIZATION_NOT_FOUND: true, ORGANIZATION_INACTIVE: true,
+    INVITE_STATE_INCONSISTENT: true, INVITE_REVOKED: true, INVITE_EXPIRED: true, INVITE_MAX_USES_REACHED: true,
+    MEMBERSHIP_INACTIVE: true, MEMBERSHIP_STATE_INCONSISTENT: true, INVITE_ALREADY_CONSUMED: true,
+    MEMBER_LIMIT_UNAVAILABLE: true, MEMBER_LIMIT_INVALID: true, MEMBER_LIMIT_REACHED: true,
+    INTERNAL_ERROR: true, NETWORK_ERROR: true, INVALID_RESPONSE: true
+  };
+  return reasonsMap[value] === true;
+}
+
 export function parseInvitationJoinPayload(value: unknown): InvitationJoinSuccessPayload | InvitationJoinFailurePayload {
   if (!value || typeof value !== 'object') {
     return { success: false, reasonCode: 'INVALID_RESPONSE' };
@@ -67,24 +80,28 @@ export function parseInvitationJoinPayload(value: unknown): InvitationJoinSucces
     if (typeof record.alreadyMember !== 'boolean') return { success: false, reasonCode: 'INVALID_RESPONSE' };
     if (record.legacyTokenMigrated !== false) return { success: false, reasonCode: 'INVALID_RESPONSE' };
 
-    if (record.alreadyMember === true && record.reasonCode !== 'ALREADY_MEMBER') return { success: false, reasonCode: 'INVALID_RESPONSE' };
-    if (record.alreadyMember === false && record.reasonCode !== 'INVITATION_CAN_BE_ACCEPTED') return { success: false, reasonCode: 'INVALID_RESPONSE' };
+    const rawReason = record.reasonCode;
+    if (record.alreadyMember === true && rawReason !== 'ALREADY_MEMBER') return { success: false, reasonCode: 'INVALID_RESPONSE' };
+    if (record.alreadyMember === false && rawReason !== 'INVITATION_CAN_BE_ACCEPTED') return { success: false, reasonCode: 'INVALID_RESPONSE' };
 
-    return record as unknown as InvitationJoinSuccessPayload;
+    const finalReason = rawReason === 'ALREADY_MEMBER' ? 'ALREADY_MEMBER' : 'INVITATION_CAN_BE_ACCEPTED';
+
+    return {
+      success: true,
+      organizationId: record.organizationId,
+      organizationName: record.organizationName,
+      activeOrganizationId: record.activeOrganizationId,
+      membershipRole: record.membershipRole,
+      alreadyMember: record.alreadyMember,
+      legacyTokenMigrated: false,
+      reasonCode: finalReason
+    };
   }
 
   if (record.success === false) {
-    const validReasons: InvitationJoinFailureReason[] = [
-      'UNAUTHENTICATED', 'INVALID_TOKEN', 'AUTHENTICATED_EMAIL_REQUIRED', 'INVALID_INVITE_ROLE',
-      'INVITE_IDENTITY_MISMATCH', 'INVITE_NOT_FOUND', 'ORGANIZATION_NOT_FOUND', 'ORGANIZATION_INACTIVE',
-      'INVITE_STATE_INCONSISTENT', 'INVITE_REVOKED', 'INVITE_EXPIRED', 'INVITE_MAX_USES_REACHED',
-      'MEMBERSHIP_INACTIVE', 'MEMBERSHIP_STATE_INCONSISTENT', 'INVITE_ALREADY_CONSUMED',
-      'MEMBER_LIMIT_UNAVAILABLE', 'MEMBER_LIMIT_INVALID', 'MEMBER_LIMIT_REACHED',
-      'INTERNAL_ERROR', 'NETWORK_ERROR', 'INVALID_RESPONSE'
-    ];
-
-    if (typeof record.reasonCode === 'string' && validReasons.includes(record.reasonCode as InvitationJoinFailureReason)) {
-      return { success: false, reasonCode: record.reasonCode as InvitationJoinFailureReason };
+    const rawReason = record.reasonCode;
+    if (isInvitationJoinFailureReason(rawReason)) {
+      return { success: false, reasonCode: rawReason };
     }
     
     return { success: false, reasonCode: 'INVALID_RESPONSE' };
@@ -216,5 +233,37 @@ export function getInvitationJoinSuccessCopy(
       ? `Você já fazia parte de ${organizationName}.` 
       : `Você agora faz parte da organização ${organizationName}.`,
     redirectLabel: 'Redirecionando para o painel...'
+  };
+}
+
+export type InvitationJoinUiCopy = {
+  validatingTitle: string;
+  validatingDescription: string;
+  retryLabel: string;
+  dashboardLabel: string;
+};
+
+export function getInvitationJoinUiCopy(language: InvitationJoinLanguage): InvitationJoinUiCopy {
+  if (language === 'en') {
+    return {
+      validatingTitle: 'Validating invitation...',
+      validatingDescription: 'Please wait a moment.',
+      retryLabel: 'Try again',
+      dashboardLabel: 'Go to my Dashboard'
+    };
+  }
+  if (language === 'es') {
+    return {
+      validatingTitle: 'Validando invitación...',
+      validatingDescription: 'Por favor, espera un momento.',
+      retryLabel: 'Intentar de nuevo',
+      dashboardLabel: 'Ir a mi Panel'
+    };
+  }
+  return {
+    validatingTitle: 'Validando convite...',
+    validatingDescription: 'Por favor, aguarde um momento.',
+    retryLabel: 'Tentar novamente',
+    dashboardLabel: 'Ir para o meu Painel'
   };
 }
