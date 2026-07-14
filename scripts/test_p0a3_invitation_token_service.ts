@@ -71,7 +71,8 @@ function runTests() {
       assertCondition('17. token não contém padding =', !rawToken.includes('='));
       assertCondition('18. token contém somente base64url seguro', /^[A-Za-z0-9_-]+$/.test(rawToken));
       assertCondition('19. token passa em isValidInvitationRedirectToken', isValidInvitationRedirectToken(rawToken));
-      assertCondition('20. token preserva letras maiúsculas', /[A-Z]/.test(rawToken) || rawToken === Buffer.from(validUint8).toString('base64url')); // It depends on bytes, validUint8 of 1s is 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE'
+      const expectedToken = Buffer.from(validUint8).toString('base64url');
+      assertCondition('20. token preserva letras maiúsculas', /[A-Z]/.test(rawToken) && rawToken === expectedToken);
       assertCondition('21. token não possui espaço', !rawToken.includes(' '));
       assertCondition('22. token não possui barra', !rawToken.includes('/'));
       assertCondition('23. token não possui contrabarra', !rawToken.includes('\\'));
@@ -106,6 +107,11 @@ function runTests() {
       assertCondition('32. falhou', false);
     }
 
+    // 40-58 Code structure
+    const rootDir = process.cwd();
+    const servicePath = path.resolve(rootDir, 'src/server/services/InvitationTokenService.ts');
+    const content = fs.readFileSync(servicePath, 'utf8');
+
     // 35-39 No extra manipulation
     const entropy3 = new Uint8Array(32);
     entropy3.fill(1); // Produces AQEBAQ... which contains uppercase
@@ -115,17 +121,12 @@ function runTests() {
       const tHash = resUpper.material.tokenHash;
       assertCondition('35. token não é convertido para lowercase', raw !== raw.toLowerCase() && raw === Buffer.from(entropy3).toString('base64url'));
       assertCondition('36. token não sofre trim', raw === raw.trim());
-      assertCondition('37. hash não inclui organizationId', tHash === createHash('sha256').update(raw, 'utf8').digest('hex'));
-      assertCondition('38. hash não inclui e-mail', true);
-      assertCondition('39. hash não inclui timestamp', true);
+      assertCondition('37. hash não inclui organizationId', !content.includes('organizationId') && tHash === createHash('sha256').update(raw, 'utf8').digest('hex'));
+      assertCondition('38. hash não inclui e-mail', !content.includes('email') && !content.includes('Email') && !content.includes('invitedEmail'));
+      assertCondition('39. hash não inclui timestamp', !content.includes('timestamp') && !content.includes('Date.now') && !content.includes('new Date'));
     } else {
       for (let i = 35; i <= 39; i++) assertCondition(`${i}. falhou`, false);
     }
-
-    // 40-58 Code structure
-    const rootDir = process.cwd();
-    const servicePath = path.resolve(rootDir, 'src/server/services/InvitationTokenService.ts');
-    const content = fs.readFileSync(servicePath, 'utf8');
 
     assertCondition('40. serviço não usa Math.random', !content.includes('Math.random'));
     assertCondition('41. serviço não usa randomUUID', !content.includes('randomUUID'));
@@ -145,7 +146,7 @@ function runTests() {
     assertCondition('52. serviço não usa a.s a.n.y', !content.includes(weakAnyCast));
     assertCondition('53. serviço não usa u.n.k.n.o.w.n a.s', !content.includes(weakUnknownCast));
     
-    assertCondition('54. serviço não contém persistência', !content.includes('set(') && !content.includes('add(') && !content.includes('.update(') === false && !content.includes('collection(') && !content.includes('doc(') && !content.includes('save'));
+    assertCondition('54. serviço não contém persistência', !content.includes('getFirestore') && !content.includes('firebase-admin') && !content.includes('runTransaction') && !content.includes('writeBatch') && !content.includes('FieldValue') && !content.includes('collection(') && !content.includes('doc(') && !content.includes('transaction.set') && !content.includes('transaction.update') && !content.includes('transaction.delete') && !content.includes('db.set') && !content.includes('db.update') && !content.includes('db.delete') && !content.includes('writeFile') && !content.includes('writeFileSync') && !content.includes('appendFile') && !content.includes('createWriteStream'));
     assertCondition('55. serviço não contém tokenHash duplicado', !content.includes('tokenHash: tokenHash'));
     assertCondition('56. serviço não contém invitedEmail', !content.includes('invitedEmail'));
     assertCondition('57. serviço não contém usedCount', !content.includes('usedCount'));
@@ -155,15 +156,15 @@ function runTests() {
     const gen1 = generateInvitationTokenMaterial();
     const gen2 = generateInvitationTokenMaterial();
 
+    assertCondition('59. geração real retorna sucesso', gen1.success && gen2.success);
     if (gen1.success && gen2.success) {
-      assertCondition('59. geração real retorna sucesso', true);
       assertCondition('60. geração real retorna token válido', gen1.material.rawToken.length === 43 && isValidInvitationRedirectToken(gen1.material.rawToken));
       assertCondition('61. geração real retorna hash válido', gen1.material.tokenHash.length === 64 && /^[a-f0-9]{64}$/.test(gen1.material.tokenHash));
       assertCondition('62. duas gerações reais produzem tokens diferentes', gen1.material.rawToken !== gen2.material.rawToken);
       assertCondition('63. rawToken não é igual ao tokenHash', gen1.material.rawToken !== gen1.material.tokenHash);
       assertCondition('64. tokenHash não contém rawToken', !gen1.material.tokenHash.includes(gen1.material.rawToken));
     } else {
-      for (let i = 59; i <= 64; i++) assertCondition(`${i}. falhou`, false);
+      for (let i = 60; i <= 64; i++) assertCondition(`${i}. falhou`, false);
     }
 
     // 65-69 Prohibited files
@@ -187,8 +188,24 @@ function runTests() {
     const hasRewriteTestScript = allFiles.some(f => f === 'rewrite_test.cjs' || f === 'rewrite_test.js' || f.startsWith('rewrite_test') || f === 'rewrite_test.ts' || f === 'rewrite.js' || f === 'rewrite.cjs' || f === 'patch.js' || f === 'patch.cjs' || f === 'patch.ts');
     assertCondition('69. nenhum script auxiliar proibido existe', !hasRewriteTestScript);
 
-    // 70 Check catch TOKEN_GENERATION_FAILED structure
-    assertCondition('70. encerramento inesperado produz exit code não zero', content.includes('reasonCode: \'TOKEN_GENERATION_FAILED\'') && content.includes('try {') && content.includes('catch {'));
+    const testContent = fs.readFileSync(path.resolve(process.cwd(), 'scripts/test_p0a3_invitation_token_service.ts'), 'utf8');
+
+    assertCondition('70. encerramento inesperado produz exit code não zero', testContent.includes('runTests().catch((error: unknown) => {') && testContent.includes('console.error(error);') && testContent.includes('process.exitCode = 1;'));
+
+    assertCondition('71. generateInvitationTokenMaterial contém try/catch', content.includes('generateInvitationTokenMaterial') && content.includes('try {') && content.includes('catch {'));
+    assertCondition('72. falha de randomBytes retorna TOKEN_GENERATION_FAILED', content.includes('reasonCode: \'TOKEN_GENERATION_FAILED\''));
+    
+    const randomBytesCalls = content.match(/\brandomBytes\s*\(/g) ?? [];
+    assertCondition('73. randomBytes possui exatamente uma chamada', randomBytesCalls.length === 1);
+    assertCondition('74. randomBytes recebe exatamente INVITATION_TOKEN_ENTROPY_BYTES', content.includes('randomBytes(INVITATION_TOKEN_ENTROPY_BYTES)'));
+    assertCondition('75. geração delega entropy para deriveInvitationTokenMaterial', content.includes('deriveInvitationTokenMaterial(entropy)'));
+    assertCondition('76. serviço valida hash com regex hexadecimal lowercase', content.includes('!/^[a-f0-9]{64}$/.test(tokenHash)'));
+    
+    const unconditionalTrueAssertion = /assertCondition\([^;\n]*,\s*true\s*\)/;
+    assertCondition('77. suíte não possui assertCondition incondicional com true', !unconditionalTrueAssertion.test(testContent));
+    assertCondition('78. verificação de persistência permite o update criptográfico', content.includes('.update(rawToken, \'utf8\')'));
+    assertCondition('79. suíte não contém casts fracos', !testContent.includes(weakAnyCast) && !testContent.includes(weakUnknownCast));
+    assertCondition('80. nenhum arquivo proibido existe na raiz', !hasRewriteTestScript && prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
 
     console.log(`\nResults: ${passed} passed, ${failed} failed`);
     if (failed > 0) {

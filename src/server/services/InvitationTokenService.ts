@@ -49,7 +49,10 @@ export function deriveInvitationTokenMaterial(entropy: unknown): InvitationToken
       .update(rawToken, 'utf8')
       .digest('hex');
 
-    if (tokenHash.length !== INVITATION_TOKEN_HASH_HEX_LENGTH) {
+    if (
+      tokenHash.length !== INVITATION_TOKEN_HASH_HEX_LENGTH ||
+      !/^[a-f0-9]{64}$/.test(tokenHash)
+    ) {
       return { success: false, reasonCode: 'TOKEN_STATE_INCONSISTENT' };
     }
 
