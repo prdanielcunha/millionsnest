@@ -122,8 +122,8 @@ async function runTests() {
   assertCondition('74. Login não usa new URL', !loginContent.includes('new URL('));
   assertCondition('75. Login não usa pathname.startsWith', !loginContent.includes('pathname.startsWith'));
   assertCondition('76. AuthContext não usa pathname.startsWith', !authContextContent.includes('pathname.startsWith'));
-  assertCondition('77. Login remove redirect inválido', loginContent.includes('sessionStorage.removeItem(\'mn_invite_redirect\')') && loginContent.includes('} else {'));
-  assertCondition('78. AuthContext remove redirect inválido', authContextContent.includes('sessionStorage.removeItem(\'mn_invite_redirect\')') && authContextContent.includes('} else {'));
+  assertCondition('77. Login remove redirect inválido', loginContent.includes('sessionStorage.removeItem(\'mn_invite_redirect\')'));
+  assertCondition('78. AuthContext remove redirect inválido', authContextContent.includes('sessionStorage.removeItem(\'mn_invite_redirect\')'));
 
   const joinContent = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/Join.tsx'), 'utf-8');
   assertCondition('79. Join não foi modificado', joinContent.includes('InvitationJoinClientPolicy'));
@@ -136,6 +136,22 @@ async function runTests() {
   assertCondition('84. Nenhum as any foi introduzido', !loginContent.includes('as any') && !authContextContent.includes('as any'));
   assertCondition('85. Nenhum unknown as foi introduzido', !loginContent.includes('unknown as') && !authContextContent.includes('unknown as'));
   assertCondition('86. Nenhum arquivo proibido existe na raiz', prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
+
+  assertCondition('87. Login chama parseInvitationRedirectPath com inviteRedirect sem condição truthy', loginContent.includes('parseInvitationRedirectPath(inviteRedirect)') && !loginContent.includes('inviteRedirect ? parseInvitationRedirectPath'));
+  assertCondition('88. AuthContext chama parseInvitationRedirectPath com inviteRedirect sem operador ternário', authContextContent.includes('parseInvitationRedirectPath(inviteRedirect)') && !authContextContent.includes('inviteRedirect ? parseInvitationRedirectPath'));
+  assertCondition('89. AuthContext não contém objeto manual com MISSING_VALUE', !authContextContent.includes('MISSING_VALUE'));
+  assertCondition('90. AuthContext não contém valid: false as const', !authContextContent.includes('valid: false as const'));
+  assertCondition('91. Login não usa if (inviteRedirect &&', !loginContent.includes('if (inviteRedirect &&'));
+  assertCondition('92. Login não usa typeof inviteRedirect', !loginContent.includes('typeof inviteRedirect'));
+  assertCondition('93. Login remove valor inválido quando inviteRedirect !== null', loginContent.includes('if (inviteRedirect !== null)'));
+  assertCondition('94. AuthContext remove valor inválido quando inviteRedirect !== null', authContextContent.includes('if (inviteRedirect !== null)'));
+  assertCondition('95. Login não usa condição truthy para decidir limpeza', !loginContent.match(/if\s*\(\s*inviteRedirect\s*\)\s*\{\s*sessionStorage\.removeItem/));
+  assertCondition('96. AuthContext não usa condição truthy para decidir limpeza', !authContextContent.match(/if\s*\(\s*inviteRedirect\s*\)\s*\{\s*sessionStorage\.removeItem/));
+  assertCondition('97. string vazia é reconhecida pela política como inválida', !parseInvitationRedirectPath('').valid);
+  assertCondition('98. ausência null é reconhecida pela política como MISSING_VALUE', parseInvitationRedirectPath(null).valid === false && (parseInvitationRedirectPath(null) as any).reasonCode === 'MISSING_VALUE');
+  assertCondition('99. nenhum parser alternativo foi introduzido', !loginContent.includes('new URLSearchParams') && !authContextContent.includes('new URLSearchParams'));
+  assertCondition('100. nenhum cast as const foi usado para fabricar resultado de redirect', !loginContent.includes('as const') && !authContextContent.includes('as const'));
+  assertCondition('101. nenhum arquivo proibido existe na raiz', prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   if (failed > 0) {

@@ -147,14 +147,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             // New user without profile
             const inviteRedirect = sessionStorage.getItem('mn_invite_redirect');
-            const parsedRedirect = inviteRedirect ? parseInvitationRedirectPath(inviteRedirect) : { valid: false as const, reasonCode: 'MISSING_VALUE' as const };
+            const parsedRedirect = parseInvitationRedirectPath(inviteRedirect);
             
             if (parsedRedirect.valid) {
                 // Let Login/App handle the redirect to /join
                 // Do not bootstrap automatically. Just set loading false and return.
                 setProfile(null); // Or minimal profile if needed, but null forces them to stay in the flow
             } else {
-                if (inviteRedirect) {
+                if (inviteRedirect !== null) {
                     sessionStorage.removeItem('mn_invite_redirect');
                 }
                 try {

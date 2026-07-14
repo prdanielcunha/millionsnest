@@ -27,14 +27,15 @@ export function Login() {
     if (user) {
       // Check for invite redirect first
       const inviteRedirect = sessionStorage.getItem('mn_invite_redirect');
-      if (inviteRedirect && typeof inviteRedirect === 'string') {
-        const parsed = parseInvitationRedirectPath(inviteRedirect);
-        if (parsed.valid) {
-          navigate(parsed.data.path);
-          return;
-        } else {
-          sessionStorage.removeItem('mn_invite_redirect');
-        }
+      const parsedRedirect = parseInvitationRedirectPath(inviteRedirect);
+
+      if (parsedRedirect.valid) {
+        navigate(parsedRedirect.data.path);
+        return;
+      }
+      
+      if (inviteRedirect !== null) {
+        sessionStorage.removeItem('mn_invite_redirect');
       }
       
       if (profile) {
