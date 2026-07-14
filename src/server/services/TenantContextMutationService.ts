@@ -439,7 +439,7 @@ export async function acceptInvitation(req: Request, res: Response) {
     let normalizedAuthenticatedEmail: string | null = null;
     try {
       const authUser = await getAuth().getUser(uid);
-      normalizedAuthenticatedEmail = normalizeInvitationEmail(normalizedAuthenticatedEmail);
+      normalizedAuthenticatedEmail = normalizeInvitationEmail(authUser.email);
     } catch (e) {
       return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
     }

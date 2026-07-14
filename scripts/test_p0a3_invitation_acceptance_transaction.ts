@@ -380,5 +380,45 @@ assertCondition('80. pelo menos uma leitura e uma escrita transacional', getMatc
 const acceptedByMatches = endpointContent.match(/inviteUpdates\.acceptedBy =/g) || [];
 assertCondition('81. acceptedBy atribuído exatamente uma vez', acceptedByMatches.length === 1);
 
+
+
+const emailNormMatch = endpointContent.match(/normalizedAuthenticatedEmail\s*=\s*normalizeInvitationEmail\(authUser\.email\);/g) || [];
+assertCondition('82. existe exatamente uma ocorrência de: normalizedAuthenticatedEmail = normalizeInvitationEmail(authUser.email);', emailNormMatch.length === 1);
+
+assertCondition('83. não existe: normalizeInvitationEmail(normalizedAuthenticatedEmail)', !endpointContent.includes('normalizeInvitationEmail(normalizedAuthenticatedEmail)'));
+
+const getUserIdx = endpointContent.indexOf('getAuth().getUser(uid)');
+const normEmailIdx = endpointContent.indexOf('normalizeInvitationEmail(authUser.email)');
+assertCondition('84. a normalização de authUser.email ocorre depois de getAuth().getUser(uid)', getUserIdx !== -1 && normEmailIdx > getUserIdx);
+
+const txIdx = endpointContent.indexOf('runTransaction');
+assertCondition('85. a normalização ocorre antes de runTransaction', txIdx !== -1 && normEmailIdx !== -1 && normEmailIdx < txIdx);
+
+const errEmailIdx = endpointContent.indexOf("'AUTHENTICATED_EMAIL_REQUIRED'");
+assertCondition('86. AUTHENTICATED_EMAIL_REQUIRED é verificado depois da normalização e antes de runTransaction', errEmailIdx !== -1 && errEmailIdx > normEmailIdx && errEmailIdx < txIdx);
+
+// removed require('fs');
+assertCondition('87. test_planner_direct.cjs não existe', !fs.existsSync('test_planner_direct.cjs'));
+assertCondition('88. test_planner_direct.ts não existe', !fs.existsSync('test_planner_direct.ts'));
+
+const tempFiles = [
+  'patch_service.cjs',
+  'patch_tests.cjs',
+  'patch_tests2.cjs',
+  'patch_test.cjs',
+  'fix_test.cjs',
+  'update_service.cjs',
+  'update_tests.cjs',
+  'test_planner_direct.cjs',
+  'test_planner_direct.ts'
+];
+assertCondition('89. nenhum dos arquivos temporários listados nesta instrução existe', tempFiles.every(f => !fs.existsSync(f)));
+
+const reasonCodeFallbackIdx = endpointContent.indexOf('reasonCode = capacityResult.reasonCode;');
+assertCondition('90. o ramo que preserva capacityResult.reasonCode em falha ocorre antes da primeira chamada t.set ou t.update', reasonCodeFallbackIdx !== -1 && reasonCodeFallbackIdx < firstWriteIdxTx);
+
+const amBranch = endpointContent.split("planResult.action === 'ALREADY_MEMBER'")[1].split("CREATE_MEMBERSHIP")[0];
+assertCondition('91. o ramo ALREADY_MEMBER continua sem t.set, t.update ou t.delete', !amBranch.includes('t.set(') && !amBranch.includes('t.update(') && !amBranch.includes('t.delete('));
+
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
