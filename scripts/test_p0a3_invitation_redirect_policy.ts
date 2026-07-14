@@ -3,7 +3,7 @@ import {
   isValidInvitationRedirectToken,
   buildInvitationRedirectPath,
   parseInvitationRedirectPath
-} from '../src/lib/InvitationRedirectPolicy';
+} from '../src/lib/InvitationRedirectPolicy.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
