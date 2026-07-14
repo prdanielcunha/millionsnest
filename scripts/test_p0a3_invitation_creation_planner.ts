@@ -323,7 +323,9 @@ function runTests() {
       'test-output.txt',
       'test_output.txt',
       'build-output.txt',
-      'lint-output.txt'
+      'lint-output.txt',
+      'rewrite_test.cjs',
+      'rewrite_test.js'
     ];
     assertCondition('78. report.txt não existe', !fs.existsSync(path.join(rootDir, 'report.txt')));
     assertCondition('79. nenhum arquivo de relatório proibido existe', prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
@@ -361,6 +363,13 @@ function runTests() {
     assertCondition('98. cada cenário principal guarda o resultado antes de verificar reasonCode', testContent.includes('let res10 = planInvitationCreation(input, nowMs);') && testContent.includes('isFailureWithReason(res10, \'UNAUTHENTICATED\')'));
     assertCondition('99. arquivo report.txt não existe', !fs.existsSync(path.join(rootDir, 'report.txt')));
     assertCondition('100. nenhum arquivo proibido existe na raiz', prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
+
+    assertCondition('101. rewrite_test.cjs não existe na raiz', !fs.existsSync(path.join(rootDir, 'rewrite_test.cjs')));
+    assertCondition('102. rewrite_test.js não existe na raiz', !fs.existsSync(path.join(rootDir, 'rewrite_test.js')));
+    
+    const allFiles = fs.readdirSync(rootDir);
+    const hasRewriteTestScript = allFiles.some(f => f === 'rewrite_test.cjs' || f === 'rewrite_test.js' || f.startsWith('rewrite_test'));
+    assertCondition('103. nenhum script auxiliar rewrite_test existe na raiz', !hasRewriteTestScript);
 
     console.log(`\nResults: ${passed} passed, ${failed} failed`);
     if (failed > 0) {
