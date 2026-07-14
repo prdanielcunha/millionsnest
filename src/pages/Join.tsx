@@ -22,6 +22,7 @@ export function Join() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   
+  const [isAttemptActive, setIsAttemptActive] = useState(false);
   const [status, setStatus] = useState<JoinStatus>('validating');
   const [errorMessage, setErrorMessage] = useState<{ title: string; description: string; retryable: boolean } | null>(null);
   const [inviteData, setInviteData] = useState<{ organizationName: string } | null>(null);
@@ -61,10 +62,11 @@ export function Join() {
     return () => {
       disposed = true;
       attemptVersionRef.current += 1;
-      isActiveRef.current = false;
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
+      isActiveRef.current = false;
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
@@ -77,47 +79,56 @@ export function Join() {
   const validateAndAcceptInvite = async () => {
     if (isActiveRef.current) return;
     isActiveRef.current = true;
+    setIsAttemptActive(true);
+    setStatus('validating');
+    setErrorMessage(null);
+    setInviteData(null);
+    
     attemptVersionRef.current += 1;
     const currentVersion = attemptVersionRef.current;
+    
+    abortControllerRef.current?.abort();
+    const currentController = new AbortController();
+    abortControllerRef.current = currentController;
+    const currentSignal = currentController.signal;
+
+    const isCurrentAttempt = () => currentVersion === attemptVersionRef.current && !currentSignal.aborted;
     
     const lang = getLanguage();
     
     if (!orgId) {
-      if (currentVersion === attemptVersionRef.current && (!abortControllerRef.current?.signal.aborted)) {
+      if (isCurrentAttempt()) {
         setStatus('error');
         setErrorMessage(getInvitationJoinMessage('INVALID_RESPONSE', lang));
         isActiveRef.current = false;
+        setIsAttemptActive(false);
       }
       return;
     }
 
     if (!token || !token.trim()) {
-      if (currentVersion === attemptVersionRef.current && (!abortControllerRef.current?.signal.aborted)) {
+      if (isCurrentAttempt()) {
         setStatus('error');
         setErrorMessage(getInvitationJoinMessage('INVALID_TOKEN', lang));
         isActiveRef.current = false;
+        setIsAttemptActive(false);
       }
       return;
     }
 
     if (!user) {
-      if (currentVersion === attemptVersionRef.current && (!abortControllerRef.current?.signal.aborted)) {
+      if (isCurrentAttempt()) {
         setStatus('error');
         setErrorMessage(getInvitationJoinMessage('UNAUTHENTICATED', lang));
         isActiveRef.current = false;
+        setIsAttemptActive(false);
       }
       return;
     }
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-    const currentSignal = abortControllerRef.current.signal;
-
     try {
       const idToken = await user.getIdToken();
-      if (currentVersion !== attemptVersionRef.current || currentSignal.aborted) return;
+      if (!isCurrentAttempt()) return;
       
       const res = await fetch('/api/v1/invitations/accept', {
         method: 'POST',
@@ -128,28 +139,28 @@ export function Join() {
         body: JSON.stringify({ token }),
         signal: currentSignal
       });
-      if (currentVersion !== attemptVersionRef.current || currentSignal.aborted) return;
+      if (!isCurrentAttempt()) return;
       
       const rawData = await res.json().catch(() => null);
-      if (currentVersion !== attemptVersionRef.current || currentSignal.aborted) return;
+      if (!isCurrentAttempt()) return;
 
       const parsed = parseInvitationJoinPayload(rawData);
       
-      if (!parsed.success) {
-        setStatus('error');
-        setErrorMessage(getInvitationJoinMessage(parsed.reasonCode, lang));
+      if (parsed.success === true) {
+        setInviteData({ organizationName: parsed.organizationName });
+        setStatus(parsed.alreadyMember ? 'already_member' : 'success');
+        sessionStorage.removeItem('mn_invite_redirect');
+        
+        timeoutRef.current = setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 2500);
         return;
       }
       
-      setInviteData({ organizationName: parsed.organizationName });
-      setStatus(parsed.alreadyMember ? 'already_member' : 'success');
-      sessionStorage.removeItem('mn_invite_redirect');
-      
-      timeoutRef.current = setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 2500);
+      setStatus('error');
+      setErrorMessage(getInvitationJoinMessage(parsed.reasonCode, lang));
     } catch (e: unknown) {
-      if (currentVersion !== attemptVersionRef.current || currentSignal.aborted) return;
+      if (!isCurrentAttempt()) return;
 
       if (e instanceof Error && e.name === 'AbortError') {
         return;
@@ -160,13 +171,22 @@ export function Join() {
       if (currentVersion === attemptVersionRef.current) {
         isActiveRef.current = false;
       }
+      if (isCurrentAttempt()) {
+        setIsAttemptActive(false);
+      }
     }
   };
 
   const handleRetry = () => {
-    if (isActiveRef.current || !errorMessage?.retryable) return;
-    setStatus('validating');
-    setErrorMessage(null);
+    if (isAttemptActive || !errorMessage?.retryable) return;
+    
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    attemptVersionRef.current += 1;
+    isActiveRef.current = false;
+
     validateAndAcceptInvite();
   };
 
@@ -228,7 +248,7 @@ export function Join() {
             {errorMessage.retryable ? (
               <button 
                 onClick={handleRetry}
-                disabled={isActiveRef.current}
+                disabled={isAttemptActive}
                 className="w-full py-3 bg-[#2B85EB] text-white text-sm font-semibold rounded-xl hover:bg-[#2B85EB]/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <RefreshCw className="w-4 h-4" /> {t.retryLabel}

@@ -205,14 +205,34 @@ async function runTests() {
   assertCondition('75. efeito usa microtask', joinContent.includes('Promise.resolve().then('));
   assertCondition('76. cleanup marca disposed', joinContent.includes('disposed = true'));
   assertCondition('77. cleanup invalida attemptVersionRef', joinContent.match(/attemptVersionRef\.current \+= 1/g) !== null);
-  assertCondition('78. estados após await verificam versão e signal', joinContent.includes('currentVersion !== attemptVersionRef.current || currentSignal.aborted'));
+  assertCondition('78. estados após await verificam versão e signal', joinContent.includes('isCurrentAttempt()'));
   assertCondition('79. retry exige errorMessage.retryable', joinContent.includes('!errorMessage?.retryable'));
   assertCondition('80. tentativa ativa impede duplicidade', joinContent.includes('if (isActiveRef.current) return;'));
-  assertCondition('81. botão usa a informação de tentativa ativa no disabled', joinContent.includes('disabled={isActiveRef.current}'));
+  assertCondition('81. botão usa a informação de tentativa ativa no disabled', joinContent.includes('disabled={isAttemptActive}'));
   assertCondition('82. parsed.reasonCode não possui cast', !joinContent.includes('parsed.reasonCode as InvitationJoinFailureReason') && !joinContent.includes('as InvitationJoinFailureReason'));
-  assertCondition('83. não existe setState assíncrono desprotegido após desmontagem', joinContent.includes('currentVersion === attemptVersionRef.current && (!abortControllerRef.current?.signal.aborted)'));
+  assertCondition('83. não existe setState assíncrono desprotegido após desmontagem', joinContent.includes('isCurrentAttempt()'));
 
-  assertCondition('84. catch final da suíte define exit code diferente de zero', true);
+  const testContent = fs.readFileSync(__filename, 'utf-8');
+  const lines = testContent.split('\n');
+  const hasUnconditionalTrue = lines.some(line => line.includes('assert' + 'Condition(') && line.endsWith(', true);'));
+
+  assertCondition('84. catch final da suíte define exit code diferente de zero', testContent.includes('process.exitCode = 1') && testContent.includes('catch((error: unknown)') && !testContent.includes('runTests()' + '.catch(console.error)') && !hasUnconditionalTrue);
+  assertCondition('85. controller é criado antes da validação de orgId', joinContent.indexOf('new AbortController()') < joinContent.indexOf('if (!orgId)'));
+  assertCondition('86. controller é criado antes da validação do token', joinContent.indexOf('new AbortController()') < joinContent.indexOf('if (!token'));
+  assertCondition('87. validações usam currentSignal', joinContent.includes('!currentSignal.aborted'));
+  assertCondition('88. Join não contém abortControllerRef.current?.signal.aborted', !joinContent.includes('abortControllerRef.current?.signal.aborted'));
+  assertCondition('89. cleanup define abortControllerRef.current como null', joinContent.includes('abortControllerRef.current = null'));
+  assertCondition('90. existe estado isAttemptActive', joinContent.includes('isAttemptActive, setIsAttemptActive'));
+  assertCondition('91. início da tentativa define setIsAttemptActive(true)', joinContent.includes('setIsAttemptActive(true)'));
+  assertCondition('92. finally define setIsAttemptActive(false) somente no ramo atual', joinContent.includes('if (isCurrentAttempt()) {') && joinContent.includes('setIsAttemptActive(false)'));
+  assertCondition('93. botão usa disabled={isAttemptActive}', joinContent.includes('disabled={isAttemptActive}'));
+  assertCondition('94. botão não usa disabled={isActiveRef.current}', !joinContent.includes('disabled={isActiveRef.current}'));
+  assertCondition('95. início da tentativa define status validating', joinContent.includes("setStatus('validating')"));
+  assertCondition('96. início da tentativa limpa errorMessage', joinContent.includes('setErrorMessage(null)'));
+  assertCondition('97. início da tentativa limpa inviteData', joinContent.includes('setInviteData(null)'));
+  assertCondition('98. retry aborta controller residual', joinContent.indexOf('abortControllerRef.current.abort()', joinContent.indexOf('handleRetry')) > -1);
+  assertCondition('99. retry invalida attemptVersionRef', joinContent.indexOf('attemptVersionRef.current += 1', joinContent.indexOf('handleRetry')) > -1);
+  assertCondition('100. suíte não contém assertCondition incondicional', !hasUnconditionalTrue);
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   if (failed > 0) {
