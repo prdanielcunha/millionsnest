@@ -1,43 +1,86 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { motion } from 'framer-motion';
-import { Loader2, CheckCircle2, XCircle, ArrowRight } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw } from 'lucide-react';
 import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
+import {
+  InvitationJoinLanguage,
+  InvitationJoinFailureReason,
+  normalizeInvitationJoinLanguage,
+  parseInvitationJoinPayload,
+  getInvitationJoinMessage,
+  getInvitationJoinSuccessCopy
+} from '../lib/InvitationJoinClientPolicy.js';
+
+type JoinStatus = 'validating' | 'success' | 'already_member' | 'error';
 
 export function Join() {
   const { orgId } = useParams();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();
-  const { user, profile, switchOrganization, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   
-  const [status, setStatus] = useState<'loading' | 'validating' | 'success' | 'error' | 'already_member'>('validating');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [inviteData, setInviteData] = useState<any>(null);
-  const [requestLoading, setRequestLoading] = useState(false);
+  const [status, setStatus] = useState<JoinStatus>('validating');
+  const [errorMessage, setErrorMessage] = useState<{ title: string; description: string; retryable: boolean } | null>(null);
+  const [inviteData, setInviteData] = useState<{ organizationName: string } | null>(null);
+  
+  const requestFiredRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const getLanguage = (): InvitationJoinLanguage => {
+    return normalizeInvitationJoinLanguage(document.documentElement.lang || navigator.language);
+  };
 
   useEffect(() => {
     if (authLoading) return;
     
-    // Se não estiver logado, manda pro login com retorno
     if (!user) {
       sessionStorage.setItem('mn_invite_redirect', `/join/${orgId}${token ? `?token=${token}` : ''}`);
       navigate(`/login?org=${orgId}&invite=true`);
       return;
     }
 
+    if (requestFiredRef.current) return;
+    requestFiredRef.current = true;
+
     validateAndAcceptInvite();
-  }, [user, authLoading, orgId, token]);
 
-
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [user, authLoading, orgId, token, navigate]);
 
   const validateAndAcceptInvite = async () => {
-    if (!user) {
+    const lang = getLanguage();
+    
+    if (!orgId) {
       setStatus('error');
-      setErrorMessage('Erro de sessão');
+      setErrorMessage(getInvitationJoinMessage('INVALID_RESPONSE', lang));
       return;
     }
+
+    const trimmedToken = token?.trim() || '';
+    if (!trimmedToken) {
+      setStatus('error');
+      setErrorMessage(getInvitationJoinMessage('INVALID_TOKEN', lang));
+      return;
+    }
+
+    if (!user) {
+      setStatus('error');
+      setErrorMessage(getInvitationJoinMessage('UNAUTHENTICATED', lang));
+      return;
+    }
+
+    abortControllerRef.current = new AbortController();
 
     try {
       const idToken = await user.getIdToken();
@@ -48,42 +91,48 @@ export function Join() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({ token: trimmedToken }),
+        signal: abortControllerRef.current.signal
       });
       
-      const data = await res.json();
+      const rawData = await res.json().catch(() => null);
+      const parsed = parseInvitationJoinPayload(rawData);
       
-      if (res.ok && data.success) {
-        setInviteData({ organizationName: data.organizationName });
-        if (data.alreadyMember) {
-           setStatus('already_member');
-        } else {
-           setStatus('success');
-        }
+      if (parsed.success) {
+        setInviteData({ organizationName: parsed.organizationName });
+        setStatus(parsed.alreadyMember ? 'already_member' : 'success');
         sessionStorage.removeItem('mn_invite_redirect');
         
-        setTimeout(() => {
-          // Tell context to refresh or just reload to get new profile 
-          // For now window.location.href forces full bootstrap check with new member
+        timeoutRef.current = setTimeout(() => {
           window.location.href = '/dashboard';
-        }, 3000);
+        }, 2500);
       } else {
         setStatus('error');
-        if (data.reasonCode === 'INVITE_EXPIRED') setErrorMessage('Este convite expirou.');
-        else if (data.reasonCode === 'INVITE_REVOKED') setErrorMessage('Este convite foi revogado.');
-        else if (data.reasonCode === 'INVITE_ALREADY_CONSUMED') setErrorMessage('Este convite já foi utilizado.');
-        else if (data.reasonCode === 'INVITE_IDENTITY_MISMATCH') setErrorMessage('Este convite não pertence a este email.');
-        else if (data.reasonCode === 'MEMBER_LIMIT_REACHED') setErrorMessage('Esta organização atingiu o limite de membros do plano.');
-        else if (data.reasonCode === 'INVITE_NOT_FOUND') setErrorMessage('Convite não encontrado ou inválido.');
-        else if (data.reasonCode === 'ORGANIZATION_INACTIVE') setErrorMessage('A organização está inativa.');
-        else setErrorMessage('Ocorreu um erro ao processar o convite.');
+        setErrorMessage(getInvitationJoinMessage(parsed.reasonCode as InvitationJoinFailureReason, lang));
       }
-    } catch (e: any) {
-      console.error(e);
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        return;
+      }
       setStatus('error');
-      setErrorMessage('Erro de comunicação. Tente novamente.');
+      setErrorMessage(getInvitationJoinMessage('NETWORK_ERROR', lang));
     }
   };
+
+  const handleRetry = () => {
+    setStatus('validating');
+    setErrorMessage(null);
+    requestFiredRef.current = true;
+    validateAndAcceptInvite();
+  };
+
+  const lang = getLanguage();
+  const uiTexts = {
+    pt: { validating: 'Validando convite...', wait: 'Por favor, aguarde um momento.', retry: 'Tentar novamente', dashboard: 'Ir para o meu Painel' },
+    en: { validating: 'Validating invitation...', wait: 'Please wait a moment.', retry: 'Try again', dashboard: 'Go to my Dashboard' },
+    es: { validating: 'Validando invitación...', wait: 'Por favor, espera un momento.', retry: 'Intentar de nuevo', dashboard: 'Ir a mi Panel' }
+  };
+  const t = uiTexts[lang];
 
   return (
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4">
@@ -93,6 +142,8 @@ export function Join() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md bg-[#0B0F19]/50 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative text-center"
+        aria-live="polite"
+        aria-busy={status === 'validating'}
       >
         <div className="flex justify-center mb-8">
            <MillionsNestLogo className="h-10 w-auto" />
@@ -101,58 +152,58 @@ export function Join() {
         {status === 'validating' && (
           <div className="flex flex-col items-center py-8">
             <Loader2 className="w-12 h-12 text-[#2B85EB] animate-spin mb-4" />
-            <h2 className="text-[#F5F7FA] font-semibold text-lg">Validando convite...</h2>
-            <p className="text-[#A0A7B5] text-sm mt-2">Por favor, aguarde um momento.</p>
+            <h2 className="text-[#F5F7FA] font-semibold text-lg">{t.validating}</h2>
+            <p className="text-[#A0A7B5] text-sm mt-2">{t.wait}</p>
           </div>
         )}
 
-        {status === 'success' && (
+        {(status === 'success' || status === 'already_member') && inviteData && (
           <div className="flex flex-col items-center py-8">
-            <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mb-6">
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${status === 'already_member' ? 'bg-[#2B85EB]/10 text-[#2B85EB]' : 'bg-emerald-500/10 text-emerald-400'}`}>
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h2 className="text-[#F5F7FA] font-bold text-xl mb-2">Convite Aceito com Sucesso!</h2>
-            <p className="text-[#A0A7B5] text-sm mb-8">
-              Você agora faz parte da organização <strong className="text-white">{inviteData?.organizationName || 'do ecossistema'}</strong>.
-            </p>
-            <p className="text-xs text-[#A0A7B5] flex items-center gap-2">
-              <Loader2 className="w-3 h-3 animate-spin" /> Redirecionando para o painel...
-            </p>
+            
+            {(() => {
+              const successCopy = getInvitationJoinSuccessCopy(status === 'already_member', inviteData.organizationName, lang);
+              return (
+                <>
+                  <h2 className="text-[#F5F7FA] font-bold text-xl mb-2">{successCopy.title}</h2>
+                  <p className="text-[#A0A7B5] text-sm mb-8">{successCopy.description}</p>
+                  <p className="text-xs text-[#A0A7B5] flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" /> {successCopy.redirectLabel}
+                  </p>
+                </>
+              );
+            })()}
           </div>
         )}
 
-        {status === 'already_member' && (
-          <div className="flex flex-col items-center py-8">
-            <div className="w-16 h-16 bg-[#2B85EB]/10 text-[#2B85EB] rounded-full flex items-center justify-center mb-6">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-            <h2 className="text-[#F5F7FA] font-bold text-xl mb-2">Tudo Certo!</h2>
-            <p className="text-[#A0A7B5] text-sm mb-8">
-              Você já fazia parte desta organização.
-            </p>
-            <p className="text-xs text-[#A0A7B5] flex items-center gap-2">
-              <Loader2 className="w-3 h-3 animate-spin" /> Redirecionando...
-            </p>
-          </div>
-        )}
-
-        {status === 'error' && (
+        {status === 'error' && errorMessage && (
           <div className="flex flex-col items-center py-8">
             <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mb-6">
               <XCircle className="w-8 h-8" />
             </div>
-            <h2 className="text-[#F5F7FA] font-bold text-xl mb-2">Convite Inválido</h2>
-            <p className="text-[#A0A7B5] text-sm mb-8">{errorMessage}</p>
+            <h2 className="text-[#F5F7FA] font-bold text-xl mb-2">{errorMessage.title}</h2>
+            <p className="text-[#A0A7B5] text-sm mb-8">{errorMessage.description}</p>
             
-            <Link 
-              to="/dashboard"
-              className="w-full py-3 bg-white/5 text-[#F5F7FA] text-sm font-semibold rounded-xl hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
-            >
-              Ir para o meu Painel <ArrowRight className="w-4 h-4" />
-            </Link>
+            {errorMessage.retryable ? (
+              <button 
+                onClick={handleRetry}
+                disabled={status === 'validating'}
+                className="w-full py-3 bg-[#2B85EB] text-white text-sm font-semibold rounded-xl hover:bg-[#2B85EB]/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <RefreshCw className="w-4 h-4" /> {t.retry}
+              </button>
+            ) : (
+              <Link 
+                to="/dashboard"
+                className="w-full py-3 bg-white/5 text-[#F5F7FA] text-sm font-semibold rounded-xl hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
+              >
+                {t.dashboard} <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
           </div>
         )}
-
 
       </motion.div>
     </div>
