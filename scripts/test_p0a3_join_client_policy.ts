@@ -233,6 +233,7 @@ async function runTests() {
   assertCondition('98. retry aborta controller residual', joinContent.indexOf('abortControllerRef.current.abort()', joinContent.indexOf('handleRetry')) > -1);
   assertCondition('99. retry invalida attemptVersionRef', joinContent.indexOf('attemptVersionRef.current += 1', joinContent.indexOf('handleRetry')) > -1);
   assertCondition('100. suíte não contém assertCondition incondicional', !hasUnconditionalTrue);
+  assertCondition('101. report.txt não existe na raiz do projeto', !fs.existsSync(path.resolve(process.cwd(), 'report.txt')));
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   if (failed > 0) {
