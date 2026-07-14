@@ -1,4 +1,5 @@
-import {
+const fs = require('fs');
+const content = `import {
   planInvitationCreation,
   isInvitationCreatorGlobalRole,
   isInvitationCreatorMembershipRole,
@@ -16,10 +17,10 @@ let failed = 0;
 
 function assertCondition(name: string, condition: boolean) {
   if (condition) {
-    console.log(`[PASS] ${name}`);
+    console.log(\`[PASS] \${name}\`);
     passed++;
   } else {
-    console.error(`[FAIL] ${name}`);
+    console.error(\`[FAIL] \${name}\`);
     failed++;
   }
 }
@@ -175,7 +176,7 @@ function runTests() {
     assertCondition('36. domínio vazio falha', !isValidInvitationCreationEmail('test@'));
     assertCondition('37. domínio sem ponto falha', !isValidInvitationCreationEmail('test@example'));
     assertCondition('38. e-mail com espaço interno falha', !isValidInvitationCreationEmail('test @example.com'));
-    assertCondition('39. e-mail com controle falha', !isValidInvitationCreationEmail('test\x00@example.com'));
+    assertCondition('39. e-mail com controle falha', !isValidInvitationCreationEmail('test\\x00@example.com'));
     assertCondition('40. e-mail acima de 254 falha', !isValidInvitationCreationEmail('a'.repeat(250) + '@example.com'));
 
     // Request Role
@@ -343,11 +344,11 @@ function runTests() {
     let res85 = planInvitationCreation(input, nowMs);
     assertCondition('85. planner com email vazio retorna INVALID_INVITE_EMAIL sem lançar', isFailureWithReason(res85, 'INVALID_INVITE_EMAIL'));
     
-    assertCondition('86. whitespace tab interno é rejeitado', !isValidInvitationCreationEmail('test\t@example.com'));
-    assertCondition('87. whitespace de quebra de linha interno é rejeitado', !isValidInvitationCreationEmail('test\n@example.com'));
-    assertCondition('88. whitespace Unicode interno é rejeitado', !isValidInvitationCreationEmail('test\u200B@example.com'));
+    assertCondition('86. whitespace tab interno é rejeitado', !isValidInvitationCreationEmail('test\\t@example.com'));
+    assertCondition('87. whitespace de quebra de linha interno é rejeitado', !isValidInvitationCreationEmail('test\\n@example.com'));
+    assertCondition('88. whitespace Unicode interno é rejeitado', !isValidInvitationCreationEmail('test\\u200B@example.com'));
     
-    assertCondition('89. normalizador não acessa length antes de verificar null', plannerContent.includes('const norm = normalizeInvitationEmail(value);\n  if (norm === null) return null;\n  \n  if (norm.length > 254) return null;'));
+    assertCondition('89. normalizador não acessa length antes de verificar null', plannerContent.includes('const norm = normalizeInvitationEmail(value);\\n  if (norm === null) return null;\\n  \\n  if (norm.length > 254) return null;'));
     assertCondition('90. planner chama normalizeValidInvitationCreationEmail', plannerContent.includes('normalizeValidInvitationCreationEmail('));
     assertCondition('91. planner não normaliza o e-mail novamente após a validação', !plannerContent.includes('const normalizedEmail = normalizeInvitationEmail(input.request.email);'));
 
@@ -356,13 +357,13 @@ function runTests() {
     assertCondition('93. suíte não contém u.n.k.n.o.w.n a.s', !testContent.includes(weakUnknownCast));
     assertCondition('94. suíte não contém cast duplo', !testContent.includes(weakUnknownCast) && !testContent.includes(weakAnyCast));
     assertCondition('95. suíte usa isFailureWithReason', testContent.includes('isFailureWithReason('));
-    assertCondition('96. cenário de mode desconhecido usa Reflect.set', testContent.includes('Reflect.set(unknownModeInput.capacity, \'mode\', \'unknown\')'));
-    assertCondition('97. cenário de mode desconhecido não usa cast', !testContent.includes('\'unknown\' ' + weakAnyCast) && !testContent.includes('\'unknown\' ' + weakUnknownCast));
-    assertCondition('98. cada cenário principal guarda o resultado antes de verificar reasonCode', testContent.includes('let res10 = planInvitationCreation(input, nowMs);') && testContent.includes('isFailureWithReason(res10, \'UNAUTHENTICATED\')'));
+    assertCondition('96. cenário de mode desconhecido usa Reflect.set', testContent.includes('Reflect.set(unknownModeInput.capacity, \\'mode\\', \\'unknown\\')'));
+    assertCondition('97. cenário de mode desconhecido não usa cast', !testContent.includes('\\'unknown\\' ' + weakAnyCast) && !testContent.includes('\\'unknown\\' ' + weakUnknownCast));
+    assertCondition('98. cada cenário principal guarda o resultado antes de verificar reasonCode', testContent.includes('let res10 = planInvitationCreation(input, nowMs);') && testContent.includes('isFailureWithReason(res10, \\'UNAUTHENTICATED\\')'));
     assertCondition('99. arquivo report.txt não existe', !fs.existsSync(path.join(rootDir, 'report.txt')));
     assertCondition('100. nenhum arquivo proibido existe na raiz', prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
 
-    console.log(`\nResults: ${passed} passed, ${failed} failed`);
+    console.log(\`\\nResults: \${passed} passed, \${failed} failed\`);
     if (failed > 0) {
       process.exitCode = 1;
     }
@@ -374,3 +375,5 @@ runTests().catch((error: unknown) => {
   console.error(error);
   process.exitCode = 1;
 });
+`
+fs.writeFileSync('scripts/test_p0a3_invitation_creation_planner.ts', content);

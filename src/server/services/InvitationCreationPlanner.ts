@@ -115,33 +115,39 @@ export function isInvitationCreatorMembershipRole(value: unknown): value is Invi
   return value === 'owner' || value === 'admin' || value === 'member';
 }
 
-export function isValidInvitationCreationEmail(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
+function normalizeValidInvitationCreationEmail(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
   const norm = normalizeInvitationEmail(value);
-  if (norm.length > 254) return false;
+  if (norm === null) return null;
+  
+  if (norm.length > 254) return null;
   
   const parts = norm.split('@');
-  if (parts.length !== 2) return false;
+  if (parts.length !== 2) return null;
   
   const localPart = parts[0];
   const domainPart = parts[1];
   
-  if (localPart === undefined || domainPart === undefined) return false;
-  if (localPart.length === 0) return false;
-  if (domainPart.length === 0) return false;
+  if (localPart === undefined || domainPart === undefined) return null;
+  if (localPart.length === 0) return null;
+  if (domainPart.length === 0) return null;
   
-  if (!domainPart.includes('.')) return false;
-  if (domainPart.startsWith('.') || domainPart.endsWith('.')) return false;
+  if (!domainPart.includes('.')) return null;
+  if (domainPart.startsWith('.') || domainPart.endsWith('.')) return null;
   
-  if (norm.includes(' ')) return false;
-  if (/[\x00-\x1F\x7F]/.test(norm)) return false;
-  if (norm.includes('/')) return false;
-  if (norm.includes('\\')) return false;
-  if (norm.includes('#')) return false;
-  if (norm.includes('?')) return false;
-  if (norm.includes('&')) return false;
+  if (/\s/.test(norm) || norm.includes('\u200B')) return null;
+  if (/[\x00-\x1F\x7F]/.test(norm)) return null;
+  if (norm.includes('/')) return null;
+  if (norm.includes('\\')) return null;
+  if (norm.includes('#')) return null;
+  if (norm.includes('?')) return null;
+  if (norm.includes('&')) return null;
   
-  return true;
+  return norm;
+}
+
+export function isValidInvitationCreationEmail(value: unknown): value is string {
+  return normalizeValidInvitationCreationEmail(value) !== null;
 }
 
 export function planInvitationCreation(input: InvitationCreationInput, nowMs: number): InvitationCreationResult {
@@ -192,10 +198,10 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
     }
   }
 
-  if (!isValidInvitationCreationEmail(input.request.email)) {
+  const normalizedEmail = normalizeValidInvitationCreationEmail(input.request.email);
+  if (normalizedEmail === null) {
     return { success: false, reasonCode: 'INVALID_INVITE_EMAIL' };
   }
-  const normalizedEmail = normalizeInvitationEmail(input.request.email);
 
   const requestRole = input.request.role;
   if (!isInvitationRole(requestRole)) {
