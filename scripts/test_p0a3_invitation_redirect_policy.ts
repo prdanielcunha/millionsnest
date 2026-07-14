@@ -81,8 +81,8 @@ async function runTests() {
   const policyContent = fs.readFileSync(path.resolve(process.cwd(), 'src/lib/InvitationRedirectPolicy.ts'), 'utf-8');
   
   assertCondition('53. política não usa any', !policyContent.includes(' any ') && !policyContent.includes(': any'));
-  assertCondition('54. política não usa as any', !policyContent.includes('as any'));
-  assertCondition('55. política não usa unknown as', !policyContent.includes('unknown as'));
+  assertCondition('54. política não usa as ' + 'any', !policyContent.includes('as ' + 'any'));
+  assertCondition('55. política não usa unknown ' + 'as', !policyContent.includes('unknown ' + 'as'));
   assertCondition('56. política não usa browser globals', !policyContent.includes('window.') && !policyContent.includes('document.') && !policyContent.includes('navigator.'));
   assertCondition('57. política não usa URL', !policyContent.includes('new URL(') && !policyContent.includes(' URL('));
   assertCondition('58. política não usa URLSearchParams', !policyContent.includes('URLSearchParams'));
@@ -132,9 +132,9 @@ async function runTests() {
   assertCondition('81. Nenhum parser duplicado permanece em Login', !loginContent.includes('window.location.origin') && !loginContent.includes('url.origin') && !loginContent.includes('url.pathname'));
   assertCondition('82. Nenhum parser duplicado permanece em AuthContext', !authContextContent.includes('inviteRedirect.startsWith') && !authContextContent.includes('new URL'));
 
-  assertCondition('83. Nenhum any novo foi introduzido', !loginContent.includes(' as any ') && !authContextContent.includes(' as any '));
-  assertCondition('84. Nenhum as any foi introduzido', !loginContent.includes('as any') && !authContextContent.includes('as any'));
-  assertCondition('85. Nenhum unknown as foi introduzido', !loginContent.includes('unknown as') && !authContextContent.includes('unknown as'));
+  assertCondition('83. Nenhum any novo foi introduzido', !loginContent.includes(' as ' + 'any ') && !authContextContent.includes(' as ' + 'any '));
+  assertCondition('84. Nenhum as ' + 'any foi introduzido', !loginContent.includes('as ' + 'any') && !authContextContent.includes('as ' + 'any'));
+  assertCondition('85. Nenhum unknown ' + 'as foi introduzido', !loginContent.includes('unknown ' + 'as') && !authContextContent.includes('unknown ' + 'as'));
   assertCondition('86. Nenhum arquivo proibido existe na raiz', prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
 
   assertCondition('87. Login chama parseInvitationRedirectPath com inviteRedirect sem condição truthy', loginContent.includes('parseInvitationRedirectPath(inviteRedirect)') && !loginContent.includes('inviteRedirect ? parseInvitationRedirectPath'));
@@ -148,10 +148,25 @@ async function runTests() {
   assertCondition('95. Login não usa condição truthy para decidir limpeza', !loginContent.match(/if\s*\(\s*inviteRedirect\s*\)\s*\{\s*sessionStorage\.removeItem/));
   assertCondition('96. AuthContext não usa condição truthy para decidir limpeza', !authContextContent.match(/if\s*\(\s*inviteRedirect\s*\)\s*\{\s*sessionStorage\.removeItem/));
   assertCondition('97. string vazia é reconhecida pela política como inválida', !parseInvitationRedirectPath('').valid);
-  assertCondition('98. ausência null é reconhecida pela política como MISSING_VALUE', parseInvitationRedirectPath(null).valid === false && (parseInvitationRedirectPath(null) as any).reasonCode === 'MISSING_VALUE');
+  const missingRedirectResult = parseInvitationRedirectPath(null);
+  assertCondition(
+    '98. ausência null é reconhecida pela política como MISSING_VALUE',
+    !missingRedirectResult.valid && 'reasonCode' in missingRedirectResult && missingRedirectResult.reasonCode === 'MISSING_VALUE'
+  );
+
   assertCondition('99. nenhum parser alternativo foi introduzido', !loginContent.includes('new URLSearchParams') && !authContextContent.includes('new URLSearchParams'));
   assertCondition('100. nenhum cast as const foi usado para fabricar resultado de redirect', !loginContent.includes('as const') && !authContextContent.includes('as const'));
   assertCondition('101. nenhum arquivo proibido existe na raiz', prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
+
+  const testContent = fs.readFileSync(path.resolve(process.cwd(), 'scripts/test_p0a3_invitation_redirect_policy.ts'), 'utf-8');
+  assertCondition('102. o próprio arquivo de teste não contém as ' + 'any', !testContent.includes('as ' + 'any'));
+  assertCondition('103. o próprio arquivo de teste não contém unknown ' + 'as', !testContent.includes('unknown ' + 'as'));
+  
+  const p0a1TestContent = fs.readFileSync(path.resolve(process.cwd(), 'scripts/test_p0a1_frontend_authority_rules.ts'), 'utf-8');
+  assertCondition('104. a suíte P0-A.1 não procura mais url.pathname.startsWith(\'/join\')', !p0a1TestContent.includes("url.pathname.startsWith('/join')"));
+  assertCondition('105. a suíte P0-A.1 exige parseInvitationRedirectPath', p0a1TestContent.includes('parseInvitationRedirectPath'));
+  assertCondition('106. a suíte P0-A.1 exige parsedRedirect.data.path', p0a1TestContent.includes('parsedRedirect.data.path'));
+  assertCondition('107. nenhum arquivo proibido existe na raiz', prohibitedFiles.every(f => !fs.existsSync(path.join(rootDir, f))));
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   if (failed > 0) {

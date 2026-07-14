@@ -73,7 +73,16 @@ assertCondition("7. AuthContext systemRole does not include admin", authCtx.incl
 assertCondition("8. Login processes invite redirect without profile", login.includes("if (user) {") && login.indexOf("inviteRedirect") < login.indexOf("if (profile) {"));
 
 // 9. Login restringe redirect a /join
-assertCondition("9. Login restricts redirect to /join", login.includes("url.pathname.startsWith('/join')") && login.includes("url.origin === window.location.origin"));
+assertCondition("9. Login restricts redirect through canonical policy", 
+  login.includes("InvitationRedirectPolicy") &&
+  login.includes("parseInvitationRedirectPath(inviteRedirect)") &&
+  login.includes("navigate(parsedRedirect.data.path)") &&
+  login.includes("sessionStorage.removeItem('mn_invite_redirect')") &&
+  login.includes("if (inviteRedirect !== null)") &&
+  !login.includes("new URL(") &&
+  !login.includes("pathname.startsWith") &&
+  !login.includes("startsWith('/join')")
+);
 
 // 10. Nenhum arquivo patch_*.py existe na raiz
 const files = fs.readdirSync(rootDir);
