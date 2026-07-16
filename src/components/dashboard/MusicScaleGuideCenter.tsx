@@ -8,9 +8,15 @@ import {
   CalendarDays, 
   Users, 
   FileText,
-  AlertCircle
+  AlertCircle,
+  Globe,
+  ArrowDown,
+  Info,
+  Sparkles,
+  Music,
+  Map
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 export interface MusicScaleGuideCenterProps {
   activeSection: 'overview' | 'resources' | 'getting-started';
@@ -139,7 +145,7 @@ export function MusicScaleGuideCenter({
             <p className="text-[#A0A7B5] text-sm lg:text-base mb-6">
               {!teamStarted 
                 ? t('dashboard.musicscale.center.overview.no_team_desc', 'Convide as pessoas que participarão da organização e depois continue a configuração dentro do MusicScale.')
-                : t('dashboard.musicscale.center.overview.team_desc', 'Aprenda a adicionar músicas, criar repertórios e montar sua primeira escala.')
+                : t('dashboard.musicscale.center.overview.team_desc', 'Aprenda a adicionar músicas ao Repertório, consultar cifras e letras e montar suas primeiras escalas.')
               }
             </p>
             
@@ -227,100 +233,377 @@ export function MusicScaleGuideCenter({
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
         <div className="max-w-3xl mb-12">
           <h2 className="text-2xl font-bold text-white mb-2">
-            {t('dashboard.musicscale.center.resources.title', 'O que o MusicScale pode fazer?')}
+            {t('dashboard.musicscale.center.resources.title', 'Conheça o MusicScale por dentro')}
           </h2>
           <p className="text-[#A0A7B5]">
-            {t('dashboard.musicscale.center.resources.description', 'Explore as funcionalidades integradas.')}
+            {t('dashboard.musicscale.center.resources.description', 'Entenda onde ficam as músicas, cifras, letras, escalas e integrantes, e como cada área se conecta na preparação da equipe.')}
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Repertórios */}
-          <div className="bg-[#050505] border border-white/5 rounded-2xl p-6 lg:p-8 flex flex-col h-full">
-            <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mb-6">
-              <ListMusic className="w-6 h-6 text-[#A0A7B5]" />
+        <div className="mb-12 bg-[#050505] border border-white/5 rounded-2xl p-6 lg:p-8">
+          <div className="flex flex-col md:flex-row gap-12 md:gap-8 justify-between">
+            <div className="flex-1 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                  <Globe className="w-5 h-5 text-purple-400" />
+                </div>
+                <div className="font-semibold text-white">{t('dashboard.musicscale.center.resources.flow.live_library', 'Biblioteca Viva')}</div>
+              </div>
+              <div className="ml-5 border-l-2 border-white/10 pl-6 py-2">
+                <ArrowDown className="w-4 h-4 text-[#A0A7B5] mb-2 -ml-[35px] bg-[#050505]" />
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center">
+                    <ListMusic className="w-5 h-5 text-[#2B85EB]" />
+                  </div>
+                  <div className="font-semibold text-white">{t('dashboard.musicscale.center.resources.flow.repertoire', 'Repertório de músicas')}</div>
+                </div>
+                <div className="border-l-2 border-white/10 pl-6 space-y-6">
+                  <div className="relative">
+                    <div className="absolute w-6 border-b-2 border-white/10 top-1/2 -left-6" />
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-4 h-4 text-[#A0A7B5]" />
+                      <span className="text-sm text-[#A0A7B5]">{t('dashboard.musicscale.center.resources.flow.chords', 'Cifras')}</span>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <div className="absolute w-6 border-b-2 border-white/10 top-1/2 -left-6" />
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-4 h-4 text-[#A0A7B5]" />
+                      <span className="text-sm text-[#A0A7B5]">{t('dashboard.musicscale.center.resources.flow.lyrics', 'Letras')}</span>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <div className="absolute w-6 border-b-2 border-white/10 top-1/2 -left-6" />
+                    <div className="flex items-center gap-3">
+                      <CalendarDays className="w-4 h-4 text-[#2B85EB]" />
+                      <span className="text-sm text-white font-medium">{t('dashboard.musicscale.center.resources.flow.music_scale', 'Escala de Músicas')}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-widest mb-4">
-              {t('dashboard.musicscale.center.resources.repertoire.title', 'REPERTÓRIOS')}
-            </h3>
-            <p className="text-base text-white font-medium mb-2">
-              {t('dashboard.musicscale.center.resources.repertoire.desc', 'Organize as músicas de cultos, ensaios e eventos.')}
-            </p>
-            <p className="text-sm text-[#A0A7B5] mb-6">
-              {t('dashboard.musicscale.center.resources.repertoire.why', 'Sua equipe encontra o que precisa preparar sem depender de mensagens espalhadas.')}
-            </p>
-            <div className="bg-white/5 rounded-xl p-4 mt-auto">
-              <p className="text-xs text-[#A0A7B5] leading-relaxed">
-                <strong className="text-white">Exemplo:</strong> {t('dashboard.musicscale.center.resources.repertoire.example', 'Crie um repertório chamado Culto de domingo e adicione as músicas da ministração.')}
-              </p>
+            
+            <div className="flex-1 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-amber-400" />
+                </div>
+                <div className="font-semibold text-white">{t('dashboard.musicscale.center.resources.flow.members', 'Integrantes')}</div>
+              </div>
+              <div className="ml-5 border-l-2 border-white/10 pl-6 py-2">
+                <ArrowDown className="w-4 h-4 text-[#A0A7B5] mb-2 -ml-[35px] bg-[#050505]" />
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
+                    <CalendarDays className="w-5 h-5 text-green-400" />
+                  </div>
+                  <div className="font-semibold text-white">{t('dashboard.musicscale.center.resources.flow.band_scale', 'Escala da Banda')}</div>
+                </div>
+                <div className="border-l-2 border-white/10 pl-6">
+                  <ArrowDown className="w-4 h-4 text-[#A0A7B5] mb-2 -ml-[35px] bg-[#050505]" />
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center">
+                      <CalendarDays className="w-5 h-5 text-[#2B85EB]" />
+                    </div>
+                    <div className="font-semibold text-white">{t('dashboard.musicscale.center.resources.flow.music_scale', 'Escala de Músicas')}</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-
-          {/* Escalas */}
-          <div className="bg-[#050505] border border-white/5 rounded-2xl p-6 lg:p-8 flex flex-col h-full">
-            <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mb-6">
-              <CalendarDays className="w-6 h-6 text-[#A0A7B5]" />
+          
+          <div className="mt-8 bg-[#2B85EB]/10 border border-[#2B85EB]/20 rounded-xl p-4 flex flex-col sm:flex-row items-start gap-4">
+            <div className="mt-0.5 shrink-0">
+              <Info className="w-5 h-5 text-[#2B85EB]" />
             </div>
-            <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-widest mb-4">
-              {t('dashboard.musicscale.center.resources.scales.title', 'ESCALAS')}
-            </h3>
-            <p className="text-base text-white font-medium mb-2">
-              {t('dashboard.musicscale.center.resources.scales.desc', 'Defina quem participará e qual será a função de cada pessoa.')}
-            </p>
-            <p className="text-sm text-[#A0A7B5] mb-6">
-              {t('dashboard.musicscale.center.resources.scales.why', 'Todos sabem quando servirão e o que farão.')}
-            </p>
-            <div className="bg-white/5 rounded-xl p-4 mt-auto">
-              <p className="text-xs text-[#A0A7B5] leading-relaxed">
-                <strong className="text-white">Exemplo:</strong> {t('dashboard.musicscale.center.resources.scales.example', 'Escolha vocal principal, backing vocal, teclado, bateria, guitarra e liderança.')}
-              </p>
-            </div>
-          </div>
-
-          {/* Músicos */}
-          <div className="bg-[#050505] border border-white/5 rounded-2xl p-6 lg:p-8 flex flex-col h-full">
-            <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mb-6">
-              <Users className="w-6 h-6 text-[#A0A7B5]" />
-            </div>
-            <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-widest mb-4">
-              {t('dashboard.musicscale.center.resources.musicians.title', 'MÚSICOS')}
-            </h3>
-            <p className="text-base text-white font-medium mb-2">
-              {t('dashboard.musicscale.center.resources.musicians.desc', 'Organize as pessoas e suas funções dentro do ministério.')}
-            </p>
-            <p className="text-sm text-[#A0A7B5] mb-6">
-              {t('dashboard.musicscale.center.resources.musicians.why', 'Fica mais fácil montar equipes coerentes para cada culto.')}
-            </p>
-            <div className="bg-white/5 rounded-xl p-4 mt-auto">
-              <p className="text-xs text-[#A0A7B5] leading-relaxed">
-                <strong className="text-white">Exemplo:</strong> {t('dashboard.musicscale.center.resources.musicians.example', 'Cadastre quem toca bateria, teclado, guitarra ou participa do vocal.')}
-              </p>
-            </div>
-          </div>
-
-          {/* Preparação */}
-          <div className="bg-[#050505] border border-white/5 rounded-2xl p-6 lg:p-8 flex flex-col h-full">
-            <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mb-6">
-              <FileText className="w-6 h-6 text-[#A0A7B5]" />
-            </div>
-            <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-widest mb-4">
-              {t('dashboard.musicscale.center.resources.preparation.title', 'PREPARAÇÃO')}
-            </h3>
-            <p className="text-base text-white font-medium mb-2">
-              {t('dashboard.musicscale.center.resources.preparation.desc', 'Reúna as informações que sua equipe precisa antes do culto.')}
-            </p>
-            <p className="text-sm text-[#A0A7B5] mb-6">
-              {t('dashboard.musicscale.center.resources.preparation.why', 'Os participantes chegam mais preparados para o ensaio e a ministração.')}
-            </p>
-            <div className="bg-white/5 rounded-xl p-4 mt-auto">
-              <p className="text-xs text-[#A0A7B5] leading-relaxed">
-                <strong className="text-white">Exemplo:</strong> {t('dashboard.musicscale.center.resources.preparation.example', 'Compartilhe repertório, orientações e materiais de preparação.')}
+            <div>
+              <h4 className="text-sm font-bold text-white mb-1">{t('dashboard.musicscale.center.resources.flow.notice_title', 'Como o Repertório funciona')}</h4>
+              <p className="text-sm text-[#A0A7B5]">
+                {t('dashboard.musicscale.center.resources.flow.notice_text', 'No MusicScale, Repertório é o acervo de músicas da sua organização. Você não cria um repertório separado para cada culto. Para uma data ou evento, crie uma Escala de Músicas e escolha nela as músicas do Repertório.')}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-12 flex justify-center">
+        <div className="mb-8">
+            <h3 className="text-xl font-bold text-white mb-6">Músicas e conteúdo</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              
+              {/* Repertório de músicas */}
+              <div className="bg-[#2B85EB]/10 border border-[#2B85EB]/30 rounded-2xl p-6 lg:p-8 flex flex-col h-full md:col-span-2 lg:col-span-2 shadow-[0_0_30px_rgba(43,133,235,0.05)]">
+                <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/20 flex items-center justify-center mb-6">
+                  <ListMusic className="w-6 h-6 text-[#2B85EB]" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">
+                  {t('dashboard.musicscale.center.resources.repertoire.title', 'Repertório de músicas')}
+                </h3>
+                <p className="text-sm text-[#A0A7B5] mb-6">
+                  {t('dashboard.musicscale.center.resources.repertoire.desc', 'É o acervo de músicas da sua organização. Nele ficam todas as músicas cadastradas ou importadas para a equipe.')}
+                </p>
+                <div className="mb-6 flex-1">
+                  <strong className="text-sm text-white block mb-2">Você pode:</strong>
+                  <ul className="text-sm text-[#A0A7B5] space-y-1.5 list-disc pl-4">
+                    <li>pesquisar por título ou artista;</li>
+                    <li>abrir os detalhes de cada música;</li>
+                    <li>consultar letra, cifra e tom quando estiverem disponíveis;</li>
+                    <li>organizar músicas com tags e informações;</li>
+                    <li>escolher essas músicas ao criar uma Escala de Músicas.</li>
+                  </ul>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Map className="w-4 h-4 text-[#2B85EB]" />
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">Onde encontrar</span>
+                  </div>
+                  <p className="text-sm text-[#A0A7B5] mb-3">Repertório &rarr; Músicas</p>
+                  <p className="text-xs text-[#A0A7B5] leading-relaxed">
+                    <strong className="text-white">Na prática:</strong> {t('dashboard.musicscale.center.resources.repertoire.practice', 'Abra uma música para conferir seus detalhes, letra ou cifra. Depois, escolha essa música ao montar a escala de um culto.')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Biblioteca Viva */}
+              <div className="bg-gradient-to-br from-purple-500/10 to-[#050505] border border-purple-500/20 rounded-2xl p-6 lg:p-8 flex flex-col h-full lg:col-span-1 shadow-[0_0_30px_rgba(168,85,247,0.05)]">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                    <Globe className="w-6 h-6 text-purple-400" />
+                  </div>
+                  <span className="px-2 py-1 bg-purple-500/20 text-purple-300 text-[10px] font-bold uppercase tracking-wider rounded">Acervo global</span>
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">
+                  {t('dashboard.musicscale.center.resources.library.title', 'Biblioteca Viva')}
+                </h3>
+                <p className="text-sm text-[#A0A7B5] mb-6">
+                  {t('dashboard.musicscale.center.resources.library.desc', 'Um acervo global e atualizado de músicas prontas para importar para o Repertório da sua organização.')}
+                </p>
+                <div className="mb-6 flex-1">
+                  <strong className="text-sm text-white block mb-2">Você pode:</strong>
+                  <ul className="text-sm text-[#A0A7B5] space-y-1.5 list-disc pl-4">
+                    <li>pesquisar músicas;</li>
+                    <li>visualizar músicas completas;</li>
+                    <li>encontrar letras;</li>
+                    <li>encontrar cifras;</li>
+                    <li>conferir o tom e os detalhes disponíveis;</li>
+                    <li>importar a música para sua organização;</li>
+                    <li>identificar o que já foi importado.</li>
+                  </ul>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Map className="w-4 h-4 text-purple-400" />
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">Onde encontrar</span>
+                  </div>
+                  <p className="text-sm text-[#A0A7B5] mb-3">Biblioteca Viva</p>
+                  <p className="text-xs text-[#A0A7B5] leading-relaxed">
+                    <strong className="text-white">Na prática:</strong> {t('dashboard.musicscale.center.resources.library.practice', 'Encontre uma música pronta, confira seu conteúdo e importe-a para o Repertório da sua organização.')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Cifras */}
+              <div className="bg-[#050505] border border-white/10 rounded-2xl p-6 flex flex-col h-full">
+                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center mb-4">
+                  <Music className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">
+                  {t('dashboard.musicscale.center.resources.chords.title', 'Cifras')}
+                </h3>
+                <p className="text-sm text-[#A0A7B5] mb-4">
+                  {t('dashboard.musicscale.center.resources.chords.desc', 'Consulte as cifras das músicas que fazem parte do Repertório da sua organização.')}
+                </p>
+                <div className="mb-6 flex-1">
+                  <strong className="text-sm text-white block mb-2">Você pode:</strong>
+                  <ul className="text-sm text-[#A0A7B5] space-y-1.5 list-disc pl-4">
+                    <li>pesquisar por título ou artista;</li>
+                    <li>filtrar por tom;</li>
+                    <li>filtrar por tags;</li>
+                    <li>abrir a cifra;</li>
+                    <li>adicionar ou atualizar cifras quando possuir permissão.</li>
+                  </ul>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Map className="w-4 h-4 text-white" />
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">Onde encontrar</span>
+                  </div>
+                  <p className="text-sm text-[#A0A7B5] mb-3">Repertório &rarr; Cifras</p>
+                  <p className="text-xs text-[#A0A7B5] leading-relaxed">
+                    <strong className="text-white">Na prática:</strong> {t('dashboard.musicscale.center.resources.chords.practice', 'Encontre rapidamente a cifra e o tom que a banda precisa preparar.')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Letras */}
+              <div className="bg-[#050505] border border-white/10 rounded-2xl p-6 flex flex-col h-full">
+                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center mb-4">
+                  <FileText className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">
+                  {t('dashboard.musicscale.center.resources.lyrics.title', 'Letras')}
+                </h3>
+                <p className="text-sm text-[#A0A7B5] mb-4">
+                  {t('dashboard.musicscale.center.resources.lyrics.desc', 'Consulte as letras das músicas cadastradas no Repertório.')}
+                </p>
+                <div className="mb-6 flex-1">
+                  <strong className="text-sm text-white block mb-2">Você pode:</strong>
+                  <ul className="text-sm text-[#A0A7B5] space-y-1.5 list-disc pl-4">
+                    <li>pesquisar por título, artista ou trecho;</li>
+                    <li>visualizar a letra completa;</li>
+                    <li>filtrar e organizar as músicas;</li>
+                    <li>usar a letra durante a preparação da equipe.</li>
+                  </ul>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Map className="w-4 h-4 text-white" />
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">Onde encontrar</span>
+                  </div>
+                  <p className="text-sm text-[#A0A7B5] mb-3">Repertório &rarr; Letras</p>
+                  <p className="text-xs text-[#A0A7B5] leading-relaxed">
+                    <strong className="text-white">Na prática:</strong> {t('dashboard.musicscale.center.resources.lyrics.practice', 'Abra a letra completa para revisar a ordem e as partes da música.')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Importação Inteligente */}
+              <div className="bg-[#050505] border border-white/10 rounded-2xl p-6 flex flex-col h-full">
+                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center mb-4">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">
+                  {t('dashboard.musicscale.center.resources.ai_import.title', 'Importação inteligente')}
+                </h3>
+                <p className="text-sm text-[#A0A7B5] mb-4">
+                  {t('dashboard.musicscale.center.resources.ai_import.desc', 'Transforme uma cifra ou letra desorganizada em conteúdo estruturado para o MusicScale.')}
+                </p>
+                <div className="mb-6 flex-1">
+                  <strong className="text-sm text-white block mb-2">Você pode:</strong>
+                  <ul className="text-sm text-[#A0A7B5] space-y-1.5 list-disc pl-4">
+                    <li>colar uma cifra;</li>
+                    <li>colar uma letra;</li>
+                    <li>organizar automaticamente o conteúdo;</li>
+                    <li>revisar antes de salvar;</li>
+                    <li>adicionar a música ao Repertório.</li>
+                  </ul>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Map className="w-4 h-4 text-white" />
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">Onde encontrar</span>
+                  </div>
+                  <p className="text-sm text-[#A0A7B5] mb-3">Repertório &rarr; Músicas &rarr; Importar com IA</p>
+                  <p className="text-[11px] text-[#A0A7B5] italic">
+                    {t('dashboard.musicscale.center.resources.ai_import.notice', 'A disponibilidade depende dos recursos incluídos no plano.')}
+                  </p>
+                </div>
+              </div>
+            </div>
+        </div>
+
+        <div className="mb-12">
+            <h3 className="text-xl font-bold text-white mb-6">Equipe e escalas</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              
+              {/* Escalas de Músicas */}
+              <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-6 lg:p-8 flex flex-col h-full md:col-span-2 lg:col-span-2 shadow-[0_0_30px_rgba(34,197,94,0.05)]">
+                <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center mb-6">
+                  <CalendarDays className="w-6 h-6 text-green-400" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">
+                  {t('dashboard.musicscale.center.resources.music_scales.title', 'Escalas de Músicas')}
+                </h3>
+                <p className="text-sm text-[#A0A7B5] mb-6">
+                  {t('dashboard.musicscale.center.resources.music_scales.desc', 'Organize as músicas que serão cantadas e tocadas em uma data e tipo de evento.')}
+                </p>
+                <div className="mb-6 flex-1">
+                  <strong className="text-sm text-white block mb-2">Você pode:</strong>
+                  <ul className="text-sm text-[#A0A7B5] space-y-1.5 list-disc pl-4">
+                    <li>escolher a data, o horário, o local e o tipo de evento;</li>
+                    <li>selecionar músicas do Repertório;</li>
+                    <li>vincular uma Escala da Banda;</li>
+                    <li>visualizar as músicas e os integrantes da ocasião.</li>
+                  </ul>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Map className="w-4 h-4 text-green-400" />
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">Onde encontrar</span>
+                  </div>
+                  <p className="text-sm text-[#A0A7B5] mb-3">Escalas &rarr; Escalas de Músicas</p>
+                  <p className="text-xs text-[#A0A7B5] leading-relaxed">
+                    <strong className="text-white">Na prática:</strong> {t('dashboard.musicscale.center.resources.music_scales.practice', 'Crie a escala do culto de domingo, escolha as músicas e vincule a banda que participará.')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Integrantes */}
+              <div className="bg-[#050505] border border-white/10 rounded-2xl p-6 flex flex-col h-full lg:col-span-1">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center mb-4">
+                  <Users className="w-5 h-5 text-amber-400" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">
+                  {t('dashboard.musicscale.center.resources.members.title', 'Integrantes')}
+                </h3>
+                <p className="text-sm text-[#A0A7B5] mb-4">
+                  {t('dashboard.musicscale.center.resources.members.desc', 'Visualize as pessoas que participam do ministério e suas especialidades.')}
+                </p>
+                <div className="mb-6 flex-1">
+                  <strong className="text-sm text-white block mb-2">Você pode:</strong>
+                  <ul className="text-sm text-[#A0A7B5] space-y-1.5 list-disc pl-4">
+                    <li>localizar músicos, vocais e ministros;</li>
+                    <li>visualizar funções, instrumentos e especialidades;</li>
+                    <li>filtrar integrantes pela especialidade.</li>
+                  </ul>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4 mt-auto">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Map className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">Onde encontrar</span>
+                  </div>
+                  <p className="text-sm text-[#A0A7B5] mb-3">Integrantes</p>
+                  <p className="text-xs text-[#A0A7B5] leading-relaxed">
+                    <strong className="text-white">Na prática:</strong> {t('dashboard.musicscale.center.resources.members.practice', 'Encontre quem toca bateria, teclado ou guitarra e quem participa dos vocais.')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Escalas da Banda */}
+              <div className="bg-[#050505] border border-white/10 rounded-2xl p-6 flex flex-col h-full lg:col-span-1">
+                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center mb-4">
+                  <CalendarDays className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">
+                  {t('dashboard.musicscale.center.resources.band_scales.title', 'Escalas da Banda')}
+                </h3>
+                <p className="text-sm text-[#A0A7B5] mb-4">
+                  {t('dashboard.musicscale.center.resources.band_scales.desc', 'Organize os músicos, vocais, ministros e funções que atuarão em uma data ou evento.')}
+                </p>
+                <div className="mb-6 flex-1">
+                  <strong className="text-sm text-white block mb-2">Você pode:</strong>
+                  <ul className="text-sm text-[#A0A7B5] space-y-1.5 list-disc pl-4">
+                    <li>escolher os integrantes e definir funções;</li>
+                    <li>visualizar quem está escalado e criar a composição da banda;</li>
+                    <li>vincular a Escala da Banda a uma Escala de Músicas.</li>
+                  </ul>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4 mt-auto">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Map className="w-4 h-4 text-white" />
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">Onde encontrar</span>
+                  </div>
+                  <p className="text-sm text-[#A0A7B5] mb-3">Escalas &rarr; Escalas da Banda</p>
+                  <p className="text-xs text-[#A0A7B5] leading-relaxed">
+                    <strong className="text-white">Na prática:</strong> {t('dashboard.musicscale.center.resources.band_scales.practice', 'Defina vocal principal, backing vocals, teclado, guitarra, baixo e bateria para o culto.')}
+                  </p>
+                </div>
+              </div>
+            </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-[#0a0a0a] to-[#111] border border-white/5 rounded-2xl p-8 text-center flex flex-col items-center">
+          <h3 className="text-xl font-bold text-white mb-4">{t('dashboard.musicscale.center.resources.preparation_result.title', 'Tudo conectado para preparar a equipe')}</h3>
+          <p className="text-[#A0A7B5] max-w-2xl mb-8">
+            {t('dashboard.musicscale.center.resources.preparation_result.text', 'O Repertório reúne as músicas. Cifras e Letras ajudam no estudo. Os Integrantes formam a Escala da Banda. A Escala de Músicas organiza o que será apresentado em cada data e pode receber a banda que atuará naquele evento.')}
+          </p>
           <button
             onClick={onOpenMusicScale}
             disabled={!musicScaleReady}
@@ -330,6 +613,7 @@ export function MusicScaleGuideCenter({
             <ExternalLink className="w-4 h-4" />
           </button>
         </div>
+
       </div>
     );
   };
@@ -351,7 +635,7 @@ export function MusicScaleGuideCenter({
             <ExternalLink className="w-5 h-5 text-[#2B85EB]" />
           </div>
           <p className="text-sm text-[#A0A7B5]">
-            {t('dashboard.musicscale.center.getting_started.operational_notice', 'As etapas de músicas, repertórios e escalas acontecem dentro do MusicScale. Abra o aplicativo e siga as orientações abaixo.')}
+            {t('dashboard.musicscale.center.getting_started.operational_notice', 'As etapas de Repertório, cifras, letras, integrantes e escalas acontecem dentro do MusicScale. Abra o aplicativo e siga as orientações abaixo.')}
           </p>
         </div>
 
@@ -487,7 +771,7 @@ export function MusicScaleGuideCenter({
             
             <div className="mb-2 flex items-center gap-3">
               <h3 className="text-lg font-bold text-white">
-                {t('dashboard.musicscale.center.getting_started.steps.songs.title', 'Adicione suas primeiras músicas')}
+                {t('dashboard.musicscale.center.getting_started.steps.songs.title', 'Adicione músicas ao Repertório')}
               </h3>
               <span className="px-2 py-0.5 bg-white/10 text-[#A0A7B5] text-xs font-semibold rounded-md uppercase tracking-wider">
                 {t('dashboard.musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale')}
@@ -497,20 +781,20 @@ export function MusicScaleGuideCenter({
             <div className="space-y-4 text-sm max-w-2xl">
               <div>
                 <strong className="text-white block mb-1">O que é:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.songs.what', 'As músicas serão utilizadas nos repertórios e nas escalas.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.songs.what', 'O Repertório reúne todas as músicas da sua organização.')}</p>
               </div>
               <div>
                 <strong className="text-white block mb-1">Por que é importante:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.songs.why', 'Sem músicas cadastradas, sua equipe não consegue preparar o repertório.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.songs.why', 'As músicas do Repertório poderão ser escolhidas nas Escalas de Músicas.')}</p>
               </div>
               <div>
                 <strong className="text-white block mb-1">Como fazer:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.songs.how', 'Abra o MusicScale, entre na área de músicas e escolha a opção para adicionar uma música.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.songs.how', 'No MusicScale, abra Repertório → Músicas. Adicione manualmente, use a importação inteligente ou importe pela Biblioteca Viva.')}</p>
               </div>
               <div className="bg-white/5 rounded-lg p-3">
                 <p className="text-[#A0A7B5]">
                   <strong className="text-white">Resultado esperado: </strong>
-                  {t('dashboard.musicscale.center.getting_started.steps.songs.result', 'Suas primeiras músicas estarão disponíveis para os próximos repertórios.')}
+                  {t('dashboard.musicscale.center.getting_started.steps.songs.result', 'As músicas usadas pela organização estarão disponíveis em um único acervo.')}
                 </p>
               </div>
               
@@ -535,7 +819,7 @@ export function MusicScaleGuideCenter({
             
             <div className="mb-2 flex items-center gap-3">
               <h3 className="text-lg font-bold text-white">
-                {t('dashboard.musicscale.center.getting_started.steps.repertoire.title', 'Crie seu primeiro repertório')}
+                {t('dashboard.musicscale.center.getting_started.steps.content.title', 'Confira cifras e letras')}
               </h3>
               <span className="px-2 py-0.5 bg-white/10 text-[#A0A7B5] text-xs font-semibold rounded-md uppercase tracking-wider">
                 {t('dashboard.musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale')}
@@ -545,21 +829,20 @@ export function MusicScaleGuideCenter({
             <div className="space-y-4 text-sm max-w-2xl">
               <div>
                 <strong className="text-white block mb-1">O que é:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.repertoire.what', 'O repertório reúne as músicas de um culto, ensaio ou evento.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.content.what', 'Cifras e Letras são visualizações do conteúdo das músicas que já estão no Repertório.')}</p>
               </div>
               <div>
                 <strong className="text-white block mb-1">Por que é importante:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.repertoire.why', 'A equipe consegue saber antecipadamente o que precisa estudar.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.content.why', 'A equipe encontra rapidamente o material necessário para estudar.')}</p>
               </div>
               <div>
                 <strong className="text-white block mb-1">Como fazer:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.repertoire.how', 'Abra a área de repertórios, crie um novo repertório e adicione as músicas.')}</p>
-                <p className="text-[#A0A7B5] mt-1"><strong className="text-white">Exemplo: </strong>{t('dashboard.musicscale.center.getting_started.steps.repertoire.example', 'Culto de domingo, 19h.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.content.how', 'Abra Repertório → Cifras ou Repertório → Letras.')}</p>
               </div>
               <div className="bg-white/5 rounded-lg p-3">
                 <p className="text-[#A0A7B5]">
                   <strong className="text-white">Resultado esperado: </strong>
-                  {t('dashboard.musicscale.center.getting_started.steps.repertoire.result', 'O conjunto de músicas ficará organizado em um único lugar.')}
+                  {t('dashboard.musicscale.center.getting_started.steps.content.result', 'Músicos e vocais terão acesso ao conteúdo necessário para a preparação.')}
                 </p>
               </div>
               
@@ -569,7 +852,7 @@ export function MusicScaleGuideCenter({
                   disabled={!musicScaleReady}
                   className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] disabled:bg-white/5 disabled:text-[#A0A7B5] text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
                 >
-                  {t('dashboard.musicscale.center.getting_started.steps.repertoire.action', 'Abrir MusicScale')}
+                  {t('dashboard.musicscale.center.getting_started.steps.content.action', 'Abrir MusicScale')}
                   <ExternalLink className="w-4 h-4" />
                 </button>
               </div>
@@ -584,7 +867,7 @@ export function MusicScaleGuideCenter({
             
             <div className="mb-2 flex items-center gap-3">
               <h3 className="text-lg font-bold text-white">
-                {t('dashboard.musicscale.center.getting_started.steps.scale.title', 'Monte sua primeira escala')}
+                {t('dashboard.musicscale.center.getting_started.steps.members.title', 'Organize os integrantes')}
               </h3>
               <span className="px-2 py-0.5 bg-white/10 text-[#A0A7B5] text-xs font-semibold rounded-md uppercase tracking-wider">
                 {t('dashboard.musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale')}
@@ -594,21 +877,20 @@ export function MusicScaleGuideCenter({
             <div className="space-y-4 text-sm max-w-2xl">
               <div>
                 <strong className="text-white block mb-1">O que é:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.scale.what', 'A escala define quem participará e qual será a função de cada pessoa.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.members.what', 'A área Integrantes reúne músicos, vocais, ministros, funções e especialidades.')}</p>
               </div>
               <div>
                 <strong className="text-white block mb-1">Por que é importante:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.scale.why', 'Todos sabem quando servirão e o que precisam preparar.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.members.why', 'Essas informações ajudam a montar Escalas da Banda de forma mais clara.')}</p>
               </div>
               <div>
                 <strong className="text-white block mb-1">Como fazer:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.scale.how', 'Crie uma escala, escolha a data e adicione as pessoas e funções.')}</p>
-                <p className="text-[#A0A7B5] mt-1"><strong className="text-white">Exemplo: </strong>{t('dashboard.musicscale.center.getting_started.steps.scale.example', 'liderança; vocal principal; backing vocal; teclado; guitarra; baixo; bateria.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.members.how', 'Abra Integrantes e confira se as funções e especialidades estão corretas.')}</p>
               </div>
               <div className="bg-white/5 rounded-lg p-3">
                 <p className="text-[#A0A7B5]">
                   <strong className="text-white">Resultado esperado: </strong>
-                  {t('dashboard.musicscale.center.getting_started.steps.scale.result', 'A equipe ficará organizada para o culto.')}
+                  {t('dashboard.musicscale.center.getting_started.steps.members.result', 'O MusicScale saberá quem pode atuar em cada instrumento ou função.')}
                 </p>
               </div>
               
@@ -618,7 +900,7 @@ export function MusicScaleGuideCenter({
                   disabled={!musicScaleReady}
                   className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] disabled:bg-white/5 disabled:text-[#A0A7B5] text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
                 >
-                  {t('dashboard.musicscale.center.getting_started.steps.scale.action', 'Abrir MusicScale')}
+                  {t('dashboard.musicscale.center.getting_started.steps.members.action', 'Abrir MusicScale')}
                   <ExternalLink className="w-4 h-4" />
                 </button>
               </div>
@@ -633,7 +915,7 @@ export function MusicScaleGuideCenter({
             
             <div className="mb-2 flex items-center gap-3">
               <h3 className="text-lg font-bold text-white">
-                {t('dashboard.musicscale.center.getting_started.steps.preparation.title', 'Prepare a equipe para o culto')}
+                {t('dashboard.musicscale.center.getting_started.steps.band_scale.title', 'Monte uma Escala da Banda')}
               </h3>
               <span className="px-2 py-0.5 bg-white/10 text-[#A0A7B5] text-xs font-semibold rounded-md uppercase tracking-wider">
                 {t('dashboard.musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale')}
@@ -643,20 +925,20 @@ export function MusicScaleGuideCenter({
             <div className="space-y-4 text-sm max-w-2xl">
               <div>
                 <strong className="text-white block mb-1">O que é:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.preparation.what', 'Reúna as informações e orientações que todos precisam antes da ministração.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.band_scale.what', 'A Escala da Banda define quem atuará e qual será a função de cada pessoa.')}</p>
               </div>
               <div>
                 <strong className="text-white block mb-1">Por que é importante:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.preparation.why', 'Uma equipe bem informada chega mais preparada.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.band_scale.why', 'A equipe entende quem participará e como será formada.')}</p>
               </div>
               <div>
                 <strong className="text-white block mb-1">Como fazer:</strong>
-                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.preparation.how', 'Revise o repertório, a escala, os participantes e os materiais disponíveis.')}</p>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.band_scale.how', 'Abra Escalas → Escalas da Banda, escolha os integrantes e defina as funções.')}</p>
               </div>
               <div className="bg-white/5 rounded-lg p-3">
                 <p className="text-[#A0A7B5]">
                   <strong className="text-white">Resultado esperado: </strong>
-                  {t('dashboard.musicscale.center.getting_started.steps.preparation.result', 'Todos conseguem visualizar o que precisam fazer.')}
+                  {t('dashboard.musicscale.center.getting_started.steps.band_scale.result', 'A banda e os vocais da ocasião estarão organizados.')}
                 </p>
               </div>
               
@@ -666,7 +948,103 @@ export function MusicScaleGuideCenter({
                   disabled={!musicScaleReady}
                   className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] disabled:bg-white/5 disabled:text-[#A0A7B5] text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
                 >
-                  {t('dashboard.musicscale.center.getting_started.steps.preparation.action', 'Abrir MusicScale')}
+                  {t('dashboard.musicscale.center.getting_started.steps.band_scale.action', 'Abrir MusicScale')}
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 7 */}
+          <div className="relative">
+            <div className="absolute -left-[49px] top-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm bg-white/10 text-white border border-white/20">
+              7
+            </div>
+            
+            <div className="mb-2 flex items-center gap-3">
+              <h3 className="text-lg font-bold text-white">
+                {t('dashboard.musicscale.center.getting_started.steps.music_scale.title', 'Crie uma Escala de Músicas')}
+              </h3>
+              <span className="px-2 py-0.5 bg-white/10 text-[#A0A7B5] text-xs font-semibold rounded-md uppercase tracking-wider">
+                {t('dashboard.musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale')}
+              </span>
+            </div>
+            
+            <div className="space-y-4 text-sm max-w-2xl">
+              <div>
+                <strong className="text-white block mb-1">O que é:</strong>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.music_scale.what', 'A Escala de Músicas reúne as músicas de uma data e tipo de evento.')}</p>
+              </div>
+              <div>
+                <strong className="text-white block mb-1">Por que é importante:</strong>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.music_scale.why', 'A equipe sabe o que será cantado e tocado.')}</p>
+              </div>
+              <div>
+                <strong className="text-white block mb-1">Como fazer:</strong>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.music_scale.how', 'Abra Escalas → Escalas de Músicas, escolha a data, o tipo de evento, o local e as músicas do Repertório. Você também pode vincular a Escala da Banda.')}</p>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3">
+                <p className="text-[#A0A7B5]">
+                  <strong className="text-white">Resultado esperado: </strong>
+                  {t('dashboard.musicscale.center.getting_started.steps.music_scale.result', 'As músicas e a equipe daquele evento estarão organizadas.')}
+                </p>
+              </div>
+              
+              <div className="pt-2">
+                <button
+                  onClick={onOpenMusicScale}
+                  disabled={!musicScaleReady}
+                  className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] disabled:bg-white/5 disabled:text-[#A0A7B5] text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
+                >
+                  {t('dashboard.musicscale.center.getting_started.steps.music_scale.action', 'Abrir MusicScale')}
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 8 */}
+          <div className="relative">
+            <div className="absolute -left-[49px] top-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm bg-white/10 text-white border border-white/20">
+              8
+            </div>
+            
+            <div className="mb-2 flex items-center gap-3">
+              <h3 className="text-lg font-bold text-white">
+                {t('dashboard.musicscale.center.getting_started.steps.review.title', 'Revise a preparação')}
+              </h3>
+              <span className="px-2 py-0.5 bg-white/10 text-[#A0A7B5] text-xs font-semibold rounded-md uppercase tracking-wider">
+                {t('dashboard.musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale')}
+              </span>
+            </div>
+            
+            <div className="space-y-4 text-sm max-w-2xl">
+              <div>
+                <strong className="text-white block mb-1">O que é:</strong>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.review.what', 'Antes do culto, confira se músicas, letras, cifras e integrantes estão corretos.')}</p>
+              </div>
+              <div>
+                <strong className="text-white block mb-1">Por que é importante:</strong>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.review.why', 'Uma equipe bem informada consegue se preparar melhor.')}</p>
+              </div>
+              <div>
+                <strong className="text-white block mb-1">Como fazer:</strong>
+                <p className="text-[#A0A7B5]">{t('dashboard.musicscale.center.getting_started.steps.review.how', 'Revise a Escala de Músicas e a Escala da Banda vinculada.')}</p>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3">
+                <p className="text-[#A0A7B5]">
+                  <strong className="text-white">Resultado esperado: </strong>
+                  {t('dashboard.musicscale.center.getting_started.steps.review.result', 'Todos terão clareza sobre o que preparar e quando participar.')}
+                </p>
+              </div>
+              
+              <div className="pt-2">
+                <button
+                  onClick={onOpenMusicScale}
+                  disabled={!musicScaleReady}
+                  className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] disabled:bg-white/5 disabled:text-[#A0A7B5] text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
+                >
+                  {t('dashboard.musicscale.center.getting_started.steps.review.action', 'Abrir MusicScale')}
                   <ExternalLink className="w-4 h-4" />
                 </button>
               </div>

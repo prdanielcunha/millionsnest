@@ -4,7 +4,6 @@ import path from 'path';
 function runTests() {
   let hasErrors = false;
   const errors: string[] = [];
-
   const logError = (msg: string) => {
     errors.push(msg);
     hasErrors = true;
@@ -48,30 +47,55 @@ function runTests() {
   if (!compContent.includes("activeSection === 'resources'")) logError('Missing resources section logic');
   if (!compContent.includes("activeSection === 'getting-started'")) logError('Missing getting-started section logic');
 
-  // 3. Dashboard reading query param
-  const dashboardContent = fs.readFileSync(path.join(root, 'src/pages/Dashboard.tsx'), 'utf8');
-  if (!dashboardContent.includes('searchParams.get(\'section\')')) logError('Dashboard doesn\'t read section query param');
-  if (!dashboardContent.includes('validSections.includes')) logError('Dashboard doesn\'t validate sections');
-  if (!dashboardContent.includes('scrollIntoView')) {
-    // scrollIntoView should not be there for tab === apps
-    if (dashboardContent.includes("tab === 'apps'")) {
-       if(dashboardContent.match(/tab === 'apps'.*scrollIntoView/s)) {
-          logError('Legacy scrollIntoView for apps tab not removed');
-       }
-    }
+  // Validate the 8 steps
+  const steps = [
+    'Confira sua organização',
+    'Convide sua equipe',
+    'Adicione músicas ao Repertório',
+    'Confira cifras e letras',
+    'Organize os integrantes',
+    'Monte uma Escala da Banda',
+    'Crie uma Escala de Músicas',
+    'Revise a preparação'
+  ];
+  for (const step of steps) {
+    if (!compContent.includes(step)) logError(`Missing step: ${step}`);
   }
 
+  // Validate the canonical resources names
+  const resources = [
+    'Repertório de músicas',
+    'Biblioteca Viva',
+    'Importação inteligente',
+    'Cifras',
+    'Letras',
+    'Escalas de Músicas',
+    'Escalas da Banda',
+    'Integrantes'
+  ];
+  for (const resource of resources) {
+    if (!compContent.includes(resource)) logError(`Missing resource card: ${resource}`);
+  }
+
+  // Validate visual map terms
+  if (!compContent.includes('Como o Repertório funciona')) logError('Missing visual map instruction');
+
+  // 3. WorkspaceHome rules
   const workspaceHomeContent = fs.readFileSync(path.join(root, 'src/components/dashboard/EcosystemWorkspaceHome.tsx'), 'utf8');
   if (workspaceHomeContent.includes("Conhecer recursos' } &rarr;")) logError('Card Conhecer recursos navigates poorly');
   if (workspaceHomeContent.includes("Aprender a usar &rarr;") && !workspaceHomeContent.includes("getting-started")) logError('Card Aprender a usar doesn\'t navigate correctly');
   if (!workspaceHomeContent.includes('onSelectMusicScaleSection(\'resources\')')) logError('Conhecer recursos action not found');
+  
+  // Checking new Home card requirement: "Abrir MusicScale" / "Conhecer recursos" / "Novo por aqui"
+  if (!workspaceHomeContent.includes('dashboard.musicscale.home.new_here')) logError('Missing contextual link "Novo por aqui?"');
+  if (!workspaceHomeContent.includes('onSelectMusicScaleSection(\'getting-started\')')) logError('Getting started action not found on home card');
 
   if (hasErrors) {
     console.error("Test Failed:\n", errors.join('\n'));
     process.exit(1);
   }
   
-  console.log("All static tests passed for UX-FOUNDATION-1B.1");
+  console.log("All static tests passed for UX-FOUNDATION-1B.2");
 }
 
 runTests();

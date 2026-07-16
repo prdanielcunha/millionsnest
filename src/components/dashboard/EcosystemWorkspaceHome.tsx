@@ -123,6 +123,7 @@ export function EcosystemWorkspaceHome({
                   const hasPaymentIssue = msCatalogState === "payment_issue";
                   
                   const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
+                  const teamStarted = members.length > 1 || pendingInvites.length > 0;
 
                   return (
                     <div key={app.id} className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-2xl p-6 flex flex-col justify-between">
@@ -159,14 +160,57 @@ export function EcosystemWorkspaceHome({
                         }}
                         disabled={isLoading || (!isReadyToOpen && !hasPaymentIssue)}
                         className={`w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 ${
-                          hasPaymentIssue ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30' :
-                          isReadyToOpen ? 'bg-[#2B85EB]/10 text-[#2B85EB] hover:bg-[#2B85EB]/20 border border-[#2B85EB]/30' :
+                          hasPaymentIssue ? 'bg-red-500 hover:bg-red-600 text-white' :
+                          isReadyToOpen ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20' :
                           'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
                         }`}
                       >
                         {isLoading ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : (hasPaymentIssue ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
                         {hasPaymentIssue ? t('dashboard.workspace.resolve_payment', 'Regularizar pagamento') : t('dashboard.workspace.open_app', `Abrir ${app.name}`, { appName: app.name })}
                       </button>
+
+                      {!hasPaymentIssue && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectWorkspace('musicscale');
+                              onSelectMusicScaleSection('resources');
+                            }}
+                            className="w-full py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10 mt-3 text-sm"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            {t('dashboard.musicscale.hero.learn_more', 'Conhecer recursos')}
+                          </button>
+                          
+                          <div className="mt-4 text-center">
+                            {(!teamStarted) ? (
+                              <button
+                                onClick={() => {
+                                  onSelectWorkspace('musicscale');
+                                  onSelectMusicScaleSection('getting-started');
+                                }}
+                                className="inline-flex items-center gap-1.5 text-xs text-[#2B85EB] hover:text-[#3B95FB] font-medium transition-colors"
+                              >
+                                <span className="px-1.5 py-0.5 rounded-[4px] bg-[#2B85EB]/20 text-[#2B85EB] font-bold uppercase tracking-wider text-[9px] mr-1">
+                                  {t('dashboard.musicscale.center.badges.recommended', 'Recomendado')}
+                                </span>
+                                {t('dashboard.musicscale.home.new_here', 'Novo por aqui? Veja os primeiros passos')} &rarr;
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  onSelectWorkspace('musicscale');
+                                  onSelectMusicScaleSection('getting-started');
+                                }}
+                                className="inline-flex items-center gap-1.5 text-xs text-[#A0A7B5] hover:text-white font-medium transition-colors"
+                              >
+                                {t('dashboard.musicscale.home.review_steps', 'Rever primeiros passos')} &rarr;
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 }

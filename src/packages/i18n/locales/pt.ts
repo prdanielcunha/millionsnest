@@ -412,49 +412,80 @@ export default {
                   "no_team_title": "Prepare sua equipe para usar o MusicScale",
                   "no_team_desc": "Convide as pessoas que participarão da organização e depois continue a configuração dentro do MusicScale.",
                   "team_title": "Continue seus primeiros passos",
-                  "team_desc": "Aprenda a adicionar músicas, criar repertórios e montar sua primeira escala.",
+                  "team_desc": "Aprenda a adicionar músicas ao Repertório, consultar cifras e letras e montar suas primeiras escalas.",
                   "btn_continue": "Continuar primeiros passos",
                   "btn_invite": "Convidar uma pessoa",
                   "ask_admin_invite": "Peça a um administrador da organização para convidar a equipe.",
                   "resolve_payment": "Regularizar assinatura",
                   "ask_admin_payment": "Peça ao responsável pela assinatura para regularizar o acesso.",
-                  "summary_org": "Organização pronta",
+                  "summary_org": "Organização pronta",                  
                   "summary_ms": "MusicScale ativo",
                   "summary_team": "Equipe iniciada"
             },
             "resources": {
-                  "title": "O que o MusicScale pode fazer?",
-                  "description": "Explore as funcionalidades integradas.",
+                  "title": "Conheça o MusicScale por dentro",
+                  "description": "Entenda onde ficam as músicas, cifras, letras, escalas e integrantes, e como cada área se conecta na preparação da equipe.",
+                  "flow": {
+                        "live_library": "Biblioteca Viva",
+                        "repertoire": "Repertório de músicas",
+                        "chords": "Cifras",
+                        "lyrics": "Letras",
+                        "music_scale": "Escala de Músicas",
+                        "members": "Integrantes",
+                        "band_scale": "Escala da Banda",
+                        "notice_title": "Como o Repertório funciona",
+                        "notice_text": "No MusicScale, Repertório é o acervo de músicas da sua organização. Você não cria um repertório separado para cada culto. Para uma data ou evento, crie uma Escala de Músicas e escolha nela as músicas do Repertório."
+                  },
                   "repertoire": {
-                        "title": "REPERTÓRIOS",
-                        "desc": "Organize as músicas de cultos, ensaios e eventos.",
-                        "why": "Sua equipe encontra o que precisa preparar sem depender de mensagens espalhadas.",
-                        "example": "Crie um repertório chamado Culto de domingo e adicione as músicas da ministração."
+                        "title": "Repertório de músicas",
+                        "desc": "É o acervo de músicas da sua organização. Nele ficam todas as músicas cadastradas ou importadas para a equipe.",
+                        "practice": "Abra uma música para conferir seus detalhes, letra ou cifra. Depois, escolha essa música ao montar a escala de um culto."
                   },
-                  "scales": {
-                        "title": "ESCALAS",
-                        "desc": "Defina quem participará e qual será a função de cada pessoa.",
-                        "why": "Todos sabem quando servirão e o que farão.",
-                        "example": "Escolha vocal principal, backing vocal, teclado, bateria, guitarra e liderança."
+                  "library": {
+                        "title": "Biblioteca Viva",
+                        "desc": "Um acervo global e atualizado de músicas prontas para importar para o Repertório da sua organização.",
+                        "practice": "Encontre uma música pronta, confira seu conteúdo e importe-a para o Repertório da sua organização."
                   },
-                  "musicians": {
-                        "title": "MÚSICOS",
-                        "desc": "Organize as pessoas e suas funções dentro do ministério.",
-                        "why": "Fica mais fácil montar equipes coerentes para cada culto.",
-                        "example": "Cadastre quem toca bateria, teclado, guitarra ou participa do vocal."
+                  "chords": {
+                        "title": "Cifras",
+                        "desc": "Consulte as cifras das músicas que fazem parte do Repertório da sua organização.",
+                        "practice": "Encontre rapidamente a cifra e o tom que a banda precisa preparar."
                   },
-                  "preparation": {
-                        "title": "PREPARAÇÃO",
-                        "desc": "Reúna as informações que sua equipe precisa antes do culto.",
-                        "why": "Os participantes chegam mais preparados para o ensaio e a ministração.",
-                        "example": "Compartilhe repertório, orientações e materiais de preparação."
+                  "lyrics": {
+                        "title": "Letras",
+                        "desc": "Consulte as letras das músicas cadastradas no Repertório.",
+                        "practice": "Abra a letra completa para revisar a ordem e as partes da música."
+                  },
+                  "ai_import": {
+                        "title": "Importação inteligente",
+                        "desc": "Transforme uma cifra ou letra desorganizada em conteúdo estruturado para o MusicScale.",
+                        "notice": "A disponibilidade depende dos recursos incluídos no plano."
+                  },
+                  "music_scales": {
+                        "title": "Escalas de Músicas",
+                        "desc": "Organize as músicas que serão cantadas e tocadas em uma data e tipo de evento.",
+                        "practice": "Crie a escala do culto de domingo, escolha as músicas e vincule a banda que participará."
+                  },
+                  "members": {
+                        "title": "Integrantes",
+                        "desc": "Visualize as pessoas que participam do ministério e suas especialidades.",
+                        "practice": "Encontre quem toca bateria, teclado ou guitarra e quem participa dos vocais."
+                  },
+                  "band_scales": {
+                        "title": "Escalas da Banda",
+                        "desc": "Organize os músicos, vocais, ministros e funções que atuarão em uma data ou evento.",
+                        "practice": "Defina vocal principal, backing vocals, teclado, guitarra, baixo e bateria para o culto."
+                  },
+                  "preparation_result": {
+                        "title": "Tudo conectado para preparar a equipe",
+                        "text": "O Repertório reúne as músicas. Cifras e Letras ajudam no estudo. Os Integrantes formam a Escala da Banda. A Escala de Músicas organiza o que será apresentado em cada data e pode receber a banda que atuará naquele evento."
                   },
                   "open_ms": "Abrir MusicScale"
             },
             "getting_started": {
                   "title": "Primeiros passos no MusicScale",
                   "description": "Vamos preparar sua organização, sua equipe e o primeiro fluxo de trabalho. Você pode concluir cada etapa no seu ritmo.",
-                  "operational_notice": "As etapas de músicas, repertórios e escalas acontecem dentro do MusicScale. Abra o aplicativo e siga as orientações abaixo.",
+                  "operational_notice": "As etapas de Repertório, cifras, letras, integrantes e escalas acontecem dentro do MusicScale. Abra o aplicativo e siga as orientações abaixo.",
                   "statuses": {
                         "completed": "Concluído",
                         "continue_in_ms": "Continue no MusicScale",
@@ -482,37 +513,51 @@ export default {
                               "important": "A função Administrador ou Membro define o acesso ao MillionsNest. Funções ministeriais, como músico, vocal ou líder, são configuradas dentro do MusicScale."
                         },
                         "songs": {
-                              "title": "Adicione suas primeiras músicas",
-                              "what": "As músicas serão utilizadas nos repertórios e nas escalas.",
-                              "why": "Sem músicas cadastradas, sua equipe não consegue preparar o repertório.",
-                              "how": "Abra o MusicScale, entre na área de músicas e escolha a opção para adicionar uma música.",
-                              "result": "Suas primeiras músicas estarão disponíveis para os próximos repertórios.",
+                              "title": "Adicione músicas ao Repertório",
+                              "what": "O Repertório reúne todas as músicas da sua organização.",
+                              "why": "As músicas do Repertório poderão ser escolhidas nas Escalas de Músicas.",
+                              "how": "No MusicScale, abra Repertório → Músicas. Adicione manualmente, use a importação inteligente ou importe pela Biblioteca Viva.",
+                              "result": "As músicas usadas pela organização estarão disponíveis em um único acervo.",
                               "action": "Abrir MusicScale"
                         },
-                        "repertoire": {
-                              "title": "Crie seu primeiro repertório",
-                              "what": "O repertório reúne as músicas de um culto, ensaio ou evento.",
-                              "why": "A equipe consegue saber antecipadamente o que precisa estudar.",
-                              "how": "Abra a área de repertórios, crie um novo repertório e adicione as músicas.",
-                              "example": "Culto de domingo, 19h.",
-                              "result": "O conjunto de músicas ficará organizado em um único lugar.",
+                        "content": {
+                              "title": "Confira cifras e letras",
+                              "what": "Cifras e Letras são visualizações do conteúdo das músicas que já estão no Repertório.",
+                              "why": "A equipe encontra rapidamente o material necessário para estudar.",
+                              "how": "Abra Repertório → Cifras ou Repertório → Letras.",
+                              "result": "Músicos e vocais terão acesso ao conteúdo necessário para a preparação.",
                               "action": "Abrir MusicScale"
                         },
-                        "scale": {
-                              "title": "Monte sua primeira escala",
-                              "what": "A escala define quem participará e qual será a função de cada pessoa.",
-                              "why": "Todos sabem quando servirão e o que precisam preparar.",
-                              "how": "Crie uma escala, escolha a data e adicione as pessoas e funções.",
-                              "example": "liderança; vocal principal; backing vocal; teclado; guitarra; baixo; bateria.",
-                              "result": "A equipe ficará organizada para o culto.",
+                        "members": {
+                              "title": "Organize os integrantes",
+                              "what": "A área Integrantes reúne músicos, vocais, ministros, funções e especialidades.",
+                              "why": "Essas informações ajudam a montar Escalas da Banda de forma mais clara.",
+                              "how": "Abra Integrantes e confira se as funções e especialidades estão corretas.",
+                              "result": "O MusicScale saberá quem pode atuar em cada instrumento ou função.",
                               "action": "Abrir MusicScale"
                         },
-                        "preparation": {
-                              "title": "Prepare a equipe para o culto",
-                              "what": "Reúna as informações e orientações que todos precisam antes da ministração.",
-                              "why": "Uma equipe bem informada chega mais preparada.",
-                              "how": "Revise o repertório, a escala, os participantes e os materiais disponíveis.",
-                              "result": "Todos conseguem visualizar o que precisam fazer.",
+                        "band_scale": {
+                              "title": "Monte uma Escala da Banda",
+                              "what": "A Escala da Banda define quem atuará e qual será a função de cada pessoa.",
+                              "why": "A equipe entende quem participará e como será formada.",
+                              "how": "Abra Escalas → Escalas da Banda, escolha os integrantes e defina as funções.",
+                              "result": "A banda e os vocais da ocasião estarão organizados.",
+                              "action": "Abrir MusicScale"
+                        },
+                        "music_scale": {
+                              "title": "Crie uma Escala de Músicas",
+                              "what": "A Escala de Músicas reúne as músicas de uma data e tipo de evento.",
+                              "why": "A equipe sabe o que será cantado e tocado.",
+                              "how": "Abra Escalas → Escalas de Músicas, escolha a data, o tipo de evento, o local e as músicas do Repertório. Você também pode vincular a Escala da Banda.",
+                              "result": "As músicas e a equipe daquele evento estarão organizadas.",
+                              "action": "Abrir MusicScale"
+                        },
+                        "review": {
+                              "title": "Revise a preparação",
+                              "what": "Antes do culto, confira se músicas, letras, cifras e integrantes estão corretos.",
+                              "why": "Uma equipe bem informada consegue se preparar melhor.",
+                              "how": "Revise a Escala de Músicas e a Escala da Banda vinculada.",
+                              "result": "Todos terão clareza sobre o que preparar e quando participar.",
                               "action": "Abrir MusicScale"
                         }
                   }
