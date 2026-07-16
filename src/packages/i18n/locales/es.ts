@@ -514,7 +514,8 @@ export default {
                   "statuses": {
                         "completed": "Completado",
                         "continue_in_ms": "Continuar en MusicScale",
-                        "pending": "Pendiente"
+                        "pending": "Pendiente",
+                        "pending_invite": "Invitación enviada"
                   },
                   "steps": {
                         "organization": {

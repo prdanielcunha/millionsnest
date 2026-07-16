@@ -63,6 +63,7 @@ export function EcosystemWorkspaceHome({
         <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('dashboard.workspace.spaces_title', 'Seus espaços')}</h3>
         <div className="flex items-center gap-4 min-w-max">
           <button
+            type="button"
             onClick={() => onSelectWorkspace('home')}
             role="tab"
             aria-selected={selectedWorkspace === 'home'}
@@ -85,6 +86,7 @@ export function EcosystemWorkspaceHome({
             return (
               <button
                 key={app.id}
+                type="button"
                 onClick={() => onSelectWorkspace(app.id)}
                 role="tab"
                 aria-selected={isSelected}
@@ -169,48 +171,46 @@ export function EcosystemWorkspaceHome({
                         {hasPaymentIssue ? t('dashboard.workspace.resolve_payment', 'Regularizar pagamento') : t('dashboard.workspace.open_app', `Abrir ${app.name}`, { appName: app.name })}
                       </button>
 
-                      {!hasPaymentIssue && (
-                        <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectWorkspace('musicscale');
+                          onSelectMusicScaleSection('resources');
+                        }}
+                        className="w-full py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10 mt-3 text-sm"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        {t('dashboard.musicscale.hero.learn_more', 'Conhecer recursos')}
+                      </button>
+                      
+                      <div className="mt-4 text-center">
+                        {(!teamStarted) ? (
                           <button
                             type="button"
                             onClick={() => {
                               onSelectWorkspace('musicscale');
-                              onSelectMusicScaleSection('resources');
+                              onSelectMusicScaleSection('getting-started');
                             }}
-                            className="w-full py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10 mt-3 text-sm"
+                            className="inline-flex items-center gap-1.5 text-xs text-[#2B85EB] hover:text-[#3B95FB] font-medium transition-colors"
                           >
-                            <ExternalLink className="w-4 h-4" />
-                            {t('dashboard.musicscale.hero.learn_more', 'Conhecer recursos')}
+                            <span className="px-1.5 py-0.5 rounded-[4px] bg-[#2B85EB]/20 text-[#2B85EB] font-bold uppercase tracking-wider text-[9px] mr-1">
+                              {t('dashboard.musicscale.center.badges.recommended', 'Recomendado')}
+                            </span>
+                            {t('dashboard.musicscale.home.new_here', 'Novo por aqui? Veja os primeiros passos')} &rarr;
                           </button>
-                          
-                          <div className="mt-4 text-center">
-                            {(!teamStarted) ? (
-                              <button
-                                onClick={() => {
-                                  onSelectWorkspace('musicscale');
-                                  onSelectMusicScaleSection('getting-started');
-                                }}
-                                className="inline-flex items-center gap-1.5 text-xs text-[#2B85EB] hover:text-[#3B95FB] font-medium transition-colors"
-                              >
-                                <span className="px-1.5 py-0.5 rounded-[4px] bg-[#2B85EB]/20 text-[#2B85EB] font-bold uppercase tracking-wider text-[9px] mr-1">
-                                  {t('dashboard.musicscale.center.badges.recommended', 'Recomendado')}
-                                </span>
-                                {t('dashboard.musicscale.home.new_here', 'Novo por aqui? Veja os primeiros passos')} &rarr;
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  onSelectWorkspace('musicscale');
-                                  onSelectMusicScaleSection('getting-started');
-                                }}
-                                className="inline-flex items-center gap-1.5 text-xs text-[#A0A7B5] hover:text-white font-medium transition-colors"
-                              >
-                                {t('dashboard.musicscale.home.review_steps', 'Rever primeiros passos')} &rarr;
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      )}
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectWorkspace('musicscale');
+                              onSelectMusicScaleSection('getting-started');
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs text-[#A0A7B5] hover:text-white font-medium transition-colors"
+                          >
+                            {t('dashboard.musicscale.home.review_steps', 'Rever primeiros passos')} &rarr;
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 }
@@ -292,6 +292,7 @@ export function EcosystemWorkspaceHome({
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             {!hasPaymentIssue ? (
               <button 
+                type="button"
                 onClick={() => { if(musicScaleApp) onLaunchApp(musicScaleApp); }}
                 className="px-6 py-3 bg-[#2B85EB] text-white font-semibold rounded-xl hover:bg-[#3B95FB] transition-all flex items-center gap-2"
               >
@@ -375,6 +376,7 @@ export function EcosystemWorkspaceHome({
                 
                 {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
                   <button 
+                    type="button"
                     onClick={onOpenInviteModal}
                     className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
                   > 
@@ -384,6 +386,7 @@ export function EcosystemWorkspaceHome({
                 
                 {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
                   <button 
+                    type="button"
                     onClick={onNavigateToOrganizationMembers}
                     className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
                   > 
@@ -393,6 +396,7 @@ export function EcosystemWorkspaceHome({
                 
                 {(currentUserPerms['organization.billing.manage'] || isGlobalAdmin) && (
                   <button 
+                    type="button"
                     onClick={onNavigateToBilling}
                     className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
                   > 
@@ -449,6 +453,7 @@ export function EcosystemWorkspaceHome({
               <div className="flex flex-col gap-2 mt-4">
                 {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
                   <button 
+                    type="button"
                     onClick={onOpenInviteModal}
                     className="w-full py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] text-white font-semibold rounded-xl transition-colors text-sm"
                   >
@@ -457,6 +462,7 @@ export function EcosystemWorkspaceHome({
                 )}
                 {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
                   <button 
+                    type="button"
                     onClick={onNavigateToOrganizationMembers}
                     className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-xl transition-colors text-sm border border-white/5"
                   >
@@ -504,6 +510,8 @@ export function EcosystemWorkspaceHome({
         onNavigateToBilling={onNavigateToBilling}
         heroContent={heroContent}
         overviewContent={overviewContent}
+        memberCount={members.length}
+        pendingInviteCount={pendingInvites.length}
       />
     );
   };
@@ -520,6 +528,7 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
            <div className="flex items-center gap-4">
              {app.primaryAction === 'open' && (
                <button 
+                 type="button"
                  onClick={() => onLaunchApp(app)}
                  className="px-6 py-3 bg-[#2B85EB] text-white font-semibold rounded-xl hover:bg-[#3B95FB] transition-all"
                >
