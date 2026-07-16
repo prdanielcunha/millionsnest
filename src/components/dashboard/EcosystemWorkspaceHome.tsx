@@ -60,7 +60,7 @@ export function EcosystemWorkspaceHome({
   const renderWorkspaceSelector = () => {
     return (
       <div className="mb-8 border-b border-white/5 pb-4 overflow-x-auto no-scrollbar">
-        <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('dashboard.workspace.spaces_title', 'Seus espaços')}</h3>
+        <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('workspace.spaces_title', 'Seus espaços')}</h3>
         <div className="flex items-center gap-4 min-w-max">
           <button
             type="button"
@@ -77,7 +77,7 @@ export function EcosystemWorkspaceHome({
               <LayoutGrid className="w-4 h-4" />
             </div>
             <div className="text-left">
-              <p className="text-sm font-semibold">{t('dashboard.navigation.home', 'Início')}</p>
+              <p className="text-sm font-semibold">{t('navigation.home', 'Início')}</p>
             </div>
           </button>
 
@@ -113,11 +113,11 @@ export function EcosystemWorkspaceHome({
   const renderHomeWorkspace = () => {
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-        <h2 className="text-2xl font-bold text-white mb-2">{t('dashboard.workspace.intro', 'Seus aplicativos, organização e equipe em um só lugar')}</h2>
+        <h2 className="text-2xl font-bold text-white mb-2">{t('workspace.intro', 'Seus aplicativos, organização e equipe em um só lugar')}</h2>
         
         {installedApps.length > 0 && (
           <div className="mt-8">
-            <h3 className="text-lg font-bold text-white mb-4">{t('dashboard.workspace.apps_title', 'Seus aplicativos')}</h3>
+            <h3 className="text-lg font-bold text-white mb-4">{t('workspace.apps_title', 'Seus aplicativos')}</h3>
             <div className={`grid gap-4 ${installedApps.length === 1 ? 'grid-cols-1 max-w-[480px]' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
               {installedApps.map(app => {
                 if (app.id === 'musicscale') {
@@ -142,10 +142,10 @@ export function EcosystemWorkspaceHome({
                             'bg-white/10 text-[#A0A7B5]'
                           }`}>
                             {isLoading 
-                              ? t('dashboard.workspace.loading', 'Carregando')
+                              ? t('workspace.loading', 'Carregando')
                               : hasPaymentIssue 
-                                ? t('dashboard.workspace.payment_pending', 'Pagamento pendente')
-                                : t(`dashboard.musicscale.status.${msCatalogState}`, msCatalogState)
+                                ? t('workspace.payment_pending', 'Pagamento pendente')
+                                : t(`musicscale.status.${msCatalogState}`, msCatalogState)
                             }
                           </span>
                         </div>
@@ -168,7 +168,7 @@ export function EcosystemWorkspaceHome({
                         }`}
                       >
                         {isLoading ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : (hasPaymentIssue ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
-                        {hasPaymentIssue ? t('dashboard.workspace.resolve_payment', 'Regularizar pagamento') : t('dashboard.workspace.open_app', `Abrir ${app.name}`, { appName: app.name })}
+                        {hasPaymentIssue ? t('workspace.resolve_payment', 'Regularizar pagamento') : t('workspace.open_app', `Abrir ${app.name}`, { appName: app.name })}
                       </button>
 
                       <button
@@ -180,7 +180,7 @@ export function EcosystemWorkspaceHome({
                         className="w-full py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10 mt-3 text-sm"
                       >
                         <ExternalLink className="w-4 h-4" />
-                        {t('dashboard.musicscale.hero.learn_more', 'Conhecer recursos')}
+                        {t('musicscale.hero.learn_more', 'Conhecer recursos')}
                       </button>
                       
                       <div className="mt-4 text-center">
@@ -194,9 +194,9 @@ export function EcosystemWorkspaceHome({
                             className="inline-flex items-center gap-1.5 text-xs text-[#2B85EB] hover:text-[#3B95FB] font-medium transition-colors"
                           >
                             <span className="px-1.5 py-0.5 rounded-[4px] bg-[#2B85EB]/20 text-[#2B85EB] font-bold uppercase tracking-wider text-[9px] mr-1">
-                              {t('dashboard.musicscale.center.badges.recommended', 'Recomendado')}
+                              {t('musicscale.center.badges.recommended', 'Recomendado')}
                             </span>
-                            {t('dashboard.musicscale.home.new_here', 'Novo por aqui? Veja os primeiros passos')} &rarr;
+                            {t('musicscale.home.new_here', 'Novo por aqui? Veja os primeiros passos')} &rarr;
                           </button>
                         ) : (
                           <button
@@ -207,7 +207,7 @@ export function EcosystemWorkspaceHome({
                             }}
                             className="inline-flex items-center gap-1.5 text-xs text-[#A0A7B5] hover:text-white font-medium transition-colors"
                           >
-                            {t('dashboard.musicscale.home.review_steps', 'Rever primeiros passos')} &rarr;
+                            {t('musicscale.home.review_steps', 'Rever primeiros passos')} &rarr;
                           </button>
                         )}
                       </div>
@@ -224,7 +224,7 @@ export function EcosystemWorkspaceHome({
                           <LayoutGrid className="w-6 h-6 text-white" />
                         </div>
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-500/20 text-green-400 border border-green-500/30">
-                          {t('dashboard.workspace.available', 'Disponível')}
+                          {t('workspace.available', 'Disponível')}
                         </span>
                       </div>
                       <h4 className="text-lg font-bold text-white mb-1">{app.name}</h4>
@@ -238,7 +238,7 @@ export function EcosystemWorkspaceHome({
                       className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10"
                     >
                       <Play className="w-4 h-4 fill-current" />
-                      {t('dashboard.workspace.open_app', `Abrir ${app.name}`, { appName: app.name })}
+                      {t('workspace.open_app', `Abrir ${app.name}`, { appName: app.name })}
                     </button>
                   </div>
                 );
@@ -274,19 +274,19 @@ export function EcosystemWorkspaceHome({
                 msCatalogState === 'payment_issue' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 
                 'bg-white/10 text-[#A0A7B5]'
               }`}> 
-                {t(`dashboard.musicscale.status.${msCatalogState}`, msCatalogState)}
+                {t(`musicscale.status.${msCatalogState}`, msCatalogState)}
               </span>
             </div>
             
             <h1 className="text-3xl md:text-4xl font-bold text-white leading-tight mb-4">
-              {t('dashboard.musicscale.hero.title', 'Seu ministério organizado em um só lugar')}
+              {t('musicscale.hero.title', 'Seu ministério organizado em um só lugar')}
             </h1>
             
             <div className="flex flex-wrap items-center gap-3 text-sm text-[#A0A7B5] mb-8"> 
-              <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-[#2B85EB]"/> {t('dashboard.musicscale.features.repertoire', 'Repertórios')}</span> 
-              <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-[#2B85EB]"/> {t('dashboard.musicscale.features.scales', 'Escalas')}</span> 
-              <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-[#2B85EB]"/> {t('dashboard.musicscale.features.musicians', 'Músicos')}</span> 
-              <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-[#2B85EB]"/> {t('dashboard.musicscale.features.preparation', 'Preparação')}</span>
+              <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-[#2B85EB]"/> {t('musicscale.features.repertoire', 'Repertórios')}</span> 
+              <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-[#2B85EB]"/> {t('musicscale.features.scales', 'Escalas')}</span> 
+              <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-[#2B85EB]"/> {t('musicscale.features.musicians', 'Músicos')}</span> 
+              <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-[#2B85EB]"/> {t('musicscale.features.preparation', 'Preparação')}</span>
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -318,15 +318,15 @@ export function EcosystemWorkspaceHome({
           <div className="lg:col-span-2 space-y-6">
             {/* FEATURES */}
             <div>
-              <h3 className="text-lg font-bold text-white mb-4">{t('dashboard.musicscale.features.title', 'Recursos do MusicScale')}</h3>
+              <h3 className="text-lg font-bold text-white mb-4">{t('musicscale.features.title', 'Recursos do MusicScale')}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-[#050505] p-5 rounded-2xl border border-white/5 flex gap-4 items-start"> 
                   <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center shrink-0"> 
                     <Music className="w-5 h-5" /> 
                   </div> 
                   <div> 
-                    <h4 className="font-semibold text-white mb-1">{t('dashboard.musicscale.features.repertoire', 'Repertórios')}</h4> 
-                    <p className="text-xs text-[#A0A7B5]">{t('dashboard.musicscale.features.repertoire_desc', 'Gerencie o acervo da igreja')}</p> 
+                    <h4 className="font-semibold text-white mb-1">{t('musicscale.features.repertoire', 'Repertórios')}</h4> 
+                    <p className="text-xs text-[#A0A7B5]">{t('musicscale.features.repertoire_desc', 'Gerencie o acervo da igreja')}</p> 
                   </div>
                 </div>
                 <div className="bg-[#050505] p-5 rounded-2xl border border-white/5 flex gap-4 items-start"> 
@@ -334,17 +334,17 @@ export function EcosystemWorkspaceHome({
                     <LayoutGrid className="w-5 h-5" /> 
                   </div> 
                   <div> 
-                    <h4 className="font-semibold text-white mb-1">{t('dashboard.musicscale.features.scales', 'Escalas')}</h4> 
-                    <p className="text-xs text-[#A0A7B5]">{t('dashboard.musicscale.features.scales_desc', 'Organize as ministrações')}</p> 
+                    <h4 className="font-semibold text-white mb-1">{t('musicscale.features.scales', 'Escalas')}</h4> 
+                    <p className="text-xs text-[#A0A7B5]">{t('musicscale.features.scales_desc', 'Organize as ministrações')}</p> 
                   </div>
                 </div>
                 <div className="bg-[#050505] p-5 rounded-2xl border border-white/5 flex gap-4 items-start"> 
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0"> 
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-[#2B85EB] flex items-center justify-center shrink-0"> 
                     <Users className="w-5 h-5" /> 
                   </div> 
                   <div> 
-                    <h4 className="font-semibold text-white mb-1">{t('dashboard.musicscale.features.musicians', 'Músicos')}</h4> 
-                    <p className="text-xs text-[#A0A7B5]">{t('dashboard.musicscale.features.musicians_desc', 'Gerencie perfis e funções')}</p> 
+                    <h4 className="font-semibold text-white mb-1">{t('musicscale.features.musicians', 'Músicos')}</h4> 
+                    <p className="text-xs text-[#A0A7B5]">{t('musicscale.features.musicians_desc', 'Gerencie perfis e funções')}</p> 
                   </div>
                 </div>
                 <div className="bg-[#050505] p-5 rounded-2xl border border-white/5 flex gap-4 items-start"> 
@@ -352,8 +352,8 @@ export function EcosystemWorkspaceHome({
                     <Check className="w-5 h-5" /> 
                   </div> 
                   <div> 
-                    <h4 className="font-semibold text-white mb-1">{t('dashboard.musicscale.features.preparation', 'Preparação')}</h4> 
-                    <p className="text-xs text-[#A0A7B5]">{t('dashboard.musicscale.features.preparation_desc', 'Arquivos e ensaios')}</p> 
+                    <h4 className="font-semibold text-white mb-1">{t('musicscale.features.preparation', 'Preparação')}</h4> 
+                    <p className="text-xs text-[#A0A7B5]">{t('musicscale.features.preparation_desc', 'Arquivos e ensaios')}</p> 
                   </div>
                 </div>
               </div>
@@ -365,13 +365,13 @@ export function EcosystemWorkspaceHome({
             
             {/* ACTIONS */}
             <div className="bg-[#050505] border border-white/5 rounded-2xl p-6">
-              <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('dashboard.musicscale.actions.title', 'Ações Rápidas')}</h3>
+              <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('musicscale.actions.title', 'Ações Rápidas')}</h3>
               <div className="space-y-2"> 
                 <button type="button"  
                   onClick={() => { if (musicScaleApp) onLaunchApp(musicScaleApp); }}
                   disabled={!isReadyToOpen}
                   className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"> 
-                  <span className="flex items-center gap-3"><Play className="w-4 h-4 text-[#A0A7B5]" /> {t('dashboard.musicscale.actions.open_app', 'Abrir sistema')}</span> 
+                  <span className="flex items-center gap-3"><Play className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.open_app', 'Abrir sistema')}</span> 
                 </button>
                 
                 {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
@@ -380,7 +380,7 @@ export function EcosystemWorkspaceHome({
                     onClick={onOpenInviteModal}
                     className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
                   > 
-                    <span className="flex items-center gap-3"><User className="w-4 h-4 text-[#A0A7B5]" /> {t('dashboard.musicscale.actions.invite', 'Convidar pessoas')}</span> 
+                    <span className="flex items-center gap-3"><User className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.invite', 'Convidar pessoas')}</span> 
                   </button>
                 )}
                 
@@ -390,7 +390,7 @@ export function EcosystemWorkspaceHome({
                     onClick={onNavigateToOrganizationMembers}
                     className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
                   > 
-                    <span className="flex items-center gap-3"><Users className="w-4 h-4 text-[#A0A7B5]" /> {t('dashboard.musicscale.actions.manage_team', 'Gerenciar equipe')}</span> 
+                    <span className="flex items-center gap-3"><Users className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.manage_team', 'Gerenciar equipe')}</span> 
                   </button>
                 )}
                 
@@ -400,20 +400,20 @@ export function EcosystemWorkspaceHome({
                     onClick={onNavigateToBilling}
                     className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
                   > 
-                    <span className="flex items-center gap-3"><Settings className="w-4 h-4 text-[#A0A7B5]" /> {t('dashboard.musicscale.actions.view_sub', 'Ver assinatura')}</span> 
+                    <span className="flex items-center gap-3"><Settings className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.view_sub', 'Ver assinatura')}</span> 
                   </button>
                 )}
                 
                 <button type="button"  
                   onClick={() => onSelectMusicScaleSection('resources')}
                   className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]"> 
-                  <span className="flex items-center gap-3"><ExternalLink className="w-4 h-4 text-[#A0A7B5]" /> {t('dashboard.musicscale.actions.learn_more', 'Conhecer recursos')}</span> 
+                  <span className="flex items-center gap-3"><ExternalLink className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.learn_more', 'Conhecer recursos')}</span> 
                 </button>
                 
                 <a  
                   href="mailto:suporte@millionsnest.com"
                   className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]"> 
-                  <span className="flex items-center gap-3"><Mail className="w-4 h-4 text-[#A0A7B5]" /> {t('dashboard.musicscale.actions.need_help', 'Preciso de ajuda')}</span> 
+                  <span className="flex items-center gap-3"><Mail className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.need_help', 'Preciso de ajuda')}</span> 
                 </a>
               </div>
             </div>
@@ -424,27 +424,27 @@ export function EcosystemWorkspaceHome({
                 <div className="w-8 h-8 rounded-lg bg-white/5 text-white flex items-center justify-center shrink-0"> 
                   <Users className="w-4 h-4" /> 
                 </div> 
-                <h3 className="font-bold text-white">{t('dashboard.musicscale.team.title', 'Equipe')}</h3>
+                <h3 className="font-bold text-white">{t('musicscale.team.title', 'Equipe')}</h3>
               </div>
               <p className="text-sm text-[#A0A7B5] mb-6">
-                {t('dashboard.musicscale.team.desc', 'Convide líderes, músicos e vocais para trabalharem na mesma organização.')}
+                {t('musicscale.team.desc', 'Convide líderes, músicos e vocais para trabalharem na mesma organização.')}
               </p>
               
               <div className="flex flex-col gap-2 mb-6"> 
                 <div className="flex justify-between items-center text-sm"> 
-                  <span className="text-[#A0A7B5]">{t('dashboard.musicscale.team.members', `${members.length} membros`, { count: members.length })}</span> 
+                  <span className="text-[#A0A7B5]">{t('musicscale.team.members', `${members.length} membros`, { count: members.length })}</span> 
                   <span className="text-white font-medium">{members.length}</span> 
                 </div> 
                 <div className="flex justify-between items-center text-sm"> 
-                  <span className="text-[#A0A7B5]">{t('dashboard.musicscale.team.invites', `${pendingInvites.length} convites`, { count: pendingInvites.length })}</span> 
+                  <span className="text-[#A0A7B5]">{t('musicscale.team.invites', `${pendingInvites.length} convites`, { count: pendingInvites.length })}</span> 
                   <span className="text-white font-medium">{pendingInvites.length}</span> 
                 </div> 
                 <div className="mt-2 pt-2 border-t border-white/5 flex justify-between items-center text-sm font-semibold"> 
                   <span className="text-white">Total</span> 
                   <span className="text-[#2B85EB]"> 
                     {maxUsersLimit === -1 
-                      ? t('dashboard.musicscale.team.slots_unlimited', `${occupiedSlots} vagas (ilimitado)`, { used: occupiedSlots })
-                      : t('dashboard.musicscale.team.slots', `${occupiedSlots}/${maxUsersLimit} vagas`, { used: occupiedSlots, total: maxUsersLimit })
+                      ? t('musicscale.team.slots_unlimited', `${occupiedSlots} vagas (ilimitado)`, { used: occupiedSlots })
+                      : t('musicscale.team.slots', `${occupiedSlots}/${maxUsersLimit} vagas`, { used: occupiedSlots, total: maxUsersLimit })
                     }
                   </span> 
                 </div>
@@ -457,7 +457,7 @@ export function EcosystemWorkspaceHome({
                     onClick={onOpenInviteModal}
                     className="w-full py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] text-white font-semibold rounded-xl transition-colors text-sm"
                   >
-                    {t('dashboard.musicscale.actions.invite_person', 'Convidar pessoa')}
+                    {t('musicscale.actions.invite_person', 'Convidar pessoa')}
                   </button>
                 )}
                 {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
@@ -466,7 +466,7 @@ export function EcosystemWorkspaceHome({
                     onClick={onNavigateToOrganizationMembers}
                     className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-xl transition-colors text-sm border border-white/5"
                   >
-                    {t('dashboard.musicscale.actions.view_team_and_invites', 'Ver equipe e convites')}
+                    {t('musicscale.actions.view_team_and_invites', 'Ver equipe e convites')}
                   </button>
                 )}
               </div>
@@ -481,7 +481,7 @@ export function EcosystemWorkspaceHome({
                   Aprender a usar &rarr;
                 </button> 
                 <a  href="mailto:suporte@millionsnest.com" className="text-sm text-[#A0A7B5] hover:text-white font-medium block min-h-[44px]"> 
-                  {t('dashboard.musicscale.help.contact_support', 'Falar com suporte')}
+                  {t('musicscale.help.contact_support', 'Falar com suporte')}
                 </a> 
               </div>
             </div>
@@ -532,7 +532,7 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
                  onClick={() => onLaunchApp(app)}
                  className="px-6 py-3 bg-[#2B85EB] text-white font-semibold rounded-xl hover:bg-[#3B95FB] transition-all"
                >
-                 {t('dashboard.genericApp.open', 'Abrir App')}
+                 {t('genericApp.open', 'Abrir App')}
                </button>
              )}
              {app.status === 'coming_soon' && (

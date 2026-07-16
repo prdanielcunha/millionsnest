@@ -32,23 +32,23 @@ function runTests() {
   const compContent = fs.readFileSync(path.join(root, compPath), 'utf8');
 
   // Verify there are no Portuguese strings like "Confira sua organização" directly in the component, but instead the i18n keys
-  if (!compContent.includes('dashboard.musicscale.center.')) logError('Component does not use new i18n keys');
+  if (!compContent.includes('musicscale.center.')) logError('Component does not use new i18n keys');
 
   // Verify visual map
-  if (!compContent.includes("dashboard.musicscale.center.resources.flow.imports_to")) logError('Map missing imports_to');
-  if (!compContent.includes("dashboard.musicscale.center.resources.flow.supplies_songs_to")) logError('Map missing supplies_songs_to');
-  if (!compContent.includes("dashboard.musicscale.center.resources.flow.optional_link")) logError('Map missing optional_link');
+  if (!compContent.includes("musicscale.center.resources.flow.imports_to")) logError('Map missing imports_to');
+  if (!compContent.includes("musicscale.center.resources.flow.supplies_songs_to")) logError('Map missing supplies_songs_to');
+  if (!compContent.includes("musicscale.center.resources.flow.optional_link")) logError('Map missing optional_link');
 
   // Validate the 8 steps exist via keys
   const stepsKeys = [
-    'dashboard.musicscale.center.getting_started.steps.organization.title',
-    'dashboard.musicscale.center.getting_started.steps.team.title',
-    'dashboard.musicscale.center.getting_started.steps.songs.title',
-    'dashboard.musicscale.center.getting_started.steps.content.title',
-    'dashboard.musicscale.center.getting_started.steps.members.title',
-    'dashboard.musicscale.center.getting_started.steps.band_scale.title',
-    'dashboard.musicscale.center.getting_started.steps.music_scale.title',
-    'dashboard.musicscale.center.getting_started.steps.review.title'
+    'musicscale.center.getting_started.steps.organization.title',
+    'musicscale.center.getting_started.steps.team.title',
+    'musicscale.center.getting_started.steps.songs.title',
+    'musicscale.center.getting_started.steps.content.title',
+    'musicscale.center.getting_started.steps.members.title',
+    'musicscale.center.getting_started.steps.band_scale.title',
+    'musicscale.center.getting_started.steps.music_scale.title',
+    'musicscale.center.getting_started.steps.review.title'
   ];
   for (const key of stepsKeys) {
     if (!compContent.includes(key)) logError(`Missing step key: ${key}`);
@@ -75,29 +75,29 @@ function runTests() {
 
 
   // 4. No redundant editorial block in Overview
-  if (compContent.includes('dashboard.musicscale.center.overview.highlights.1.title')) {
+  if (compContent.includes('musicscale.center.overview.highlights.1.title')) {
     logError('Redundant editorial block (Acervo, Equipe, Escalas) is still present in MusicScaleGuideCenter.');
   }
 
   // 5. Verify the resources tab still contains its items
   const resourceKeys = [
-    'dashboard.musicscale.center.resources.flow.repertoire',
-    'dashboard.musicscale.center.resources.flow.chords',
-    'dashboard.musicscale.center.resources.flow.lyrics',
-    'dashboard.musicscale.center.resources.flow.live_library',
-    'dashboard.musicscale.center.resources.flow.members',
-    'dashboard.musicscale.center.resources.flow.band_scale',
-    'dashboard.musicscale.center.resources.flow.music_scale'
+    'musicscale.center.resources.flow.repertoire',
+    'musicscale.center.resources.flow.chords',
+    'musicscale.center.resources.flow.lyrics',
+    'musicscale.center.resources.flow.live_library',
+    'musicscale.center.resources.flow.members',
+    'musicscale.center.resources.flow.band_scale',
+    'musicscale.center.resources.flow.music_scale'
   ];
   for (const key of resourceKeys) {
     if (!compContent.includes(key)) logError(`Missing resource key: ${key}`);
   }
 
   // 6. Verify operational team card is preserved
-  if (!workspaceHomeContent.includes("dashboard.musicscale.actions.invite") || !workspaceHomeContent.includes("Convidar pessoas")) {
+  if (!workspaceHomeContent.includes("musicscale.actions.invite") || !workspaceHomeContent.includes("Convidar pessoas")) {
     logError('Convidar pessoas action missing in EcosystemWorkspaceHome.');
   }
-  if (!workspaceHomeContent.includes("dashboard.musicscale.actions.view_team_and_invites") || !workspaceHomeContent.includes("Ver equipe e convites")) {
+  if (!workspaceHomeContent.includes("musicscale.actions.view_team_and_invites") || !workspaceHomeContent.includes("Ver equipe e convites")) {
     logError('Ver equipe e convites action missing in EcosystemWorkspaceHome.');
   }
 

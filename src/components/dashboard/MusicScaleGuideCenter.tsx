@@ -72,7 +72,7 @@ export function MusicScaleGuideCenter({
         aria-selected={activeSection === 'overview'}
         className={`pb-3 border-b-2 transition-colors font-medium ${activeSection === 'overview' ? 'border-[#2B85EB] text-white' : 'border-transparent text-[#A0A7B5] hover:text-white'}`}
       >
-        {t('dashboard.musicscale.center.tabs.overview', 'Visão Geral')}
+        {t('musicscale.center.tabs.overview', 'Visão Geral')}
       </button>
       <button 
         type="button" 
@@ -81,7 +81,7 @@ export function MusicScaleGuideCenter({
         aria-selected={activeSection === 'resources'}
         className={`pb-3 border-b-2 transition-colors font-medium ${activeSection === 'resources' ? 'border-[#2B85EB] text-white' : 'border-transparent text-[#A0A7B5] hover:text-white'}`}
       >
-        {t('dashboard.musicscale.center.tabs.resources', 'Recursos')}
+        {t('musicscale.center.tabs.resources', 'Recursos')}
       </button>
       <button 
         type="button" 
@@ -90,7 +90,7 @@ export function MusicScaleGuideCenter({
         aria-selected={activeSection === 'getting-started'}
         className={`pb-3 border-b-2 transition-colors font-medium ${activeSection === 'getting-started' ? 'border-[#2B85EB] text-white' : 'border-transparent text-[#A0A7B5] hover:text-white'}`}
       >
-        {t('dashboard.musicscale.center.tabs.getting_started', 'Primeiros passos')}
+        {t('musicscale.center.tabs.getting_started', 'Primeiros passos')}
       </button>
     </div>
   );
@@ -101,12 +101,12 @@ export function MusicScaleGuideCenter({
         <ListMusic className="w-64 h-64 text-[#2B85EB]" />
       </div>
       <div className="relative z-10 max-w-2xl">
-        <h1 className="text-3xl font-bold text-white mb-4">{t('dashboard.musicscale.center.overview.title', 'Bem-vindo ao MusicScale')}</h1>
+        <h1 className="text-3xl font-bold text-white mb-4">{t('musicscale.center.overview.title', 'Bem-vindo ao MusicScale')}</h1>
         <p className="text-[#A0A7B5] text-lg mb-8 leading-relaxed">
-          {t('dashboard.musicscale.center.overview.description', 'O MusicScale é o aplicativo de organização e preparação musical da sua organização.')}
+          {t('musicscale.center.overview.description', 'O MusicScale é o aplicativo de organização e preparação musical da sua organização.')}
         </p>
         <button type="button" onClick={onOpenMusicScale} className="px-6 py-3 bg-[#2B85EB] hover:bg-[#3B95FB] text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 min-h-[44px]">
-          {t('dashboard.musicscale.center.overview.primary_action', 'Abrir MusicScale')}
+          {t('musicscale.center.overview.primary_action', 'Abrir MusicScale')}
           <ExternalLink className="w-4 h-4" />
         </button>
       </div>
@@ -131,20 +131,20 @@ export function MusicScaleGuideCenter({
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
         <div className="max-w-3xl mb-12">
           <h2 className="text-2xl font-bold text-white mb-2">
-            {t('dashboard.musicscale.center.resources.title', 'Conheça o MusicScale por dentro')}
+            {t('musicscale.center.resources.title', 'Conheça o MusicScale por dentro')}
           </h2>
           <p className="text-[#A0A7B5]">
-            {t('dashboard.musicscale.center.resources.description', 'Entenda onde ficam as músicas, cifras, letras, escalas e integrantes, e como cada área se conecta na preparação da equipe.')}
+            {t('musicscale.center.resources.description', 'Entenda onde ficam as músicas, cifras, letras, escalas e integrantes, e como cada área se conecta na preparação da equipe.')}
           </p>
         </div>
 
         {/* Visual Map */}
         <div className="mb-12 bg-[#050505] border border-white/5 rounded-2xl p-6 lg:p-8">
           <h3 className="text-lg font-bold text-white mb-6">
-            {t('dashboard.musicscale.center.resources.flow.notice_title', 'Como o Repertório funciona')}
+            {t('musicscale.center.resources.flow.notice_title', 'Como o Repertório funciona')}
           </h3>
           <p className="text-[#A0A7B5] text-sm mb-8 leading-relaxed">
-            {t('dashboard.musicscale.center.resources.flow.notice_text', 'No MusicScale, Repertório é o acervo de músicas da sua organização...')}
+            {t('musicscale.center.resources.flow.notice_text', 'No MusicScale, Repertório é o acervo de músicas da sua organização...')}
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 relative">
@@ -152,18 +152,18 @@ export function MusicScaleGuideCenter({
               {/* Biblioteca Viva */}
               <div className="flex items-center gap-3 bg-white/5 p-4 rounded-xl border border-white/5">
                 <Globe className="w-5 h-5 text-purple-400 shrink-0" />
-                <span className="font-semibold text-white">{t('dashboard.musicscale.center.resources.flow.live_library', 'Biblioteca Viva')}</span>
+                <span className="font-semibold text-white">{t('musicscale.center.resources.flow.live_library', 'Biblioteca Viva')}</span>
               </div>
               
               <div className="flex items-center gap-2 px-6 text-[#A0A7B5]">
                 <ArrowDown className="w-4 h-4 shrink-0" />
-                <span className="text-xs uppercase tracking-wider font-semibold">{t('dashboard.musicscale.center.resources.flow.imports_to', 'importa para')}</span>
+                <span className="text-xs uppercase tracking-wider font-semibold">{t('musicscale.center.resources.flow.imports_to', 'importa para')}</span>
               </div>
               
               {/* Repertório */}
               <div className="flex items-center gap-3 bg-[#2B85EB]/10 p-4 rounded-xl border border-[#2B85EB]/20">
                 <ListMusic className="w-5 h-5 text-[#2B85EB] shrink-0" />
-                <span className="font-semibold text-white">{t('dashboard.musicscale.center.resources.flow.repertoire', 'Repertório de músicas')}</span>
+                <span className="font-semibold text-white">{t('musicscale.center.resources.flow.repertoire', 'Repertório de músicas')}</span>
               </div>
               
               {/* Cifras / Letras */}
@@ -171,24 +171,24 @@ export function MusicScaleGuideCenter({
                 <div className="flex items-center gap-3">
                   <div className="w-4 border-b-2 border-white/10" />
                   <FileText className="w-4 h-4 text-[#A0A7B5] shrink-0" />
-                  <span className="text-sm text-[#A0A7B5]">{t('dashboard.musicscale.center.resources.flow.chords', 'Cifras')}</span>
+                  <span className="text-sm text-[#A0A7B5]">{t('musicscale.center.resources.flow.chords', 'Cifras')}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-4 border-b-2 border-white/10" />
                   <FileText className="w-4 h-4 text-[#A0A7B5] shrink-0" />
-                  <span className="text-sm text-[#A0A7B5]">{t('dashboard.musicscale.center.resources.flow.lyrics', 'Letras')}</span>
+                  <span className="text-sm text-[#A0A7B5]">{t('musicscale.center.resources.flow.lyrics', 'Letras')}</span>
                 </div>
               </div>
               
               <div className="flex items-center gap-2 px-6 text-[#A0A7B5]">
                 <ArrowDown className="w-4 h-4 shrink-0" />
-                <span className="text-xs uppercase tracking-wider font-semibold">{t('dashboard.musicscale.center.resources.flow.supplies_songs_to', 'fornece músicas para')}</span>
+                <span className="text-xs uppercase tracking-wider font-semibold">{t('musicscale.center.resources.flow.supplies_songs_to', 'fornece músicas para')}</span>
               </div>
               
               {/* Escala de Músicas */}
               <div className="flex items-center gap-3 bg-green-500/10 p-4 rounded-xl border border-green-500/20">
                 <CalendarDays className="w-5 h-5 text-green-400 shrink-0" />
-                <span className="font-semibold text-white">{t('dashboard.musicscale.center.resources.flow.music_scale', 'Escala de Músicas')}</span>
+                <span className="font-semibold text-white">{t('musicscale.center.resources.flow.music_scale', 'Escala de Músicas')}</span>
               </div>
             </div>
 
@@ -196,26 +196,26 @@ export function MusicScaleGuideCenter({
               {/* Integrantes */}
               <div className="flex items-center gap-3 bg-amber-500/10 p-4 rounded-xl border border-amber-500/20">
                 <Users className="w-5 h-5 text-amber-400 shrink-0" />
-                <span className="font-semibold text-white">{t('dashboard.musicscale.center.resources.flow.members', 'Integrantes')}</span>
+                <span className="font-semibold text-white">{t('musicscale.center.resources.flow.members', 'Integrantes')}</span>
               </div>
               
               <div className="flex items-center gap-2 px-6 text-[#A0A7B5]">
                 <ArrowDown className="w-4 h-4 shrink-0" />
-                <span className="text-xs uppercase tracking-wider font-semibold">{t('dashboard.musicscale.center.resources.flow.forms', 'formam')}</span>
+                <span className="text-xs uppercase tracking-wider font-semibold">{t('musicscale.center.resources.flow.forms', 'formam')}</span>
               </div>
               
               {/* Escala da Banda */}
               <div className="flex items-center gap-3 bg-white/5 p-4 rounded-xl border border-white/10">
                 <CalendarDays className="w-5 h-5 text-white shrink-0" />
-                <span className="font-semibold text-white">{t('dashboard.musicscale.center.resources.flow.band_scale', 'Escala da Banda')}</span>
+                <span className="font-semibold text-white">{t('musicscale.center.resources.flow.band_scale', 'Escala da Banda')}</span>
               </div>
 
               {/* Connector */}
               <div className="mt-auto bg-white/5 border border-dashed border-white/10 rounded-xl p-4 flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <LinkIcon className="w-4 h-4 text-[#A0A7B5]" />
-                  <span className="text-xs text-[#A0A7B5]">{t('dashboard.musicscale.center.resources.flow.can_link_to', 'pode ser vinculada')}</span>
-                  <span className="text-[10px] uppercase font-bold bg-white/10 px-1.5 py-0.5 rounded text-white">{t('dashboard.musicscale.center.resources.flow.optional_link', 'opcional')}</span>
+                  <span className="text-xs text-[#A0A7B5]">{t('musicscale.center.resources.flow.can_link_to', 'pode ser vinculada')}</span>
+                  <span className="text-[10px] uppercase font-bold bg-white/10 px-1.5 py-0.5 rounded text-white">{t('musicscale.center.resources.flow.optional_link', 'opcional')}</span>
                 </div>
               </div>
             </div>
@@ -226,10 +226,10 @@ export function MusicScaleGuideCenter({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
           {resourceCards.map((card) => {
             const Icon = card.icon;
-            const title = t(`dashboard.musicscale.center.resources.${card.key}.title`, card.key);
-            const desc = t(`dashboard.musicscale.center.resources.${card.key}.desc`, '');
-            const practice = card.key !== 'ai_import' ? t(`dashboard.musicscale.center.resources.${card.key}.practice`, '') : null;
-            const notice = card.key === 'ai_import' ? t('dashboard.musicscale.center.resources.ai_import.notice', '') : null;
+            const title = t(`musicscale.center.resources.${card.key}.title`, card.key);
+            const desc = t(`musicscale.center.resources.${card.key}.desc`, '');
+            const practice = card.key !== 'ai_import' ? t(`musicscale.center.resources.${card.key}.practice`, '') : null;
+            const notice = card.key === 'ai_import' ? t('musicscale.center.resources.ai_import.notice', '') : null;
 
             return (
               <div key={card.key} className="bg-[#050505] border border-white/5 p-6 rounded-2xl flex flex-col justify-between transition-all hover:border-white/10">
@@ -245,7 +245,7 @@ export function MusicScaleGuideCenter({
                 {practice && (
                   <div className="mt-2 pt-3 border-t border-white/5">
                     <span className="text-xs uppercase font-bold text-[#2B85EB] block mb-1">
-                      {t('dashboard.musicscale.center.common.in_practice', 'Na prática')}
+                      {t('musicscale.center.common.in_practice', 'Na prática')}
                     </span>
                     <p className="text-xs text-[#808795]">{practice}</p>
                   </div>
@@ -253,7 +253,7 @@ export function MusicScaleGuideCenter({
                 {notice && (
                   <div className="mt-2 pt-3 border-t border-white/5">
                     <span className="text-xs uppercase font-bold text-amber-500 block mb-1">
-                      {t('dashboard.musicscale.center.common.important', 'Importante')}
+                      {t('musicscale.center.common.important', 'Importante')}
                     </span>
                     <p className="text-xs text-[#808795]">{notice}</p>
                   </div>
@@ -269,24 +269,24 @@ export function MusicScaleGuideCenter({
   const renderGettingStarted = () => {
     // 8 steps
     const steps = [
-      { id: 'organization', key: 'organization', titleKey: 'dashboard.musicscale.center.getting_started.steps.organization.title' },
-      { id: 'team', key: 'team', titleKey: 'dashboard.musicscale.center.getting_started.steps.team.title' },
-      { id: 'songs', key: 'songs', titleKey: 'dashboard.musicscale.center.getting_started.steps.songs.title' },
-      { id: 'content', key: 'content', titleKey: 'dashboard.musicscale.center.getting_started.steps.content.title' },
-      { id: 'members', key: 'members', titleKey: 'dashboard.musicscale.center.getting_started.steps.members.title' },
-      { id: 'band_scale', key: 'band_scale', titleKey: 'dashboard.musicscale.center.getting_started.steps.band_scale.title' },
-      { id: 'music_scale', key: 'music_scale', titleKey: 'dashboard.musicscale.center.getting_started.steps.music_scale.title' },
-      { id: 'review', key: 'review', titleKey: 'dashboard.musicscale.center.getting_started.steps.review.title' }
+      { id: 'organization', key: 'organization', titleKey: 'musicscale.center.getting_started.steps.organization.title' },
+      { id: 'team', key: 'team', titleKey: 'musicscale.center.getting_started.steps.team.title' },
+      { id: 'songs', key: 'songs', titleKey: 'musicscale.center.getting_started.steps.songs.title' },
+      { id: 'content', key: 'content', titleKey: 'musicscale.center.getting_started.steps.content.title' },
+      { id: 'members', key: 'members', titleKey: 'musicscale.center.getting_started.steps.members.title' },
+      { id: 'band_scale', key: 'band_scale', titleKey: 'musicscale.center.getting_started.steps.band_scale.title' },
+      { id: 'music_scale', key: 'music_scale', titleKey: 'musicscale.center.getting_started.steps.music_scale.title' },
+      { id: 'review', key: 'review', titleKey: 'musicscale.center.getting_started.steps.review.title' }
     ];
 
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
         <div className="max-w-3xl mb-12">
           <h2 className="text-2xl font-bold text-white mb-2">
-            {t('dashboard.musicscale.center.getting_started.title', 'Primeiros passos')}
+            {t('musicscale.center.getting_started.title', 'Primeiros passos')}
           </h2>
           <p className="text-[#A0A7B5]">
-            {t('dashboard.musicscale.center.getting_started.description', 'Siga esta ordem sugerida para preparar sua organização no MusicScale.')}
+            {t('musicscale.center.getting_started.description', 'Siga esta ordem sugerida para preparar sua organização no MusicScale.')}
           </p>
         </div>
 
@@ -294,32 +294,32 @@ export function MusicScaleGuideCenter({
           {steps.map((step, index) => {
             const stepNum = index + 1;
             const title = t(step.titleKey, step.key);
-            const what = t(`dashboard.musicscale.center.getting_started.steps.${step.key}.what`, '');
-            const why = t(`dashboard.musicscale.center.getting_started.steps.${step.key}.why`, '');
-            const how = t(`dashboard.musicscale.center.getting_started.steps.${step.key}.how`, '');
-            const result = t(`dashboard.musicscale.center.getting_started.steps.${step.key}.result`, '');
+            const what = t(`musicscale.center.getting_started.steps.${step.key}.what`, '');
+            const why = t(`musicscale.center.getting_started.steps.${step.key}.why`, '');
+            const how = t(`musicscale.center.getting_started.steps.${step.key}.how`, '');
+            const result = t(`musicscale.center.getting_started.steps.${step.key}.result`, '');
 
             // Honest Progress Logic
             let stepStatus: 'completed' | 'pending_invite' | 'pending' = 'pending';
-            let statusText = t('dashboard.musicscale.center.getting_started.statuses.pending', 'Pendente');
+            let statusText = t('musicscale.center.getting_started.statuses.pending', 'Pendente');
 
             if (step.id === 'organization') {
               if (organizationReady) {
                 stepStatus = 'completed';
-                statusText = t('dashboard.musicscale.center.getting_started.statuses.completed', 'Concluído');
+                statusText = t('musicscale.center.getting_started.statuses.completed', 'Concluído');
               }
             } else if (step.id === 'team') {
               if (memberCount > 1) {
                 stepStatus = 'completed';
-                statusText = t('dashboard.musicscale.center.getting_started.statuses.completed', 'Concluído');
+                statusText = t('musicscale.center.getting_started.statuses.completed', 'Concluído');
               } else if (pendingInviteCount > 0) {
                 stepStatus = 'pending_invite';
-                statusText = t('dashboard.musicscale.center.getting_started.statuses.pending_invite', 'Convite enviado');
+                statusText = t('musicscale.center.getting_started.statuses.pending_invite', 'Convite enviado');
               }
             } else {
               // Other steps happen inside MusicScale
               stepStatus = 'pending';
-              statusText = t('dashboard.musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale');
+              statusText = t('musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale');
             }
 
             return (
@@ -354,7 +354,7 @@ export function MusicScaleGuideCenter({
                   {what && (
                     <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
                       <strong className="text-white block mb-1">
-                        {t('dashboard.musicscale.center.common.what_is', 'O que é')}
+                        {t('musicscale.center.common.what_is', 'O que é')}
                       </strong>
                       <p className="text-[#808795] leading-relaxed">{what}</p>
                     </div>
@@ -362,7 +362,7 @@ export function MusicScaleGuideCenter({
                   {why && (
                     <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
                       <strong className="text-white block mb-1">
-                        {t('dashboard.musicscale.center.common.why_important', 'Por que é importante')}
+                        {t('musicscale.center.common.why_important', 'Por que é importante')}
                       </strong>
                       <p className="text-[#808795] leading-relaxed">{why}</p>
                     </div>
@@ -370,7 +370,7 @@ export function MusicScaleGuideCenter({
                   {how && (
                     <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
                       <strong className="text-white block mb-1">
-                        {t('dashboard.musicscale.center.common.how_to', 'Como fazer')}
+                        {t('musicscale.center.common.how_to', 'Como fazer')}
                       </strong>
                       <p className="text-[#808795] leading-relaxed">{how}</p>
                     </div>
@@ -378,7 +378,7 @@ export function MusicScaleGuideCenter({
                   {result && (
                     <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
                       <strong className="text-white block mb-1">
-                        {t('dashboard.musicscale.center.common.expected_result', 'Resultado esperado')}
+                        {t('musicscale.center.common.expected_result', 'Resultado esperado')}
                       </strong>
                       <p className="text-[#808795] leading-relaxed">{result}</p>
                     </div>
@@ -390,7 +390,7 @@ export function MusicScaleGuideCenter({
                   <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-sm max-w-3xl mb-6 flex items-start gap-3">
                     <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
                     <p className="text-[#A0A7B5] leading-relaxed">
-                      {t('dashboard.musicscale.center.getting_started.steps.team.important', 'A função Administrador ou Membro define o acesso ao MillionsNest. Funções ministeriais, como músico, vocal ou líder, são configuradas dentro do MusicScale.')}
+                      {t('musicscale.center.getting_started.steps.team.important', 'A função Administrador ou Membro define o acesso ao MillionsNest. Funções ministeriais, como músico, vocal ou líder, são configuradas dentro do MusicScale.')}
                     </p>
                   </div>
                 )}
@@ -406,12 +406,12 @@ export function MusicScaleGuideCenter({
                         className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
                       >
                         <Settings className="w-4 h-4" />
-                        {t('dashboard.musicscale.center.getting_started.steps.organization.action', 'Revisar organização')}
+                        {t('musicscale.center.getting_started.steps.organization.action', 'Revisar organização')}
                       </button>
                       {!canManageOrganization && (
                         <p className="text-xs text-amber-500 mt-2 flex items-center gap-1.5">
                           <ShieldAlert className="w-3.5 h-3.5" />
-                          {t('dashboard.musicscale.center.getting_started.steps.organization.admin_notice', 'Um administrador pode alterar esses dados.')}
+                          {t('musicscale.center.getting_started.steps.organization.admin_notice', 'Um administrador pode alterar esses dados.')}
                         </p>
                       )}
                     </>
@@ -424,12 +424,12 @@ export function MusicScaleGuideCenter({
                         className="px-5 py-2.5 bg-white text-black hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
                       >
                         <UserPlus className="w-4 h-4" />
-                        {t('dashboard.musicscale.center.getting_started.steps.team.action_invite', 'Convidar uma pessoa')}
+                        {t('musicscale.center.getting_started.steps.team.action_invite', 'Convidar uma pessoa')}
                       </button>
                       {!canInvite && (
                         <p className="text-xs text-amber-500 mt-2 flex items-center gap-1.5">
                           <ShieldAlert className="w-3.5 h-3.5" />
-                          {t('dashboard.musicscale.center.getting_started.steps.team.admin_notice', 'Peça a um administrador para enviar o convite.')}
+                          {t('musicscale.center.getting_started.steps.team.admin_notice', 'Peça a um administrador para enviar o convite.')}
                         </p>
                       )}
                     </>
@@ -440,7 +440,7 @@ export function MusicScaleGuideCenter({
                       disabled={!musicScaleReady} 
                       className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] disabled:bg-white/5 disabled:text-[#A0A7B5] disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
                     >
-                      {t(`dashboard.musicscale.center.getting_started.steps.${step.key}.action`, 'Abrir MusicScale')}
+                      {t(`musicscale.center.getting_started.steps.${step.key}.action`, 'Abrir MusicScale')}
                       <ExternalLink className="w-4 h-4" />
                     </button>
                   )}
