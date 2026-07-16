@@ -53,6 +53,7 @@ export function EcosystemWorkspaceHome({
   const renderWorkspaceSelector = () => {
     return (
       <div className="mb-8 border-b border-white/5 pb-4 overflow-x-auto no-scrollbar">
+        <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('dashboard.workspace.spaces_title', 'Seus espaços')}</h3>
         <div className="flex items-center gap-4 min-w-max">
           <button
             onClick={() => onSelectWorkspace('home')}
@@ -102,17 +103,91 @@ export function EcosystemWorkspaceHome({
 
   const renderHomeWorkspace = () => {
     return (
-      <div className="mb-8">
+      <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
         <h2 className="text-2xl font-bold text-white mb-2">{t('dashboard.workspace.intro', 'Seus aplicativos, organização e equipe em um só lugar')}</h2>
-        {installedApps.length > 0 && installedApps[0].id === 'musicscale' && (
-          <div className="mt-6 inline-flex">
-            <button
-              onClick={() => onSelectWorkspace(installedApps[0].id)}
-              className="px-6 py-3 bg-[#2B85EB] text-white font-semibold rounded-xl hover:bg-[#3B95FB] transition-all flex items-center gap-2"
-            >
-              {t('dashboard.workspace.open_main_app', 'Abrir aplicativo principal')}
-              <ArrowRight className="w-4 h-4" />
-            </button>
+        
+        {installedApps.length > 0 && (
+          <div className="mt-8">
+            <h3 className="text-lg font-bold text-white mb-4">{t('dashboard.workspace.apps_title', 'Seus aplicativos')}</h3>
+            <div className={`grid gap-4 ${installedApps.length === 1 ? 'grid-cols-1 max-w-[480px]' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
+              {installedApps.map(app => {
+                if (app.id === 'musicscale') {
+                  const isReadyToOpen = ["trialing", "active"].includes(msCatalogState);
+                  const hasPaymentIssue = msCatalogState === "payment_issue";
+                  const isLoading = msCatalogState === "loading";
+
+                  return (
+                    <div key={app.id} className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-2xl p-6 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center shrink-0">
+                            <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            msCatalogState === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                            msCatalogState === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                            hasPaymentIssue ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                            isLoading ? 'bg-white/10 text-white border border-white/20' :
+                            'bg-white/10 text-[#A0A7B5]'
+                          }`}>
+                            {isLoading 
+                              ? t('dashboard.workspace.loading', 'Carregando')
+                              : hasPaymentIssue 
+                                ? t('dashboard.workspace.payment_pending', 'Pagamento pendente')
+                                : t(`dashboard.musicscale.status.${msCatalogState}`, msCatalogState)
+                            }
+                          </span>
+                        </div>
+                        <h4 className="text-lg font-bold text-white mb-1">MusicScale</h4>
+                        <p className="text-sm text-[#A0A7B5] mb-6 line-clamp-2">{app.shortDescription || app.description}</p>
+                      </div>
+                      
+                      <button
+                        onClick={() => {
+                          if (hasPaymentIssue) onNavigateToBilling();
+                          else onLaunchApp(app);
+                        }}
+                        disabled={isLoading || (!isReadyToOpen && !hasPaymentIssue)}
+                        className={`w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 ${
+                          hasPaymentIssue ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30' :
+                          isReadyToOpen ? 'bg-[#2B85EB]/10 text-[#2B85EB] hover:bg-[#2B85EB]/20 border border-[#2B85EB]/30' :
+                          'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
+                        }`}
+                      >
+                        {isLoading ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : (hasPaymentIssue ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
+                        {hasPaymentIssue ? t('dashboard.workspace.resolve_payment', 'Regularizar pagamento') : t('dashboard.workspace.open_app', `Abrir ${app.name}`, { appName: app.name })}
+                      </button>
+                    </div>
+                  );
+                }
+
+                // Generic App
+                return (
+                  <div key={app.id} className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-2xl p-6 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center shrink-0">
+                          <LayoutGrid className="w-6 h-6 text-white" />
+                        </div>
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-500/20 text-green-400 border border-green-500/30">
+                          {t('dashboard.workspace.available', 'Disponível')}
+                        </span>
+                      </div>
+                      <h4 className="text-lg font-bold text-white mb-1">{app.name}</h4>
+                      <p className="text-sm text-[#A0A7B5] mb-6 line-clamp-2">{app.shortDescription || app.description}</p>
+                    </div>
+                    
+                    <button
+                      onClick={() => onLaunchApp(app)}
+                      className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10"
+                    >
+                      <Play className="w-4 h-4 fill-current" />
+                      {t('dashboard.workspace.open_app', `Abrir ${app.name}`, { appName: app.name })}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

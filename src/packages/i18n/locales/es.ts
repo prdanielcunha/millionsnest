@@ -381,7 +381,13 @@ export default {
     },
     workspace: {
       intro: "Tus aplicaciones, organización y equipo en un solo lugar",
-      open_main_app: "Abrir aplicación principal"
+      spaces_title: "Tus espacios",
+      apps_title: "Tus aplicaciones",
+      open_app: "Abrir {{appName}}",
+      available: "Disponible",
+      loading: "Cargando",
+      payment_pending: "Pago pendiente",
+      resolve_payment: "Regularizar pago"
     },
     musicscale: {
       hero: {

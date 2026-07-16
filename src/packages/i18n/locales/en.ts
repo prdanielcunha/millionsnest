@@ -372,7 +372,13 @@ export default {
     },
     workspace: {
       intro: "Your apps, organization, and team in one place",
-      open_main_app: "Open main app"
+      spaces_title: "Your spaces",
+      apps_title: "Your apps",
+      open_app: "Open {{appName}}",
+      available: "Available",
+      loading: "Loading",
+      payment_pending: "Payment pending",
+      resolve_payment: "Resolve payment"
     },
     musicscale: {
       hero: {
