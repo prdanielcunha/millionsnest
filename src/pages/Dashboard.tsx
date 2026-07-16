@@ -26,6 +26,7 @@ import { createAuditLog } from "../lib/audit.js";
 
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
+import { EcosystemWorkspaceHome } from "../components/dashboard/EcosystemWorkspaceHome.js";
 import { OrganizationManager } from "../components/OrganizationManager.js";
 import { InviteModal } from "../components/InviteModal.js";
 import { UnifiedTimeline } from "../components/UnifiedTimeline.js";
@@ -1178,6 +1179,40 @@ export function Dashboard() {
   const msCatalogState = getMusicScaleCatalogState();
   const msIsInstalled = ["trialing", "active", "cancel_scheduled", "administrative"].includes(msCatalogState);
 
+  const installedApps = ECOSYSTEM_APPS.filter(app => {
+    if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
+    if (app.id === 'musicscale') return msIsInstalled;
+    return organization?.enabledApps?.includes(app.id);
+  });
+  const musicScaleApp = ECOSYSTEM_APPS.find(a => a.id === 'musicscale');
+  const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
+  const maxUsersLimit = entitlements?.limits?.users ?? 10;
+  const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
+
+  const selectedWorkspace = (() => {
+    if (activeTab === "overview") {
+      if (tab === "apps" && subTab) {
+         return subTab; 
+      } else if (tab === "overview") {
+         return "home";
+      } else {
+         if (installedApps.length === 1) {
+            return installedApps[0].id;
+         }
+         return "home";
+      }
+    }
+    return "home";
+  })();
+
+  const handleSelectWorkspace = (workspaceId: string) => {
+    if (workspaceId === "home") {
+      navigate('/dashboard/overview');
+    } else {
+      navigate(`/dashboard/apps/${workspaceId}`);
+    }
+  };
+
   const formattedRenewal = subscription?.currentPeriodEnd 
     ? new Date(normalizeDateToMs(subscription.currentPeriodEnd)).toLocaleDateString('pt-BR') 
     : null;
@@ -1256,7 +1291,13 @@ export function Dashboard() {
 
   const breadcrumbs = [];
   if (activeTab === 'overview') {
-    breadcrumbs.push({ label: 'Visão Geral' });
+    if (selectedWorkspace === 'home') {
+       breadcrumbs.push({ label: t('dashboard.navigation.home', 'Início') });
+    } else {
+       const app = installedApps.find(a => a.id === selectedWorkspace);
+       breadcrumbs.push({ label: t('dashboard.navigation.my_apps', 'Meus aplicativos') });
+       breadcrumbs.push({ label: app ? app.name : selectedWorkspace });
+    }
   } else if (activeTab === 'organization') {
     breadcrumbs.push({ label: 'Organização', path: '/dashboard/organization' });
     if (tab === 'team' || subTab === 'members') breadcrumbs.push({ label: 'Equipe' });
@@ -1278,7 +1319,7 @@ export function Dashboard() {
             onClick={() => setActiveTab("overview")}
             className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "overview" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
           >
-            Visão Geral
+            {t('dashboard.navigation.overview', 'Início')}
           </button>
           {(currentUserPerms['organization.settings.update'] || isGlobalAdmin) && (
             <button 
@@ -1403,7 +1444,29 @@ export function Dashboard() {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
             >
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <EcosystemWorkspaceHome 
+                selectedWorkspace={selectedWorkspace}
+                installedApps={installedApps}
+                organization={organization}
+                subscription={subscription}
+                members={members}
+                pendingInvites={pendingInvites}
+                currentUserPerms={currentUserPerms}
+                isGlobalAdmin={isGlobalAdmin}
+                msIsInstalled={msIsInstalled}
+                msCatalogState={msCatalogState}
+                musicScaleApp={musicScaleApp}
+                occupiedSlots={occupiedSlots}
+                maxUsersLimit={maxUsersLimit}
+                onSelectWorkspace={handleSelectWorkspace}
+                onLaunchApp={(app) => handleLaunchEcosystemApp(app, currentUserPerms)}
+                onNavigateToOrganizationMembers={() => setActiveTab('organization')}
+                onNavigateToBilling={() => setActiveTab('billing')}
+                onNavigateToMusicScaleLanding={() => navigate('/musicscale')}
+              />
+
+              {selectedWorkspace === 'home' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left Column: Main Content */}
                 <div className="col-span-1 lg:col-span-2 space-y-6">
                   
@@ -1723,14 +1786,13 @@ export function Dashboard() {
                           Ver Todos ({members.length})
                         </button>
                       )}
-                    </div>
                   </div>
-
                 </div>
-              </div>
+                  </div>
+                </div>
+              )}
             </motion.section>
           )}
-
           {activeTab === "organization" && (
             <motion.section
               key="organization"

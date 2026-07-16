@@ -379,4 +379,80 @@ export default {
     final_cta_button: "Começar teste grátis",
     final_cta_secondary: "Ver preços"
 }
+,
+  dashboard: {
+    navigation: {
+      home: "Início",
+      my_apps: "Meus aplicativos",
+      overview: "Início"
+    },
+    workspace: {
+      intro: "Seus aplicativos, organização e equipe em um só lugar",
+      open_main_app: "Abrir aplicativo principal"
+    },
+    musicscale: {
+      hero: {
+        title: "Seu ministério organizado em um só lugar",
+        open: "Abrir MusicScale",
+        learn_more: "Conhecer recursos",
+        unavailable: "Indisponível"
+      },
+      status: {
+        active: "Ativo",
+        trialing: "Teste",
+        payment_issue: "Problema no pagamento",
+        unavailable: "Indisponível"
+      },
+      checklist: {
+        title: "Comece por aqui",
+        org_active: "Organização ativa",
+        ms_active: "MusicScale ativado",
+        team_started: "Equipe iniciada",
+        roles_defined: "Funções definidas",
+        action_invite: "Convide sua equipe",
+        action_open: "Abra o MusicScale e comece a organizar seu ministério",
+        completed: "{{count}} concluído"
+      },
+      actions: {
+        title: "Ações rápidas",
+        open: "Abrir MusicScale",
+        invite: "Convidar pessoas",
+        manage_team: "Gerenciar equipe",
+        view_sub: "Ver assinatura",
+        learn_more: "Conhecer recursos",
+        need_help: "Preciso de ajuda"
+      },
+      team: {
+        title: "Equipe",
+        desc: "Convide líderes, músicos e vocais para trabalharem na mesma organização.",
+        members: "{{count}} membros",
+        invites: "{{count}} convites",
+        slots: "{{used}}/{{total}} vagas",
+        slots_unlimited: "{{used}} vagas (ilimitado)",
+        go_to_invites: "Ir para convites",
+        manage_team: "Gerenciar equipe"
+      },
+      features: {
+        title: "Recursos do MusicScale",
+        repertoire: "Repertórios",
+        repertoire_desc: "Gerencie o acervo da igreja",
+        scales: "Escalas",
+        scales_desc: "Organize as ministrações",
+        musicians: "Músicos",
+        musicians_desc: "Gerencie perfis e funções",
+        preparation: "Preparação",
+        preparation_desc: "Arquivos e ensaios",
+        open: "Abrir MusicScale"
+      },
+      help: {
+        title: "Não sabe por onde começar?",
+        desc: "Conheça os recursos do MusicScale ou fale com nossa equipe.",
+        how_it_works: "Ver como funciona",
+        contact_support: "Falar com suporte"
+      }
+    },
+    genericApp: {
+      open: "Abrir App"
+    }
+  }
 };
