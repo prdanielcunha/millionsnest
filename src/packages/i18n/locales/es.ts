@@ -440,11 +440,15 @@ export default {
             },
             "resources": {
                   "title": "Conoce MusicScale por dentro",
+                  "description": "Entiende dónde se encuentran las canciones, acordes, letras, escalas e integrantes, y cómo cada área se conecta en la preparación del equipo.",
+                  "view_in_ms": "Ver en MusicScale",
+                  "regularize_subscription": "Regularizar suscripción",
+                  "ask_billing_owner": "Pide al responsable de la suscripción que regularice el acceso.",
+                  "unavailable": "MusicScale no disponible",
                   "groups": {
                         "music_content": "Música y contenido",
                         "team_scales": "Equipo y escalas"
                   },
-                  "description": "Entiende dónde se encuentran las canciones, acordes, letras, escalas e integrantes, y cómo cada área se conecta en la preparación del equipo.",
                   "flow": {
                         "live_library": "Biblioteca Viva",
                         "repertoire": "Repertorio de canciones",
@@ -504,12 +508,11 @@ export default {
                   "preparation_result": {
                         "title": "Todo conectado para preparar al equipo",
                         "text": "El Repertorio reúne las canciones. Los Acordes y Letras ayudan en el estudio. Los Integrantes forman la Escala de Banda. La Escala de Canciones organiza lo que se presentará en cada fecha y puede recibir a la banda que participará en ese evento."
-                  },
-                  "open_ms": "Abrir MusicScale"
+                  }
             },
             "getting_started": {
                   "title": "Primeros pasos en MusicScale",
-                  "description": "Vamos a preparar tu organización, tu equipo y el primer flujo de trabajo. Puedes completar cada paso a tu ritmo.",
+                  "description": "Vamos a preparar tu organización, tu equipo y el primer flujo de trabalho. Puedes completar cada paso a tu ritmo.",
                   "operational_notice": "Los pasos de Repertorio, acordes, letras, integrantes y escalas ocurren dentro de MusicScale. Abre la aplicación y sigue las pautas a continuación.",
                   "statuses": {
                         "completed": "Completado",
@@ -517,27 +520,25 @@ export default {
                         "pending": "Pendiente",
                         "pending_invite": "Invitación enviada"
                   },
+                  "organization": {
+                        "ready_title": "Organización lista",
+                        "attention_title": "Revisa tu organización",
+                        "ready_description": "Tu iglesia u organización ya está creada en MillionsNest.",
+                        "attention_description": "Confirma los datos de la iglesia u organización antes de continuar.",
+                        "check_action": "Revisar datos"
+                  },
+                  "team": {
+                        "connected_title": "Equipo conectado",
+                        "invite_sent_title": "Invitación enviada",
+                        "invite_title": "Invita a tu equipo",
+                        "connected_description": "Tu organización ya tiene otras personas activas.",
+                        "waiting_description": "Hay una invitación esperando a que la persona se una a la organización.",
+                        "empty_description": "Invita a las primeras personas que usarán MusicScale contigo.",
+                        "manage_action": "Ver equipo e invitaciones",
+                        "invite_another_action": "Invitar a otra persona",
+                        "no_permission": "Pide a un administrador que invite o administre el equipo."
+                  },
                   "steps": {
-                        "organization": {
-                              "title": "Revisa tu organización",
-                              "what": "La organización representa a tu iglesia, ministerio o equipo dentro de MillionsNest.",
-                              "why": "Ahí es donde están las personas, aplicaciones y suscripción.",
-                              "how": "Comprueba si el nombre y los datos de la organización son correctos.",
-                              "result": "Tu equipo reconocerá fácilmente el entorno al ingresar.",
-                              "action": "Revisar organización",
-                              "admin_notice": "Un administrador puede cambiar estos detalles."
-                        },
-                        "team": {
-                              "title": "Invita a tu equipo",
-                              "what": "Añade a las personas que usarán MusicScale contigo.",
-                              "why": "Líderes, músicos y voces podrán acceder a la misma organización.",
-                              "how": "Ingresa el correo de la persona, elige el acceso a la organización y comparte la invitación.",
-                              "result": "La persona aparecerá en el equipo después de aceptar la invitación.",
-                              "action_invite": "Invitar a alguien",
-                              "action_manage": "Ver equipo e invitaciones",
-                              "admin_notice": "Pide a un administrador que envíe la invitación.",
-                              "important": "El rol de Administrador o Miembro define el acceso a MillionsNest. Los roles ministeriales, como músico, voz o líder, se configuran dentro de MusicScale."
-                        },
                         "songs": {
                               "title": "Añadir canciones al Repertorio",
                               "what": "El Repertorio reúne todas las canciones de tu organización.",
@@ -587,6 +588,10 @@ export default {
                               "action": "Abrir MusicScale"
                         }
                   }
+            },
+            "fallback": {
+                  "guide_step": "Etapa de la guía",
+                  "resource": "Recurso"
             }
       },
       hero: {

@@ -131,6 +131,20 @@ function runTests() {
     }
   }
 
+  // 9. Verify no raw key fallback (step.key or card.key as direct text fallbacks in t())
+  if (compContent.includes('t(step.titleKey, step.key)') || compContent.includes('t(step.titleKey, step.id)')) {
+    logError('Component uses step.key/step.id directly as t() fallback');
+  }
+  if (compContent.includes('t(`musicscale.center.resources.${card.key}.title`, card.key)')) {
+    logError('Component uses card.key directly as t() fallback');
+  }
+  if (!compContent.includes('musicscale.center.fallback.guide_step')) {
+    logError('Component missing humanized guide step fallback');
+  }
+  if (!compContent.includes('musicscale.center.fallback.resource')) {
+    logError('Component missing humanized resource fallback');
+  }
+
   if (hasErrors) {
     console.error("Test Failed:\n", errors.join('\n'));
     process.exit(1);

@@ -226,7 +226,7 @@ export function MusicScaleGuideCenter({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
           {resourceCards.map((card) => {
             const Icon = card.icon;
-            const title = t(`musicscale.center.resources.${card.key}.title`, card.key);
+            const title = t(`musicscale.center.resources.${card.key}.title`, t('musicscale.center.fallback.resource', 'Recurso'));
             const desc = t(`musicscale.center.resources.${card.key}.desc`, '');
             const practice = card.key !== 'ai_import' ? t(`musicscale.center.resources.${card.key}.practice`, '') : null;
             const notice = card.key === 'ai_import' ? t('musicscale.center.resources.ai_import.notice', '') : null;
@@ -242,22 +242,58 @@ export function MusicScaleGuideCenter({
                   </div>
                   <p className="text-sm text-[#A0A7B5] mb-4 leading-relaxed">{desc}</p>
                 </div>
-                {practice && (
-                  <div className="mt-2 pt-3 border-t border-white/5">
-                    <span className="text-xs uppercase font-bold text-[#2B85EB] block mb-1">
-                      {t('musicscale.center.common.in_practice', 'Na prática')}
-                    </span>
-                    <p className="text-xs text-[#808795]">{practice}</p>
+                
+                <div className="flex flex-col h-full justify-between">
+                  <div>
+                    {practice && (
+                      <div className="mt-2 pt-3 border-t border-white/5">
+                        <span className="text-xs uppercase font-bold text-[#2B85EB] block mb-1">
+                          {t('musicscale.center.common.in_practice', 'Na prática')}
+                        </span>
+                        <p className="text-xs text-[#808795]">{practice}</p>
+                      </div>
+                    )}
+                    {notice && (
+                      <div className="mt-2 pt-3 border-t border-white/5">
+                        <span className="text-xs uppercase font-bold text-amber-500 block mb-1">
+                          {t('musicscale.center.common.important', 'Importante')}
+                        </span>
+                        <p className="text-xs text-[#808795]">{notice}</p>
+                      </div>
+                    )}
                   </div>
-                )}
-                {notice && (
-                  <div className="mt-2 pt-3 border-t border-white/5">
-                    <span className="text-xs uppercase font-bold text-amber-500 block mb-1">
-                      {t('musicscale.center.common.important', 'Importante')}
-                    </span>
-                    <p className="text-xs text-[#808795]">{notice}</p>
+
+                  {/* Button/Action section */}
+                  <div className="mt-4 pt-4 border-t border-white/5 flex flex-col gap-2">
+                    {hasPaymentIssue ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={onNavigateToBilling}
+                          disabled={!canManageBilling}
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-black text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 min-h-[36px] w-fit"
+                        >
+                          {t('musicscale.center.resources.regularize_subscription', 'Regularizar assinatura')}
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
+                        {!canManageBilling && (
+                          <p className="text-[11px] text-amber-500 leading-normal">
+                            {t('musicscale.center.resources.ask_billing_owner', 'Peça ao responsável pela assinatura para regularizar o acesso.')}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onOpenMusicScale}
+                        className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 min-h-[36px] w-fit"
+                      >
+                        {t('musicscale.center.resources.view_in_ms', 'Ver no MusicScale')}
+                        <ExternalLink className="w-3.5 h-3.5 text-[#A0A7B5]" />
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
@@ -293,34 +329,52 @@ export function MusicScaleGuideCenter({
         <div className="space-y-12 ml-6 border-l-2 border-white/10 pl-8 py-4">
           {steps.map((step, index) => {
             const stepNum = index + 1;
-            const title = t(step.titleKey, step.key);
+            
+            // Dynamic Title & Description resolution for steps 1 and 2
+            let title = '';
+            let description = '';
+            let stepStatus: 'completed' | 'attention' | 'pending_invite' | 'pending' = 'pending';
+            let statusText = '';
+
+            if (step.id === 'organization') {
+              if (organizationReady) {
+                title = t('musicscale.center.getting_started.organization.ready_title', 'Organização pronta');
+                description = t('musicscale.center.getting_started.organization.ready_description', 'Sua igreja ou organização já está criada no MillionsNest.');
+                stepStatus = 'completed';
+                statusText = t('musicscale.center.getting_started.statuses.completed', 'Concluído');
+              } else {
+                title = t('musicscale.center.getting_started.organization.attention_title', 'Confira sua organização');
+                description = t('musicscale.center.getting_started.organization.attention_description', 'Confirme os dados da igreja ou organização antes de continuar.');
+                stepStatus = 'attention';
+                statusText = t('musicscale.center.getting_started.statuses.attention', 'Precisa de atenção');
+              }
+            } else if (step.id === 'team') {
+              if (memberCount > 1) {
+                title = t('musicscale.center.getting_started.team.connected_title', 'Equipe conectada');
+                description = t('musicscale.center.getting_started.team.connected_description', 'Sua organização ya posee outras pessoas ativas.');
+                stepStatus = 'completed';
+                statusText = t('musicscale.center.getting_started.statuses.completed', 'Concluído');
+              } else if (pendingInviteCount > 0) {
+                title = t('musicscale.center.getting_started.team.invite_sent_title', 'Convite enviado');
+                description = t('musicscale.center.getting_started.team.waiting_description', 'Há um convite aguardando a pessoa entrar na organização.');
+                stepStatus = 'pending_invite';
+                statusText = t('musicscale.center.getting_started.statuses.pending_invite', 'Convite enviado');
+              } else {
+                title = t('musicscale.center.getting_started.team.invite_title', 'Convide sua equipe');
+                description = t('musicscale.center.getting_started.team.empty_description', 'Convide as primeiras pessoas que utilizarão o MusicScale com você.');
+                stepStatus = 'pending';
+                statusText = t('musicscale.center.getting_started.statuses.pending', 'Pendente');
+              }
+            } else {
+              title = t(step.titleKey, t('musicscale.center.fallback.guide_step', 'Etapa do guia'));
+              stepStatus = 'pending';
+              statusText = t('musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale');
+            }
+
             const what = t(`musicscale.center.getting_started.steps.${step.key}.what`, '');
             const why = t(`musicscale.center.getting_started.steps.${step.key}.why`, '');
             const how = t(`musicscale.center.getting_started.steps.${step.key}.how`, '');
             const result = t(`musicscale.center.getting_started.steps.${step.key}.result`, '');
-
-            // Honest Progress Logic
-            let stepStatus: 'completed' | 'pending_invite' | 'pending' = 'pending';
-            let statusText = t('musicscale.center.getting_started.statuses.pending', 'Pendente');
-
-            if (step.id === 'organization') {
-              if (organizationReady) {
-                stepStatus = 'completed';
-                statusText = t('musicscale.center.getting_started.statuses.completed', 'Concluído');
-              }
-            } else if (step.id === 'team') {
-              if (memberCount > 1) {
-                stepStatus = 'completed';
-                statusText = t('musicscale.center.getting_started.statuses.completed', 'Concluído');
-              } else if (pendingInviteCount > 0) {
-                stepStatus = 'pending_invite';
-                statusText = t('musicscale.center.getting_started.statuses.pending_invite', 'Convite enviado');
-              }
-            } else {
-              // Other steps happen inside MusicScale
-              stepStatus = 'pending';
-              statusText = t('musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale');
-            }
 
             return (
               <div key={step.id} className="relative">
@@ -328,7 +382,7 @@ export function MusicScaleGuideCenter({
                 <div className={`absolute -left-[49px] top-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border transition-colors ${
                   stepStatus === 'completed' 
                     ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                    : stepStatus === 'pending_invite'
+                    : (stepStatus === 'pending_invite' || stepStatus === 'attention')
                       ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                       : 'bg-white/10 text-[#A0A7B5] border-white/20'
                 }`}>
@@ -341,7 +395,7 @@ export function MusicScaleGuideCenter({
                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                     stepStatus === 'completed' 
                       ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                      : stepStatus === 'pending_invite'
+                      : (stepStatus === 'pending_invite' || stepStatus === 'attention')
                         ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                         : 'bg-white/5 text-[#A0A7B5] border border-white/5'
                   }`}>
@@ -349,41 +403,45 @@ export function MusicScaleGuideCenter({
                   </span>
                 </div>
 
-                {/* Educational Fields Block */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 max-w-3xl">
-                  {what && (
-                    <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
-                      <strong className="text-white block mb-1">
-                        {t('musicscale.center.common.what_is', 'O que é')}
-                      </strong>
-                      <p className="text-[#808795] leading-relaxed">{what}</p>
-                    </div>
-                  )}
-                  {why && (
-                    <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
-                      <strong className="text-white block mb-1">
-                        {t('musicscale.center.common.why_important', 'Por que é importante')}
-                      </strong>
-                      <p className="text-[#808795] leading-relaxed">{why}</p>
-                    </div>
-                  )}
-                  {how && (
-                    <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
-                      <strong className="text-white block mb-1">
-                        {t('musicscale.center.common.how_to', 'Como fazer')}
-                      </strong>
-                      <p className="text-[#808795] leading-relaxed">{how}</p>
-                    </div>
-                  )}
-                  {result && (
-                    <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
-                      <strong className="text-white block mb-1">
-                        {t('musicscale.center.common.expected_result', 'Resultado esperado')}
-                      </strong>
-                      <p className="text-[#808795] leading-relaxed">{result}</p>
-                    </div>
-                  )}
-                </div>
+                {/* Educational Fields Block or Text Description */}
+                {step.id === 'organization' || step.id === 'team' ? (
+                  <p className="text-sm text-[#A0A7B5] leading-relaxed mb-6 max-w-2xl">{description}</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 max-w-3xl">
+                    {what && (
+                      <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
+                        <strong className="text-white block mb-1">
+                          {t('musicscale.center.common.what_is', 'O que é')}
+                        </strong>
+                        <p className="text-[#808795] leading-relaxed">{what}</p>
+                      </div>
+                    )}
+                    {why && (
+                      <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
+                        <strong className="text-white block mb-1">
+                          {t('musicscale.center.common.why_important', 'Por que é importante')}
+                        </strong>
+                        <p className="text-[#808795] leading-relaxed">{why}</p>
+                      </div>
+                    )}
+                    {how && (
+                      <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
+                        <strong className="text-white block mb-1">
+                          {t('musicscale.center.common.how_to', 'Como fazer')}
+                        </strong>
+                        <p className="text-[#808795] leading-relaxed">{how}</p>
+                      </div>
+                    )}
+                    {result && (
+                      <div className="bg-[#050505] p-4 rounded-xl border border-white/5 text-sm">
+                        <strong className="text-white block mb-1">
+                          {t('musicscale.center.common.expected_result', 'Resultado esperado')}
+                        </strong>
+                        <p className="text-[#808795] leading-relaxed">{result}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Important notice for step 2 (team) */}
                 {step.id === 'team' && (
@@ -399,38 +457,55 @@ export function MusicScaleGuideCenter({
                 <div className="pt-2">
                   {step.id === 'organization' ? (
                     <>
-                      <button 
-                        type="button" 
-                        onClick={onReviewOrganization} 
-                        disabled={!canManageOrganization}
-                        className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
-                      >
-                        <Settings className="w-4 h-4" />
-                        {t('musicscale.center.getting_started.steps.organization.action', 'Revisar organização')}
-                      </button>
-                      {!canManageOrganization && (
+                      {canManageOrganization ? (
+                        <button 
+                          type="button" 
+                          onClick={onReviewOrganization} 
+                          className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
+                        >
+                          <Settings className="w-4 h-4" />
+                          {t('musicscale.center.getting_started.organization.check_action', 'Conferir dados')}
+                        </button>
+                      ) : (
                         <p className="text-xs text-amber-500 mt-2 flex items-center gap-1.5">
                           <ShieldAlert className="w-3.5 h-3.5" />
-                          {t('musicscale.center.getting_started.steps.organization.admin_notice', 'Um administrador pode alterar esses dados.')}
+                          {t('musicscale.center.getting_started.organization.admin_notice', 'Um administrador pode alterar esses dados.')}
                         </p>
                       )}
                     </>
                   ) : step.id === 'team' ? (
                     <>
-                      <button 
-                        type="button" 
-                        onClick={onOpenInviteModal} 
-                        disabled={!canInvite}
-                        className="px-5 py-2.5 bg-white text-black hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                        {t('musicscale.center.getting_started.steps.team.action_invite', 'Convidar uma pessoa')}
-                      </button>
-                      {!canInvite && (
+                      {(!canInvite && !canManageTeam) ? (
                         <p className="text-xs text-amber-500 mt-2 flex items-center gap-1.5">
                           <ShieldAlert className="w-3.5 h-3.5" />
-                          {t('musicscale.center.getting_started.steps.team.admin_notice', 'Peça a um administrador para enviar o convite.')}
+                          {t('musicscale.center.getting_started.team.no_permission', 'Peça a um administrador para convidar ou gerenciar a equipe.')}
                         </p>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-3">
+                          {canInvite && (
+                            <button 
+                              type="button" 
+                              onClick={onOpenInviteModal} 
+                              className="px-5 py-2.5 bg-white text-black hover:bg-gray-100 text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px]"
+                            >
+                              <UserPlus className="w-4 h-4" />
+                              {memberCount > 1 
+                                ? t('musicscale.center.getting_started.team.invite_another_action', 'Convidar outra pessoa')
+                                : t('musicscale.center.getting_started.team.invite_title', 'Convidar uma pessoa')
+                              }
+                            </button>
+                          )}
+                          {canManageTeam && (
+                            <button 
+                              type="button" 
+                              onClick={onManageTeam} 
+                              className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px]"
+                            >
+                              <Users className="w-4 h-4" />
+                              {t('musicscale.center.getting_started.team.manage_action', 'Ver equipe e convites')}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </>
                   ) : (
@@ -440,7 +515,7 @@ export function MusicScaleGuideCenter({
                       disabled={!musicScaleReady} 
                       className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] disabled:bg-white/5 disabled:text-[#A0A7B5] disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
                     >
-                      {t(`musicscale.center.getting_started.steps.${step.key}.action`, 'Abrir MusicScale')}
+                      {t(`musicscale.center.getting_started.steps.${step.key}.action`, t('musicscale.center.hero.open', 'Abrir MusicScale'))}
                       <ExternalLink className="w-4 h-4" />
                     </button>
                   )}

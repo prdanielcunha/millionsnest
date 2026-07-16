@@ -431,11 +431,15 @@ export default {
             },
             "resources": {
                   "title": "Get to know MusicScale inside",
+                  "description": "Understand where songs, chords, lyrics, scales, and members are located, and how each area connects in team preparation.",
+                  "view_in_ms": "View in MusicScale",
+                  "regularize_subscription": "Regularizar assinatura",
+                  "ask_billing_owner": "Peça ao responsável pela assinatura para regularizar o acesso.",
+                  "unavailable": "MusicScale indisponível",
                   "groups": {
                         "music_content": "Music and content",
                         "team_scales": "Team and scales"
                   },
-                  "description": "Understand where songs, chords, lyrics, scales, and members are located, and how each area connects in team preparation.",
                   "flow": {
                         "live_library": "Live Library",
                         "repertoire": "Song Repertoire",
@@ -508,27 +512,25 @@ export default {
                         "pending": "Pending",
                         "pending_invite": "Invite sent"
                   },
+                  "organization": {
+                        "ready_title": "Organization ready",
+                        "attention_title": "Check your organization",
+                        "ready_description": "Your church or organization is already created in MillionsNest.",
+                        "attention_description": "Confirm the church or organization details before continuing.",
+                        "check_action": "Check details"
+                  },
+                  "team": {
+                        "connected_title": "Team connected",
+                        "invite_sent_title": "Invite sent",
+                        "invite_title": "Invite your team",
+                        "connected_description": "Your organization already has other active people.",
+                        "waiting_description": "An invitation is waiting for the person to join the organization.",
+                        "empty_description": "Invite the first people who will use MusicScale with you.",
+                        "manage_action": "View team and invitations",
+                        "invite_another_action": "Invite another person",
+                        "no_permission": "Ask an administrator to invite or manage the team."
+                  },
                   "steps": {
-                        "organization": {
-                              "title": "Check your organization",
-                              "what": "The organization represents your church, ministry or team inside MillionsNest.",
-                              "why": "That's where the people, apps and subscription are.",
-                              "how": "Check if the organization's name and details are correct.",
-                              "result": "Your team will easily recognize the environment upon entering.",
-                              "action": "Review organization",
-                              "admin_notice": "An administrator can change these details."
-                        },
-                        "team": {
-                              "title": "Invite your team",
-                              "what": "Add the people who will use MusicScale with you.",
-                              "why": "Leaders, musicians and vocals will be able to access the same organization.",
-                              "how": "Enter the person's email, choose access to the organization and share the invite.",
-                              "result": "The person will appear in the team after accepting the invite.",
-                              "action_invite": "Invite someone",
-                              "action_manage": "View team and invites",
-                              "admin_notice": "Ask an administrator to send the invite.",
-                              "important": "The Administrator or Member role defines access to MillionsNest. Ministry roles, like musician, vocal or leader, are configured inside MusicScale."
-                        },
                         "songs": {
                               "title": "Add songs to Repertoire",
                               "what": "The Repertoire gathers all your organization's songs.",
@@ -578,6 +580,10 @@ export default {
                               "action": "Open MusicScale"
                         }
                   }
+            },
+            "fallback": {
+                  "guide_step": "Guide step",
+                  "resource": "Resource"
             }
       },
       hero: {

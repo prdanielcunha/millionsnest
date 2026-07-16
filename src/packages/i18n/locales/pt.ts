@@ -442,6 +442,10 @@ export default {
             "resources": {
                   "title": "Conheça o MusicScale por dentro",
                   "description": "Entenda onde ficam as músicas, cifras, letras, escalas e integrantes, e como cada área se conecta na preparação da equipe.",
+                  "view_in_ms": "Ver no MusicScale",
+                  "regularize_subscription": "Regularizar assinatura",
+                  "ask_billing_owner": "Peça ao responsável pela assinatura para regularizar o acesso.",
+                  "unavailable": "MusicScale indisponível",
                   "groups": {
                         "music_content": "Músicas e conteúdo",
                         "team_scales": "Equipe e escalas"
@@ -555,26 +559,21 @@ export default {
                   },
                   "organization": {
                         "ready_title": "Organização pronta",
-                        "ready_desc": "Sua igreja ou organização já está criada no MillionsNest.",
-                        "not_ready_title": "Confira sua organização",
-                        "status_done": "Concluído",
-                        "status_attention": "Precisa de atenção",
-                        "action_check": "Conferir dados",
-                        "admin_notice": "Um administrador pode alterar esses dados."
+                        "attention_title": "Confira sua organização",
+                        "ready_description": "Sua igreja ou organização já está criada no MillionsNest.",
+                        "attention_description": "Confirme os dados da igreja ou organização antes de continuar.",
+                        "check_action": "Conferir dados"
                   },
                   "team": {
-                        "ready_title": "Equipe conectada",
-                        "ready_desc": "Sua organização já possui outras pessoas ativas.",
-                        "pending_title": "Convite enviado",
-                        "pending_desc": "Há convite aguardando a pessoa entrar na organização.",
-                        "not_ready_title": "Convide sua equipe",
-                        "not_ready_desc": "Convide as primeiras pessoas que utilizarão o MusicScale com você.",
-                        "status_done": "Concluído",
-                        "status_waiting": "Aguardando aceitação",
-                        "status_pending": "Pendente",
-                        "action_invite": "Convidar uma pessoa",
-                        "action_view": "Ver equipe e convites",
-                        "admin_notice": "Um administrador pode enviar convites."
+                        "connected_title": "Equipe conectada",
+                        "invite_sent_title": "Convite enviado",
+                        "invite_title": "Convide sua equipe",
+                        "connected_description": "Sua organização já possui outras pessoas ativas.",
+                        "waiting_description": "Há um convite aguardando a pessoa entrar na organização.",
+                        "empty_description": "Convide as primeiras pessoas que utilizarão o MusicScale com você.",
+                        "manage_action": "Ver equipe e convites",
+                        "invite_another_action": "Convidar outra pessoa",
+                        "no_permission": "Peça a um administrador para convidar ou gerenciar a equipe."
                   },
                   "steps": {
                         "songs": {
@@ -614,6 +613,10 @@ export default {
                               "result": "Sua equipe subirá ao altar com máxima segurança e excelência."
                         }
                   }
+            },
+            "fallback": {
+                  "guide_step": "Etapa do guia",
+                  "resource": "Recurso"
             }
       },
       hero: {
