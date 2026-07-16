@@ -381,6 +381,127 @@ export default {
       resolve_payment: "Resolve payment"
     },
     musicscale: {
+      center: {
+            "tabs": {
+                  "overview": "Overview",
+                  "resources": "Resources",
+                  "getting_started": "Getting started"
+            },
+            "badges": {
+                  "recommended": "Recommended",
+                  "guide": "Guide"
+            },
+            "overview": {
+                  "start_here": "START HERE",
+                  "no_team_title": "Prepare your team to use MusicScale",
+                  "no_team_desc": "Invite the people who will participate in the organization and then continue the setup inside MusicScale.",
+                  "team_title": "Continue getting started",
+                  "team_desc": "Learn how to add songs, create repertoires, and build your first scale.",
+                  "btn_continue": "Continue getting started",
+                  "btn_invite": "Invite a person",
+                  "ask_admin_invite": "Ask an organization administrator to invite the team.",
+                  "resolve_payment": "Resolve subscription",
+                  "ask_admin_payment": "Ask the subscription manager to resolve access.",
+                  "summary_org": "Organization ready",
+                  "summary_ms": "MusicScale active",
+                  "summary_team": "Team started"
+            },
+            "resources": {
+                  "title": "What can MusicScale do?",
+                  "description": "Explore the integrated features.",
+                  "repertoire": {
+                        "title": "REPERTOIRES",
+                        "desc": "Organize songs for services, rehearsals, and events.",
+                        "why": "Your team finds what they need to prepare without relying on scattered messages.",
+                        "example": "Create a repertoire called Sunday Service and add the ministry songs."
+                  },
+                  "scales": {
+                        "title": "SCALES",
+                        "desc": "Define who will participate and what role each person will have.",
+                        "why": "Everyone knows when they will serve and what they will do.",
+                        "example": "Choose lead vocal, backing vocal, keyboard, drums, guitar, and leadership."
+                  },
+                  "musicians": {
+                        "title": "MUSICIANS",
+                        "desc": "Organize people and their roles within the ministry.",
+                        "why": "It becomes easier to build coherent teams for each service.",
+                        "example": "Register who plays drums, keyboard, guitar, or participates in vocals."
+                  },
+                  "preparation": {
+                        "title": "PREPARATION",
+                        "desc": "Gather the information your team needs before the service.",
+                        "why": "Participants arrive more prepared for the rehearsal and ministry.",
+                        "example": "Share repertoire, instructions, and preparation materials."
+                  },
+                  "open_ms": "Open MusicScale"
+            },
+            "getting_started": {
+                  "title": "Getting started with MusicScale",
+                  "description": "Let's prepare your organization, your team, and the first workflow. You can complete each step at your own pace.",
+                  "operational_notice": "The songs, repertoires, and scales steps happen inside MusicScale. Open the application and follow the instructions below.",
+                  "statuses": {
+                        "completed": "Completed",
+                        "continue_in_ms": "Continue in MusicScale",
+                        "pending": "Pending"
+                  },
+                  "steps": {
+                        "organization": {
+                              "title": "Check your organization",
+                              "what": "The organization represents your church, ministry, or team within MillionsNest.",
+                              "why": "This is where people, applications, and subscriptions reside.",
+                              "how": "Check if the organization name and details are correct.",
+                              "result": "Your team will easily recognize the environment when entering.",
+                              "action": "Review organization",
+                              "admin_notice": "An administrator can change these details."
+                        },
+                        "team": {
+                              "title": "Invite your team",
+                              "what": "Add the people who will use MusicScale with you.",
+                              "why": "Leaders, musicians, and vocals will be able to access the same organization.",
+                              "how": "Enter the person's email, choose the organization access, and share the invitation.",
+                              "result": "The person will appear in the team after accepting the invitation.",
+                              "action_invite": "Invite a person",
+                              "action_manage": "View team and invites",
+                              "admin_notice": "Ask an administrator to send the invitation.",
+                              "important": "The Administrator or Member role defines access to MillionsNest. Ministerial roles, such as musician, vocal, or leader, are configured inside MusicScale."
+                        },
+                        "songs": {
+                              "title": "Add your first songs",
+                              "what": "The songs will be used in repertoires and scales.",
+                              "why": "Without registered songs, your team cannot prepare the repertoire.",
+                              "how": "Open MusicScale, go to the songs area, and choose the option to add a song.",
+                              "result": "Your first songs will be available for upcoming repertoires.",
+                              "action": "Open MusicScale"
+                        },
+                        "repertoire": {
+                              "title": "Create your first repertoire",
+                              "what": "The repertoire gathers the songs for a service, rehearsal, or event.",
+                              "why": "The team can know in advance what they need to study.",
+                              "how": "Open the repertoires area, create a new repertoire, and add the songs.",
+                              "example": "Sunday Service, 7 PM.",
+                              "result": "The set of songs will be organized in a single place.",
+                              "action": "Open MusicScale"
+                        },
+                        "scale": {
+                              "title": "Build your first scale",
+                              "what": "The scale defines who will participate and what role each person will have.",
+                              "why": "Everyone knows when they will serve and what they need to prepare.",
+                              "how": "Create a scale, choose the date, and add the people and roles.",
+                              "example": "leadership; lead vocal; backing vocal; keyboard; guitar; bass; drums.",
+                              "result": "The team will be organized for the service.",
+                              "action": "Open MusicScale"
+                        },
+                        "preparation": {
+                              "title": "Prepare the team for the service",
+                              "what": "Gather the information and instructions everyone needs before the ministry.",
+                              "why": "A well-informed team arrives more prepared.",
+                              "how": "Review the repertoire, scale, participants, and available materials.",
+                              "result": "Everyone can visualize what they need to do.",
+                              "action": "Open MusicScale"
+                        }
+                  }
+            }
+      },
       hero: {
         title: "Your ministry organized in one place",
         open: "Open MusicScale",

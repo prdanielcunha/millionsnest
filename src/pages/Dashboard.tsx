@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext.js";
-import { Navigate, useNavigate, useParams, useLocation } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useLocation, useSearchParams } from "react-router-dom";
 import { 
   Music, ArrowRight, Settings, ExternalLink, ShieldCheck, 
   CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight, Building2,
@@ -74,6 +74,18 @@ export function Dashboard() {
   const { t } = useTranslation(['dashboard', 'common']);
   const { user, profile, loading, logout, switchOrganization, canonicalContext } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawSection = searchParams.get('section');
+  const validSections = ['overview', 'resources', 'getting-started'];
+  const activeSection = validSections.includes(rawSection) ? rawSection : 'overview';
+  
+  const handleSelectMusicScaleSection = (section: 'overview' | 'resources' | 'getting-started') => {
+    setSearchParams({ section });
+  };
+  
+  const onNavigateToOrganizationSettings = () => {
+    navigate('/dashboard/organization');
+  };
   const { tab, subTab } = useParams();
   
   const activeOrgId = canonicalContext?.activeOrganizationId || profile?.organizationId;
@@ -100,11 +112,7 @@ export function Dashboard() {
       setActiveTabInternal(initialTab);
     }
     
-    if (tab === 'apps') {
-      setTimeout(() => {
-        document.getElementById('apps-catalog')?.scrollIntoView({ behavior: 'smooth' });
-      }, 300);
-    }
+    
   }, [tab]);
 
   const [subscription, setSubscription] = useState<any>(null);
@@ -1204,7 +1212,7 @@ export function Dashboard() {
   const selectedWorkspace = (() => {
     if (activeTab === "overview") {
       if (tab === "apps" && subTab) {
-         return subTab; 
+         return installedApps.some(a => a.id === subTab) ? subTab : "home"; 
       } else if (tab === "overview") {
          return "home";
       } else {
@@ -1218,6 +1226,10 @@ export function Dashboard() {
   })();
 
   const handleSelectWorkspace = (workspaceId: string) => {
+    if(workspaceId !== 'musicscale' && searchParams.has('section')) {
+      searchParams.delete('section');
+      setSearchParams(searchParams);
+    }
     if (workspaceId === "home") {
       navigate('/dashboard/overview');
     } else {
@@ -1473,9 +1485,11 @@ export function Dashboard() {
                 onSelectWorkspace={handleSelectWorkspace}
                 onLaunchApp={(app) => handleLaunchEcosystemApp(app, currentUserPerms)}
                 onOpenInviteModal={() => setIsInviteModalOpen(true)}
-                onNavigateToOrganizationMembers={() => setActiveTab('organization')}
+                onNavigateToOrganizationMembers={() => navigate('/dashboard/organization/members')}
                 onNavigateToBilling={() => setActiveTab('billing')}
-                onNavigateToMusicScaleLanding={() => navigate('/musicscale')}
+                onNavigateToOrganizationSettings={onNavigateToOrganizationSettings}
+                activeSection={activeSection as 'overview' | 'resources' | 'getting-started'}
+                onSelectMusicScaleSection={handleSelectMusicScaleSection}
               />
 
               {selectedWorkspace === 'home' && (
