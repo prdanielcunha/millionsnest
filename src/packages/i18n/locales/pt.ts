@@ -398,6 +398,28 @@ export default {
     },
     musicscale: {
       center: {
+                        "common": {
+                  "can_do": "Você pode",
+                  "where_to_find": "Onde encontrar",
+                  "in_practice": "Na prática",
+                  "what_is": "O que é",
+                  "why_important": "Por que é importante",
+                  "how_to": "Como fazer",
+                  "expected_result": "Resultado esperado",
+                  "important": "Importante",
+                  "global_collection": "Acervo global",
+                  "optional": "Opcional"
+            },
+            "paths": {
+                  "repertoire_songs": "Repertório → Músicas",
+                  "repertoire_chords": "Repertório → Cifras",
+                  "repertoire_lyrics": "Repertório → Letras",
+                  "live_library": "Biblioteca Viva",
+                  "ai_import": "Repertório → Músicas → Importar com IA",
+                  "members": "Integrantes",
+                  "scales_band": "Escalas → Escalas da Banda",
+                  "scales_songs": "Escalas → Escalas de Músicas"
+            },
             "tabs": {
                   "overview": "Visão geral",
                   "resources": "Recursos",
@@ -424,6 +446,10 @@ export default {
             },
             "resources": {
                   "title": "Conheça o MusicScale por dentro",
+                  "groups": {
+                        "music_content": "Músicas e conteúdo",
+                        "team_scales": "Equipe e escalas"
+                  },
                   "description": "Entenda onde ficam as músicas, cifras, letras, escalas e integrantes, e como cada área se conecta na preparação da equipe.",
                   "flow": {
                         "live_library": "Biblioteca Viva",
@@ -433,6 +459,11 @@ export default {
                         "music_scale": "Escala de Músicas",
                         "members": "Integrantes",
                         "band_scale": "Escala da Banda",
+                        "imports_to": "importa para",
+                        "supplies_songs_to": "fornece músicas para",
+                        "forms": "formam",
+                        "can_link_to": "pode ser vinculada",
+                        "optional_link": "opcional",
                         "notice_title": "Como o Repertório funciona",
                         "notice_text": "No MusicScale, Repertório é o acervo de músicas da sua organização. Você não cria um repertório separado para cada culto. Para uma data ou evento, crie uma Escala de Músicas e escolha nela as músicas do Repertório."
                   },

@@ -4,7 +4,7 @@ import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info
-} from 'lucide-react';
+, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface EcosystemWorkspaceHomeProps {
@@ -290,30 +290,23 @@ export function EcosystemWorkspaceHome({
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <button
-                onClick={() => {
-                  if (hasPaymentIssue) onNavigateToBilling();
-                  else if (musicScaleApp) onLaunchApp(musicScaleApp);
-                }}
-                disabled={msCatalogState === 'loading' || (!isReadyToOpen && !hasPaymentIssue)}
-                className={`px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${
-                  hasPaymentIssue ? 'bg-red-500 hover:bg-red-600 text-white' :
-                  isReadyToOpen ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20 active:scale-95' :
-                  'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
-                }`}
+            {!hasPaymentIssue ? (
+              <button 
+                onClick={() => { if(musicScaleApp) onLaunchApp(musicScaleApp); }}
+                className="px-6 py-3 bg-[#2B85EB] text-white font-semibold rounded-xl hover:bg-[#3B95FB] transition-all flex items-center gap-2"
               >
-                {msCatalogState === 'loading' ? <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
-                {hasPaymentIssue ? t('dashboard.musicscale.actions.view_sub', 'Ver assinatura') : t('dashboard.musicscale.hero.open', 'Abrir MusicScale')}
-              </button>
-              
-              <button
-                onClick={() => onSelectMusicScaleSection('resources')}
-                className="px-6 py-3 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border border-white/5"
-              >
-                {t('dashboard.musicscale.hero.learn_more', 'Conhecer recursos')}
+                Abrir MusicScale
                 <ExternalLink className="w-4 h-4" />
               </button>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl font-medium">
+                <AlertCircle className="w-4 h-4" />
+                Assinatura pendente
+              </div>
+            )}
+            <button type="button" onClick={() => onSelectMusicScaleSection('getting-started')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">Primeiros passos</button>
+            <button type="button" onClick={() => onSelectMusicScaleSection('resources')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">Conhecer recursos</button>
+          </div>
           </div>
         </div>
     );
@@ -373,11 +366,10 @@ export function EcosystemWorkspaceHome({
             <div className="bg-[#050505] border border-white/5 rounded-2xl p-6">
               <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('dashboard.musicscale.actions.title', 'Ações Rápidas')}</h3>
               <div className="space-y-2"> 
-                <button 
+                <button type="button"  
                   onClick={() => { if (musicScaleApp) onLaunchApp(musicScaleApp); }}
                   disabled={!isReadyToOpen}
-                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
-                > 
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"> 
                   <span className="flex items-center gap-3"><Play className="w-4 h-4 text-[#A0A7B5]" /> {t('dashboard.musicscale.actions.open_app', 'Abrir sistema')}</span> 
                 </button>
                 
@@ -408,17 +400,15 @@ export function EcosystemWorkspaceHome({
                   </button>
                 )}
                 
-                <button 
+                <button type="button"  
                   onClick={() => onSelectMusicScaleSection('resources')}
-                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
-                > 
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]"> 
                   <span className="flex items-center gap-3"><ExternalLink className="w-4 h-4 text-[#A0A7B5]" /> {t('dashboard.musicscale.actions.learn_more', 'Conhecer recursos')}</span> 
                 </button>
                 
-                <a 
+                <a  
                   href="mailto:suporte@millionsnest.com"
-                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
-                > 
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]"> 
                   <span className="flex items-center gap-3"><Mail className="w-4 h-4 text-[#A0A7B5]" /> {t('dashboard.musicscale.actions.need_help', 'Preciso de ajuda')}</span> 
                 </a>
               </div>
@@ -481,10 +471,10 @@ export function EcosystemWorkspaceHome({
               <h3 className="text-sm font-bold text-white mb-2">Não sabe por onde começar?</h3> 
               <p className="text-xs text-[#A0A7B5] mb-4">Veja o passo a passo para preparar sua equipe, adicionar músicas e criar sua primeira escala.</p> 
               <div className="space-y-2"> 
-                <button onClick={() => onSelectMusicScaleSection('getting-started')} className="text-sm text-[#2B85EB] hover:text-[#3B95FB] font-medium block"> 
+                <button type="button"  onClick={() => onSelectMusicScaleSection('getting-started')} className="text-sm text-[#2B85EB] hover:text-[#3B95FB] font-medium block min-h-[44px]"> 
                   Aprender a usar &rarr;
                 </button> 
-                <a href="mailto:suporte@millionsnest.com" className="text-sm text-[#A0A7B5] hover:text-white font-medium block"> 
+                <a  href="mailto:suporte@millionsnest.com" className="text-sm text-[#A0A7B5] hover:text-white font-medium block min-h-[44px]"> 
                   {t('dashboard.musicscale.help.contact_support', 'Falar com suporte')}
                 </a> 
               </div>
