@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import sys
+
+new_content = """import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Copy, Check, MessageCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext.js';
+import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
-import { useOrganization } from '../contexts/OrganizationContext.js';
+import { useOrganization } from '../contexts/OrganizationContext';
 
 interface InviteModalProps {
   isOpen: boolean;
@@ -174,7 +176,7 @@ export function InviteModal({
     }
     
     const orgName = overrideOrgId && adminOrgs ? (adminOrgs.find((o:any)=>o.id === overrideOrgId)?.name || 'Nossa Organização') : (organization?.name || 'Nossa Organização');
-    const text = encodeURIComponent(`Você foi convidado para entrar na organização ${orgName} na MillionsNest.\n\nAcesse: ${url}`);
+    const text = encodeURIComponent(`Você foi convidado para entrar na organização ${orgName} na MillionsNest.\\n\\nAcesse: ${url}`);
     
     if (popup) {
       popup.location.href = `https://wa.me/?text=${text}`;
@@ -383,3 +385,9 @@ export function InviteModal({
     </AnimatePresence>
   );
 }
+"""
+
+with open('src/components/InviteModal.tsx', 'w') as f:
+    f.write(new_content)
+
+print("InviteModal patched successfully")
