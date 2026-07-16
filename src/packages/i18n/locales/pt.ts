@@ -443,6 +443,9 @@ export default {
                   "title": "Conheça o MusicScale por dentro",
                   "description": "Entenda onde ficam as músicas, cifras, letras, escalas e integrantes, e como cada área se conecta na preparação da equipe.",
                   "view_in_ms": "Ver no MusicScale",
+                  "view_aria": "Ver {{resource}} no MusicScale",
+                  "unavailable_aria": "{{resource}} indisponível no MusicScale",
+                  "billing_aria": "Regularizar assinatura para acessar {{resource}}",
                   "regularize_subscription": "Regularizar assinatura",
                   "ask_billing_owner": "Peça ao responsável pela assinatura para regularizar o acesso.",
                   "unavailable": "MusicScale indisponível",
@@ -476,73 +479,98 @@ export default {
                         "title": "Repertório de músicas",
                         "desc": "É o acervo de músicas da sua organização. Nele ficam as músicas cadastradas ou importadas para a equipe.",
                         "practice": "Abra uma música para conferir seu conteúdo e depois escolha-a na escala de um culto.",
-                        "f1": "pesquisar músicas por título ou artista",
-                        "f2": "abrir detalhes",
-                        "f3": "consultar letra, cifra e tom quando disponíveis",
-                        "f4": "escolher músicas ao criar uma Escala de Músicas"
+                        "where": "Repertório → Músicas",
+                        "can_do": [
+                              "pesquisar por título ou artista",
+                              "abrir os detalhes de uma música",
+                              "consultar letra, cifra e tom quando disponíveis",
+                              "escolher músicas ao criar uma Escala de Músicas"
+                        ]
                   },
                   "library": {
                         "title": "Biblioteca Viva",
                         "desc": "É o acervo global de músicas disponíveis para importar para sua organização.",
                         "practice": "Encontre uma música pronta e importe-a para o acervo da sua organização.",
-                        "f1": "pesquisar músicas",
-                        "f2": "consultar o conteúdo disponível",
-                        "f3": "conferir letra, cifra e tom quando disponíveis",
-                        "f4": "importar músicas para o Repertório"
+                        "where": "Biblioteca Viva",
+                        "can_do": [
+                              "pesquisar músicas",
+                              "conferir o conteúdo disponível",
+                              "encontrar letra, cifra e tom quando disponíveis",
+                              "importar músicas para o Repertório"
+                        ]
                   },
                   "chords": {
                         "title": "Cifras",
                         "desc": "Reúne as músicas do Repertório que possuem cifra.",
                         "practice": "Encontre rapidamente a cifra e o tom que a banda precisa estudar.",
-                        "f1": "pesquisar por título ou artista",
-                        "f2": "consultar cifra e tom",
-                        "f3": "filtrar músicas",
-                        "f4": "preparar o material da banda"
+                        "where": "Repertório → Cifras",
+                        "can_do": [
+                              "pesquisar músicas",
+                              "consultar cifra e tom",
+                              "filtrar o acervo",
+                              "preparar o material da banda"
+                        ]
                   },
                   "lyrics": {
                         "title": "Letras",
                         "desc": "Reúne as músicas do Repertório que possuem letra.",
                         "practice": "Confira a letra e a sequência da música antes do ensaio.",
-                        "f1": "pesquisar músicas",
-                        "f2": "consultar a letra completa",
-                        "f3": "revisar a ordem e as partes",
-                        "f4": "preparar vocais e ministros"
+                        "where": "Repertório → Letras",
+                        "can_do": [
+                              "pesquisar músicas",
+                              "consultar a letra completa",
+                              "revisar a ordem e as partes",
+                              "preparar vocais e ministros"
+                        ]
                   },
                   "ai_import": {
                         "title": "Importação inteligente",
                         "desc": "Ajuda a organizar uma cifra ou letra antes de adicioná-la ao Repertório.",
                         "notice": "A disponibilidade depende dos recursos incluídos no plano.",
-                        "f1": "colar uma cifra",
-                        "f2": "colar uma letra",
-                        "f3": "estruturar o conteúdo",
-                        "f4": "revisar antes de salvar"
+                        "where": "Repertório → Músicas → Importar com IA",
+                        "can_do": [
+                              "colar uma cifra",
+                              "colar uma letra",
+                              "organizar o conteúdo",
+                              "revisar antes de salvar"
+                        ]
                   },
                   "members": {
                         "title": "Integrantes",
                         "desc": "Reúne as pessoas do ministério e o que cada uma pode fazer na equipe.",
                         "practice": "Encontre quem toca bateria, teclado ou guitarra e quem participa dos vocais.",
-                        "f1": "localizar músicos",
-                        "f2": "localizar vocais",
-                        "f3": "localizar ministros",
-                        "f4": "consultar instrumentos, vozes e especialidades"
+                        "where": "Integrantes",
+                        "can_do": [
+                              "localizar músicos",
+                              "localizar vocais",
+                              "localizar ministros",
+                              "consultar instrumentos, vozes e especialidades"
+                        ]
                   },
                   "band_scales": {
                         "title": "Escalas da Banda",
                         "desc": "Organiza as pessoas e funções que atuarão em uma data ou evento.",
                         "practice": "Defina vocal principal, backing vocals, teclado, guitarra, baixo e bateria.",
-                        "f1": "escolher integrantes",
-                        "f2": "definir funções",
-                        "f3": "organizar banda e vocais",
-                        "f4": "associar a banda a uma Escala de Músicas"
+                        "where": "Escalas → Escalas da Banda",
+                        "can_do": [
+                              "escolher integrantes",
+                              "definir funções",
+                              "organizar banda e vocais",
+                              "associar a banda a uma Escala de Músicas"
+                        ]
                   },
                   "music_scales": {
                         "title": "Escalas de Músicas",
                         "desc": "Organiza as músicas que serão cantadas e tocadas em uma data e tipo de evento.",
                         "practice": "Crie a escala do culto, escolha as músicas e associe a banda quando necessário.",
-                        "f1": "escolher data e horário",
-                        "f2": "escolher evento e local",
-                        "f3": "selecionar músicas do Repertório",
-                        "f4": "associar uma Escala da Banda"
+                        "where": "Escalas → Escalas de Músicas",
+                        "can_do": [
+                              "escolher data e horário",
+                              "escolher evento e local",
+                              "selecionar músicas do Repertório",
+                              "associar uma Escala da Banda",
+                              "consultar as informações da ocasião"
+                        ]
                   },
                   "preparation_result": {
                         "title": "Tudo conectado para preparar a equipe",

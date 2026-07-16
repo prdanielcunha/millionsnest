@@ -150,7 +150,80 @@ function runTests() {
     process.exit(1);
   }
 
-  console.log("All static tests passed for UX-FOUNDATION-1B.2");
+  // UX-RECOVERY-2B New Tests
+  // 1. Não existe o texto: “ya posee”
+  if (compContent.includes('ya posee')) {
+    logError('Found mixed language "ya posee" in component fallback');
+  }
+
+  // 2. Nenhum fallback mistura idiomas (check some known ones)
+  if (compContent.includes('ya') || compContent.includes('posee') || compContent.includes('personas') || compContent.includes('equipo') || compContent.includes('invitación') || compContent.includes('organización')) {
+    logError('Found potential mixed language or wrong Spanish words in Portuguese fallbacks');
+  }
+
+  // 3 & 4: Already checked in block 9 above.
+
+  // 5. Existem exatamente oito cards.
+  const cardsCount = (compContent.match(/\{ key: '[^']+', icon: /g) || []).length;
+  if (cardsCount !== 8) {
+    logError(`Expected 8 resource cards, found ${cardsCount}`);
+  }
+
+  // 6 & 7. Cada card possui lista de capacidades (can_do) e onde encontrar (where)
+  if (!compContent.includes('musicscale.center.common.can_do') || !compContent.includes('can_do`, { returnObjects: true')) {
+    logError('Missing can_do list rendering');
+  }
+  if (!compContent.includes('musicscale.center.common.where_to_find') || !compContent.includes('.where`,')) {
+    logError('Missing where_to_find path rendering');
+  }
+
+  // 8 & 9. Cada card possui ação, musicScaleReady controla a ação.
+  // 10. Quando musicScaleReady é false, onOpenMusicScale não é chamado.
+  // 11. Payment issue com permissão utiliza onNavigateToBilling.
+  // 12. Payment issue sem permissão não renderiza botão de billing.
+  if (!compContent.includes('!musicScaleReady ? (')) {
+    logError('Missing check for !musicScaleReady in resources action');
+  }
+  if (!compContent.includes('onClick={onNavigateToBilling}')) {
+    logError('Missing onNavigateToBilling in resources action');
+  }
+  if (compContent.match(/hasPaymentIssue \? \(\s*canManageBilling \? \(/) === null) {
+    logError('Payment issue condition is not checking canManageBilling properly');
+  }
+
+  // 13. Todos os botões possuem min-h-[44px].
+  // we can check if there's any button without min-h-[44px]
+  if (compContent.includes('min-h-[36px]')) {
+    logError('Found a button with min-h-[36px], expected min-h-[44px]');
+  }
+
+  // 14. Todos os botões possuem aria-label contextual.
+  if (!compContent.includes('aria-label={t(\'musicscale.center.resources.view_aria\'') ||
+      !compContent.includes('aria-label={t(\'musicscale.center.resources.unavailable_aria\'') ||
+      !compContent.includes('aria-label={t(\'musicscale.center.resources.billing_aria\'')) {
+    logError('Missing contextual aria-labels in resource buttons');
+  }
+
+  // 15 & 16. Não existe window.open nem URL interna inventada.
+  if (compContent.includes('window.open')) {
+    logError('Found window.open which is forbidden');
+  }
+  if (compContent.includes('href=') || compContent.includes('to=')) {
+    // Just a heuristic for internal URL
+    logError('Found potential link or URL inside component');
+  }
+
+  // 17 & 18. onManageTeam is used and controlled by canManageTeam
+  if (!compContent.includes('onClick={onManageTeam}') || !compContent.includes('canManageTeam && (')) {
+    logError('Missing onManageTeam usage or not controlled by canManageTeam');
+  }
+
+  if (hasErrors) {
+    console.error("Test Failed:\n", errors.join('\n'));
+    process.exit(1);
+  }
+
+  console.log("All static tests passed for UX-RECOVERY-2B");
 }
 
 runTests();

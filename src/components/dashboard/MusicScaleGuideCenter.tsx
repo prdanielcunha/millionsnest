@@ -245,8 +245,28 @@ export function MusicScaleGuideCenter({
                 
                 <div className="flex flex-col h-full justify-between">
                   <div>
+                    <div className="mt-2">
+                      <span className="text-xs uppercase font-bold text-white block mb-2">
+                        {t('musicscale.center.common.can_do', 'Você pode:')}
+                      </span>
+                      <ul className="text-sm text-[#A0A7B5] space-y-1 list-disc pl-4">
+                        {(t(`musicscale.center.resources.${card.key}.can_do`, { returnObjects: true }) as string[] || []).map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-2">
+                      <span className="text-xs uppercase font-bold text-white shrink-0">
+                        {t('musicscale.center.common.where_to_find', 'Onde encontrar:')}
+                      </span>
+                      <span className="text-xs text-[#2B85EB] bg-[#2B85EB]/10 px-2 py-1 rounded">
+                        {t(`musicscale.center.resources.${card.key}.where`, '')}
+                      </span>
+                    </div>
+
                     {practice && (
-                      <div className="mt-2 pt-3 border-t border-white/5">
+                      <div className="mt-4 pt-4 border-t border-white/5">
                         <span className="text-xs uppercase font-bold text-[#2B85EB] block mb-1">
                           {t('musicscale.center.common.in_practice', 'Na prática')}
                         </span>
@@ -254,7 +274,7 @@ export function MusicScaleGuideCenter({
                       </div>
                     )}
                     {notice && (
-                      <div className="mt-2 pt-3 border-t border-white/5">
+                      <div className="mt-4 pt-4 border-t border-white/5">
                         <span className="text-xs uppercase font-bold text-amber-500 block mb-1">
                           {t('musicscale.center.common.important', 'Importante')}
                         </span>
@@ -264,33 +284,45 @@ export function MusicScaleGuideCenter({
                   </div>
 
                   {/* Button/Action section */}
-                  <div className="mt-4 pt-4 border-t border-white/5 flex flex-col gap-2">
+                  <div className="mt-6 pt-4 border-t border-white/5 flex flex-col gap-2">
                     {hasPaymentIssue ? (
-                      <>
+                      canManageBilling ? (
                         <button
                           type="button"
                           onClick={onNavigateToBilling}
-                          disabled={!canManageBilling}
-                          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-black text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 min-h-[36px] w-fit"
+                          aria-label={t('musicscale.center.resources.billing_aria', 'Regularizar assinatura para acessar {{resource}}', { resource: title })}
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black text-sm font-semibold rounded-lg transition-colors flex items-center justify-center w-full md:w-fit gap-1.5 min-h-[44px]"
                         >
                           {t('musicscale.center.resources.regularize_subscription', 'Regularizar assinatura')}
-                          <ExternalLink className="w-3.5 h-3.5" />
+                          <ExternalLink className="w-4 h-4" />
                         </button>
-                        {!canManageBilling && (
-                          <p className="text-[11px] text-amber-500 leading-normal">
-                            {t('musicscale.center.resources.ask_billing_owner', 'Peça ao responsável pela assinatura para regularizar o acesso.')}
-                          </p>
-                        )}
-                      </>
+                      ) : (
+                        <p className="text-xs text-amber-500 leading-normal">
+                          {t('musicscale.center.resources.ask_billing_owner', 'Peça ao responsável pela assinatura para regularizar o acesso.')}
+                        </p>
+                      )
                     ) : (
-                      <button
-                        type="button"
-                        onClick={onOpenMusicScale}
-                        className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 min-h-[36px] w-fit"
-                      >
-                        {t('musicscale.center.resources.view_in_ms', 'Ver no MusicScale')}
-                        <ExternalLink className="w-3.5 h-3.5 text-[#A0A7B5]" />
-                      </button>
+                      !musicScaleReady ? (
+                        <button
+                          type="button"
+                          disabled
+                          aria-disabled="true"
+                          aria-label={t('musicscale.center.resources.unavailable_aria', '{{resource}} indisponível no MusicScale', { resource: title })}
+                          className="px-4 py-2 bg-white/5 text-[#A0A7B5] text-sm font-semibold rounded-lg flex items-center justify-center w-full md:w-fit gap-1.5 min-h-[44px] opacity-50 cursor-not-allowed"
+                        >
+                          {t('musicscale.center.resources.unavailable', 'MusicScale indisponível')}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={onOpenMusicScale}
+                          aria-label={t('musicscale.center.resources.view_aria', 'Ver {{resource}} no MusicScale', { resource: title })}
+                          className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center w-full md:w-fit gap-1.5 min-h-[44px]"
+                        >
+                          {t('musicscale.center.resources.view_in_ms', 'Ver no MusicScale')}
+                          <ExternalLink className="w-4 h-4 text-[#A0A7B5]" />
+                        </button>
+                      )
                     )}
                   </div>
                 </div>
@@ -351,7 +383,7 @@ export function MusicScaleGuideCenter({
             } else if (step.id === 'team') {
               if (memberCount > 1) {
                 title = t('musicscale.center.getting_started.team.connected_title', 'Equipe conectada');
-                description = t('musicscale.center.getting_started.team.connected_description', 'Sua organização ya posee outras pessoas ativas.');
+                description = t('musicscale.center.getting_started.team.connected_description', 'Sua organização já possui outras pessoas ativas.');
                 stepStatus = 'completed';
                 statusText = t('musicscale.center.getting_started.statuses.completed', 'Concluído');
               } else if (pendingInviteCount > 0) {

@@ -433,9 +433,12 @@ export default {
                   "title": "Get to know MusicScale inside",
                   "description": "Understand where songs, chords, lyrics, scales, and members are located, and how each area connects in team preparation.",
                   "view_in_ms": "View in MusicScale",
-                  "regularize_subscription": "Regularizar assinatura",
-                  "ask_billing_owner": "Peça ao responsável pela assinatura para regularizar o acesso.",
-                  "unavailable": "MusicScale indisponível",
+                  "view_aria": "View {{resource}} in MusicScale",
+                  "unavailable_aria": "{{resource}} unavailable in MusicScale",
+                  "billing_aria": "Settle subscription to access {{resource}}",
+                  "regularize_subscription": "Settle subscription",
+                  "ask_billing_owner": "Ask the subscription manager to settle access.",
+                  "unavailable": "MusicScale unavailable",
                   "groups": {
                         "music_content": "Music and content",
                         "team_scales": "Team and scales"
@@ -459,42 +462,99 @@ export default {
                   "repertoire": {
                         "title": "Song Repertoire",
                         "desc": "It's your organization's song collection. It contains all songs registered or imported for the team.",
-                        "practice": "Open a song to check its details, lyrics or chords. Then, choose this song when creating a service scale."
+                        "practice": "Open a song to check its details, lyrics or chords. Then, choose this song when creating a service scale.",
+                        "where": "Repertoire → Songs",
+                        "can_do": [
+                              "search by title or artist",
+                              "open song details",
+                              "consult lyrics, chords and key when available",
+                              "choose songs when creating a Song Scale"
+                        ]
                   },
                   "library": {
                         "title": "Live Library",
                         "desc": "A global and updated collection of songs ready to import into your organization's Repertoire.",
-                        "practice": "Find a ready song, check its content and import it into your organization's Repertoire."
+                        "practice": "Find a ready song, check its content and import it into your organization's Repertoire.",
+                        "where": "Live Library",
+                        "can_do": [
+                              "search songs",
+                              "check available content",
+                              "find lyrics, chords and key when available",
+                              "import songs to Repertoire"
+                        ]
                   },
                   "chords": {
                         "title": "Chords",
                         "desc": "Consult the chords of the songs that are part of your organization's Repertoire.",
-                        "practice": "Quickly find the chord and key the band needs to prepare."
+                        "practice": "Quickly find the chord and key the band needs to prepare.",
+                        "where": "Repertoire → Chords",
+                        "can_do": [
+                              "search songs",
+                              "consult chords and key",
+                              "filter the collection",
+                              "prepare band material"
+                        ]
                   },
                   "lyrics": {
                         "title": "Lyrics",
                         "desc": "Consult the lyrics of the songs registered in the Repertoire.",
-                        "practice": "Open the full lyrics to review the order and parts of the song."
+                        "practice": "Open the full lyrics to review the order and parts of the song.",
+                        "where": "Repertoire → Lyrics",
+                        "can_do": [
+                              "search songs",
+                              "consult full lyrics",
+                              "review order and parts",
+                              "prepare vocals and ministers"
+                        ]
                   },
                   "ai_import": {
                         "title": "Smart Import",
                         "desc": "Transform disorganized chords or lyrics into structured content for MusicScale.",
-                        "notice": "Availability depends on the features included in the plan."
+                        "notice": "Availability depends on the features included in the plan.",
+                        "where": "Repertoire → Songs → Import with AI",
+                        "can_do": [
+                              "paste chords",
+                              "paste lyrics",
+                              "organize content",
+                              "review before saving"
+                        ]
                   },
                   "music_scales": {
                         "title": "Song Scales",
                         "desc": "Organize the songs that will be sung and played on a date and event type.",
-                        "practice": "Create the scale for Sunday service, choose the songs and link the participating band."
+                        "practice": "Create the scale for Sunday service, choose the songs and link the participating band.",
+                        "where": "Scales → Song Scales",
+                        "can_do": [
+                              "choose date and time",
+                              "choose event and location",
+                              "select songs from Repertoire",
+                              "link a Band Scale",
+                              "consult occasion details"
+                        ]
                   },
                   "members": {
                         "title": "Members",
                         "desc": "View the people who participate in the ministry and their specialties.",
-                        "practice": "Find who plays drums, keyboard or guitar and who participates in vocals."
+                        "practice": "Find who plays drums, keyboard or guitar and who participates in vocals.",
+                        "where": "Members",
+                        "can_do": [
+                              "locate musicians",
+                              "locate vocals",
+                              "locate ministers",
+                              "consult instruments, voices and specialties"
+                        ]
                   },
                   "band_scales": {
                         "title": "Band Scales",
                         "desc": "Organize the musicians, vocals, ministers and roles that will perform on a date or event.",
-                        "practice": "Define lead vocal, backing vocals, keyboard, guitar, bass and drums for the service."
+                        "practice": "Define lead vocal, backing vocals, keyboard, guitar, bass and drums for the service.",
+                        "where": "Scales → Band Scales",
+                        "can_do": [
+                              "choose members",
+                              "define roles",
+                              "organize band and vocals",
+                              "link the band to a Song Scale"
+                        ]
                   },
                   "preparation_result": {
                         "title": "Everything connected to prepare the team",

@@ -442,6 +442,9 @@ export default {
                   "title": "Conoce MusicScale por dentro",
                   "description": "Entiende dónde se encuentran las canciones, acordes, letras, escalas e integrantes, y cómo cada área se conecta en la preparación del equipo.",
                   "view_in_ms": "Ver en MusicScale",
+                  "view_aria": "Ver {{resource}} en MusicScale",
+                  "unavailable_aria": "{{resource}} no disponible en MusicScale",
+                  "billing_aria": "Regularizar suscripción para acceder a {{resource}}",
                   "regularize_subscription": "Regularizar suscripción",
                   "ask_billing_owner": "Pide al responsable de la suscripción que regularice el acceso.",
                   "unavailable": "MusicScale no disponible",
@@ -468,42 +471,99 @@ export default {
                   "repertoire": {
                         "title": "Repertorio de canciones",
                         "desc": "Es la colección de canciones de tu organización. Contiene todas las canciones registradas o importadas para el equipo.",
-                        "practice": "Abre una canción para revisar sus detalles, letras o acordes. Luego, elige esta canción al crear una escala de servicio."
+                        "practice": "Abre una canción para revisar sus detalles, letras o acordes. Luego, elige esta canción al crear una escala de servicio.",
+                        "where": "Repertorio → Canciones",
+                        "can_do": [
+                              "buscar por título o artista",
+                              "abrir detalles de la canción",
+                              "consultar letra, acordes y tono cuando estén disponibles",
+                              "elegir canciones al crear una Escala de Canciones"
+                        ]
                   },
                   "library": {
                         "title": "Biblioteca Viva",
                         "desc": "Una colección global y actualizada de canciones listas para importar al Repertorio de tu organización.",
-                        "practice": "Encuentra una canción lista, revisa su contenido e impórtala al Repertorio de tu organización."
+                        "practice": "Encuentra una canción lista, revisa su contenido e impórtala al Repertorio de tu organización.",
+                        "where": "Biblioteca Viva",
+                        "can_do": [
+                              "buscar canciones",
+                              "revisar contenido disponible",
+                              "encontrar letra, acordes y tono cuando estén disponibles",
+                              "importar canciones al Repertorio"
+                        ]
                   },
                   "chords": {
                         "title": "Acordes",
                         "desc": "Consulta los acordes de las canciones que forman parte del Repertorio de tu organización.",
-                        "practice": "Encuentra rápidamente el acorde y tono que la banda necesita preparar."
+                        "practice": "Encuentra rápidamente el acorde y tono que la banda necesita preparar.",
+                        "where": "Repertorio → Acordes",
+                        "can_do": [
+                              "buscar canciones",
+                              "consultar acordes y tono",
+                              "filtrar la colección",
+                              "preparar material de la banda"
+                        ]
                   },
                   "lyrics": {
                         "title": "Letras",
                         "desc": "Consulta las letras de las canciones registradas en el Repertorio.",
-                        "practice": "Abre la letra completa para revisar el orden y las partes de la canción."
+                        "practice": "Abre la letra completa para revisar el orden y las partes de la canción.",
+                        "where": "Repertorio → Letras",
+                        "can_do": [
+                              "buscar canciones",
+                              "consultar la letra completa",
+                              "revisar orden y partes",
+                              "preparar voces y ministros"
+                        ]
                   },
                   "ai_import": {
                         "title": "Importación Inteligente",
                         "desc": "Transforma acordes o letras desorganizadas en contenido estructurado para MusicScale.",
-                        "notice": "La disponibilidad depende de las características incluidas en el plan."
+                        "notice": "La disponibilidad depende de las características incluidas en el plan.",
+                        "where": "Repertorio → Canciones → Importar con IA",
+                        "can_do": [
+                              "pegar acordes",
+                              "pegar letras",
+                              "organizar contenido",
+                              "revisar antes de guardar"
+                        ]
                   },
                   "music_scales": {
                         "title": "Escalas de Canciones",
                         "desc": "Organiza las canciones que se cantarán y tocarán en una fecha y tipo de evento.",
-                        "practice": "Crea la escala para el servicio dominical, elige las canciones y vincula la banda que participará."
+                        "practice": "Crea la escala para el servicio dominical, elige las canciones y vincula la banda que participará.",
+                        "where": "Escalas → Escalas de Canciones",
+                        "can_do": [
+                              "elegir fecha y hora",
+                              "elegir evento y ubicación",
+                              "seleccionar canciones del Repertorio",
+                              "vincular una Escala de Banda",
+                              "consultar detalles de la ocasión"
+                        ]
                   },
                   "members": {
                         "title": "Integrantes",
                         "desc": "Visualiza a las personas que participan en el ministerio y sus especialidades.",
-                        "practice": "Encuentra quién toca la batería, teclado o guitarra y quién participa en las voces."
+                        "practice": "Encuentra quién toca la batería, teclado o guitarra y quién participa en las voces.",
+                        "where": "Integrantes",
+                        "can_do": [
+                              "localizar músicos",
+                              "localizar voces",
+                              "localizar ministros",
+                              "consultar instrumentos, voces y especialidades"
+                        ]
                   },
                   "band_scales": {
                         "title": "Escalas de Banda",
                         "desc": "Organiza a los músicos, voces, ministros y roles que participarán en una fecha o evento.",
-                        "practice": "Define voz principal, coros, teclado, guitarra, bajo y batería para el servicio."
+                        "practice": "Define voz principal, coros, teclado, guitarra, bajo y batería para el servicio.",
+                        "where": "Escalas → Escalas de Banda",
+                        "can_do": [
+                              "elegir integrantes",
+                              "definir roles",
+                              "organizar banda y voces",
+                              "vincular la banda a una Escala de Canciones"
+                        ]
                   },
                   "preparation_result": {
                         "title": "Todo conectado para preparar al equipo",
