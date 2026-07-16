@@ -73,6 +73,64 @@ function runTests() {
     logError('Primeiros passos and Conhecer recursos are still hidden during payment_issue or structure is wrong.');
   }
 
+
+  // 4. No redundant editorial block in Overview
+  if (compContent.includes('dashboard.musicscale.center.overview.highlights.1.title')) {
+    logError('Redundant editorial block (Acervo, Equipe, Escalas) is still present in MusicScaleGuideCenter.');
+  }
+
+  // 5. Verify the resources tab still contains its items
+  const resourceKeys = [
+    'dashboard.musicscale.center.resources.flow.repertoire',
+    'dashboard.musicscale.center.resources.flow.chords',
+    'dashboard.musicscale.center.resources.flow.lyrics',
+    'dashboard.musicscale.center.resources.flow.live_library',
+    'dashboard.musicscale.center.resources.flow.members',
+    'dashboard.musicscale.center.resources.flow.band_scale',
+    'dashboard.musicscale.center.resources.flow.music_scale'
+  ];
+  for (const key of resourceKeys) {
+    if (!compContent.includes(key)) logError(`Missing resource key: ${key}`);
+  }
+
+  // 6. Verify operational team card is preserved
+  if (!workspaceHomeContent.includes("dashboard.musicscale.actions.invite") || !workspaceHomeContent.includes("Convidar pessoas")) {
+    logError('Convidar pessoas action missing in EcosystemWorkspaceHome.');
+  }
+  if (!workspaceHomeContent.includes("dashboard.musicscale.actions.view_team_and_invites") || !workspaceHomeContent.includes("Ver equipe e convites")) {
+    logError('Ver equipe e convites action missing in EcosystemWorkspaceHome.');
+  }
+
+  // 7. Verify routing actions
+  if (!workspaceHomeContent.includes("onSelectMusicScaleSection('resources')")) {
+    logError("Conhecer recursos action doesn't point to onSelectMusicScaleSection('resources')");
+  }
+  if (!workspaceHomeContent.includes("onSelectMusicScaleSection('getting-started')")) {
+    logError("Primeiros passos action doesn't point to onSelectMusicScaleSection('getting-started')");
+  }
+  if (!workspaceHomeContent.includes("onLaunchApp")) {
+    logError("Abrir MusicScale doesn't point to onLaunchApp");
+  }
+
+  // 8. Verify no auxiliary files exist
+  const auxFiles = [
+    'extract.cjs', 'extract.js', 'fix_alert.py', 'fix_arrays.cjs', 'fix_buttons.cjs', 
+    'fix_buttons.py', 'fix_content_key.cjs', 'fix_map_again.cjs', 'fix_mess.cjs', 
+    'fix_props.py', 'fix_syntax.cjs', 'fix_workspace.cjs', 'pt_center.json', 
+    'rebuild_getting_started.cjs', 'replace_map.cjs', 'translate.cjs', 'update_en.cjs', 
+    'update_pt.cjs', 'update_pt.js'
+  ];
+  for (const f of auxFiles) {
+    checkFileExists(f, false);
+  }
+
+  const filesInRoot = fs.readdirSync(root);
+  for (const f of filesInRoot) {
+    if (f.startsWith('fix_') || f.startsWith('patch_') || f.startsWith('extract') || f.startsWith('translate') || f.startsWith('update_')) {
+      logError(`Auxiliary file found in root: ${f}`);
+    }
+  }
+
   if (hasErrors) {
     console.error("Test Failed:\n", errors.join('\n'));
     process.exit(1);

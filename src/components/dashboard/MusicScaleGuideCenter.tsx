@@ -56,31 +56,6 @@ export function MusicScaleGuideCenter({
     </div>
   );
 
-  const renderOverviewHighlights = () => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-      <div className="bg-[#050505] border border-white/5 p-6 rounded-xl">
-        <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center mb-4">
-          <ListMusic className="w-5 h-5 text-[#2B85EB]" />
-        </div>
-        <h3 className="font-semibold text-white mb-2">{t('dashboard.musicscale.center.overview.highlights.1.title', 'Acervo')}</h3>
-        <p className="text-sm text-[#A0A7B5]">{t('dashboard.musicscale.center.overview.highlights.1.description', 'Todas as músicas em um só lugar.')}</p>
-      </div>
-      <div className="bg-[#050505] border border-white/5 p-6 rounded-xl">
-        <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center mb-4">
-          <Users className="w-5 h-5 text-amber-400" />
-        </div>
-        <h3 className="font-semibold text-white mb-2">{t('dashboard.musicscale.center.overview.highlights.2.title', 'Equipe')}</h3>
-        <p className="text-sm text-[#A0A7B5]">{t('dashboard.musicscale.center.overview.highlights.2.description', 'Organize integrantes e funções.')}</p>
-      </div>
-      <div className="bg-[#050505] border border-white/5 p-6 rounded-xl">
-        <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center mb-4">
-          <CalendarDays className="w-5 h-5 text-green-400" />
-        </div>
-        <h3 className="font-semibold text-white mb-2">{t('dashboard.musicscale.center.overview.highlights.3.title', 'Escalas')}</h3>
-        <p className="text-sm text-[#A0A7B5]">{t('dashboard.musicscale.center.overview.highlights.3.description', 'Escalas de banda e músicas claras.')}</p>
-      </div>
-    </div>
-  );
 
   const overviewContent = externalOverviewContent || null;
 
@@ -430,7 +405,6 @@ export function MusicScaleGuideCenter({
       {activeSection === 'overview' && (
         <div className="animate-in fade-in duration-300">
           {heroContent}
-          {renderOverviewHighlights()}
           {overviewContent}
         </div>
       )}
