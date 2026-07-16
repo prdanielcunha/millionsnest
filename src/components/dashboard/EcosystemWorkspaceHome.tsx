@@ -22,6 +22,7 @@ interface EcosystemWorkspaceHomeProps {
   maxUsersLimit: number;
   onSelectWorkspace: (workspaceId: string) => void;
   onLaunchApp: (app: EcosystemApp) => void;
+  onOpenInviteModal: () => void;
   onNavigateToOrganizationMembers: () => void;
   onNavigateToBilling: () => void;
   onNavigateToMusicScaleLanding: () => void;
@@ -43,6 +44,7 @@ export function EcosystemWorkspaceHome({
   maxUsersLimit,
   onSelectWorkspace,
   onLaunchApp,
+  onOpenInviteModal,
   onNavigateToOrganizationMembers,
   onNavigateToBilling,
   onNavigateToMusicScaleLanding
@@ -112,9 +114,10 @@ export function EcosystemWorkspaceHome({
             <div className={`grid gap-4 ${installedApps.length === 1 ? 'grid-cols-1 max-w-[480px]' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
               {installedApps.map(app => {
                 if (app.id === 'musicscale') {
-                  const isReadyToOpen = ["trialing", "active"].includes(msCatalogState);
-                  const hasPaymentIssue = msCatalogState === "payment_issue";
                   const isLoading = msCatalogState === "loading";
+                  const hasPaymentIssue = msCatalogState === "payment_issue";
+                  
+                  const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
 
                   return (
                     <div key={app.id} className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-2xl p-6 flex flex-col justify-between">
@@ -143,6 +146,8 @@ export function EcosystemWorkspaceHome({
                       </div>
                       
                       <button
+                        type="button"
+                        aria-label={app.name}
                         onClick={() => {
                           if (hasPaymentIssue) onNavigateToBilling();
                           else onLaunchApp(app);
@@ -178,6 +183,8 @@ export function EcosystemWorkspaceHome({
                     </div>
                     
                     <button
+                      type="button"
+                      aria-label={app.name}
                       onClick={() => onLaunchApp(app)}
                       className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10"
                     >
@@ -195,8 +202,11 @@ export function EcosystemWorkspaceHome({
   };
 
   const renderMusicScaleWorkspace = () => {
-    const isReadyToOpen = ["trialing", "active"].includes(msCatalogState);
+    const isLoading = msCatalogState === "loading";
     const hasPaymentIssue = msCatalogState === "payment_issue";
+    
+    const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
+    
     
     // Checklist logic
     const orgActive = !!organization;
@@ -318,7 +328,7 @@ export function EcosystemWorkspaceHome({
                  </p>
                  {(!teamStarted && (currentUserPerms['organization.members.invite'] || isGlobalAdmin)) && (
                    <button 
-                     onClick={onNavigateToOrganizationMembers}
+                     onClick={onOpenInviteModal}
                      className="p-2 bg-[#2B85EB] text-white rounded-lg hover:bg-[#3B95FB] transition-colors"
                    >
                      <ArrowRight className="w-4 h-4" />
@@ -389,7 +399,7 @@ export function EcosystemWorkspaceHome({
                  
                  {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
                    <button 
-                     onClick={onNavigateToOrganizationMembers}
+                     onClick={onOpenInviteModal}
                      className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
                    >
                      <span className="flex items-center gap-3"><User className="w-4 h-4 text-[#A0A7B5]" /> {t('dashboard.musicscale.actions.invite', 'Convidar pessoas')}</span>
@@ -462,14 +472,24 @@ export function EcosystemWorkspaceHome({
                  </div>
               </div>
               
-              {(currentUserPerms['organization.members.invite'] || currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
-                 <button 
-                   onClick={onNavigateToOrganizationMembers}
-                   className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-xl transition-colors text-sm border border-white/5"
-                 >
-                   {t('dashboard.musicscale.team.manage_team', 'Gerenciar equipe')}
-                 </button>
-              )}
+              <div className="flex flex-col gap-2 mt-4">
+                {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
+                  <button 
+                    onClick={onOpenInviteModal}
+                    className="w-full py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] text-white font-semibold rounded-xl transition-colors text-sm"
+                  >
+                    {t('dashboard.musicscale.actions.invite_person', 'Convidar pessoa')}
+                  </button>
+                )}
+                {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
+                  <button 
+                    onClick={onNavigateToOrganizationMembers}
+                    className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-xl transition-colors text-sm border border-white/5"
+                  >
+                    {t('dashboard.musicscale.actions.view_team_and_invites', 'Ver equipe e convites')}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* HELP INFO */}

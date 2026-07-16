@@ -416,6 +416,8 @@ export default {
         title: "Acciones rápidas",
         open: "Abrir MusicScale",
         invite: "Invitar personas",
+        invite_person: "Invitar persona",
+        view_team_and_invites: "Ver equipo e invitaciones",
         manage_team: "Gestionar equipo",
         view_sub: "Ver suscripción",
         learn_more: "Conocer características",
@@ -449,6 +451,19 @@ export default {
         how_it_works: "Ver cómo funciona",
         contact_support: "Contactar soporte"
       }
+    },
+    invite: {
+      title: "Invitar a una persona",
+      subtitle: "Elige el rol y cómo deseas compartir la invitación.",
+      email_label: "Correo electrónico de la persona",
+      email_hint: "Opcional. La invitación se puede vincular a este correo.",
+      role_label: "¿Cuál será el rol de esta persona?",
+      share_method: "¿Cómo deseas enviarlo?",
+      whatsapp: "Enviar por WhatsApp",
+      copy_link: "Copiar enlace",
+      link_copied: "Enlace copiado",
+      access_denied: "Acceso denegado",
+      access_denied_description: "Solo los administradores pueden invitar a nuevos miembros a la organización."
     },
     genericApp: {
       open: "Abrir App"

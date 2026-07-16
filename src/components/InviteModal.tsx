@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Copy, Check, MessageCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useOrganization } from '../contexts/OrganizationContext.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
@@ -14,6 +15,7 @@ interface InviteModalProps {
   occupiedSlots?: number;
   maxUsersLimit?: number;
   onUpgradeClick?: () => void;
+  canInvite?: boolean;
 }
 
 export function InviteModal({ 
@@ -24,8 +26,10 @@ export function InviteModal({
   isAtLimit = false,
   occupiedSlots = 0,
   maxUsersLimit = 10,
-  onUpgradeClick
+  onUpgradeClick,
+  canInvite = false
 }: InviteModalProps) {
+  const { t } = useTranslation(['dashboard']);
   const [role, setRole] = useState('member');
   const [email, setEmail] = useState('');
   const [overrideOrgId, setOverrideOrgId] = useState('');
@@ -37,8 +41,6 @@ export function InviteModal({
   const { profile, user } = useAuth();
   
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
-  const canInvite = isGlobalAdmin || 
-                    profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin';
 
   useEffect(() => {
     if (isOpen && isGlobalAdmin) {
@@ -91,7 +93,8 @@ export function InviteModal({
             className="relative w-full max-w-md bg-[#0B0F19] border border-white/10 rounded-3xl shadow-2xl overflow-hidden p-6"
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-[#F5F7FA]">Criar Link de Acesso</h2>
+              <h2 className="text-xl font-bold text-[#F5F7FA]">{t('dashboard.invite.title', 'Convidar uma pessoa')}</h2>
+              <p className="text-[#A0A7B5] text-sm mt-1">{t('dashboard.invite.subtitle', 'Escolha a função e como deseja compartilhar o convite.')}</p>
               <button 
                 onClick={onClose}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-[#A0A7B5] transition-colors"
@@ -133,8 +136,8 @@ export function InviteModal({
                 <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 mb-4">
                   <AlertCircle className="w-6 h-6" />
                 </div>
-                <h3 className="text-[#F5F7FA] font-medium mb-2">Acesso Negado</h3>
-                <p className="text-[#A0A7B5] text-sm mb-6">Apenas administradores podem convidar novos membros para a organização.</p>
+                <h3 className="text-[#F5F7FA] font-medium mb-2">{t('dashboard.invite.access_denied', 'Acesso Negado')}</h3>
+                <p className="text-[#A0A7B5] text-sm mb-6">{t('dashboard.invite.access_denied_description', 'Apenas administradores podem convidar novos membros para a organização.')}</p>
                 <button 
                   onClick={onClose}
                   className="px-6 py-2 bg-white/5 hover:bg-white/10 text-[#F5F7FA] rounded-xl transition-colors font-medium text-sm"
@@ -174,7 +177,7 @@ export function InviteModal({
                  ) : null}
                  
                 <div>
-                  <label className="block text-sm font-medium text-[#A0A7B5] mb-2">E-mail do convidado <span className="text-[#A0A7B5]/50 text-xs">(Opcional)</span></label>
+                  <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.email_label', 'E-mail da pessoa')} <span className="text-[#A0A7B5]/50 text-xs">{t('dashboard.invite.email_hint', 'Opcional. O convite pode ser vinculado a este e-mail.')}</span></label>
                   <input
                     type="email"
                     value={email}
@@ -185,7 +188,7 @@ export function InviteModal({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#A0A7B5] mb-2">Função Inicial</label>
+                  <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.role_label', 'Qual será a função dessa pessoa?')}</label>
                   <select
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
@@ -197,14 +200,14 @@ export function InviteModal({
                   </select>
                 </div>
 
-                <div className="gap-3 grid grid-cols-2">
+                <div><label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.share_method', 'Como deseja enviar?')}</label><div className="gap-3 grid grid-cols-2">
                   <button
                     onClick={onWhatsApp}
                     disabled={isLoading}
                     className="flex flex-col items-center justify-center gap-2 p-4 bg-[#10B981]/10 hover:bg-[#10B981]/20 border border-[#10B981]/20 rounded-xl transition-colors text-[#10B981]"
                   >
                     {isLoading && !copiedLink ? <Loader2 className="w-6 h-6 animate-spin" /> : <MessageCircle className="w-6 h-6" />}
-                    <span className="text-sm font-medium">WhatsApp</span>
+                    <span className="text-sm font-medium">{t('dashboard.invite.whatsapp', 'Enviar pelo WhatsApp')}</span>
                   </button>
                   <button
                     onClick={onCopy}
@@ -212,8 +215,9 @@ export function InviteModal({
                     className="flex flex-col items-center justify-center gap-2 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-colors text-[#F5F7FA]"
                   >
                     {isLoading && !copiedLink ? <Loader2 className="w-6 h-6 animate-spin" /> : copiedLink ? <Check className="w-6 h-6 text-[#10B981]" /> : <Copy className="w-6 h-6" />}
-                    <span className="text-sm font-medium">{copiedLink ? 'Copiado!' : 'Copiar Link'}</span>
+                    <span className="text-sm font-medium">{copiedLink ? t('dashboard.invite.link_copied', 'Link copiado') : t('dashboard.invite.copy_link', 'Copiar link')}</span>
                   </button>
+                </div>
                 </div>
               </div>
             )}

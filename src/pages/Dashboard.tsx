@@ -1460,6 +1460,7 @@ export function Dashboard() {
                 maxUsersLimit={maxUsersLimit}
                 onSelectWorkspace={handleSelectWorkspace}
                 onLaunchApp={(app) => handleLaunchEcosystemApp(app, currentUserPerms)}
+                onOpenInviteModal={() => setIsInviteModalOpen(true)}
                 onNavigateToOrganizationMembers={() => setActiveTab('organization')}
                 onNavigateToBilling={() => setActiveTab('billing')}
                 onNavigateToMusicScaleLanding={() => navigate('/musicscale')}
@@ -2683,6 +2684,7 @@ export function Dashboard() {
             occupiedSlots={occupiedSlots}
             maxUsersLimit={maxUsersLimit}
             onUpgradeClick={() => setActiveTab("billing")}
+            canInvite={Boolean(currentUserPerms['organization.members.invite'] || isGlobalAdmin)}
           />
         );
       })()}
