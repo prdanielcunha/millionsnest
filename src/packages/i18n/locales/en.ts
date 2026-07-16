@@ -564,10 +564,15 @@ export default {
             },
             "getting_started": {
                   "title": "First steps in MusicScale",
-                  "description": "Let's prepare your organization, your team and the first workflow. You can complete each step at your own pace.",
+                  "description": "Let's prepare your organization, your team and the initial setup. You can complete each step at your own pace.",
                   "operational_notice": "The Repertoire, chords, lyrics, members and scales steps take place inside MusicScale. Open the app and follow the guidelines below.",
+                  "sections": {
+                        "millionsnest": "Preparation in MillionsNest",
+                        "musicscale": "Continue in MusicScale"
+                  },
                   "statuses": {
                         "completed": "Completed",
+                        "attention": "Needs attention",
                         "continue_in_ms": "Continue in MusicScale",
                         "pending": "Pending",
                         "pending_invite": "Invite sent"
@@ -577,7 +582,8 @@ export default {
                         "attention_title": "Check your organization",
                         "ready_description": "Your church or organization is already created in MillionsNest.",
                         "attention_description": "Confirm the church or organization details before continuing.",
-                        "check_action": "Check details"
+                        "check_action": "Check details",
+                        "admin_notice": "An administrator can update these details."
                   },
                   "team": {
                         "connected_title": "Team connected",
@@ -588,9 +594,13 @@ export default {
                         "empty_description": "Invite the first people who will use MusicScale with you.",
                         "manage_action": "View team and invitations",
                         "invite_another_action": "Invite another person",
+                        "invite_action": "Invite someone",
                         "no_permission": "Ask an administrator to invite or manage the team."
                   },
                   "steps": {
+                        "team": {
+                              "important": "The Administrator or Member role defines access to MillionsNest. Inside MusicScale, you can specify what each person does on the team, such as vocals, drums, keyboard, or leadership."
+                        },
                         "songs": {
                               "title": "Add songs to Repertoire",
                               "what": "The Repertoire gathers all your organization's songs.",
@@ -632,7 +642,7 @@ export default {
                               "action": "Open MusicScale"
                         },
                         "review": {
-                              "title": "Review the preparation",
+                              "title": "Check everything before the service",
                               "what": "Before the service, check if songs, lyrics, chords and members are correct.",
                               "why": "A well-informed team can prepare better.",
                               "how": "Review the Song Scale and the linked Band Scale.",

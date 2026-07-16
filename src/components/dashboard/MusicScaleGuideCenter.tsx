@@ -21,7 +21,7 @@ import {
 export interface MusicScaleGuideCenterProps {
   activeSection: 'overview' | 'resources' | 'getting-started';
   organizationReady: boolean;
-  musicScaleReady?: boolean;
+  musicScaleReady: boolean;
   teamStarted: boolean;
   canInvite: boolean;
   canManageTeam: boolean;
@@ -43,7 +43,7 @@ export interface MusicScaleGuideCenterProps {
 export function MusicScaleGuideCenter({ 
   activeSection,
   organizationReady,
-  musicScaleReady = true,
+  musicScaleReady,
   teamStarted,
   canInvite,
   canManageTeam,
@@ -521,9 +521,9 @@ export function MusicScaleGuideCenter({
                               className="px-5 py-2.5 bg-white text-black hover:bg-gray-100 text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px]"
                             >
                               <UserPlus className="w-4 h-4" />
-                              {memberCount > 1 
+                              {memberCount > 1 || pendingInviteCount > 0
                                 ? t('musicscale.center.getting_started.team.invite_another_action', 'Convidar outra pessoa')
-                                : t('musicscale.center.getting_started.team.invite_title', 'Convidar uma pessoa')
+                                : t('musicscale.center.getting_started.team.invite_action', 'Convidar uma pessoa')
                               }
                             </button>
                           )}

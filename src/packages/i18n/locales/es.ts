@@ -572,10 +572,15 @@ export default {
             },
             "getting_started": {
                   "title": "Primeros pasos en MusicScale",
-                  "description": "Vamos a preparar tu organización, tu equipo y el primer flujo de trabalho. Puedes completar cada paso a tu ritmo.",
+                  "description": "Vamos a preparar tu organización, tu equipo y la primera configuración. Puedes completar cada paso a tu ritmo.",
                   "operational_notice": "Los pasos de Repertorio, acordes, letras, integrantes y escalas ocurren dentro de MusicScale. Abre la aplicación y sigue las pautas a continuación.",
+                  "sections": {
+                        "millionsnest": "Preparación en MillionsNest",
+                        "musicscale": "Continuar en MusicScale"
+                  },
                   "statuses": {
                         "completed": "Completado",
+                        "attention": "Requiere atención",
                         "continue_in_ms": "Continuar en MusicScale",
                         "pending": "Pendiente",
                         "pending_invite": "Invitación enviada"
@@ -585,7 +590,8 @@ export default {
                         "attention_title": "Revisa tu organización",
                         "ready_description": "Tu iglesia u organización ya está creada en MillionsNest.",
                         "attention_description": "Confirma los datos de la iglesia u organización antes de continuar.",
-                        "check_action": "Revisar datos"
+                        "check_action": "Revisar datos",
+                        "admin_notice": "Un administrador puede actualizar estos datos."
                   },
                   "team": {
                         "connected_title": "Equipo conectado",
@@ -596,9 +602,13 @@ export default {
                         "empty_description": "Invita a las primeras personas que usarán MusicScale contigo.",
                         "manage_action": "Ver equipo e invitaciones",
                         "invite_another_action": "Invitar a otra persona",
+                        "invite_action": "Invitar a una persona",
                         "no_permission": "Pide a un administrador que invite o administre el equipo."
                   },
                   "steps": {
+                        "team": {
+                              "important": "El rol Administrador o Miembro define el acceso a MillionsNest. Dentro de MusicScale, podrás indicar qué hace cada persona en el equipo, como voz, batería, teclado o liderazgo."
+                        },
                         "songs": {
                               "title": "Añadir canciones al Repertorio",
                               "what": "El Repertorio reúne todas las canciones de tu organización.",
@@ -640,7 +650,7 @@ export default {
                               "action": "Abrir MusicScale"
                         },
                         "review": {
-                              "title": "Revisar la preparación",
+                              "title": "Revisa todo antes del servicio",
                               "what": "Antes del servicio, comprueba si las canciones, letras, acordes e integrantes son correctos.",
                               "why": "Un equipo bien informado puede prepararse mejor.",
                               "how": "Revisa la Escala de Canciones y la Escala de Banda vinculada.",
