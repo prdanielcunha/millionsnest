@@ -72,8 +72,29 @@ const checkContextControl = () => {
   const hub = fs.readFileSync('src/components/support/SupportHub.tsx', 'utf-8');
   assertCondition(!hub.includes('const [isOpen, setIsOpen]'), 'SupportHub does not have local isOpen state', 'SupportHub has local isOpen state');
   assertCondition(hub.includes('const { hubOpen, openHub, closeHub, toggleHub') || hub.includes('hubOpen'), 'SupportHub uses hubOpen from context', 'SupportHub does not use hubOpen');
-  assertCondition(hub.includes("if (e.key === 'Escape') closeHub();"), 'Escape calls closeHub', 'Escape does not call closeHub');
   assertCondition(hub.includes("closeHub();") && hub.includes('mousedown'), 'Click outside calls closeHub', 'Click outside does not call closeHub');
+};
+
+const checkSupportHubFixes = () => {
+  const hub = fs.readFileSync('src/components/support/SupportHub.tsx', 'utf-8');
+  assertCondition(hub.includes('requestOpen') && hub.includes('whatsappOpen') && hub.includes('guideOpen'), 'SupportHub gets modal states from context', 'Missing modal states from context');
+  assertCondition(hub.includes('const supportModalOpen ='), 'Exists supportModalOpen', 'Missing supportModalOpen');
+  assertCondition(hub.includes('requestOpen || whatsappOpen || guideOpen') || hub.includes('requestOpen||whatsappOpen||guideOpen'), 'supportModalOpen considers all three states', 'Does not consider all three states');
+  assertCondition(hub.includes('if (supportModalOpen) {') && hub.includes('return null;'), 'Returns null when supportModalOpen is true', 'Does not return null');
+  assertCondition(!hub.includes('opacity-0') || (!hub.includes('opacity-0') && !hub.includes('pointer-events')), 'Does not use opacity or pointer-events to hide', 'Uses opacity or pointer-events to hide');
+  
+  const escapeCount = (hub.match(/if \(e.key === 'Escape'\)/g) || []).length;
+  assertCondition(escapeCount === 1, 'Escape has only one functional condition', `Escape has ${escapeCount} conditions instead of 1`);
+  assertCondition(hub.includes('closeHubAndRestoreFocus();'), 'Escape calls closeHubAndRestoreFocus', 'Does not call closeHubAndRestoreFocus');
+  assertCondition(hub.includes('e.preventDefault();'), 'Escape uses preventDefault', 'Escape missing preventDefault');
+  assertCondition(!hub.includes("if (e.key === 'Escape') closeHub();"), 'Isolated closeHub removed', 'Isolated closeHub still present');
+
+  assertCondition(hub.includes('setCapabilities(null)') && /setCapabilities\(null\);\s*setLoading\(true\);/.test(hub), 'setCapabilities(null) occurs before loadSupportCapabilities', 'setCapabilities missing before load');
+  assertCondition(!hub.includes('capabilities:') || !hub.includes('setCapabilities(capabilities)'), 'Failure does not restore old capabilities', 'May restore old capabilities');
+  
+  assertCondition(hub.includes('user?.uid') && hub.includes('organization?.id'), 'Dependencies use user?.uid and organization?.id', 'Dependencies missing safe uid/id');
+  assertCondition(hub.includes('new AbortController()') && hub.includes('signal: controller.signal'), 'AbortController is present', 'AbortController missing');
+  assertCondition(hub.includes('min-w-[44px]') && hub.includes('min-h-[44px]'), 'Floating button has 44px', 'Floating button missing 44px');
 };
 
 const checkCentralPanel = () => {
@@ -122,6 +143,7 @@ checkCentralConfig();
 checkRouteAdded();
 checkDashboardGlobalMount();
 checkContextControl();
+checkSupportHubFixes();
 checkCentralPanel();
 checkRoutesDetection();
 checkGuidesRoutes();

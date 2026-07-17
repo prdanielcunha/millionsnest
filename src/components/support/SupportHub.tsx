@@ -10,7 +10,7 @@ import { useLocation } from 'react-router-dom';
 
 export function SupportHub() {
   const { t } = useTranslation(['dashboard']);
-  const { hubOpen, openHub, closeHub, toggleHub, openRequest, openWhatsApp, openCurrentGuide, appId } = useSupportHub();
+  const { hubOpen, openHub, closeHub, toggleHub, openRequest, openWhatsApp, openCurrentGuide, appId, requestOpen, whatsappOpen, guideOpen } = useSupportHub();
   const { user } = useAuth();
   const { organization } = useOrganization();
   const location = useLocation();
@@ -40,18 +40,23 @@ export function SupportHub() {
 
   // Load capabilities when opened
   useEffect(() => {
-    if (hubOpen && user && organization) {
+    if (hubOpen && user?.uid && organization?.id) {
       let active = true;
+      setCapabilities(null);
       setLoading(true);
       const controller = new AbortController();
       
+      const requestUserId = user.uid;
+      const requestOrganizationId = organization.id;
+      const getIdToken = () => user.getIdToken();
+
       loadSupportCapabilities({
-        user: { getIdToken: () => user.getIdToken(), uid: user.uid },
-        organizationId: organization.id,
+        user: { getIdToken, uid: requestUserId },
+        organizationId: requestOrganizationId,
         signal: controller.signal
       })
       .then(res => {
-        if (!active) return;
+        if (!active || user.uid !== requestUserId || organization.id !== requestOrganizationId) return;
         if (res.success && 'canUseWhatsAppSupport' in res) {
           setCapabilities({
             canUseWhatsAppSupport: res.canUseWhatsAppSupport,
@@ -75,7 +80,7 @@ export function SupportHub() {
         controller.abort();
       };
     }
-  }, [hubOpen, user, organization]);
+  }, [hubOpen, user?.uid, organization?.id]);
 
   const closeHubAndRestoreFocus = () => {
     closeHub();
@@ -98,8 +103,8 @@ export function SupportHub() {
   useEffect(() => {
     if (!hubOpen) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeHub();
       if (e.key === 'Escape') {
+        e.preventDefault();
         closeHubAndRestoreFocus();
         return;
       }
@@ -150,6 +155,12 @@ export function SupportHub() {
     searchParams: new URLSearchParams(location.search),
     appId
   });
+
+  const supportModalOpen = requestOpen || whatsappOpen || guideOpen;
+
+  if (supportModalOpen) {
+    return null;
+  }
 
   return (
     <div 
