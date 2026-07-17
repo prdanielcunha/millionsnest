@@ -365,6 +365,60 @@ export default {
 }
 ,
   dashboard: {
+    support: {
+      actions: {
+        need_help: "I need help",
+        contact_support: "Talk to support"
+      },
+      modal: {
+        title: "Submit a request",
+        description: "Tell us what happened and our team will receive the necessary details to assist you.",
+        security_notice: "Do not send passwords, access codes, or complete card details.",
+        submitting: "Sending...",
+        submit: "Submit request"
+      },
+      fields: {
+        name: "Name",
+        email: "Email",
+        whatsapp: "WhatsApp, optional",
+        category: "Subject",
+        message: "How can we help?"
+      },
+      categories: {
+        general: "General question",
+        access: "Access and login",
+        billing: "Subscription and billing",
+        organization: "Organization and team",
+        musicscale: "MusicScale",
+        bug: "Error or unexpected behavior",
+        other: "Other subject"
+      },
+      validation: {
+        message_too_short: "Tell us a bit more about what happened (minimum 20 characters)."
+      },
+      errors: {
+        UNAUTHENTICATED: "Your session has expired. Please sign in again.",
+        ORGANIZATION_CONTEXT_MISMATCH: "The active organization has changed. Close this window and try again.",
+        MEMBERSHIP_REQUIRED: "You do not have access to the selected organization.",
+        RATE_LIMITED: "You have sent several requests in a short time. Please wait a few minutes.",
+        MESSAGE_TOO_SHORT: "Tell us a bit more about what happened.",
+        INVALID_WHATSAPP: "Please check the WhatsApp number.",
+        INTERNAL_ERROR: "Could not send right now. Please try again."
+      },
+      success: {
+        received: "We received your request.",
+        protocol: "Protocol: {{reference}}",
+        close: "Close",
+        send_another: "Submit another request"
+      },
+      security: {
+        confidentiality: "Your data is protected by MillionsNest ecosystem encryption."
+      },
+      accessibility: {
+        close_dialog: "Close support form",
+        character_counter: "{{current}} of 4000 characters"
+      }
+    },
     navigation: {
       home: "Home",
       my_apps: "My apps",

@@ -374,6 +374,60 @@ export default {
 }
 ,
   dashboard: {
+    support: {
+      actions: {
+        need_help: "Necesito ayuda",
+        contact_support: "Hablar con soporte"
+      },
+      modal: {
+        title: "Enviar una solicitud",
+        description: "Cuéntanos qué pasó y nuestro equipo recibirá los detalles necesarios para ayudarte.",
+        security_notice: "No envíes contraseñas, códigos de acceso o datos completos de tarjeta.",
+        submitting: "Enviando...",
+        submit: "Enviar solicitud"
+      },
+      fields: {
+        name: "Nombre",
+        email: "Correo electrónico",
+        whatsapp: "WhatsApp, opcional",
+        category: "Asunto",
+        message: "¿Cómo podemos ayudarte?"
+      },
+      categories: {
+        general: "Duda general",
+        access: "Acceso e inicio de sesión",
+        billing: "Suscripción y facturación",
+        organization: "Organización y equipo",
+        musicscale: "MusicScale",
+        bug: "Error o comportamiento inesperado",
+        other: "Otro asunto"
+      },
+      validation: {
+        message_too_short: "Cuéntanos un poco más sobre lo que pasó (mínimo 20 caracteres)."
+      },
+      errors: {
+        UNAUTHENTICATED: "Tu sesión ha expirado. Por favor ingresa de nuevo.",
+        ORGANIZATION_CONTEXT_MISMATCH: "La organización activa ha cambiado. Cierra esta ventana e intenta de nuevo.",
+        MEMBERSHIP_REQUIRED: "No tienes acceso a la organización seleccionada.",
+        RATE_LIMITED: "Has enviado varias solicitudes en poco tiempo. Por favor espera unos minutos.",
+        MESSAGE_TOO_SHORT: "Cuéntanos un poco más sobre lo que pasó.",
+        INVALID_WHATSAPP: "Por favor verifica el número de WhatsApp.",
+        INTERNAL_ERROR: "No se pudo enviar ahora. Intenta de nuevo."
+      },
+      success: {
+        received: "Hemos recibido tu solicitud.",
+        protocol: "Protocolo: {{reference}}",
+        close: "Cerrar",
+        send_another: "Enviar otra solicitud"
+      },
+      security: {
+        confidentiality: "Tus datos están protegidos por el cifrado del ecosistema MillionsNest."
+      },
+      accessibility: {
+        close_dialog: "Cerrar formulario de soporte",
+        character_counter: "{{current}} de 4000 caracteres"
+      }
+    },
     navigation: {
       home: "Inicio",
       my_apps: "Mis aplicaciones",

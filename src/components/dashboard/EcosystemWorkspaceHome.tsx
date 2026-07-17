@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
+import { SupportRequestModal } from '../support/SupportRequestModal.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info
@@ -55,6 +56,7 @@ export function EcosystemWorkspaceHome({
   onSelectMusicScaleSection
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
+  const [isSupportOpen, setIsSupportOpen] = React.useState(false);
 
   // Selector UI
   const renderWorkspaceSelector = () => {
@@ -410,11 +412,12 @@ export function EcosystemWorkspaceHome({
                   <span className="flex items-center gap-3"><ExternalLink className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.learn_more', 'Conhecer recursos')}</span> 
                 </button>
                 
-                <a  
-                  href="mailto:suporte@millionsnest.com"
+                <button  
+                  type="button"
+                  onClick={() => setIsSupportOpen(true)}
                   className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]"> 
-                  <span className="flex items-center gap-3"><Mail className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.need_help', 'Preciso de ajuda')}</span> 
-                </a>
+                  <span className="flex items-center gap-3"><Mail className="w-4 h-4 text-[#A0A7B5]" /> {t('support.actions.need_help', t('musicscale.actions.need_help', 'Preciso de ajuda'))}</span> 
+                </button>
               </div>
             </div>
 
@@ -480,9 +483,13 @@ export function EcosystemWorkspaceHome({
                 <button type="button"  onClick={() => onSelectMusicScaleSection('getting-started')} className="text-sm text-[#2B85EB] hover:text-[#3B95FB] font-medium block min-h-[44px]"> 
                   Aprender a usar &rarr;
                 </button> 
-                <a  href="mailto:suporte@millionsnest.com" className="text-sm text-[#A0A7B5] hover:text-white font-medium block min-h-[44px]"> 
-                  {t('musicscale.help.contact_support', 'Falar com suporte')}
-                </a> 
+                <button 
+                  type="button"
+                  onClick={() => setIsSupportOpen(true)}
+                  className="text-sm text-[#A0A7B5] hover:text-white font-medium block min-h-[44px] text-left"
+                > 
+                  {t('support.actions.contact_support', t('musicscale.help.contact_support', 'Falar com suporte'))}
+                </button> 
               </div>
             </div>
           </div>
@@ -555,6 +562,14 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
       {selectedWorkspace === 'home' && renderHomeWorkspace()}
       {selectedWorkspace === 'musicscale' && renderMusicScaleWorkspace()}
       {selectedWorkspace !== 'home' && selectedWorkspace !== 'musicscale' && currentApp && renderGenericAppWorkspace(currentApp)}
+
+      <SupportRequestModal
+        isOpen={isSupportOpen}
+        onClose={() => setIsSupportOpen(false)}
+        organizationId={organization?.id || null}
+        organizationName={organization?.name || null}
+        appId={selectedWorkspace === 'musicscale' ? 'musicscale' : 'core'}
+      />
     </div>
   );
 }

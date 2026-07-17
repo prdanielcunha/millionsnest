@@ -381,6 +381,60 @@ export default {
 }
 ,
   dashboard: {
+    support: {
+      actions: {
+        need_help: "Preciso de ajuda",
+        contact_support: "Falar com suporte"
+      },
+      modal: {
+        title: "Enviar uma solicitação",
+        description: "Conte o que aconteceu e nossa equipe receberá as informações necessárias para ajudar.",
+        security_notice: "Não envie senhas, códigos de acesso ou dados completos de cartão.",
+        submitting: "Enviando...",
+        submit: "Enviar solicitação"
+      },
+      fields: {
+        name: "Nome",
+        email: "E-mail",
+        whatsapp: "WhatsApp, opcional",
+        category: "Assunto",
+        message: "Como podemos ajudar?"
+      },
+      categories: {
+        general: "Dúvida geral",
+        access: "Acesso e login",
+        billing: "Assinatura e pagamento",
+        organization: "Organização e equipe",
+        musicscale: "MusicScale",
+        bug: "Erro ou comportamento inesperado",
+        other: "Outro assunto"
+      },
+      validation: {
+        message_too_short: "Conte um pouco mais sobre o que aconteceu (mínimo de 20 caracteres)."
+      },
+      errors: {
+        UNAUTHENTICATED: "Sua sessão expirou. Entre novamente.",
+        ORGANIZATION_CONTEXT_MISMATCH: "A organização ativa mudou. Feche esta janela e tente novamente.",
+        MEMBERSHIP_REQUIRED: "Você não possui acesso à organização selecionada.",
+        RATE_LIMITED: "Você enviou várias solicitações em pouco tempo. Aguarde alguns minutos.",
+        MESSAGE_TOO_SHORT: "Conte um pouco mais sobre o que aconteceu.",
+        INVALID_WHATSAPP: "Confira o número do WhatsApp.",
+        INTERNAL_ERROR: "Não foi possível enviar agora. Tente novamente."
+      },
+      success: {
+        received: "Recebemos sua solicitação.",
+        protocol: "Protocolo: {{reference}}",
+        close: "Fechar",
+        send_another: "Enviar outra solicitação"
+      },
+      security: {
+        confidentiality: "Seus dados estão protegidos pela criptografia do ecossistema MillionsNest."
+      },
+      accessibility: {
+        close_dialog: "Fechar formulário de suporte",
+        character_counter: "{{current}} de 4000 caracteres"
+      }
+    },
     navigation: {
       home: "Início",
       my_apps: "Meus aplicativos",
