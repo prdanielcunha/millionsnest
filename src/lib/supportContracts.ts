@@ -36,6 +36,19 @@ export interface SupportTicketFailureResponse {
   reasonCode: string;
 }
 
+export interface SupportCapabilitiesSuccessResponse {
+  success: true;
+  supportTier: SupportTier;
+  hasPrioritySupport: boolean;
+  canUseWhatsAppSupport: boolean;
+  hasGlobalEntitlementOverride: boolean;
+}
+
+export interface SupportCapabilitiesFailureResponse {
+  success: false;
+  reasonCode: string;
+}
+
 export const SUPPORT_CATEGORIES: SupportCategory[] = [
   'general',
   'access',

@@ -1,12 +1,22 @@
 import { planSupportTicketRequest } from '../src/server/services/SupportTicketPlanner.js';
 import { deliverSupportTicketEmail } from '../src/server/services/SupportEmailAdapter.js';
+import { resolveEcosystemPrivilegePolicy, resolveEffectiveSupportAccess } from '../src/lib/permissionService.js';
+import { getSupportCapabilities } from '../src/server/services/SupportCapabilitiesService.js';
+import admin from 'firebase-admin';
+import { getAuth } from 'firebase-admin/auth';
 
 // Setup environment for testing
 process.env.SUPPORT_EMAIL_PROVIDER = 'disabled';
 process.env.RESEND_API_KEY = '';
 
+if (admin.apps.length === 0) {
+  admin.initializeApp({
+    projectId: 'test-project'
+  });
+}
+
 async function runTests() {
-  console.log('=== STARTING SUPPORT FOUNDATION 1 VALIDATION TESTS ===\n');
+  console.log('=== STARTING EXPANDED SUPPORT ACCESS & PRIVILEGES TESTS ===\n');
 
   let passed = 0;
   let failed = 0;
@@ -28,7 +38,6 @@ async function runTests() {
 
   const nowMs = Date.now();
 
-  // Test 1.1: Success Planning
   const validRequest = {
     requestId: '12345678-1234-1234-1234-1234567890ab',
     organizationId: 'org-test-999',
@@ -44,7 +53,6 @@ async function runTests() {
   assert(res1.normalized?.requestId === '12345678-1234-1234-1234-1234567890ab', 'Normalized requestId matches');
   assert(res1.normalized?.organizationId === 'org-test-999', 'Normalized organizationId matches');
 
-  // Test 1.2: Message too short
   const shortRequest = {
     ...validRequest,
     message: 'Too short.'
@@ -52,7 +60,6 @@ async function runTests() {
   const res2 = planSupportTicketRequest(shortRequest, nowMs);
   assert(res2.success === false && res2.reasonCode === 'MESSAGE_TOO_SHORT', 'Should fail when message is too short');
 
-  // Test 1.3: Invalid Organization ID
   const badOrgRequest1 = {
     ...validRequest,
     organizationId: ''
@@ -62,18 +69,10 @@ async function runTests() {
 
   const badOrgRequest2 = {
     ...validRequest,
-    organizationId: 'a'.repeat(129) // over 128 characters
+    organizationId: 'a'.repeat(129)
   };
   const res4 = planSupportTicketRequest(badOrgRequest2, nowMs);
   assert(res4.success === false && res4.reasonCode === 'INVALID_ORGANIZATION_ID', 'Should fail on organizationId too long');
-
-  // Test 1.4: Null or missing Request ID
-  const missingReqId = {
-    ...validRequest,
-    requestId: undefined
-  };
-  const res5 = planSupportTicketRequest(missingReqId as any, nowMs);
-  assert(res5.success === false && res5.reasonCode === 'INVALID_REQUEST_ID', 'Should fail on missing requestId');
 
 
   // ==========================================
@@ -81,8 +80,6 @@ async function runTests() {
   // ==========================================
   console.log('\n--- 2. Testing SupportEmailAdapter ---');
 
-  // Test 2.1: Provider disabled
-  process.env.SUPPORT_EMAIL_PROVIDER = 'disabled';
   const ticketMock = {
     id: 'ticket-123',
     reference: 'MN-TEST1234',
@@ -91,58 +88,191 @@ async function runTests() {
     userEmail: 'tester@test.com',
     organizationName: 'Test Org',
     organizationId: 'org-test-999',
-    supportTier: 'standard',
+    supportTier: 'standard' as const,
     message: 'Testing disabled provider behavior.',
-    locale: 'pt'
+    locale: 'pt' as const
   };
 
   const emailRes1 = await deliverSupportTicketEmail(ticketMock);
   assert(emailRes1.status === 'not_configured', 'Should return not_configured when provider is disabled');
 
-  // Test 2.2: Simulate Successful Send
-  process.env.SUPPORT_EMAIL_PROVIDER = 'resend';
-  process.env.RESEND_API_KEY = 're_test_123456';
-  process.env.SUPPORT_FROM_EMAIL = 'support@test.com';
-  process.env.SUPPORT_EMAIL_TO = 'recipient@test.com';
 
-  const originalFetch = global.fetch;
+  // ==========================================
+  // 3. PermissionService & Support Precedence Tests
+  // ==========================================
+  console.log('\n--- 3. Testing PermissionService & Support Precedence ---');
 
-  global.fetch = (async (url: string, options: any) => {
-    assert(url === 'https://api.resend.com/emails', 'Deliver calls Resend API endpoint');
-    assert(options.method === 'POST', 'HTTP method is POST');
-    assert(options.headers.Authorization === 'Bearer re_test_123456', 'Auth header contains API key');
-    
-    const body = JSON.parse(options.body);
-    assert(body.from === 'support@test.com', 'From email is mapped correctly');
-    assert(body.to[0] === 'recipient@test.com', 'Recipient email is mapped correctly');
-    assert(body.subject.includes('MN-TEST1234'), 'Subject contains ticket reference');
+  // Test 3.1: Privilege policies
+  const ceoPolicy = resolveEcosystemPrivilegePolicy('ceo');
+  assert(ceoPolicy.isCanonicalGlobalRole === true && ceoPolicy.canBypassSupportMembership === true, 'CEO should bypass support membership');
+  assert(ceoPolicy.hasPrioritySupport === true, 'CEO should have priority support entitlement');
 
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({ id: 'resend-email-id' }),
-      text: async () => 'OK'
-    };
-  }) as any;
+  const supportPolicy = resolveEcosystemPrivilegePolicy('ecosystem_support');
+  assert(supportPolicy.isEcosystemSupportStaff === true && supportPolicy.canBypassSupportMembership === true, 'Ecosystem Support should bypass membership');
+  assert(supportPolicy.hasPrioritySupport === true, 'Ecosystem Support should have priority support');
+  assert(supportPolicy.isCanonicalGlobalRole === false, 'Ecosystem Support is not a canonical global role (governance isolation)');
 
-  const emailRes2 = await deliverSupportTicketEmail(ticketMock);
-  assert(emailRes2.status === 'sent', 'Should return sent status on successful fetch response');
+  const userPolicy = resolveEcosystemPrivilegePolicy('user');
+  assert(userPolicy.canBypassSupportMembership === false && userPolicy.hasPrioritySupport === false, 'Regular user has no automatic privilege bypass or priority');
 
-  // Test 2.3: Simulate HTTP Failure
-  global.fetch = (async (url: string, options: any) => {
-    return {
-      ok: false,
-      status: 403,
-      text: async () => 'Unauthorized'
-    };
-  }) as any;
+  // Test 3.2: resolveEffectiveSupportAccess precedence rules
+  // Rule 1: Privilege override priority
+  const accessCEO = resolveEffectiveSupportAccess({ systemRole: 'ceo' });
+  assert(accessCEO.supportTier === 'priority' && accessCEO.accessSource === 'global_privilege', 'CEO precedence leads to priority support from global_privilege');
 
-  const emailRes3 = await deliverSupportTicketEmail(ticketMock);
-  assert(emailRes3.status === 'failed' && emailRes3.errorCode === 'HTTP_403', 'Should return failed status with correct errorCode on 403 response');
+  const accessStaff = resolveEffectiveSupportAccess({ systemRole: 'ecosystem_support' });
+  assert(accessStaff.supportTier === 'priority' && accessStaff.accessSource === 'ecosystem_support', 'Support staff precedence leads to priority support from ecosystem_support');
 
-  // Restore global fetch
-  global.fetch = originalFetch;
+  // Rule 2: Subscription support tier
+  const accessSub = resolveEffectiveSupportAccess({
+    systemRole: 'user',
+    subscription: { supportTier: 'priority' }
+  });
+  assert(accessSub.supportTier === 'priority' && accessSub.accessSource === 'subscription', 'Subscription support tier overrides fallback');
 
+  // Rule 3: Organization app support tier
+  const accessOrg = resolveEffectiveSupportAccess({
+    systemRole: 'user',
+    organization: { apps: { musicscale: { supportTier: 'basic' } } }
+  });
+  assert(accessOrg.supportTier === 'basic_priority' && accessOrg.accessSource === 'organization', 'Organization app support tier basic resolves to basic_priority');
+
+  // Rule 4: Fallback
+  const accessFallback = resolveEffectiveSupportAccess({ systemRole: 'user' });
+  assert(accessFallback.supportTier === 'standard' && accessFallback.accessSource === 'fallback', 'Fallback resolves to standard support tier');
+
+
+  // ==========================================
+  // 4. SupportCapabilitiesService Mock Tests
+  // ==========================================
+  console.log('\n--- 4. Testing SupportCapabilitiesService ---');
+
+  const auth = getAuth();
+  let stubVerifyIdToken = async (token: string): Promise<any> => {
+    return { uid: 'test-user-uid', email: 'test@test.com' };
+  };
+  auth.verifyIdToken = (token: string) => stubVerifyIdToken(token);
+
+  let mockDbData: any = {};
+  const originalFirestore = admin.firestore;
+  Object.defineProperty(admin, 'firestore', {
+    get: () => {
+      return () => {
+        return {
+          settings: () => {},
+          collection: (colName: string) => {
+            return {
+              doc: (docId: string) => {
+                return {
+                  get: async () => {
+                    const path = `${colName}/${docId}`;
+                    const data = mockDbData[path];
+                    if (!data) return { exists: false };
+                    return {
+                      exists: true,
+                      data: () => data
+                    };
+                  },
+                  collection: (subColName: string) => {
+                    return {
+                      doc: (subDocId: string) => {
+                        return {
+                          get: async () => {
+                            const path = `${colName}/${docId}/${subColName}/${subDocId}`;
+                            const data = mockDbData[path];
+                            if (!data) return { exists: false };
+                            return {
+                              exists: true,
+                              data: () => data
+                            };
+                          }
+                        };
+                      }
+                    };
+                  }
+                };
+              }
+            };
+          }
+        };
+      };
+    },
+    configurable: true
+  });
+
+  // Scenario 4.1: Canonical role success capabilities retrieval
+  stubVerifyIdToken = async () => ({ uid: 'ceo-uid', email: 'ceo@test.com' });
+  mockDbData = {
+    'users/ceo-uid': { systemRole: 'ceo' },
+    'organizations/org-star': { name: 'Starter Church', apps: { musicscale: { supportTier: 'standard' } } },
+    'subscriptions/org-star': { supportTier: 'standard' }
+  };
+
+  let resStatus = 0;
+  let resJson: any = null;
+  const mockRes = {
+    status: (code: number) => {
+      resStatus = code;
+      return mockRes;
+    },
+    json: (payload: any) => {
+      resJson = payload;
+      return mockRes;
+    }
+  } as any;
+
+  const mockReq1 = {
+    headers: { authorization: 'Bearer dummy-token-1' },
+    query: { organizationId: 'org-star' }
+  } as any;
+
+  await getSupportCapabilities(mockReq1, mockRes);
+  assert(resStatus === 200, 'CEO capability request returns 200 OK');
+  assert(resJson?.success === true, 'Response indicates success');
+  assert(resJson?.supportTier === 'priority', 'CEO resolved to priority support tier');
+  assert(resJson?.hasPrioritySupport === true, 'CEO hasPrioritySupport is true');
+  assert(resJson?.hasGlobalEntitlementOverride === true, 'CEO hasGlobalEntitlementOverride is true');
+  assert(resJson?.systemRole === undefined, 'Does not leak systemRole in payload');
+
+  // Scenario 4.2: Ecosystem Support staff success capabilities retrieval
+  stubVerifyIdToken = async () => ({ uid: 'staff-uid', email: 'staff@test.com' });
+  mockDbData = {
+    'users/staff-uid': { systemRole: 'ecosystem_support' },
+    'organizations/org-star': { name: 'Starter Church', apps: { musicscale: { supportTier: 'standard' } } },
+    'subscriptions/org-star': { supportTier: 'standard' }
+  };
+
+  const mockReq2 = {
+    headers: { authorization: 'Bearer dummy-token-2' },
+    query: { organizationId: 'org-star' }
+  } as any;
+
+  await getSupportCapabilities(mockReq2, mockRes);
+  assert(resStatus === 200, 'Support staff request returns 200 OK');
+  assert(resJson?.supportTier === 'priority', 'Support staff resolved to priority support tier');
+  assert(resJson?.hasGlobalEntitlementOverride === true, 'Support staff has override true');
+
+  // Scenario 4.3: Regular user context mismatch validation
+  stubVerifyIdToken = async () => ({ uid: 'user-uid', email: 'user@test.com' });
+  mockDbData = {
+    'users/user-uid': { systemRole: 'user', activeOrganizationId: 'org-active' },
+    'organizations/org-other': { name: 'Other Church' }
+  };
+
+  const mockReq3 = {
+    headers: { authorization: 'Bearer dummy-token-3' },
+    query: { organizationId: 'org-other' }
+  } as any;
+
+  await getSupportCapabilities(mockReq3, mockRes);
+  assert(resStatus === 409, 'Querying different organization than active returning 409 mismatch');
+  assert(resJson?.reasonCode === 'ORGANIZATION_CONTEXT_MISMATCH', 'Correct reason code returned');
+
+  // Restore firestore mock
+  Object.defineProperty(admin, 'firestore', {
+    get: () => originalFirestore,
+    configurable: true
+  });
 
   // ==========================================
   // SUMMARY

@@ -433,6 +433,14 @@ export default {
       accessibility: {
         close_dialog: "Fechar formulário de suporte",
         character_counter: "{{current}} de 4000 caracteres"
+      },
+      priority: {
+        badge: "Suporte prioritário",
+        description: "Seu acesso inclui atendimento prioritário.",
+        global_override: "Acesso completo concedido pelo seu papel no ecossistema."
+      },
+      capabilities: {
+        loading: "Verificando seus canais de suporte..."
       }
     },
     navigation: {

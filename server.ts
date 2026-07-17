@@ -2,6 +2,7 @@ import express from 'express';
 import { bootstrapUserContext, acceptInvitation, setActiveOrganization } from './src/server/services/TenantContextMutationService.js';
 import { createInvitation } from "./src/server/services/InvitationCreationService.js";
 import { createSupportTicket } from './src/server/services/SupportTicketService.js';
+import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
 
 import Stripe from 'stripe';
 import cors from 'cors';
@@ -604,7 +605,8 @@ async function startServer() {
   
   
   // P0-A Security and Governance Routes
-  app.post('/api/v1/support/tickets', express.json(), createSupportTicket);
+  app.post('/api/v1/support/tickets', express.json({ limit: '32kb' }), createSupportTicket);
+  app.get('/api/v1/support/capabilities', getSupportCapabilities);
   app.post('/api/v1/onboarding/bootstrap', express.json(), bootstrapUserContext);
   app.post('/api/v1/invitations', express.json(), createInvitation);
   app.post('/api/v1/invitations/accept', express.json(), acceptInvitation);

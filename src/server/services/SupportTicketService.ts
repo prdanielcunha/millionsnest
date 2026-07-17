@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { planSupportTicketRequest } from './SupportTicketPlanner.js';
 import { getSupportConfig } from '../config/supportConfig.js';
 import { deliverSupportTicketEmail } from './SupportEmailAdapter.js';
+import { resolveEcosystemPrivilegePolicy, resolveEffectiveSupportAccess } from '../../lib/permissionService.js';
 
 export async function createSupportTicket(req: Request, res: Response) {
   try {
@@ -47,9 +48,9 @@ export async function createSupportTicket(req: Request, res: Response) {
     const userDocData = userDoc.exists ? userDoc.data() : null;
 
     const systemRole = userDocData?.systemRole || 'user';
-    const isGlobalRole = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(systemRole);
+    const privilegePolicy = resolveEcosystemPrivilegePolicy(systemRole);
 
-    if (!isGlobalRole) {
+    if (!privilegePolicy.canBypassSupportMembership) {
       const userActiveOrgId = userDocData?.activeOrganizationId || userDocData?.organizationId;
       if (normalized.organizationId !== userActiveOrgId) {
         return res.status(409).json({ success: false, reasonCode: 'ORGANIZATION_CONTEXT_MISMATCH' });
@@ -67,26 +68,17 @@ export async function createSupportTicket(req: Request, res: Response) {
       }
     }
 
-    // Resolve support tier
-    let supportTier: 'standard' | 'basic_priority' | 'priority' = 'standard';
+    // Resolve support tier and access source
     const subDoc = await db.collection('subscriptions').doc(normalized.organizationId).get();
     const subData = subDoc.exists ? subDoc.data() : null;
 
-    if (subData?.supportTier) {
-      const st = subData.supportTier;
-      if (st === 'standard' || st === 'basic_priority' || st === 'priority') {
-        supportTier = st;
-      } else if (st === 'basic') {
-        supportTier = 'basic_priority';
-      }
-    } else if (orgData?.apps?.musicscale?.supportTier) {
-      const st = orgData.apps.musicscale.supportTier;
-      if (st === 'standard' || st === 'basic_priority' || st === 'priority') {
-        supportTier = st;
-      } else if (st === 'basic') {
-        supportTier = 'basic_priority';
-      }
-    }
+    const resolvedAccess = resolveEffectiveSupportAccess({
+      systemRole,
+      subscription: subData,
+      organization: orgData
+    });
+
+    const { supportTier, accessSource } = resolvedAccess;
 
     // Derive display name
     let displayName = decodedToken.name || '';
@@ -164,6 +156,7 @@ export async function createSupportTicket(req: Request, res: Response) {
         locale: normalized.locale,
 
         supportTier,
+        supportAccessSource: accessSource,
 
         emailDelivery: {
           provider: config.provider,
@@ -195,6 +188,7 @@ export async function createSupportTicket(req: Request, res: Response) {
         ticketId,
         ticketReference: reference,
         supportTier,
+        supportAccessSource: accessSource,
         timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext.js';
-import { submitSupportTicket } from '../../services/supportClient.js';
+import { submitSupportTicket, loadSupportCapabilities } from '../../services/supportClient.js';
 import { SupportCategory, SUPPORT_CATEGORIES, SupportLocale } from '../../lib/supportContracts.js';
 import { X, AlertCircle, CheckCircle, Mail, MessageSquare } from 'lucide-react';
 
@@ -30,6 +30,11 @@ export function SupportRequestModal({
   const [protocol, setProtocol] = useState('');
   const [errorCode, setErrorCode] = useState('');
   const [hasEditedSinceError, setHasEditedSinceError] = useState(false);
+  const [capabilities, setCapabilities] = useState<{
+    hasPrioritySupport: boolean;
+    hasGlobalEntitlementOverride: boolean;
+  } | null>(null);
+  const [loadingCapabilities, setLoadingCapabilities] = useState(false);
 
   const [requestId, setRequestId] = useState(() => generateUUID());
 
@@ -98,6 +103,41 @@ export function SupportRequestModal({
       document.body.style.overflow = '';
     };
   }, [isOpen]);
+
+  // Load support capabilities on mount/open
+  useEffect(() => {
+    if (isOpen && user && organizationId) {
+      setLoadingCapabilities(true);
+      const controller = new AbortController();
+
+      loadSupportCapabilities({
+        user,
+        organizationId,
+        signal: controller.signal
+      })
+      .then((res) => {
+        if (res.success && 'supportTier' in res) {
+          setCapabilities({
+            hasPrioritySupport: res.hasPrioritySupport,
+            hasGlobalEntitlementOverride: res.hasGlobalEntitlementOverride
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Error loading support capabilities:', err);
+      })
+      .finally(() => {
+        setLoadingCapabilities(false);
+      });
+
+      return () => {
+        controller.abort();
+      };
+    } else {
+      setCapabilities(null);
+      setLoadingCapabilities(false);
+    }
+  }, [isOpen, user, organizationId]);
 
   // Escape key handler
   useEffect(() => {
@@ -221,6 +261,46 @@ export function SupportRequestModal({
           <p id="support-modal-description" className="text-sm text-[#A0A7B5]">
             {t('support.modal.description', 'Conte o que aconteceu e nossa equipe receberá as informações necessárias para ajudar.')}
           </p>
+
+          {/* SKELETON LOADER */}
+          {loadingCapabilities && (
+            <div className="animate-pulse flex items-center gap-3 p-3.5 bg-white/5 border border-white/5 rounded-xl">
+              <div className="w-4 h-4 bg-white/20 rounded-full animate-ping shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3.5 bg-white/20 rounded w-1/3" />
+                <div className="h-3 bg-white/10 rounded w-2/3" />
+              </div>
+            </div>
+          )}
+
+          {/* PRIORITY BADGE */}
+          {!loadingCapabilities && capabilities?.hasPrioritySupport && (
+            <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl animate-in fade-in duration-200">
+              <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-amber-500/15 text-amber-400 shrink-0">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                </svg>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                    {t('support.priority.badge', 'Suporte prioritário')}
+                  </span>
+                  <span className="text-[10px] font-semibold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
+                    PREMIUM
+                  </span>
+                </div>
+                <p className="text-xs text-[#E1E4EB]">
+                  {t('support.priority.description', 'Seu acesso inclui atendimento prioritário.')}
+                </p>
+                {capabilities.hasGlobalEntitlementOverride && (
+                  <p className="text-[11px] text-amber-400/80">
+                    {t('support.priority.global_override', 'Acesso completo concedido pelo seu papel no ecossistema.')}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {status === 'success' ? (
             <div role="status" className="flex flex-col items-center text-center py-8 space-y-4 animate-in fade-in duration-200">

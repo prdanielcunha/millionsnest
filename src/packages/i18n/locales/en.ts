@@ -417,6 +417,14 @@ export default {
       accessibility: {
         close_dialog: "Close support form",
         character_counter: "{{current}} of 4000 characters"
+      },
+      priority: {
+        badge: "Priority support",
+        description: "Your access includes priority support.",
+        global_override: "Full access granted by your ecosystem role."
+      },
+      capabilities: {
+        loading: "Checking your support channels..."
       }
     },
     navigation: {

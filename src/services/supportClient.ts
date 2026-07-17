@@ -1,4 +1,10 @@
-import { SupportTicketRequest, SupportTicketSuccessResponse, SupportTicketFailureResponse } from '../lib/supportContracts.js';
+import { 
+  SupportTicketRequest, 
+  SupportTicketSuccessResponse, 
+  SupportTicketFailureResponse,
+  SupportCapabilitiesSuccessResponse,
+  SupportCapabilitiesFailureResponse
+} from '../lib/supportContracts.js';
 
 export interface SubmitSupportTicketParams {
   user: {
@@ -6,6 +12,69 @@ export interface SubmitSupportTicketParams {
   };
   request: SupportTicketRequest;
   signal?: AbortSignal;
+}
+
+export interface LoadSupportCapabilitiesParams {
+  user: {
+    getIdToken: () => Promise<string>;
+  };
+  organizationId: string;
+  signal?: AbortSignal;
+}
+
+export async function loadSupportCapabilities(
+  params: LoadSupportCapabilitiesParams
+): Promise<SupportCapabilitiesSuccessResponse | SupportCapabilitiesFailureResponse> {
+  const { user, organizationId, signal } = params;
+
+  try {
+    const token = await user.getIdToken();
+
+    const response = await fetch(`/api/v1/support/capabilities?organizationId=${encodeURIComponent(organizationId)}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+        'Cache-Control': 'no-store'
+      },
+      signal
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        success: true,
+        supportTier: data.supportTier,
+        hasPrioritySupport: data.hasPrioritySupport,
+        canUseWhatsAppSupport: data.canUseWhatsAppSupport,
+        hasGlobalEntitlementOverride: data.hasGlobalEntitlementOverride
+      };
+    } else {
+      try {
+        const errorData = await response.json();
+        return {
+          success: false,
+          reasonCode: errorData.reasonCode || 'INTERNAL_ERROR'
+        };
+      } catch (err) {
+        return {
+          success: false,
+          reasonCode: 'INTERNAL_ERROR'
+        };
+      }
+    }
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      return {
+        success: false,
+        reasonCode: 'TIMEOUT'
+      };
+    }
+    return {
+      success: false,
+      reasonCode: 'INTERNAL_ERROR'
+    };
+  }
 }
 
 export async function submitSupportTicket(
