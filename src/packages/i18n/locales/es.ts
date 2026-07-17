@@ -434,6 +434,84 @@ export default {
       },
       capabilities: {
         loading: "Verificando tus canales de soporte..."
+      },
+      hub: {
+        title: "¿Cómo podemos ayudarte?",
+        description: "Elige la mejor forma de continuar.",
+        expand: "Abrir ayuda",
+        collapse: "Cerrar ayuda",
+        accessibility: {
+          close_dialog: "Cerrar guía"
+        },
+        request: {
+          title: "Enviar una solicitud",
+          description: "Cuéntanos qué pasó y recibe un protocolo."
+        },
+        whatsapp: {
+          title: "Hablar por WhatsApp",
+          description: "Chatea a través de nuestro canal de soporte prioritario.",
+          locked: "Disponible en el plan Pro."
+        },
+        guide: {
+          title: "Ayuda sobre esta página",
+          description: "Ver una guía rápida de esta pantalla."
+        }
+      },
+      whatsapp: {
+        modal: {
+          title: "Hablar por WhatsApp",
+          description: "WhatsApp se abrirá con un mensaje listo. Podrás revisarlo antes de enviarlo."
+        }
+      },
+      guides: {
+        understood: "Entendido",
+        musicscale_resources: {
+          title: "Recursos de MusicScale",
+          intro: "Conoce cómo funciona la estructura de MusicScale.",
+          sections: {
+            repertoire: "Repertorio reúne las canciones.",
+            library: "La Biblioteca Viva permite importar cifrados listos.",
+            chords: "Los cifrados ayudan a los músicos en el estudio.",
+            members: "Integrantes define los talentos del equipo.",
+            scales: "Las Escalas organizan cultos y ministraciones."
+          },
+          tip: "Empieza definiendo el Repertorio y luego crea las Escalas."
+        },
+        musicscale_getting_started: {
+          title: "Primeros pasos",
+          intro: "El flujo ideal para iniciar con MusicScale.",
+          sections: {
+            org: "Verifica tu organización.",
+            team: "Invita a los primeros miembros.",
+            songs: "Agrega las primeras canciones.",
+            chords: "Revisa cifrados y letras.",
+            members: "Asigna instrumentos a los miembros.",
+            scales: "Arma la primera escala."
+          },
+          tip: "Seguir los pasos ayuda en la implementación."
+        },
+        team: {
+          title: "Miembros del Equipo",
+          intro: "Entiende la gestión del equipo.",
+          sections: {
+            active: "Los miembros activos tienen acceso a la organización.",
+            pending: "Las invitaciones pendientes esperan aceptación.",
+            new: "Puedes agregar nuevos miembros según tu plan.",
+            seats: "Tu plan dicta la capacidad de usuarios.",
+            roles: "Los cargos determinan el poder administrativo."
+          }
+        },
+        billing: {
+          title: "Suscripciones y Facturación",
+          intro: "La facturación está centralizada en MillionsNest.",
+          sections: {
+            plan: "Visualiza el plan actual y las funciones activadas.",
+            seats: "Gestiona el uso de asientos en tu organización.",
+            status: "El estado puede estar activo, cancelado o pendiente.",
+            payments: "Tu pago es gestionado por Stripe.",
+            features: "Actualiza los planes para liberar más capacidades."
+          }
+        }
       }
     },
     navigation: {

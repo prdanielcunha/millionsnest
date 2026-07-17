@@ -425,6 +425,84 @@ export default {
       },
       capabilities: {
         loading: "Checking your support channels..."
+      },
+      hub: {
+        title: "How can we help?",
+        description: "Choose the best way to continue.",
+        expand: "Open help",
+        collapse: "Close help",
+        accessibility: {
+          close_dialog: "Close guide"
+        },
+        request: {
+          title: "Send a request",
+          description: "Tell us what happened and receive a protocol."
+        },
+        whatsapp: {
+          title: "Talk via WhatsApp",
+          description: "Chat through our priority support channel.",
+          locked: "Available on the Pro plan."
+        },
+        guide: {
+          title: "Help about this page",
+          description: "View a quick guide for this screen."
+        }
+      },
+      whatsapp: {
+        modal: {
+          title: "Talk via WhatsApp",
+          description: "WhatsApp will open with a ready message. You can review it before sending."
+        }
+      },
+      guides: {
+        understood: "Got it",
+        musicscale_resources: {
+          title: "MusicScale Resources",
+          intro: "Learn how the MusicScale structure works.",
+          sections: {
+            repertoire: "Repertoire gathers the songs.",
+            library: "The Live Library lets you import ready chords.",
+            chords: "Chords help musicians study.",
+            members: "Members defines the team's talents.",
+            scales: "Scales organize services and ministrations."
+          },
+          tip: "Start by setting up the Repertoire and then create Scales."
+        },
+        musicscale_getting_started: {
+          title: "Getting Started",
+          intro: "The ideal flow to start with MusicScale.",
+          sections: {
+            org: "Check your organization.",
+            team: "Invite your first members.",
+            songs: "Add your first songs.",
+            chords: "Review chords and lyrics.",
+            members: "Assign instruments to members.",
+            scales: "Build your first scale."
+          },
+          tip: "Following the steps helps with deployment."
+        },
+        team: {
+          title: "Team Members",
+          intro: "Understand team management.",
+          sections: {
+            active: "Active members have access to the organization.",
+            pending: "Pending invites await acceptance.",
+            new: "You can add new members according to your plan.",
+            seats: "Your plan dictates user capacity.",
+            roles: "Roles determine administrative power."
+          }
+        },
+        billing: {
+          title: "Subscriptions and Billing",
+          intro: "Billing is centralized in MillionsNest.",
+          sections: {
+            plan: "View current plan and activated features.",
+            seats: "Manage seat usage in your organization.",
+            status: "Status can be active, canceled, or pending.",
+            payments: "Your payment is managed by Stripe.",
+            features: "Upgrade plans to unlock more capabilities."
+          }
+        }
       }
     },
     navigation: {

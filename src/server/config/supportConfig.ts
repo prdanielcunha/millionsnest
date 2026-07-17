@@ -17,10 +17,25 @@ export function getSupportConfig() {
     provider = 'resend';
   }
 
+  // WhatsApp Configuration
+  const rawNumber = process.env.SUPPORT_WHATSAPP_NUMBER || '5543999907071';
+  let whatsappNumber: string | null = null;
+  let isWhatsAppConfigured = false;
+
+  if (rawNumber) {
+    const normalized = rawNumber.replace(/[\s\-\(\)\+]/g, '');
+    if (/^\d{10,15}$/.test(normalized) && !normalized.startsWith('00') && !rawNumber.includes('http')) {
+      whatsappNumber = normalized;
+      isWhatsAppConfigured = true;
+    }
+  }
+
   return {
     provider,
     recipientEmail,
     fromEmail,
-    resendApiKey
+    resendApiKey,
+    whatsappNumber,
+    isWhatsAppConfigured
   };
 }

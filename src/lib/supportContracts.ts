@@ -41,10 +41,29 @@ export interface SupportCapabilitiesSuccessResponse {
   supportTier: SupportTier;
   hasPrioritySupport: boolean;
   canUseWhatsAppSupport: boolean;
+  isWhatsAppConfigured: boolean;
   hasGlobalEntitlementOverride: boolean;
 }
 
 export interface SupportCapabilitiesFailureResponse {
+  success: false;
+  reasonCode: string;
+}
+
+export interface SupportWhatsAppLinkRequest {
+  organizationId: string;
+  locale: SupportLocale;
+  message: string;
+  appId?: string;
+  pagePath?: string;
+}
+
+export interface SupportWhatsAppLinkSuccessResponse {
+  success: true;
+  url: string;
+}
+
+export interface SupportWhatsAppLinkFailureResponse {
   success: false;
   reasonCode: string;
 }

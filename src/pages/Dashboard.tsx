@@ -32,6 +32,7 @@ import { InviteModal } from "../components/InviteModal.js";
 import { UnifiedTimeline } from "../components/UnifiedTimeline.js";
 import { ECOSYSTEM_APPS, EcosystemApp } from "../lib/apps.js";
 import { ecosystemPlatform } from "../sdk/ecosystem.js";
+import { SupportHubProvider } from "../components/support/SupportHubContext.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -1333,6 +1334,7 @@ export function Dashboard() {
   }
 
   return (
+    <SupportHubProvider organizationId={activeContextOrgId || null} organizationName={organization?.name || null} appId="core">
     <EcosystemShell activeAppId="core" breadcrumbList={breadcrumbs}>
       <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-[#2B85EB]/5 blur-[150px] rounded-full pointer-events-none" />
       
@@ -2874,5 +2876,6 @@ export function Dashboard() {
       </AnimatePresence>
 
     </EcosystemShell>
+    </SupportHubProvider>
   );
 }

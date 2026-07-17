@@ -4,24 +4,12 @@ import { useAuth } from '../../contexts/AuthContext.js';
 import { submitSupportTicket, loadSupportCapabilities } from '../../services/supportClient.js';
 import { SupportCategory, SUPPORT_CATEGORIES, SupportLocale } from '../../lib/supportContracts.js';
 import { X, AlertCircle, CheckCircle, Mail, MessageSquare } from 'lucide-react';
+import { useSupportHub } from './SupportHubContext.js';
 
-interface SupportRequestModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  organizationId: string | null;
-  organizationName?: string | null;
-  appId?: string;
-}
-
-export function SupportRequestModal({
-  isOpen,
-  onClose,
-  organizationId,
-  organizationName,
-  appId = 'core'
-}: SupportRequestModalProps) {
+export function SupportRequestModal() {
   const { t, i18n } = useTranslation(['dashboard']);
   const { user, profile } = useAuth();
+  const { requestOpen: isOpen, closeSupport: onClose, organizationId, organizationName, appId } = useSupportHub();
 
   const [whatsapp, setWhatsapp] = useState('');
   const [category, setCategory] = useState<SupportCategory>('general');

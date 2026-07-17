@@ -1,12 +1,12 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
-import { SupportRequestModal } from '../support/SupportRequestModal.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info
 , AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useSupportHub } from '../support/SupportHubContext.js';
 
 interface EcosystemWorkspaceHomeProps {
   selectedWorkspace: string;
@@ -56,7 +56,7 @@ export function EcosystemWorkspaceHome({
   onSelectMusicScaleSection
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
-  const [isSupportOpen, setIsSupportOpen] = React.useState(false);
+  const { openRequest } = useSupportHub();
 
   // Selector UI
   const renderWorkspaceSelector = () => {
@@ -414,7 +414,7 @@ export function EcosystemWorkspaceHome({
                 
                 <button  
                   type="button"
-                  onClick={() => setIsSupportOpen(true)}
+                  onClick={openRequest}
                   className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]"> 
                   <span className="flex items-center gap-3"><Mail className="w-4 h-4 text-[#A0A7B5]" /> {t('support.actions.need_help', t('musicscale.actions.need_help', 'Preciso de ajuda'))}</span> 
                 </button>
@@ -485,7 +485,7 @@ export function EcosystemWorkspaceHome({
                 </button> 
                 <button 
                   type="button"
-                  onClick={() => setIsSupportOpen(true)}
+                  onClick={openRequest}
                   className="text-sm text-[#A0A7B5] hover:text-white font-medium block min-h-[44px] text-left"
                 > 
                   {t('support.actions.contact_support', t('musicscale.help.contact_support', 'Falar com suporte'))}
@@ -562,14 +562,6 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
       {selectedWorkspace === 'home' && renderHomeWorkspace()}
       {selectedWorkspace === 'musicscale' && renderMusicScaleWorkspace()}
       {selectedWorkspace !== 'home' && selectedWorkspace !== 'musicscale' && currentApp && renderGenericAppWorkspace(currentApp)}
-
-      <SupportRequestModal
-        isOpen={isSupportOpen}
-        onClose={() => setIsSupportOpen(false)}
-        organizationId={organization?.id || null}
-        organizationName={organization?.name || null}
-        appId={selectedWorkspace === 'musicscale' ? 'musicscale' : 'core'}
-      />
     </div>
   );
 }
