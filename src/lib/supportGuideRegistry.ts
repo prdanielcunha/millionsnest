@@ -42,6 +42,23 @@ const registry: SupportGuideDefinition[] = [
     }
   },
   {
+    id: 'musicscale_overview',
+    titleKey: 'support.guides.musicscale_overview.title',
+    introKey: 'support.guides.musicscale_overview.intro',
+    sectionKeys: [
+      'support.guides.musicscale_overview.sections.open',
+      'support.guides.musicscale_overview.sections.resources',
+      'support.guides.musicscale_overview.sections.getting_started',
+      'support.guides.musicscale_overview.sections.subscription',
+      'support.guides.musicscale_overview.sections.management'
+    ],
+    tipKey: 'support.guides.musicscale_overview.tip',
+    matches: ({ pathname, searchParams }) => {
+      const section = searchParams.get('section');
+      return pathname === '/dashboard/apps/musicscale' && (!section || section === 'overview');
+    }
+  },
+  {
     id: 'team_invitations',
     titleKey: 'support.guides.team.title',
     introKey: 'support.guides.team.intro',
@@ -55,6 +72,20 @@ const registry: SupportGuideDefinition[] = [
     matches: ({ pathname }) => pathname === '/dashboard/organization/members'
   },
   {
+    id: 'organization_settings',
+    titleKey: 'support.guides.organization.title',
+    introKey: 'support.guides.organization.intro',
+    sectionKeys: [
+      'support.guides.organization.sections.name',
+      'support.guides.organization.sections.address',
+      'support.guides.organization.sections.apps',
+      'support.guides.organization.sections.auth',
+      'support.guides.organization.sections.scope'
+    ],
+    tipKey: 'support.guides.organization.tip',
+    matches: ({ pathname }) => pathname === '/dashboard/organization'
+  },
+  {
     id: 'billing_subscription',
     titleKey: 'support.guides.billing.title',
     introKey: 'support.guides.billing.intro',
@@ -66,6 +97,20 @@ const registry: SupportGuideDefinition[] = [
       'support.guides.billing.sections.features'
     ],
     matches: ({ pathname }) => pathname === '/dashboard/billing'
+  },
+  {
+    id: 'account_profile',
+    titleKey: 'support.guides.account.title',
+    introKey: 'support.guides.account.intro',
+    sectionKeys: [
+      'support.guides.account.sections.name',
+      'support.guides.account.sections.email',
+      'support.guides.account.sections.edit',
+      'support.guides.account.sections.orgs',
+      'support.guides.account.sections.roles'
+    ],
+    tipKey: 'support.guides.account.tip',
+    matches: ({ pathname }) => pathname === '/dashboard/account'
   }
 ];
 

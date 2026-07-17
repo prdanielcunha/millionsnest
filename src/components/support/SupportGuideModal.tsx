@@ -10,13 +10,20 @@ interface SupportGuideModalProps {
 }
 
 export function SupportGuideModal({ isOpen, onClose, guide }: SupportGuideModalProps) {
-  const { t } = useTranslation();
+  const { t } = useTranslation(['dashboard']);
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
+  // Close safely if guide is null but modal is open
+  useEffect(() => {
+    if (isOpen && !guide) {
+      onClose();
+    }
+  }, [isOpen, guide, onClose]);
+
   // Focus trap & Escape key
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && guide) {
       previousFocusRef.current = document.activeElement as HTMLElement;
       if (modalRef.current) {
         modalRef.current.focus();
@@ -36,7 +43,7 @@ export function SupportGuideModal({ isOpen, onClose, guide }: SupportGuideModalP
         }
       };
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, guide, onClose]);
 
   // Scroll lock handled by provider
 
@@ -46,7 +53,7 @@ export function SupportGuideModal({ isOpen, onClose, guide }: SupportGuideModalP
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm motion-reduce:animate-none animate-in fade-in duration-200"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -57,25 +64,26 @@ export function SupportGuideModal({ isOpen, onClose, guide }: SupportGuideModalP
         role="dialog"
         aria-modal="true"
         aria-labelledby="guide-title"
+        aria-describedby="guide-intro"
         tabIndex={-1}
-        className="relative w-full max-w-md bg-[#1C1C1F] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 focus:outline-none"
+        className="relative w-full max-w-md bg-[#1C1C1F] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-32px)] motion-reduce:animate-none animate-in zoom-in-95 duration-200 focus:outline-none"
       >
-        <div className="flex items-center justify-between p-6 border-b border-white/10">
+        <div className="flex items-center justify-between p-6 border-b border-white/10 shrink-0">
           <h2 id="guide-title" className="text-xl font-bold text-white tracking-tight">
             {t(guide.titleKey)}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 -mr-2 text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition-colors"
-            aria-label={t('dashboard.support.hub.accessibility.close_dialog', 'Fechar guia')}
+            className="flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 -mr-3 text-white/50 hover:text-white rounded-lg hover:bg-white/5 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
+            aria-label={t('support.guides.close_aria', 'Fechar guia')}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-6">
-          <p className="text-[#E1E4EB] text-sm leading-relaxed">
+        <div className="p-6 overflow-y-auto space-y-6 overscroll-contain">
+          <p id="guide-intro" className="text-[#E1E4EB] text-sm leading-relaxed">
             {t(guide.introKey)}
           </p>
 
@@ -100,13 +108,13 @@ export function SupportGuideModal({ isOpen, onClose, guide }: SupportGuideModalP
           )}
         </div>
 
-        <div className="p-6 border-t border-white/10 bg-[#161618] rounded-b-2xl">
+        <div className="p-6 border-t border-white/10 bg-[#161618] rounded-b-2xl shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-3.5 bg-white text-black font-semibold rounded-xl hover:bg-gray-100 transition-colors focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[#1C1C1F] outline-none"
+            className="w-full min-h-[44px] py-3.5 bg-white text-black font-semibold rounded-xl hover:bg-gray-100 transition-colors focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[#1C1C1F] outline-none"
           >
-            {t('dashboard.support.guides.understood', 'Entendi')}
+            {t('support.guides.understood', 'Entendi')}
           </button>
         </div>
       </div>

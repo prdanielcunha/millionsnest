@@ -434,6 +434,8 @@ export default {
         accessibility: {
           close_dialog: "Close guide"
         },
+        menu_aria: "Help and support options",
+        close_aria: "Close Help Center",
         central_action: {
           title: "Help and support",
           description: "Send a request, talk via WhatsApp, or check quick guides.",
@@ -462,6 +464,43 @@ export default {
       },
       guides: {
         understood: "Got it",
+        close_aria: "Close guide",
+        musicscale_overview: {
+          title: "MusicScale Overview",
+          intro: "This screen brings together app access, subscription status, and paths to explore or configure MusicScale.",
+          sections: {
+            open: "Use Open MusicScale to launch the application.",
+            resources: "Learn resources explains what is available.",
+            getting_started: "Getting started guides you through the initial setup.",
+            subscription: "Subscription status informs if access is available.",
+            management: "Team and payment matters are managed by MillionsNest."
+          },
+          tip: "Start with Getting Started when the team is not yet set up."
+        },
+        organization: {
+          title: "Organization Data",
+          intro: "On this screen, you can check the information that identifies the organization within the ecosystem.",
+          sections: {
+            name: "Check the name displayed in the applications.",
+            address: "Review the public address when this option is available.",
+            apps: "See which applications are linked.",
+            auth: "Only authorized people can change the data.",
+            scope: "Changes affect the active organization, not all organizations in the account."
+          },
+          tip: "Check the organization name before inviting the team."
+        },
+        account: {
+          title: "Account and Profile",
+          intro: "This screen gathers the personal information used to identify you in MillionsNest.",
+          sections: {
+            name: "Check your display name.",
+            email: "See the email associated with your access.",
+            edit: "Update only the data available for editing.",
+            orgs: "Your access to organizations is managed separately.",
+            roles: "Changing the profile does not automatically change your roles in the team."
+          },
+          tip: "Use a name that your team will easily recognize."
+        },
         musicscale_resources: {
           title: "MusicScale Resources",
           intro: "Learn how the MusicScale structure works.",

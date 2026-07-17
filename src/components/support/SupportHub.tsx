@@ -25,15 +25,23 @@ export function SupportHub() {
   } | null>(null);
   const [loading, setLoading] = useState(false);
   
-  const menuRef = useRef<HTMLDivElement>(null);
+  const hubRootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     localStorage.setItem('mn_support_widget_collapsed_v1', isCollapsed.toString());
   }, [isCollapsed]);
 
+  // Clean capabilities on context change
+  useEffect(() => {
+    setCapabilities(null);
+    setLoading(false);
+  }, [user?.uid, organization?.id]);
+
   // Load capabilities when opened
   useEffect(() => {
     if (hubOpen && user && organization) {
+      let active = true;
       setLoading(true);
       const controller = new AbortController();
       
@@ -43,6 +51,7 @@ export function SupportHub() {
         signal: controller.signal
       })
       .then(res => {
+        if (!active) return;
         if (res.success && 'canUseWhatsAppSupport' in res) {
           setCapabilities({
             canUseWhatsAppSupport: res.canUseWhatsAppSupport,
@@ -51,36 +60,90 @@ export function SupportHub() {
           });
         }
       })
-      .catch(console.error)
+      .catch(err => {
+        if (!active) return;
+        if (err.name !== 'AbortError') {
+          console.error('[SupportHub] Failed to load capabilities');
+        }
+      })
       .finally(() => {
-        setLoading(false);
+        if (active) setLoading(false);
       });
 
-      return () => controller.abort();
+      return () => {
+        active = false;
+        controller.abort();
+      };
     }
   }, [hubOpen, user, organization]);
+
+  const closeHubAndRestoreFocus = () => {
+    closeHub();
+    triggerRef.current?.focus();
+  };
 
   // Click outside to close
   useEffect(() => {
     if (!hubOpen) return;
     const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        closeHub();
+      if (hubRootRef.current && !hubRootRef.current.contains(e.target as Node)) {
+        closeHubAndRestoreFocus();
       }
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [hubOpen, closeHub]);
+  }, [hubOpen]);
 
-  // Escape to close
+  // Keyboard navigation & Escape
   useEffect(() => {
     if (!hubOpen) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeHub();
+      if (e.key === 'Escape') {
+        closeHubAndRestoreFocus();
+        return;
+      }
+      
+      const menu = document.getElementById('mn-support-hub-menu');
+      if (!menu) return;
+      
+      const items = Array.from(menu.querySelectorAll('[role="menuitem"]:not([disabled])')) as HTMLElement[];
+      if (items.length === 0) return;
+      
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+        items[nextIndex].focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const nextIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+        items[nextIndex].focus();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        items[0].focus();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        items[items.length - 1].focus();
+      }
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [hubOpen, closeHub]);
+  }, [hubOpen]);
+
+  // Focus management on open
+  useEffect(() => {
+    if (hubOpen) {
+      setTimeout(() => {
+        const menu = document.getElementById('mn-support-hub-menu');
+        if (menu) {
+          const firstItem = menu.querySelector('[role="menuitem"]:not([disabled])') as HTMLElement;
+          if (firstItem) firstItem.focus();
+        }
+      }, 50);
+    }
+  }, [hubOpen]);
 
   const currentGuide = resolveSupportGuide({
     pathname: location.pathname,
@@ -89,14 +152,19 @@ export function SupportHub() {
   });
 
   return (
-    <div className="fixed z-50 bottom-[calc(env(safe-area-inset-bottom)+24px)] right-6 md:bottom-6 flex flex-col items-end">
+    <div 
+      ref={hubRootRef} 
+      className="fixed z-[999] bottom-[calc(env(safe-area-inset-bottom)+12px)] md:bottom-6 right-3 md:right-6 flex flex-col items-end"
+    >
       
       {hubOpen && (
         <div 
-          ref={menuRef}
-          className="mb-4 w-80 bg-[#1C1C1F] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-200"
+          id="mn-support-hub-menu"
+          role="menu"
+          aria-label={t('support.hub.menu_aria', 'Opções de ajuda e suporte')}
+          className="mb-4 w-[calc(100vw-24px)] max-w-80 max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-96px)] overflow-y-auto overscroll-contain bg-[#1C1C1F] border border-white/10 rounded-2xl shadow-2xl flex flex-col motion-reduce:animate-none animate-in slide-in-from-bottom-5 duration-200"
         >
-          <div className="p-4 border-b border-white/10 bg-[#232326]">
+          <div className="p-4 border-b border-white/10 bg-[#232326] shrink-0">
             <h3 className="font-bold text-white text-sm">
               {t('support.hub.title', 'Como podemos ajudar?')}
             </h3>
@@ -105,11 +173,12 @@ export function SupportHub() {
             </p>
           </div>
 
-          <div className="p-2 flex flex-col gap-1">
+          <div className="p-2 flex flex-col gap-1 shrink-0">
             <button
               type="button"
+              role="menuitem"
               onClick={openRequest}
-              className="flex items-start gap-3 p-3 text-left rounded-xl hover:bg-white/5 transition-colors group"
+              className="flex items-start gap-3 p-3 min-h-[44px] text-left rounded-xl hover:bg-white/5 transition-colors group focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 shrink-0 group-hover:bg-blue-500/20 group-hover:text-blue-300 transition-colors">
                 <Mail className="w-4 h-4" />
@@ -125,23 +194,24 @@ export function SupportHub() {
             </button>
 
             {loading ? (
-              <div className="flex items-start gap-3 p-3">
-                 <div className="w-8 h-8 rounded-lg bg-white/5 animate-pulse shrink-0" />
+              <div className="flex items-start gap-3 p-3 min-h-[44px]">
+                 <div className="w-8 h-8 rounded-lg bg-white/5 motion-reduce:animate-none animate-pulse shrink-0" />
                  <div className="flex-1 space-y-2 py-1">
-                   <div className="h-3 bg-white/10 rounded w-1/2 animate-pulse" />
-                   <div className="h-3 bg-white/5 rounded w-3/4 animate-pulse" />
+                   <div className="h-3 bg-white/10 rounded w-1/2 motion-reduce:animate-none animate-pulse" />
+                   <div className="h-3 bg-white/5 rounded w-3/4 motion-reduce:animate-none animate-pulse" />
                  </div>
               </div>
             ) : (
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   if (capabilities?.canUseWhatsAppSupport) {
                     openWhatsApp();
                   }
                 }}
                 disabled={!capabilities?.canUseWhatsAppSupport}
-                className={`flex items-start gap-3 p-3 text-left rounded-xl transition-colors group ${
+                className={`flex items-start gap-3 p-3 min-h-[44px] text-left rounded-xl transition-colors group focus:outline-none focus:ring-2 focus:ring-green-500 ${
                   capabilities?.canUseWhatsAppSupport 
                     ? 'hover:bg-white/5 cursor-pointer' 
                     : 'opacity-60 cursor-not-allowed'
@@ -178,8 +248,9 @@ export function SupportHub() {
             {currentGuide && (
               <button
                 type="button"
+                role="menuitem"
                 onClick={openCurrentGuide}
-                className="flex items-start gap-3 p-3 text-left rounded-xl hover:bg-white/5 transition-colors group"
+                className="flex items-start gap-3 p-3 min-h-[44px] text-left rounded-xl hover:bg-white/5 transition-colors group focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
                 <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 shrink-0 group-hover:bg-purple-500/20 group-hover:text-purple-300 transition-colors">
                   <Info className="w-4 h-4" />
@@ -197,7 +268,7 @@ export function SupportHub() {
           </div>
 
           {!loading && capabilities?.hasPrioritySupport && (
-            <div className="p-3 bg-amber-500/10 border-t border-amber-500/20 text-center text-xs text-amber-400">
+            <div className="p-3 bg-amber-500/10 border-t border-amber-500/20 text-center text-xs text-amber-400 shrink-0">
                {capabilities.hasGlobalEntitlementOverride 
                  ? t('support.priority.global_override', 'Acesso completo concedido pelo seu papel no ecossistema.')
                  : t('support.priority.badge', 'Suporte prioritário')
@@ -211,19 +282,24 @@ export function SupportHub() {
         <button
           type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="flex items-center justify-center w-8 h-8 rounded-full bg-black/40 text-white/60 hover:text-white hover:bg-black/60 backdrop-blur-md transition-colors border border-white/10"
+          className="flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 rounded-full bg-black/40 text-white/60 hover:text-white hover:bg-black/60 backdrop-blur-md transition-colors border border-white/10"
           aria-label={isCollapsed ? t('support.hub.expand', 'Abrir ajuda') : t('support.hub.collapse', 'Recolher ajuda')}
         >
           {isCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
         
         <button
+          ref={triggerRef}
           type="button"
-          onClick={toggleHub}
+          onClick={() => {
+            if (hubOpen) closeHubAndRestoreFocus();
+            else toggleHub();
+          }}
           aria-expanded={hubOpen}
           aria-haspopup="menu"
+          aria-controls={hubOpen ? 'mn-support-hub-menu' : undefined}
           aria-label={t('support.hub.trigger', 'Precisa de ajuda?')}
-          className={`flex items-center justify-center bg-blue-600 hover:bg-blue-500 text-white shadow-lg transition-all focus:ring-2 focus:ring-blue-400 focus:outline-none ${
+          className={`flex items-center justify-center min-w-[44px] min-h-[44px] bg-blue-600 hover:bg-blue-500 text-white shadow-lg transition-all focus:ring-2 focus:ring-blue-400 focus:outline-none ${
             isCollapsed ? 'w-11 h-11 rounded-full' : 'h-11 px-5 rounded-full gap-2'
           }`}
         >

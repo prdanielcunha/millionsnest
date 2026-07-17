@@ -450,6 +450,8 @@ export default {
         accessibility: {
           close_dialog: "Fechar guia"
         },
+        menu_aria: "Opções de ajuda e suporte",
+        close_aria: "Fechar Central de Ajuda",
         central_action: {
           title: "Ajuda e suporte",
           description: "Envie uma solicitação, fale pelo WhatsApp ou consulte guias rápidos.",
@@ -478,6 +480,43 @@ export default {
       },
       guides: {
         understood: "Entendi",
+        close_aria: "Fechar guia",
+        musicscale_overview: {
+          title: "Visão geral do MusicScale",
+          intro: "Esta tela reúne o acesso ao aplicativo, o estado da assinatura e os caminhos para conhecer ou configurar o MusicScale.",
+          sections: {
+            open: "Use Abrir MusicScale para entrar no aplicativo.",
+            resources: "Conhecer recursos explica o que está disponível.",
+            getting_started: "Primeiros passos orienta a configuração inicial.",
+            subscription: "O estado da assinatura informa se o acesso está disponível.",
+            management: "Questões de equipe e pagamento são administradas pelo MillionsNest."
+          },
+          tip: "Comece por Primeiros passos quando a equipe ainda não estiver configurada."
+        },
+        organization: {
+          title: "Dados da organização",
+          intro: "Nesta tela você confere as informações que identificam a organização dentro do ecossistema.",
+          sections: {
+            name: "Confira o nome exibido nos aplicativos.",
+            address: "Revise o endereço público quando essa opção estiver disponível.",
+            apps: "Veja quais aplicativos estão vinculados.",
+            auth: "Somente pessoas autorizadas podem alterar os dados.",
+            scope: "Mudanças afetam a organização ativa, não todas as organizações da conta."
+          },
+          tip: "Confira o nome da organização antes de convidar a equipe."
+        },
+        account: {
+          title: "Conta e perfil",
+          intro: "Esta tela reúne as informações pessoais usadas para identificar você no MillionsNest.",
+          sections: {
+            name: "Confira seu nome de exibição.",
+            email: "Veja o e-mail associado ao acesso.",
+            edit: "Atualize somente os dados disponíveis para edição.",
+            orgs: "Seu acesso às organizações é administrado separadamente.",
+            roles: "Alterar o perfil não muda automaticamente suas funções na equipe."
+          },
+          tip: "Use um nome que sua equipe reconheça facilmente."
+        },
         musicscale_resources: {
           title: "Recursos do MusicScale",
           intro: "Conheça como a estrutura do MusicScale funciona.",

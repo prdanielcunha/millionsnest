@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { SupportRequestModal } from './SupportRequestModal.js';
 import { SupportWhatsAppModal } from './SupportWhatsAppModal.js';
 import { SupportGuideModal } from './SupportGuideModal.js';
@@ -92,6 +92,38 @@ export function SupportHubProvider({ children, organizationId, organizationName,
   };
 
   let currentAppId = resolveSupportAppId(location.pathname);
+
+  const prevOrgIdRef = useRef(organizationId);
+  const prevPathRef = useRef(location.pathname);
+  const prevSearchRef = useRef(location.search);
+  const prevAppIdRef = useRef(currentAppId);
+
+  useEffect(() => {
+    let shouldCloseHub = false;
+    let shouldCloseAll = false;
+
+    if (prevOrgIdRef.current !== organizationId) {
+      shouldCloseAll = true;
+    }
+    
+    if (prevPathRef.current !== location.pathname || prevSearchRef.current !== location.search || prevAppIdRef.current !== currentAppId) {
+      shouldCloseHub = true;
+    }
+
+    if (shouldCloseAll) {
+      setHubOpen(false);
+      setRequestOpen(false);
+      setWhatsappOpen(false);
+      setGuideOpen(false);
+    } else if (shouldCloseHub) {
+      setHubOpen(false);
+    }
+
+    prevOrgIdRef.current = organizationId;
+    prevPathRef.current = location.pathname;
+    prevSearchRef.current = location.search;
+    prevAppIdRef.current = currentAppId;
+  }, [organizationId, location.pathname, location.search, currentAppId]);
 
   const currentGuide = resolveSupportGuide({
     pathname: location.pathname,
