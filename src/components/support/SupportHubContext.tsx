@@ -5,8 +5,16 @@ import { SupportGuideModal } from './SupportGuideModal.js';
 import { useLocation } from 'react-router-dom';
 import { resolveSupportGuide, SupportGuideDefinition } from '../../lib/supportGuideRegistry.js';
 
+export function resolveSupportAppId(pathname: string): string {
+  if (pathname.startsWith('/dashboard/apps/musicscale')) return 'musicscale';
+  if (pathname.startsWith('/dashboard/apps/nestfinance')) return 'nestfinance';
+  return 'core';
+}
+
 interface SupportHubContextValue {
   openHub: () => void;
+  closeHub: () => void;
+  toggleHub: () => void;
   openRequest: () => void;
   openWhatsApp: () => void;
   openCurrentGuide: () => void;
@@ -45,35 +53,45 @@ export function SupportHubProvider({ children, organizationId, organizationName,
   
   const location = useLocation();
 
-  const openHub = () => setHubOpen(true);
+  const openHub = () => {
+    setHubOpen(true);
+    setRequestOpen(false);
+    setWhatsappOpen(false);
+    setGuideOpen(false);
+  };
+
+  const closeHub = () => setHubOpen(false);
+  const toggleHub = () => setHubOpen(prev => !prev);
   
   const openRequest = () => {
+    setHubOpen(false);
     setRequestOpen(true);
     setWhatsappOpen(false);
     setGuideOpen(false);
   };
 
   const openWhatsApp = () => {
+    setHubOpen(false);
     setWhatsappOpen(true);
     setRequestOpen(false);
     setGuideOpen(false);
   };
 
   const openCurrentGuide = () => {
+    setHubOpen(false);
     setGuideOpen(true);
     setRequestOpen(false);
     setWhatsappOpen(false);
   };
 
   const closeSupport = () => {
+    setHubOpen(false);
     setRequestOpen(false);
     setWhatsappOpen(false);
     setGuideOpen(false);
   };
 
-  let currentAppId = appId;
-  if (location.pathname.startsWith('/musicscale')) currentAppId = 'musicscale';
-  else if (location.pathname.startsWith('/finance')) currentAppId = 'nestfinance';
+  let currentAppId = resolveSupportAppId(location.pathname);
 
   const currentGuide = resolveSupportGuide({
     pathname: location.pathname,
@@ -83,7 +101,7 @@ export function SupportHubProvider({ children, organizationId, organizationName,
 
   return (
     <SupportHubContext.Provider value={{ 
-      openHub, openRequest, openWhatsApp, openCurrentGuide, closeSupport,
+      openHub, closeHub, toggleHub, openRequest, openWhatsApp, openCurrentGuide, closeSupport,
       requestOpen, whatsappOpen, guideOpen, hubOpen,
       organizationId, organizationName, appId: currentAppId
     }}>

@@ -10,66 +10,62 @@ export interface SupportGuideDefinition {
 const registry: SupportGuideDefinition[] = [
   {
     id: 'musicscale_resources',
-    titleKey: 'dashboard.support.guides.musicscale_resources.title',
-    introKey: 'dashboard.support.guides.musicscale_resources.intro',
+    titleKey: 'support.guides.musicscale_resources.title',
+    introKey: 'support.guides.musicscale_resources.intro',
     sectionKeys: [
-      'dashboard.support.guides.musicscale_resources.sections.repertoire',
-      'dashboard.support.guides.musicscale_resources.sections.library',
-      'dashboard.support.guides.musicscale_resources.sections.chords',
-      'dashboard.support.guides.musicscale_resources.sections.members',
-      'dashboard.support.guides.musicscale_resources.sections.scales'
+      'support.guides.musicscale_resources.sections.repertoire',
+      'support.guides.musicscale_resources.sections.library',
+      'support.guides.musicscale_resources.sections.chords',
+      'support.guides.musicscale_resources.sections.members',
+      'support.guides.musicscale_resources.sections.scales'
     ],
-    tipKey: 'dashboard.support.guides.musicscale_resources.tip',
-    matches: ({ pathname, appId }) => {
-      // Must be precisely MusicScale resources view or the nested routes.
-      // Easiest is to check if it's the resources tab.
-      if (appId !== 'musicscale') return false;
-      return pathname.includes('/musicscale/resources');
+    tipKey: 'support.guides.musicscale_resources.tip',
+    matches: ({ pathname, searchParams }) => {
+      return pathname === '/dashboard/apps/musicscale' && searchParams.get('section') === 'resources';
     }
   },
   {
     id: 'musicscale_getting_started',
-    titleKey: 'dashboard.support.guides.musicscale_getting_started.title',
-    introKey: 'dashboard.support.guides.musicscale_getting_started.intro',
+    titleKey: 'support.guides.musicscale_getting_started.title',
+    introKey: 'support.guides.musicscale_getting_started.intro',
     sectionKeys: [
-      'dashboard.support.guides.musicscale_getting_started.sections.org',
-      'dashboard.support.guides.musicscale_getting_started.sections.team',
-      'dashboard.support.guides.musicscale_getting_started.sections.songs',
-      'dashboard.support.guides.musicscale_getting_started.sections.chords',
-      'dashboard.support.guides.musicscale_getting_started.sections.members',
-      'dashboard.support.guides.musicscale_getting_started.sections.scales'
+      'support.guides.musicscale_getting_started.sections.org',
+      'support.guides.musicscale_getting_started.sections.team',
+      'support.guides.musicscale_getting_started.sections.songs',
+      'support.guides.musicscale_getting_started.sections.chords',
+      'support.guides.musicscale_getting_started.sections.members',
+      'support.guides.musicscale_getting_started.sections.scales'
     ],
-    tipKey: 'dashboard.support.guides.musicscale_getting_started.tip',
-    matches: ({ pathname, appId }) => {
-      if (appId !== 'musicscale') return false;
-      return pathname.includes('/musicscale') && !pathname.includes('/musicscale/resources');
+    tipKey: 'support.guides.musicscale_getting_started.tip',
+    matches: ({ pathname, searchParams }) => {
+      return pathname === '/dashboard/apps/musicscale' && searchParams.get('section') === 'getting-started';
     }
   },
   {
     id: 'team_invitations',
-    titleKey: 'dashboard.support.guides.team.title',
-    introKey: 'dashboard.support.guides.team.intro',
+    titleKey: 'support.guides.team.title',
+    introKey: 'support.guides.team.intro',
     sectionKeys: [
-      'dashboard.support.guides.team.sections.active',
-      'dashboard.support.guides.team.sections.pending',
-      'dashboard.support.guides.team.sections.new',
-      'dashboard.support.guides.team.sections.seats',
-      'dashboard.support.guides.team.sections.roles'
+      'support.guides.team.sections.active',
+      'support.guides.team.sections.pending',
+      'support.guides.team.sections.new',
+      'support.guides.team.sections.seats',
+      'support.guides.team.sections.roles'
     ],
-    matches: ({ pathname }) => pathname.includes('/settings/team')
+    matches: ({ pathname }) => pathname === '/dashboard/organization/members'
   },
   {
     id: 'billing_subscription',
-    titleKey: 'dashboard.support.guides.billing.title',
-    introKey: 'dashboard.support.guides.billing.intro',
+    titleKey: 'support.guides.billing.title',
+    introKey: 'support.guides.billing.intro',
     sectionKeys: [
-      'dashboard.support.guides.billing.sections.plan',
-      'dashboard.support.guides.billing.sections.seats',
-      'dashboard.support.guides.billing.sections.status',
-      'dashboard.support.guides.billing.sections.payments',
-      'dashboard.support.guides.billing.sections.features'
+      'support.guides.billing.sections.plan',
+      'support.guides.billing.sections.seats',
+      'support.guides.billing.sections.status',
+      'support.guides.billing.sections.payments',
+      'support.guides.billing.sections.features'
     ],
-    matches: ({ pathname }) => pathname.includes('/settings/billing')
+    matches: ({ pathname }) => pathname === '/dashboard/billing'
   }
 ];
 
@@ -80,7 +76,7 @@ export function resolveSupportGuide(params: {
 }): SupportGuideDefinition | null {
   
   // Dashboard home should have NO guide
-  if (params.pathname === '/dashboard' || params.pathname === '/dashboard/') {
+  if (params.pathname === '/dashboard' || params.pathname === '/dashboard/' || params.pathname === '/dashboard/overview') {
      return null;
   }
 

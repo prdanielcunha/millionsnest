@@ -450,6 +450,12 @@ export default {
         accessibility: {
           close_dialog: "Fechar guia"
         },
+        central_action: {
+          title: "Ajuda e suporte",
+          description: "Envie uma solicitação, fale pelo WhatsApp ou consulte guias rápidos.",
+          open: "Abrir Central de Ajuda",
+          aria: "Abrir a Central de Ajuda e suporte"
+        },
         request: {
           title: "Enviar uma solicitação",
           description: "Conte o que aconteceu e receba um protocolo."

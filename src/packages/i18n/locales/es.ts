@@ -443,6 +443,12 @@ export default {
         accessibility: {
           close_dialog: "Cerrar guía"
         },
+        central_action: {
+          title: "Ayuda y soporte",
+          description: "Envía una solicitud, habla por WhatsApp o consulta guías rápidas.",
+          open: "Abrir Centro de Ayuda",
+          aria: "Abrir el Centro de Ayuda y soporte"
+        },
         request: {
           title: "Enviar una solicitud",
           description: "Cuéntanos qué pasó y recibe un protocolo."

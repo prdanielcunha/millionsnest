@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import { 
-  Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info
-, AlertCircle } from 'lucide-react';
+  Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
+  AlertCircle, CircleHelp
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSupportHub } from '../support/SupportHubContext.js';
 
@@ -56,7 +57,7 @@ export function EcosystemWorkspaceHome({
   onSelectMusicScaleSection
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
-  const { openRequest } = useSupportHub();
+  const { openHub, openRequest } = useSupportHub();
 
   // Selector UI
   const renderWorkspaceSelector = () => {
@@ -248,6 +249,28 @@ export function EcosystemWorkspaceHome({
             </div>
           </div>
         )}
+
+        <div className="mt-8">
+          <h3 className="text-lg font-bold text-white mb-4">{t('support.hub.central_action.title', 'Ajuda e suporte')}</h3>
+          <button
+            type="button"
+            onClick={openHub}
+            aria-label={t('support.hub.central_action.aria', 'Abrir a Central de Ajuda e suporte')}
+            className="w-full md:max-w-[480px] min-h-[44px] flex items-center gap-4 bg-[#050505] border border-white/10 hover:border-[#2B85EB]/50 rounded-2xl p-4 text-left transition-colors group focus:outline-none focus:ring-2 focus:ring-[#2B85EB]"
+          >
+            <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center shrink-0 group-hover:bg-[#2B85EB]/20 transition-colors">
+              <CircleHelp className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <h4 className="text-sm font-bold text-white group-hover:text-[#2B85EB] transition-colors">{t('support.hub.central_action.title', 'Ajuda e suporte')}</h4>
+              <p className="text-xs text-[#A0A7B5] mt-0.5 leading-snug">{t('support.hub.central_action.description', 'Envie uma solicitação, fale pelo WhatsApp ou consulte guias rápidos.')}</p>
+            </div>
+            <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/5 text-white/50 group-hover:bg-[#2B85EB] group-hover:text-white transition-colors">
+              <ArrowRight className="w-4 h-4" />
+            </div>
+          </button>
+        </div>
+
       </div>
     );
   };

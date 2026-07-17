@@ -33,6 +33,7 @@ import { UnifiedTimeline } from "../components/UnifiedTimeline.js";
 import { ECOSYSTEM_APPS, EcosystemApp } from "../lib/apps.js";
 import { ecosystemPlatform } from "../sdk/ecosystem.js";
 import { SupportHubProvider } from "../components/support/SupportHubContext.js";
+import { SupportHub } from "../components/support/SupportHub.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -2876,6 +2877,7 @@ export function Dashboard() {
       </AnimatePresence>
 
     </EcosystemShell>
+    <SupportHub />
     </SupportHubProvider>
   );
 }

@@ -434,6 +434,12 @@ export default {
         accessibility: {
           close_dialog: "Close guide"
         },
+        central_action: {
+          title: "Help and support",
+          description: "Send a request, talk via WhatsApp, or check quick guides.",
+          open: "Open Help Center",
+          aria: "Open the Help and Support Center"
+        },
         request: {
           title: "Send a request",
           description: "Tell us what happened and receive a protocol."
