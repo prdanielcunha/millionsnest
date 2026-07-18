@@ -4,6 +4,7 @@ import { createInvitation } from "./src/server/services/InvitationCreationServic
 import { createSupportTicket } from './src/server/services/SupportTicketService.js';
 import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
 import { createSupportWhatsAppLink } from './src/server/services/SupportWhatsAppService.js';
+import { createPublicSalesWhatsAppLink } from './src/server/services/PublicSalesWhatsAppService.js';
 
 import Stripe from 'stripe';
 import cors from 'cors';
@@ -609,6 +610,7 @@ async function startServer() {
   app.post('/api/v1/support/tickets', express.json({ limit: '32kb' }), createSupportTicket);
   app.get('/api/v1/support/capabilities', getSupportCapabilities);
   app.post('/api/v1/support/whatsapp-link', express.json({ limit: '8kb' }), createSupportWhatsAppLink);
+  app.post('/api/v1/public/sales/whatsapp-link', express.json({ limit: '8kb' }), createPublicSalesWhatsAppLink);
   app.post('/api/v1/onboarding/bootstrap', express.json(), bootstrapUserContext);
   app.post('/api/v1/invitations', express.json(), createInvitation);
   app.post('/api/v1/invitations/accept', express.json(), acceptInvitation);

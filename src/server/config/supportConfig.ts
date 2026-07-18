@@ -1,3 +1,5 @@
+const DEFAULT_WHATSAPP_NUMBER = '5543999907071';
+
 export function getSupportConfig() {
   const envProvider = process.env.SUPPORT_EMAIL_PROVIDER;
   const rawEmailTo = process.env.SUPPORT_EMAIL_TO;
@@ -18,17 +20,20 @@ export function getSupportConfig() {
   }
 
   // WhatsApp Configuration
-  const rawNumber = process.env.SUPPORT_WHATSAPP_NUMBER || '5543999907071';
-  let whatsappNumber: string | null = null;
-  let isWhatsAppConfigured = false;
-
-  if (rawNumber) {
-    const normalized = rawNumber.replace(/[\s\-\(\)\+]/g, '');
-    if (/^\d{10,15}$/.test(normalized) && !normalized.startsWith('00') && !rawNumber.includes('http')) {
-      whatsappNumber = normalized;
-      isWhatsAppConfigured = true;
+  const normalizeNumber = (raw: string | undefined | null) => {
+    if (!raw) return null;
+    const normalized = raw.replace(/[\s\-\(\)\+]/g, '');
+    if (/^\d{10,15}$/.test(normalized) && !normalized.startsWith('00') && !raw.includes('http')) {
+      return normalized;
     }
-  }
+    return null;
+  };
+
+  const rawSupportNumber = process.env.SUPPORT_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER;
+  const rawSalesNumber = process.env.SALES_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER;
+
+  const whatsappNumber = normalizeNumber(rawSupportNumber);
+  const salesWhatsappNumber = normalizeNumber(rawSalesNumber);
 
   return {
     provider,
@@ -36,6 +41,8 @@ export function getSupportConfig() {
     fromEmail,
     resendApiKey,
     whatsappNumber,
-    isWhatsAppConfigured
+    isWhatsAppConfigured: !!whatsappNumber,
+    salesWhatsappNumber,
+    isSalesWhatsAppConfigured: !!salesWhatsappNumber
   };
 }

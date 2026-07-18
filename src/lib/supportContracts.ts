@@ -77,3 +77,26 @@ export const SUPPORT_CATEGORIES: SupportCategory[] = [
   'bug',
   'other'
 ];
+
+export type PublicSalesContactIntent =
+  | 'pricing'
+  | 'pre_sales_question'
+  | 'partnership'
+  | 'general';
+
+export interface PublicSalesWhatsAppRequest {
+  intent: PublicSalesContactIntent;
+  locale: 'pt' | 'en' | 'es';
+  message?: string;
+  pagePath?: string;
+}
+
+export interface PublicSalesWhatsAppSuccessResponse {
+  success: true;
+  url: string;
+}
+
+export interface PublicSalesWhatsAppFailureResponse {
+  success: false;
+  reasonCode: string; // INVALID_INTENT, INVALID_LOCALE, INVALID_MESSAGE, INVALID_PAGE_PATH, SALES_WHATSAPP_NOT_CONFIGURED, INTERNAL_ERROR
+}

@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle, X, Send, User, ChevronRight, DollarSign, Wrench, Handshake } from "lucide-react";
+import { MessageCircle, X, Send, User, ChevronRight, DollarSign, Wrench, Handshake, HelpCircle, Loader2 } from "lucide-react";
 import { useTranslation } from 'react-i18next';
+import { createPublicSalesWhatsAppLink } from '../services/publicContactClient.js';
+import { useLocation } from 'react-router-dom';
 
 export function SalesChat() {
-  const { t } = useTranslation(['landing']);
+  const { t, i18n } = useTranslation(['landing']);
+  const location = useLocation();
   
   const commonQuestions = [
     {
@@ -23,10 +26,10 @@ export function SalesChat() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<'intent' | 'faq' | 'input'>('intent');
-  const [selectedIntent, setSelectedIntent] = useState<'pricing' | 'support' | 'partnership' | null>(null);
+  const [selectedIntent, setSelectedIntent] = useState<'pricing' | 'pre_sales_question' | 'partnership' | null>(null);
   const [selectedFaq, setSelectedFaq] = useState<typeof commonQuestions[0] | null>(null);
   const [userQuestion, setUserQuestion] = useState("");
-  const whatsappNumber = "5543999907071";
+  const [isContacting, setIsContacting] = useState(false);
   
   const chatRef = useRef<HTMLDivElement>(null);
 
@@ -41,28 +44,39 @@ export function SalesChat() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleSendToWhatsapp = () => {
-    let prefix = "";
-    if (selectedIntent === 'pricing') prefix = "[Planos e Preços] ";
-    else if (selectedIntent === 'support') prefix = "[Suporte Técnico] ";
-    else if (selectedIntent === 'partnership') prefix = "[Parcerias Comerciais] ";
+  const handleSendToWhatsapp = async () => {
+    if (isContacting || !selectedIntent) return;
 
-    let baseText = "";
-    if (userQuestion) {
-      baseText = `${prefix}${userQuestion}`;
-    } else if (selectedFaq) {
-      baseText = `${prefix}Minha dúvida: ${selectedFaq.q}`;
-    } else {
-      const intentName = selectedIntent === 'pricing' ? 'Planos e Preços' : selectedIntent === 'support' ? 'Suporte Técnico' : 'Parcerias Comerciais';
-      baseText = `Olá! Gostaria de falar sobre ${intentName}.`;
+    let finalMessage = userQuestion;
+    if (!userQuestion && selectedFaq) {
+      finalMessage = `Minha dúvida: ${selectedFaq.q}`;
     }
 
-    const encoded = encodeURIComponent(baseText);
-    window.open(`https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${encoded}`, '_blank');
-    setIsOpen(false);
+    const popup = window.open('about:blank', '_blank');
+    if (!popup) {
+      alert(t('public_contact_error', 'Ocorreu um erro. Verifique se o bloqueador de popups está ativo.'));
+      return;
+    }
+
+    try {
+      setIsContacting(true);
+      const url = await createPublicSalesWhatsAppLink({
+        intent: selectedIntent,
+        locale: i18n.language as 'pt' | 'en' | 'es',
+        message: finalMessage || undefined,
+        pagePath: location.pathname
+      });
+      popup.location.href = url;
+      setIsOpen(false);
+    } catch (error) {
+      popup.close();
+      alert(t('public_contact_error', 'Ocorreu um erro ao gerar o link. Tente novamente mais tarde.'));
+    } finally {
+      setIsContacting(false);
+    }
   };
 
-  const handleIntentSelect = (intent: 'pricing' | 'support' | 'partnership') => {
+  const handleIntentSelect = (intent: 'pricing' | 'pre_sales_question' | 'partnership') => {
     setSelectedIntent(intent);
     if (intent === 'pricing') {
       setStep('faq');
@@ -145,14 +159,14 @@ export function SalesChat() {
                     </button>
 
                     <button
-                      onClick={() => handleIntentSelect('support')}
+                      onClick={() => handleIntentSelect('pre_sales_question')}
                       className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-[#2B85EB]/30 transition-all flex items-center justify-between group"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <Wrench className="w-4.5 h-4.5 text-[#2B85EB]" />
+                          <HelpCircle className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">{t('chat_opt_support', 'Dúvidas e Suporte')}</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">{t('pre_sales_question', 'Dúvidas antes de assinar')}</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
@@ -235,7 +249,7 @@ export function SalesChat() {
                     </button>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-[#A0A7B5]">
-                        {selectedIntent === 'support' ? t('chat_how_help_support', 'Como podemos te ajudar com suporte?') : selectedIntent === 'partnership' ? t('chat_how_help_partnership', 'Como podemos te ajudar com parcerias?') : t('chat_how_help_plans', 'Como podemos te ajudar com planos?')}
+                        {selectedIntent === 'pre_sales_question' ? t('pre_sales_prompt', 'Como podemos ajudar antes da contratação?') : selectedIntent === 'partnership' ? t('chat_how_help_partnership', 'Como podemos te ajudar com parcerias?') : t('chat_how_help_plans', 'Como podemos te ajudar com planos?')}
                       </label>
                       <textarea
                         autoFocus
@@ -247,9 +261,10 @@ export function SalesChat() {
                     </div>
                     <button
                       onClick={handleSendToWhatsapp}
-                      className="w-full py-4 bg-[#2B85EB] text-white text-sm font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-[#1a5fb4] transition-colors"
+                      disabled={isContacting}
+                      className="w-full py-4 bg-[#2B85EB] text-white text-sm font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-[#1a5fb4] transition-colors disabled:opacity-50"
                     >
-                      <Send className="w-4 h-4" />
+                      {isContacting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                       {t('chat_button')}
                     </button>
                   </motion.div>

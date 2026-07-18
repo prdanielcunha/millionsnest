@@ -1,11 +1,42 @@
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MillionsNestLogo } from './MillionsNestLogo.js';
 import { getAvailableApps } from '../lib/apps.js';
+import { createPublicSalesWhatsAppLink } from '../services/publicContactClient.js';
+import { Loader2 } from 'lucide-react';
 
 export function Footer() {
-  const { t } = useTranslation(['landing', 'common']);
+  const { t, i18n } = useTranslation(['landing', 'common']);
   const apps = getAvailableApps([]);
+  const [isContacting, setIsContacting] = useState(false);
+  const location = useLocation();
+
+  const handleContact = async () => {
+    if (isContacting) return;
+    
+    // Open a blank window synchronously to avoid popup blockers
+    const popup = window.open('about:blank', '_blank');
+    if (!popup) {
+      alert(t('public_contact_error'));
+      return;
+    }
+
+    try {
+      setIsContacting(true);
+      const url = await createPublicSalesWhatsAppLink({
+        intent: 'general',
+        locale: i18n.language as 'pt' | 'en' | 'es',
+        pagePath: location.pathname
+      });
+      popup.location.href = url;
+    } catch (error) {
+      popup.close();
+      alert(t('public_contact_error'));
+    } finally {
+      setIsContacting(false);
+    }
+  };
 
   return (
     <footer className="bg-[#050505] border-t border-white/5 pt-16 pb-8">
@@ -52,7 +83,18 @@ export function Footer() {
               <li><Link to="/politica-de-privacidade" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">{t('footer_privacy')}</Link></li>
               <li><Link to="/politicas-de-cancelamento" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">{t('footer_cancel')}</Link></li>
               <li><Link to="/politicas-de-reembolso" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">{t('footer_refund')}</Link></li>
-              <li><a href="https://api.whatsapp.com/send?phone=5543999907071" target="_blank" rel="noopener noreferrer" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">{t('footer_contact')}</a></li>
+              <li>
+                <button 
+                  type="button"
+                  onClick={handleContact}
+                  disabled={isContacting}
+                  aria-label={t('footer_contact_aria')}
+                  className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-white/20 rounded disabled:opacity-50"
+                >
+                  {isContacting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {t('footer_contact')}
+                </button>
+              </li>
             </ul>
           </div>
         </div>

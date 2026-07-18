@@ -145,10 +145,10 @@ assertCondition("9. Login restricts redirect through canonical policy",
   !login.includes("startsWith('/join')")
 );
 
-// 10. Nenhum arquivo patch_*.py existe na raiz
+// 10. Nenhum arquivo de script residual existe na raiz
 const files = fs.readdirSync(rootDir);
-const tempFiles = files.filter(f => (f.startsWith('patch_') || f.startsWith('fix_') || f.startsWith('temp_') || f.startsWith('update_')) && f.endsWith('.py'));
-assertCondition("10. No temp python files in root", tempFiles.length === 0);
+const tempFiles = files.filter(f => (f.startsWith('patch_') || f.startsWith('fix_') || f.startsWith('temp_') || f.startsWith('update_')) && (f.endsWith('.py') || f.endsWith('.js') || f.endsWith('.ts') || f.endsWith('.cjs') || f.endsWith('.mjs')));
+assertCondition("10. No residual script files in root", tempFiles.length === 0);
 
 // 11. test_results.txt não existe
 assertCondition("11. test_results.txt does not exist", !files.includes('test_results.txt'));
