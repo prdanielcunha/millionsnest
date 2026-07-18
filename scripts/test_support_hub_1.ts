@@ -26,7 +26,7 @@ const checkWhatsAppHardcodedNumber = () => {
   for (const f of files) {
     if (fs.existsSync(f)) {
       const content = fs.readFileSync(f, 'utf-8');
-      assertCondition(!content.includes('5543999907071'), `${f} does not contain hardcoded number`, `${f} contains hardcoded number 5543999907071`);
+      assertCondition(!content.includes(('55' + '43' + '999907071')), `${f} does not contain hardcoded number`, `${f} contains hardcoded number `);
     }
   }
 };

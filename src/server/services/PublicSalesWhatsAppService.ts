@@ -21,23 +21,27 @@ const MESSAGES = {
     pricing: 'Olá! Gostaria de saber mais sobre os planos do MillionsNest.',
     pre_sales_question: 'Olá! Tenho uma dúvida antes de contratar o MillionsNest.',
     partnership: 'Olá! Gostaria de conversar sobre uma parceria com o MillionsNest.',
-    general: 'Olá! Gostaria de falar com a equipe comercial do MillionsNest.'
+    general: 'Olá! Gostaria de falar com a equipe comercial do MillionsNest.',
+    source: 'Origem:'
   },
   en: {
     pricing: 'Hello! I would like to know more about MillionsNest plans.',
     pre_sales_question: 'Hello! I have a question before subscribing to MillionsNest.',
     partnership: 'Hello! I would like to discuss a partnership with MillionsNest.',
-    general: 'Hello! I would like to speak with the MillionsNest sales team.'
+    general: 'Hello! I would like to speak with the MillionsNest sales team.',
+    source: 'Source:'
   },
   es: {
     pricing: '¡Hola! Me gustaría saber más sobre los planes de MillionsNest.',
     pre_sales_question: '¡Hola! Tengo una duda antes de suscribirme a MillionsNest.',
     partnership: '¡Hola! Me gustaría hablar sobre una asociación con MillionsNest.',
-    general: '¡Hola! Me gustaría hablar con el equipo comercial de MillionsNest.'
+    general: '¡Hola! Me gustaría hablar con el equipo comercial de MillionsNest.',
+    source: 'Origen:'
   }
 };
 
 export const createPublicSalesWhatsAppLink = async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
   try {
     const config = getSupportConfig();
     
@@ -50,9 +54,9 @@ export const createPublicSalesWhatsAppLink = async (req: Request, res: Response)
       return;
     }
 
-    const payload = req.body as Partial<PublicSalesWhatsAppRequest>;
+    const payload = req.body;
 
-    if (!payload.intent || !VALID_INTENTS.includes(payload.intent as PublicSalesContactIntent)) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       const response: PublicSalesWhatsAppFailureResponse = {
         success: false,
         reasonCode: 'INVALID_INTENT'
@@ -61,7 +65,16 @@ export const createPublicSalesWhatsAppLink = async (req: Request, res: Response)
       return;
     }
 
-    if (!payload.locale || !VALID_LOCALES.includes(payload.locale)) {
+    if (typeof payload.intent !== 'string' || !VALID_INTENTS.includes(payload.intent as PublicSalesContactIntent)) {
+      const response: PublicSalesWhatsAppFailureResponse = {
+        success: false,
+        reasonCode: 'INVALID_INTENT'
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    if (typeof payload.locale !== 'string' || !VALID_LOCALES.includes(payload.locale)) {
       const response: PublicSalesWhatsAppFailureResponse = {
         success: false,
         reasonCode: 'INVALID_LOCALE'
@@ -73,11 +86,18 @@ export const createPublicSalesWhatsAppLink = async (req: Request, res: Response)
     let finalMessage = '';
     const localeMap = MESSAGES[payload.locale as keyof typeof MESSAGES];
     const prefix = localeMap[payload.intent as PublicSalesContactIntent];
+    const sourceLabel = localeMap.source;
     
     finalMessage += prefix;
 
-    if (payload.pagePath) {
-      if (typeof payload.pagePath !== 'string' || !payload.pagePath.startsWith('/') || payload.pagePath.startsWith('//') || payload.pagePath.length > 500 || payload.pagePath.includes('http')) {
+    if (payload.pagePath !== undefined) {
+      if (typeof payload.pagePath !== 'string') {
+        const response: PublicSalesWhatsAppFailureResponse = { success: false, reasonCode: 'INVALID_PAGE_PATH' };
+        res.status(400).json(response);
+        return;
+      }
+      const trimmedPath = payload.pagePath.trim();
+      if (!trimmedPath || !trimmedPath.startsWith('/') || trimmedPath.startsWith('//') || trimmedPath.length > 500 || trimmedPath.includes('http')) {
         const response: PublicSalesWhatsAppFailureResponse = {
           success: false,
           reasonCode: 'INVALID_PAGE_PATH'
@@ -85,10 +105,15 @@ export const createPublicSalesWhatsAppLink = async (req: Request, res: Response)
         res.status(400).json(response);
         return;
       }
-      finalMessage += `\n\nOrigem: ${payload.pagePath.split('#')[0]}`;
+      finalMessage += `\n\n${sourceLabel} ${trimmedPath.split('#')[0]}`;
     }
 
-    if (payload.message) {
+    if (payload.message !== undefined) {
+      if (typeof payload.message !== 'string') {
+        const response: PublicSalesWhatsAppFailureResponse = { success: false, reasonCode: 'INVALID_MESSAGE' };
+        res.status(400).json(response);
+        return;
+      }
       const userMessage = payload.message.trim().replace(/[\x00-\x1F\x7F]/g, '');
       if (userMessage.length === 0 || userMessage.length > 1000 || /javascript:/i.test(userMessage)) {
         const response: PublicSalesWhatsAppFailureResponse = {
@@ -103,7 +128,6 @@ export const createPublicSalesWhatsAppLink = async (req: Request, res: Response)
 
     const url = `https://wa.me/${config.salesWhatsappNumber}?text=${encodeURIComponent(finalMessage)}`;
 
-    res.set('Cache-Control', 'no-store');
     const response: PublicSalesWhatsAppSuccessResponse = {
       success: true,
       url

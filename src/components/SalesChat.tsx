@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, User, ChevronRight, DollarSign, Wrench, Handshake, HelpCircle, Loader2 } from "lucide-react";
 import { useTranslation } from 'react-i18next';
-import { createPublicSalesWhatsAppLink } from '../services/publicContactClient.js';
+import { createPublicSalesWhatsAppLink, resolvePublicContactLocale } from '../services/publicContactClient.js';
 import { useLocation } from 'react-router-dom';
 
 export function SalesChat() {
@@ -30,6 +30,7 @@ export function SalesChat() {
   const [selectedFaq, setSelectedFaq] = useState<typeof commonQuestions[0] | null>(null);
   const [userQuestion, setUserQuestion] = useState("");
   const [isContacting, setIsContacting] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
   
   const chatRef = useRef<HTMLDivElement>(null);
 
@@ -47,30 +48,42 @@ export function SalesChat() {
   const handleSendToWhatsapp = async () => {
     if (isContacting || !selectedIntent) return;
 
+    setContactError(null);
+
     let finalMessage = userQuestion;
     if (!userQuestion && selectedFaq) {
-      finalMessage = `Minha dúvida: ${selectedFaq.q}`;
+      finalMessage = selectedFaq.q;
     }
 
     const popup = window.open('about:blank', '_blank');
     if (!popup) {
-      alert(t('public_contact_error', 'Ocorreu um erro. Verifique se o bloqueador de popups está ativo.'));
+      setContactError(t('public_contact_error'));
       return;
+    }
+
+    try {
+      popup.opener = null;
+    } catch (e) {
+      // Ignored
     }
 
     try {
       setIsContacting(true);
       const url = await createPublicSalesWhatsAppLink({
         intent: selectedIntent,
-        locale: i18n.language as 'pt' | 'en' | 'es',
+        locale: resolvePublicContactLocale(i18n.resolvedLanguage ?? i18n.language),
         message: finalMessage || undefined,
         pagePath: location.pathname
       });
-      popup.location.href = url;
-      setIsOpen(false);
+      if (url.startsWith('https://wa.me/')) {
+        popup.location.href = url;
+        setIsOpen(false);
+      } else {
+        throw new Error('Invalid URL');
+      }
     } catch (error) {
       popup.close();
-      alert(t('public_contact_error', 'Ocorreu um erro ao gerar o link. Tente novamente mais tarde.'));
+      setContactError(t('public_contact_error'));
     } finally {
       setIsContacting(false);
     }
@@ -78,6 +91,7 @@ export function SalesChat() {
 
   const handleIntentSelect = (intent: 'pricing' | 'pre_sales_question' | 'partnership') => {
     setSelectedIntent(intent);
+    setContactError(null);
     if (intent === 'pricing') {
       setStep('faq');
     } else {
@@ -120,10 +134,10 @@ export function SalesChat() {
                   <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-[#2B85EB] rounded-full" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg">{t('chat_consultant', 'Consultor MusicScale')}</h3>
+                  <h3 className="font-bold text-lg">{t('chat_consultant')}</h3>
                   <div className="flex items-center gap-1.5 text-xs text-white/80">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    {t('chat_online', 'Online')}
+                    {t('chat_online')}
                   </div>
                 </div>
               </div>
@@ -143,7 +157,7 @@ export function SalesChat() {
                     exit={{ opacity: 0, x: -10 }}
                     className="space-y-3"
                   >
-                    <p className="text-xs font-semibold text-[#A0A7B5] mb-4">{t('chat_choose', 'Escolha sobre o que deseja falar:')}</p>
+                    <p className="text-xs font-semibold text-[#A0A7B5] mb-4">{t('chat_choose')}</p>
                     
                     <button
                       onClick={() => handleIntentSelect('pricing')}
@@ -153,7 +167,7 @@ export function SalesChat() {
                         <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <DollarSign className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">{t('chat_opt_plans', 'Planos e Preços')}</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">{t('chat_opt_plans')}</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
@@ -166,7 +180,7 @@ export function SalesChat() {
                         <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <HelpCircle className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">{t('pre_sales_question', 'Dúvidas antes de assinar')}</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">{t('pre_sales_question')}</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
@@ -179,7 +193,7 @@ export function SalesChat() {
                         <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                           <Handshake className="w-4.5 h-4.5 text-[#2B85EB]" />
                         </div>
-                        <span className="text-sm font-medium text-[#F5F7FA]">{t('chat_opt_partnership', 'Parcerias e Comercial')}</span>
+                        <span className="text-sm font-medium text-[#F5F7FA]">{t('chat_opt_partnership')}</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:translate-x-1 transition-transform group-hover:text-[#F5F7FA]" />
                     </button>
@@ -195,10 +209,10 @@ export function SalesChat() {
                     className="space-y-3"
                   >
                     <button 
-                      onClick={() => { setStep('intent'); setSelectedIntent(null); setSelectedFaq(null); }}
+                      onClick={() => { setStep('intent'); setSelectedIntent(null); setSelectedFaq(null); setContactError(null); }}
                       className="text-xs text-[#2B85EB] font-semibold mb-2 hover:underline"
                     >
-                      {t('chat_back_options', '← Voltar às opções')}
+                      {t('chat_back_options')}
                     </button>
                     {commonQuestions.map((q, i) => (
                       <button
@@ -219,12 +233,12 @@ export function SalesChat() {
                       </button>
                     ))}
                     <div className="mt-4 pt-4 border-t border-white/10">
-                      <p className="text-xs font-medium text-[#A0A7B5] text-center mb-3">{t('chat_no_faq_found', 'Não encontrou o que procurava?')}</p>
+                      <p className="text-xs font-medium text-[#A0A7B5] text-center mb-3">{t('chat_no_faq_found')}</p>
                       <button
-                        onClick={() => setStep('input')}
+                        onClick={() => { setStep('input'); setContactError(null); }}
                         className="w-full py-3 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 text-[#2B85EB] border border-[#2B85EB]/30 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
                       >
-                        <MessageCircle className="w-3.5 h-3.5" /> {t('chat_talk_consultant', 'Falar com consultor')}
+                        <MessageCircle className="w-3.5 h-3.5" /> {t('chat_talk_consultant')}
                       </button>
                     </div>
                   </motion.div>
@@ -242,14 +256,15 @@ export function SalesChat() {
                       onClick={() => {
                         if (selectedIntent === 'pricing') setStep('faq');
                         else setStep('intent');
+                        setContactError(null);
                       }}
                       className="text-xs text-[#2B85EB] font-semibold hover:underline"
                     >
-                      ← {selectedIntent === 'pricing' ? t('chat_back_faq', 'Voltar ao FAQ') : t('chat_back_options', 'Voltar às opções')}
+                      ← {selectedIntent === 'pricing' ? t('chat_back_faq') : t('chat_back_options')}
                     </button>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-[#A0A7B5]">
-                        {selectedIntent === 'pre_sales_question' ? t('pre_sales_prompt', 'Como podemos ajudar antes da contratação?') : selectedIntent === 'partnership' ? t('chat_how_help_partnership', 'Como podemos te ajudar com parcerias?') : t('chat_how_help_plans', 'Como podemos te ajudar com planos?')}
+                        {selectedIntent === 'pre_sales_question' ? t('pre_sales_prompt') : selectedIntent === 'partnership' ? t('chat_how_help_partnership') : t('chat_how_help_plans')}
                       </label>
                       <textarea
                         autoFocus
@@ -259,13 +274,29 @@ export function SalesChat() {
                         className="w-full h-24 p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-[#F5F7FA] placeholder:text-[#A0A7B5]/40 focus:border-[#2B85EB]/50 focus:outline-none transition-all resize-none"
                       />
                     </div>
+
+                    {contactError && (
+                      <div role="alert" aria-live="assertive" className="text-xs text-red-400 text-center p-2 bg-red-400/10 rounded-lg">
+                        {contactError}
+                      </div>
+                    )}
+
                     <button
                       onClick={handleSendToWhatsapp}
                       disabled={isContacting}
                       className="w-full py-4 bg-[#2B85EB] text-white text-sm font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-[#1a5fb4] transition-colors disabled:opacity-50"
                     >
-                      {isContacting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      {t('chat_button')}
+                      {isContacting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          {t('public_contact_loading')}
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4" />
+                          {t('chat_button')}
+                        </>
+                      )}
                     </button>
                   </motion.div>
                 )}
@@ -275,7 +306,7 @@ export function SalesChat() {
             {/* Footer */}
             <div className="px-6 py-4 bg-[#050505] border-t border-white/5 flex items-center justify-center gap-2 text-[10px] text-[#A0A7B5] uppercase tracking-widest font-semibold">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              {t('chat_human_support', 'Atendimento Humanizado')}
+              {t('chat_human_support')}
             </div>
           </motion.div>
         )}

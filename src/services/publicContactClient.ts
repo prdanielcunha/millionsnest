@@ -1,5 +1,14 @@
 import { PublicSalesWhatsAppRequest, PublicSalesWhatsAppSuccessResponse } from '../lib/supportContracts.js';
 
+export function resolvePublicContactLocale(language?: string | null): 'pt' | 'en' | 'es' {
+  if (!language) return 'pt';
+  const normalized = language.replace(/_/g, '-').toLowerCase();
+  if (normalized.startsWith('pt')) return 'pt';
+  if (normalized.startsWith('en')) return 'en';
+  if (normalized.startsWith('es')) return 'es';
+  return 'pt';
+}
+
 export async function createPublicSalesWhatsAppLink(
   request: PublicSalesWhatsAppRequest,
   signal?: AbortSignal
