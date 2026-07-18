@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, User, ChevronRight, DollarSign, Wrench, Handshake, HelpCircle, Loader2 } from "lucide-react";
 import { useTranslation } from 'react-i18next';
@@ -32,33 +32,49 @@ export function SalesChat() {
   const [isContacting, setIsContacting] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
   
-  const chatRef = useRef<HTMLDivElement>(null);
+  const chatRootRef = useRef<HTMLDivElement>(null);
+  const contactAbortRef = useRef<AbortController | null>(null);
 
-  const closeChat = () => {
-    setIsOpen(false);
+  const closeChat = useCallback(() => {
+    contactAbortRef.current?.abort();
+    contactAbortRef.current = null;
+    setIsContacting(false);
     setContactError(null);
-  };
+    setIsOpen(false);
+  }, []);
 
-  const toggleChat = () => {
+  const toggleChat = useCallback(() => {
     if (isOpen) {
       closeChat();
       return;
     }
 
     setContactError(null);
+    contactAbortRef.current?.abort();
+    contactAbortRef.current = null;
     setIsOpen(true);
-  };
+  }, [isOpen, closeChat]);
 
   // Close when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (chatRef.current && !chatRef.current.contains(event.target as Node)) {
+      if (
+        chatRootRef.current &&
+        !chatRootRef.current.contains(event.target as Node)
+      ) {
         closeChat();
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
+  }, [closeChat]);
+
+  useEffect(() => {
+    return () => {
+      contactAbortRef.current?.abort();
+      contactAbortRef.current = null;
+    };
+  }, []);
 
   const handleSendToWhatsapp = async () => {
     if (isContacting || !selectedIntent) return;
@@ -69,6 +85,10 @@ export function SalesChat() {
     if (!userQuestion && selectedFaq) {
       finalMessage = selectedFaq.q;
     }
+
+    contactAbortRef.current?.abort();
+    const controller = new AbortController();
+    contactAbortRef.current = controller;
 
     const popup = window.open('about:blank', '_blank');
     if (!popup) {
@@ -89,7 +109,16 @@ export function SalesChat() {
         locale: resolvePublicContactLocale(i18n.resolvedLanguage ?? i18n.language),
         message: finalMessage || undefined,
         pagePath: location.pathname
-      });
+      }, controller.signal);
+
+      if (
+        controller.signal.aborted ||
+        contactAbortRef.current !== controller
+      ) {
+        popup.close();
+        return;
+      }
+
       if (url.startsWith('https://wa.me/')) {
         popup.location.href = url;
         closeChat();
@@ -97,10 +126,17 @@ export function SalesChat() {
         throw new Error('Invalid URL');
       }
     } catch (error) {
+      if (controller.signal.aborted) {
+        popup.close();
+        return;
+      }
       popup.close();
       setContactError(t('public_contact_error'));
     } finally {
-      setIsContacting(false);
+      if (contactAbortRef.current === controller) {
+        contactAbortRef.current = null;
+        setIsContacting(false);
+      }
     }
   };
 
@@ -115,7 +151,7 @@ export function SalesChat() {
   };
 
   return (
-    <>
+    <div ref={chatRootRef}>
       {/* Floating Button */}
       <motion.button
         onClick={toggleChat}
@@ -133,7 +169,6 @@ export function SalesChat() {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            ref={chatRef}
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -326,6 +361,6 @@ export function SalesChat() {
           </motion.div>
         )}
       </AnimatePresence>
-    </>
+    </div>
   );
 }

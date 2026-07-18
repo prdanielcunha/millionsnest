@@ -253,14 +253,31 @@ async function runTests() {
   assert(salesChatContent.includes("popup.opener = null"), "SalesChat disables window.opener");
   assert(!salesChatContent.includes("Minha dúvida:"), "SalesChat does not hardcode Minha dúvida prefix");
   assert(!salesChatContent.includes("'support'"), "SalesChat does not use support intent");
-  assert(salesChatContent.includes("const closeChat = () => {"), "SalesChat has closeChat function");
+  assert(salesChatContent.includes("closeChat = useCallback(() => {"), "SalesChat has closeChat function");
   assert(salesChatContent.includes("setContactError(null)"), "SalesChat closeChat clears contactError");
   assert(salesChatContent.includes("closeChat()") && salesChatContent.includes("handleClickOutside"), "Click outside calls closeChat");
-  assert(salesChatContent.includes("const toggleChat = () => {") && salesChatContent.includes("onClick={toggleChat}"), "Main button calls toggleChat");
+  assert(salesChatContent.includes("toggleChat = useCallback(() => {") && salesChatContent.includes("onClick={toggleChat}"), "Main button calls toggleChat");
   assert(salesChatContent.includes("closeChat()") && salesChatContent.includes("url.startsWith('https://wa.me/')"), "Success calls closeChat");
   
   const setIsOpenMatches = salesChatContent.match(/setIsOpen\(false\)/g) || [];
   assert(setIsOpenMatches.length === 1, "No isolated setIsOpen(false) outside closeChat");
+
+  assert(salesChatContent.includes("const chatRootRef = useRef<HTMLDivElement>(null)"), "SalesChat possui chatRootRef.");
+  assert(salesChatContent.includes("<div ref={chatRootRef}>"), "O root envolve botão e painel.");
+  assert(salesChatContent.includes("chatRootRef.current.contains"), "Clique externo verifica chatRootRef.");
+  assert(!salesChatContent.includes("!chatRef.current.contains"), "Clique externo não utiliza somente chatRef.");
+  assert(salesChatContent.includes("contactAbortRef = useRef<AbortController | null>(null)"), "Existe contactAbortRef.");
+  assert(salesChatContent.includes("contactAbortRef.current?.abort()"), "Uma nova solicitação aborta a anterior.");
+  assert(salesChatContent.includes("}, controller.signal)"), "createPublicSalesWhatsAppLink recebe controller.signal.");
+  assert(salesChatContent.includes("closeChat = useCallback(() => {") && salesChatContent.includes("contactAbortRef.current?.abort()"), "closeChat aborta a solicitação.");
+  assert(salesChatContent.includes("closeChat = useCallback(() => {") && salesChatContent.includes("contactAbortRef.current = null"), "closeChat limpa contactAbortRef.");
+  assert(salesChatContent.includes("closeChat = useCallback(() => {") && salesChatContent.includes("setIsContacting(false)"), "closeChat define isContacting como false.");
+  assert(salesChatContent.includes("controller.signal.aborted"), "Resposta verifica controller.signal.aborted.");
+  assert(salesChatContent.includes("contactAbortRef.current !== controller"), "Resposta verifica identidade do controller.");
+  assert(salesChatContent.includes("catch (error") && salesChatContent.includes("if (controller.signal.aborted) {") && salesChatContent.includes("return;"), "Abort não exibe mensagem de erro.");
+  assert(salesChatContent.includes("finally {") && salesChatContent.includes("if (contactAbortRef.current === controller) {"), "finally verifica o controller atual.");
+  assert(salesChatContent.includes("return () => {") && salesChatContent.includes("contactAbortRef.current?.abort()"), "Existe cleanup de unmount.");
+  assert(salesChatContent.includes("<div ref={chatRootRef}>") && salesChatContent.indexOf("<div ref={chatRootRef}>") < salesChatContent.indexOf("onClick={toggleChat}"), "O próprio gatilho pertence ao root de clique interno.");
 
   // 5. I18N
   const locales = ['pt', 'en', 'es'];
