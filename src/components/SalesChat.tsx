@@ -34,16 +34,31 @@ export function SalesChat() {
   
   const chatRef = useRef<HTMLDivElement>(null);
 
+  const closeChat = () => {
+    setIsOpen(false);
+    setContactError(null);
+  };
+
+  const toggleChat = () => {
+    if (isOpen) {
+      closeChat();
+      return;
+    }
+
+    setContactError(null);
+    setIsOpen(true);
+  };
+
   // Close when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (chatRef.current && !chatRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+        closeChat();
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
   const handleSendToWhatsapp = async () => {
     if (isContacting || !selectedIntent) return;
@@ -77,7 +92,7 @@ export function SalesChat() {
       });
       if (url.startsWith('https://wa.me/')) {
         popup.location.href = url;
-        setIsOpen(false);
+        closeChat();
       } else {
         throw new Error('Invalid URL');
       }
@@ -103,7 +118,7 @@ export function SalesChat() {
     <>
       {/* Floating Button */}
       <motion.button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleChat}
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         whileHover={{ scale: 1.1 }}

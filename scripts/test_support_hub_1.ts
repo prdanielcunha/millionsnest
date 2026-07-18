@@ -1,6 +1,10 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+
 console.log('Testing Support Hub and WhatsApp logic...\n');
 
 let pass = true;
@@ -15,6 +19,15 @@ const assertCondition = (condition: boolean, passMsg: string, failMsg: string) =
 };
 
 const checkWhatsAppHardcodedNumber = () => {
+  const configContent = fs.readFileSync('src/server/config/supportConfig.ts', 'utf-8');
+  const match = configContent.match(/const DEFAULT_WHATSAPP_NUMBER = ['"](\d+)['"]/);
+  if (!match) {
+    assertCondition(false, 'Extracted DEFAULT_WHATSAPP_NUMBER programmatically', 'Could not find DEFAULT_WHATSAPP_NUMBER in supportConfig.ts');
+    return;
+  }
+  const defaultNumber = match[1];
+  assertCondition(defaultNumber.length >= 10 && defaultNumber.length <= 15, 'Extracted DEFAULT_WHATSAPP_NUMBER programmatically', `Extracted number is invalid: ${defaultNumber}`);
+
   const files = [
     'src/components/support/SupportWhatsAppModal.tsx',
     'src/components/support/SupportHub.tsx',
@@ -26,9 +39,12 @@ const checkWhatsAppHardcodedNumber = () => {
   for (const f of files) {
     if (fs.existsSync(f)) {
       const content = fs.readFileSync(f, 'utf-8');
-      assertCondition(!content.includes(('55' + '43' + '999907071')), `${f} does not contain hardcoded number`, `${f} contains hardcoded number `);
+      assertCondition(!content.includes(defaultNumber), `${f} does not contain hardcoded number`, `${f} contains hardcoded number`);
     }
   }
+
+  const testContent = fs.readFileSync(__filename, 'utf-8');
+  assertCondition(!testContent.match(/\(['"]\d{2}['"] \+ ['"]\d{2}['"] \+ ['"]\d+['"]\)/), 'No string concatenation fragments of numbers in test', 'Found number fragments in test');
 };
 
 const checkCentralConfig = () => {

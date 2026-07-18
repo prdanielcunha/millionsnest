@@ -64,30 +64,26 @@ async function runTests() {
 
   // 2. Locale normalizer
   const clientContent = fs.readFileSync(path.join(rootDir, 'src', 'services', 'publicContactClient.ts'), 'utf8');
-  assert(clientContent.includes('function resolvePublicContactLocale'), "resolvePublicContactLocale exists");
+  assert(clientContent.includes('function resolvePublicContactLocale') || clientContent.includes('export const resolvePublicContactLocale'), "resolvePublicContactLocale exists");
   
-  const evalLocale = (lang: string | null | undefined) => {
-    if (!lang) return 'pt';
-    const normalized = lang.replace(/_/g, '-').toLowerCase();
-    if (normalized.startsWith('pt')) return 'pt';
-    if (normalized.startsWith('en')) return 'en';
-    if (normalized.startsWith('es')) return 'es';
-    return 'pt';
-  };
+  const testContent = fs.readFileSync(__filename, 'utf8');
+  assert(!testContent.includes("startsWith(" + "'pt'") && !testContent.includes("startsWith(" + '"pt"'), "Test does not duplicate startsWith logic");
+
+  const { resolvePublicContactLocale } = await import(path.join(rootDir, 'src', 'services', 'publicContactClient.ts'));
   
-  assert(evalLocale('pt') === 'pt', "pt resolves to pt");
-  assert(evalLocale('pt-BR') === 'pt', "pt-BR resolves to pt");
-  assert(evalLocale('pt_PT') === 'pt', "pt_PT resolves to pt");
-  assert(evalLocale('en') === 'en', "en resolves to en");
-  assert(evalLocale('en-US') === 'en', "en-US resolves to en");
-  assert(evalLocale('en_GB') === 'en', "en_GB resolves to en");
-  assert(evalLocale('es') === 'es', "es resolves to es");
-  assert(evalLocale('es-ES') === 'es', "es-ES resolves to es");
-  assert(evalLocale('es_MX') === 'es', "es_MX resolves to es");
-  assert(evalLocale('fr') === 'pt', "unknown resolves to pt");
-  assert(evalLocale('') === 'pt', "empty resolves to pt");
-  assert(evalLocale(null) === 'pt', "null resolves to pt");
-  assert(evalLocale(undefined) === 'pt', "undefined resolves to pt");
+  assert(resolvePublicContactLocale('pt') === 'pt', "pt resolves to pt");
+  assert(resolvePublicContactLocale('pt-BR') === 'pt', "pt-BR resolves to pt");
+  assert(resolvePublicContactLocale('pt_PT') === 'pt', "pt_PT resolves to pt");
+  assert(resolvePublicContactLocale('en') === 'en', "en resolves to en");
+  assert(resolvePublicContactLocale('en-US') === 'en', "en-US resolves to en");
+  assert(resolvePublicContactLocale('en_GB') === 'en', "en_GB resolves to en");
+  assert(resolvePublicContactLocale('es') === 'es', "es resolves to es");
+  assert(resolvePublicContactLocale('es-ES') === 'es', "es-ES resolves to es");
+  assert(resolvePublicContactLocale('es_MX') === 'es', "es_MX resolves to es");
+  assert(resolvePublicContactLocale('fr') === 'pt', "unknown resolves to pt");
+  assert(resolvePublicContactLocale('') === 'pt', "empty resolves to pt");
+  assert(resolvePublicContactLocale(null as any) === 'pt', "null resolves to pt");
+  assert(resolvePublicContactLocale(undefined as any) === 'pt', "undefined resolves to pt");
 
   // 3. Server service validations
   const serviceContent = fs.readFileSync(path.join(rootDir, 'src', 'server', 'services', 'PublicSalesWhatsAppService.ts'), 'utf8');
@@ -109,123 +105,137 @@ async function runTests() {
   const { createPublicSalesWhatsAppLink } = await import(path.join(rootDir, 'src', 'server', 'services', 'PublicSalesWhatsAppService.ts'));
   
   // Set fake env var to test 
-  process.env.SALES_WHATSAPP_NUMBER = '5511999999999';
-  
-  const mockReq = (body: any) => ({ body });
-  const mockRes = () => {
-    const res: any = {
-      headers: {},
-      statusCode: 0,
-      jsonData: null,
-      set: (key: string, val: string) => { res.headers[key] = val; return res; },
-      status: (code: number) => { res.statusCode = code; return res; },
-      json: (data: any) => { res.jsonData = data; return res; }
+  const prevSalesWhatsAppNumber = process.env.SALES_WHATSAPP_NUMBER;
+  const prevSupportWhatsAppNumber = process.env.SUPPORT_WHATSAPP_NUMBER;
+
+  try {
+    process.env.SALES_WHATSAPP_NUMBER = '5511999999999';
+    
+    const mockReq = (body: any) => ({ body });
+    const mockRes = () => {
+      const res: any = {
+        headers: {},
+        statusCode: 0,
+        jsonData: null,
+        set: (key: string, val: string) => { res.headers[key] = val; return res; },
+        status: (code: number) => { res.statusCode = code; return res; },
+        json: (data: any) => { res.jsonData = data; return res; }
+      };
+      return res;
     };
-    return res;
-  };
-  
-  const runApi = async (body: any) => {
-    const req = mockReq(body) as any;
-    const res = mockRes();
-    await createPublicSalesWhatsAppLink(req, res);
-    return res;
-  };
+    
+    const runApi = async (body: any) => {
+      const req = mockReq(body) as any;
+      const res = mockRes();
+      await createPublicSalesWhatsAppLink(req, res);
+      return res;
+    };
 
-  // Test successful intents
-  let res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: '/foo' });
-  assert(res.statusCode === 200, "pricing PT success");
-  assert(res.jsonData.url.startsWith('https://wa.me/'), "URL starts with https://wa.me/");
-  assert(decodeURIComponent(res.jsonData.url).includes('Origem:'), "PT url contains Origem:");
-  assert(res.headers['Cache-Control'] === 'no-store', "Cache-Control no-store on success");
+    // Test successful intents
+    let res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: '/foo' });
+    assert(res.statusCode === 200, "pricing PT success");
+    assert(res.jsonData.url.startsWith('https://wa.me/'), "URL starts with https://wa.me/");
+    assert(decodeURIComponent(res.jsonData.url).includes('Origem:'), "PT url contains Origem:");
+    assert(res.headers['Cache-Control'] === 'no-store', "Cache-Control no-store on success");
 
-  res = await runApi({ intent: 'pricing', locale: 'en', pagePath: '/foo' });
-  assert(res.statusCode === 200, "pricing EN success");
-  assert(!decodeURIComponent(res.jsonData.url).includes('Origem:'), "EN url does not contain Origem");
-  assert(decodeURIComponent(res.jsonData.url).includes('Source:'), "EN url contains Source:");
+    res = await runApi({ intent: 'pricing', locale: 'en', pagePath: '/foo' });
+    assert(res.statusCode === 200, "pricing EN success");
+    assert(!decodeURIComponent(res.jsonData.url).includes('Origem:'), "EN url does not contain Origem");
+    assert(decodeURIComponent(res.jsonData.url).includes('Source:'), "EN url contains Source:");
 
-  res = await runApi({ intent: 'pricing', locale: 'es', pagePath: '/foo' });
-  assert(res.statusCode === 200, "pricing ES success");
-  assert(!decodeURIComponent(res.jsonData.url).includes('Origem:'), "ES url does not contain Origem");
-  assert(decodeURIComponent(res.jsonData.url).includes('Origen:'), "ES url contains Origen:");
+    res = await runApi({ intent: 'pricing', locale: 'es', pagePath: '/foo' });
+    assert(res.statusCode === 200, "pricing ES success");
+    assert(!decodeURIComponent(res.jsonData.url).includes('Origem:'), "ES url does not contain Origem");
+    assert(decodeURIComponent(res.jsonData.url).includes('Origen:'), "ES url contains Origen:");
 
-  res = await runApi({ intent: 'pre_sales_question', locale: 'pt', message: 'Hi there' });
-  assert(res.statusCode === 200, "pre_sales_question PT success");
-  
-  res = await runApi({ intent: 'partnership', locale: 'en', pagePath: '/foo' });
-  assert(res.statusCode === 200, "partnership EN success");
-  
-  res = await runApi({ intent: 'general', locale: 'es' });
-  assert(res.statusCode === 200, "general ES success");
+    res = await runApi({ intent: 'pre_sales_question', locale: 'pt', message: 'Hi there' });
+    assert(res.statusCode === 200, "pre_sales_question PT success");
+    
+    res = await runApi({ intent: 'partnership', locale: 'en', pagePath: '/foo' });
+    assert(res.statusCode === 200, "partnership EN success");
+    
+    res = await runApi({ intent: 'general', locale: 'es' });
+    assert(res.statusCode === 200, "general ES success");
 
-  // Invalid payloads
-  res = await runApi(null);
-  assert(res.statusCode === 400, "400 on null body");
-  
-  res = await runApi([1,2,3]);
-  assert(res.statusCode === 400, "400 on array body");
+    // Invalid payloads
+    res = await runApi(null);
+    assert(res.statusCode === 400, "400 on null body");
+    
+    res = await runApi([1,2,3]);
+    assert(res.statusCode === 400, "400 on array body");
 
-  res = await runApi({ intent: 'unknown', locale: 'pt' });
-  assert(res.statusCode === 400, "400 on invalid intent");
+    res = await runApi({ intent: 'unknown', locale: 'pt' });
+    assert(res.statusCode === 400, "400 on invalid intent");
 
-  res = await runApi({ intent: 'pricing', locale: 'fr' });
-  assert(res.statusCode === 400, "400 on invalid locale");
+    res = await runApi({ intent: 'pricing', locale: 'fr' });
+    assert(res.statusCode === 400, "400 on invalid locale");
 
-  res = await runApi({ intent: 'pricing', locale: 'pt', message: null });
-  assert(res.statusCode === 400, "400 on message null");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', message: 123 });
-  assert(res.statusCode === 400, "400 on message number");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', message: {} });
-  assert(res.statusCode === 400, "400 on message object");
+    res = await runApi({ intent: 'pricing', locale: 'pt', message: null });
+    assert(res.statusCode === 400, "400 on message null");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', message: 123 });
+    assert(res.statusCode === 400, "400 on message number");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', message: {} });
+    assert(res.statusCode === 400, "400 on message object");
 
-  res = await runApi({ intent: 'pricing', locale: 'pt', message: [] });
-  assert(res.statusCode === 400, "400 on message array");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', message: '' });
-  assert(res.statusCode === 400, "400 on message empty string");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', message: '   ' });
-  assert(res.statusCode === 400, "400 on message spaces only");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', message: 'a'.repeat(1001) });
-  assert(res.statusCode === 400, "400 on message too long");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', message: 'javascript:alert(1)' });
-  assert(res.statusCode === 400, "400 on message javascript");
+    res = await runApi({ intent: 'pricing', locale: 'pt', message: [] });
+    assert(res.statusCode === 400, "400 on message array");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', message: '' });
+    assert(res.statusCode === 400, "400 on message empty string");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', message: '   ' });
+    assert(res.statusCode === 400, "400 on message spaces only");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', message: 'a'.repeat(1001) });
+    assert(res.statusCode === 400, "400 on message too long");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', message: 'javascript:alert(1)' });
+    assert(res.statusCode === 400, "400 on message javascript");
 
-  res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: null });
-  assert(res.statusCode === 400, "400 on pagePath null");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: 123 });
-  assert(res.statusCode === 400, "400 on pagePath number");
+    res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: null });
+    assert(res.statusCode === 400, "400 on pagePath null");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: 123 });
+    assert(res.statusCode === 400, "400 on pagePath number");
 
-  res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: '' });
-  assert(res.statusCode === 400, "400 on pagePath empty string");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: 'foo' });
-  assert(res.statusCode === 400, "400 on pagePath missing starting slash");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: '//foo' });
-  assert(res.statusCode === 400, "400 on pagePath starting with //");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: 'http://foo' });
-  assert(res.statusCode === 400, "400 on pagePath absolute url");
-  
-  res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: '/a'.repeat(500) });
-  assert(res.statusCode === 400, "400 on pagePath too long");
+    res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: '' });
+    assert(res.statusCode === 400, "400 on pagePath empty string");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: 'foo' });
+    assert(res.statusCode === 400, "400 on pagePath missing starting slash");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: '//foo' });
+    assert(res.statusCode === 400, "400 on pagePath starting with //");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: 'http://foo' });
+    assert(res.statusCode === 400, "400 on pagePath absolute url");
+    
+    res = await runApi({ intent: 'pricing', locale: 'pt', pagePath: '/a'.repeat(500) });
+    assert(res.statusCode === 400, "400 on pagePath too long");
 
-  // Error payloads should not contain phone numbers or messages
-  assert(!JSON.stringify(res.jsonData).includes('55119'), "Error does not leak number");
-  
-  // Test sales whatsapp not configured
-  process.env.SALES_WHATSAPP_NUMBER = 'invalid';
-  process.env.SUPPORT_WHATSAPP_NUMBER = '';
-  res = await runApi({ intent: 'pricing', locale: 'pt' });
-  assert(res.statusCode === 503, "503 when SALES_WHATSAPP_NUMBER invalid");
+    // Error payloads should not contain phone numbers or messages
+    assert(!JSON.stringify(res.jsonData).includes('55119'), "Error does not leak number");
+    
+    // Test sales whatsapp not configured
+    process.env.SALES_WHATSAPP_NUMBER = 'invalid';
+    process.env.SUPPORT_WHATSAPP_NUMBER = '';
+    res = await runApi({ intent: 'pricing', locale: 'pt' });
+    assert(res.statusCode === 503, "503 when SALES_WHATSAPP_NUMBER invalid");
+  } finally {
+    if (prevSalesWhatsAppNumber !== undefined) {
+      process.env.SALES_WHATSAPP_NUMBER = prevSalesWhatsAppNumber;
+    } else {
+      delete process.env.SALES_WHATSAPP_NUMBER;
+    }
 
-  delete process.env.SALES_WHATSAPP_NUMBER;
-  delete process.env.SUPPORT_WHATSAPP_NUMBER;
+    if (prevSupportWhatsAppNumber !== undefined) {
+      process.env.SUPPORT_WHATSAPP_NUMBER = prevSupportWhatsAppNumber;
+    } else {
+      delete process.env.SUPPORT_WHATSAPP_NUMBER;
+    }
+  }
 
   // 4. Client and components
   const footerContent = fs.readFileSync(path.join(rootDir, 'src', 'components', 'Footer.tsx'), 'utf8');
@@ -243,6 +253,14 @@ async function runTests() {
   assert(salesChatContent.includes("popup.opener = null"), "SalesChat disables window.opener");
   assert(!salesChatContent.includes("Minha dúvida:"), "SalesChat does not hardcode Minha dúvida prefix");
   assert(!salesChatContent.includes("'support'"), "SalesChat does not use support intent");
+  assert(salesChatContent.includes("const closeChat = () => {"), "SalesChat has closeChat function");
+  assert(salesChatContent.includes("setContactError(null)"), "SalesChat closeChat clears contactError");
+  assert(salesChatContent.includes("closeChat()") && salesChatContent.includes("handleClickOutside"), "Click outside calls closeChat");
+  assert(salesChatContent.includes("const toggleChat = () => {") && salesChatContent.includes("onClick={toggleChat}"), "Main button calls toggleChat");
+  assert(salesChatContent.includes("closeChat()") && salesChatContent.includes("url.startsWith('https://wa.me/')"), "Success calls closeChat");
+  
+  const setIsOpenMatches = salesChatContent.match(/setIsOpen\(false\)/g) || [];
+  assert(setIsOpenMatches.length === 1, "No isolated setIsOpen(false) outside closeChat");
 
   // 5. I18N
   const locales = ['pt', 'en', 'es'];
