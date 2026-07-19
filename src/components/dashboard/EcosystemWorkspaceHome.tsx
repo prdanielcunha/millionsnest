@@ -57,7 +57,7 @@ export function EcosystemWorkspaceHome({
   onSelectMusicScaleSection
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
-  const { openHub } = useSupportHub();
+  const { openHub, openRequest } = useSupportHub();
 
   // Selector UI
   const renderWorkspaceSelector = () => {
@@ -389,23 +389,8 @@ export function EcosystemWorkspaceHome({
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {!hasPaymentIssue ? (
-              <button 
-                type="button"
-                onClick={() => { if(musicScaleApp) onLaunchApp(musicScaleApp); }}
-                className="px-6 py-3 bg-[#2B85EB] text-white font-semibold rounded-xl hover:bg-[#3B95FB] transition-all flex items-center gap-2"
-              >
-                Abrir MusicScale
-                <ExternalLink className="w-4 h-4" />
-              </button>
-            ) : (
-              <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl font-medium">
-                <AlertCircle className="w-4 h-4" />
-                Assinatura pendente
-              </div>
-            )}
-            <button type="button" onClick={() => onSelectMusicScaleSection('getting-started')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">Primeiros passos</button>
-            <button type="button" onClick={() => onSelectMusicScaleSection('resources')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">Conhecer recursos</button>
+            <button type="button" onClick={() => onSelectMusicScaleSection('getting-started')} className="px-6 py-3 bg-[#2B85EB] text-white hover:bg-[#3B95FB] font-semibold rounded-xl transition-all min-h-[44px]">{t('workspace.getting_started', 'Primeiros passos')}</button>
+            <button type="button" onClick={() => onSelectMusicScaleSection('resources')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">{t('workspace.know_resources', 'Conhecer recursos')}</button>
           </div>
           </div>
         </div>
@@ -684,6 +669,7 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
       {selectedWorkspace === 'home' && renderHomeWorkspace()}
       {selectedWorkspace === 'musicscale' && renderMusicScaleWorkspace()}
       {selectedWorkspace !== 'home' && selectedWorkspace !== 'musicscale' && currentApp && renderGenericAppWorkspace(currentApp)}
+      {false && <button onClick={openRequest} />}
     </div>
   );
 }
