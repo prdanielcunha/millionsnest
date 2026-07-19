@@ -599,7 +599,16 @@ export default {
       team_desc: "Administre quem tem acesso à organização e segurança do painel.",
       slots_allocated: "Vagas preenchidas",
       invite_action: "Convidar Membro",
-      manage_team_action: "Ver Equipe"
+      manage_team_action: "Ver Equipe",
+      team: {
+        access_title: "Equipe e Acesso",
+        access_desc: "Convide sua equipe para colaborar e configure as permissões de acesso."
+      },
+      advanced_org_management: "Gestão avançada de organização",
+      learn_and_config: "Aprenda e configure",
+      quick_access: "Acesso rápido",
+      pending_invites: "Convites e Equipe",
+      plans_and_sub: "Planos e Assinatura"
     },
     musicscale: {
       center: {
@@ -939,6 +948,12 @@ export default {
       }
     },
     invite: {
+      title: "Convidar para {{orgName}}",
+      subtitle: "Escolha o nível de acesso à organização e como deseja compartilhar o convite.",
+      role_manager: "Gestor",
+      role_viewer: "Visualizador",
+      role_label: "Qual será o nível de acesso desta pessoa?",
+      role_owner: "Proprietário",
       email_hint: "Use o e-mail que a pessoa usará para entrar. O convite ficará protegido para essa conta.",
       email_required: "Informe o e-mail da pessoa.",
       role_admin: "Administrador",
@@ -965,11 +980,7 @@ export default {
         generic: "Não foi possível criar o convite. Tente novamente.",
         organizations_load: "Não foi possível carregar a lista de organizações.",
       },
-
-      title: "Convidar uma pessoa",
-      subtitle: "Escolha a função e como deseja compartilhar o convite.",
       email_label: "E-mail da pessoa",
-            role_label: "Qual será a função dessa pessoa?",
       share_method: "Como deseja enviar?",
       whatsapp: "Enviar pelo WhatsApp",
       copy_link: "Copiar link",

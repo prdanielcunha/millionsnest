@@ -99,8 +99,8 @@ function runTests() {
   if (!workspaceHomeContent.includes("musicscale.actions.invite") || !workspaceHomeContent.includes("Convidar pessoas")) {
     logError('Convidar pessoas action missing in EcosystemWorkspaceHome.');
   }
-  if (!workspaceHomeContent.includes("musicscale.actions.view_team_and_invites") || !workspaceHomeContent.includes("Ver equipe e convites")) {
-    logError('Ver equipe e convites action missing in EcosystemWorkspaceHome.');
+  if (!workspaceHomeContent.includes("workspace.pending_invites") || !workspaceHomeContent.includes("Convites e Equipe")) {
+    logError('Convites e Equipe action missing in EcosystemWorkspaceHome.');
   }
 
   // 7. Verify routing actions

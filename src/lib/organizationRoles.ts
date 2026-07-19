@@ -24,17 +24,28 @@ export function isInviteableOrganizationRole(role: string): role is InviteableOr
   return INVITEABLE_ORGANIZATION_ROLES.includes(role as any);
 }
 
-export function getInviteableOrganizationRolesForActor(actorRole: string | undefined | null): InviteableOrganizationRole[] {
-  if (!actorRole) return [];
-  const normalized = normalizeExistingOrganizationRole(actorRole);
-  
-  if (normalized === 'owner' || normalized === 'global_admin' || normalized === 'ceo') {
+export interface OrganizationInviteActor {
+  systemRole?: string | null;
+  organizationRole?: string | null;
+}
+
+export function getInviteableOrganizationRolesForActor(actor: OrganizationInviteActor): InviteableOrganizationRole[] {
+  if (!actor) return [];
+
+  const sys = actor.systemRole?.toLowerCase() || '';
+  if (sys === 'ceo' || sys === 'global_admin' || sys === 'ecosystem_owner' || sys === 'founder') {
     return ['admin', 'manager', 'member', 'viewer'];
   }
-  if (normalized === 'admin') {
+
+  const org = actor.organizationRole ? normalizeExistingOrganizationRole(actor.organizationRole) : '';
+  
+  if (org === 'owner') {
+    return ['admin', 'manager', 'member', 'viewer'];
+  }
+  if (org === 'admin') {
     return ['manager', 'member', 'viewer'];
   }
-  if (normalized === 'manager') {
+  if (org === 'manager') {
     return ['member', 'viewer'];
   }
   return [];
@@ -102,7 +113,7 @@ export function getRoleHierarchyScore(role: string): number {
   }
 }
 
-export function canInviteOrganizationRole(actorRole: string, targetRole: string): boolean {
+export function canInviteOrganizationRole(actor: OrganizationInviteActor, targetRole: string): boolean {
   if (!isInviteableOrganizationRole(targetRole)) return false;
-  return getInviteableOrganizationRolesForActor(actorRole).includes(targetRole as InviteableOrganizationRole);
+  return getInviteableOrganizationRolesForActor(actor).includes(targetRole as InviteableOrganizationRole);
 }

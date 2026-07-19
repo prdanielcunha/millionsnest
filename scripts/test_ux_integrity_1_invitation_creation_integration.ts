@@ -55,7 +55,7 @@ const modalFile = fs.readFileSync('src/components/InviteModal.tsx', 'utf-8');
 assert(modalFile.includes('required'), "Modal email is required");
 assert(!modalFile.includes('Opcional.'), "Modal hint doesn't contain 'Opcional.'");
 assert(!modalFile.includes('value="leader"'), "Modal doesn't have leader option");
-assert(modalFile.includes('value="admin"') && modalFile.includes('value="member"'), "Modal has admin and member options");
+assert(modalFile.includes('getInviteableRoles'), "Modal uses getInviteableRoles");
 assert(modalFile.includes('await handleCreateInvite'), "Modal shows success only after await");
 assert(modalFile.includes('setErrorMsg('), "Modal has error handling");
 assert(modalFile.includes('fallbackLink'), "Modal has fallback readonly link");

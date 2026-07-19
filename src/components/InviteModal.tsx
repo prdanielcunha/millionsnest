@@ -4,7 +4,7 @@ import { X, Copy, Check, MessageCircle, AlertCircle, Loader2 } from 'lucide-reac
 import { useAuth } from '../contexts/AuthContext.js';
 import { useTranslation } from 'react-i18next';
 import { useOrganization } from '../contexts/OrganizationContext.js';
-import { getInviteableOrganizationRolesForActor, normalizeExistingOrganizationRole } from '../lib/organizationRoles.js';
+import { getInviteableOrganizationRolesForActor, normalizeExistingOrganizationRole, getOrganizationRoleDescription } from '../lib/organizationRoles.js';
 
 interface InviteModalProps {
   isOpen: boolean;
@@ -51,11 +51,6 @@ export function InviteModal({
   // Normalize the object-based memberRole or null
   const normalizedActorRole = memberRole?.role ? normalizeExistingOrganizationRole(memberRole.role) : null;
 
-  // Roles:
-  // value: 'admin'
-  // value: 'manager'
-  // value: 'member'
-  // value: 'viewer'
   const getInviteableRoles = () => {
     // Owner is a special case derived from organization object in some contexts
     let effectiveActorRole = normalizedActorRole;
@@ -63,14 +58,17 @@ export function InviteModal({
        effectiveActorRole = 'owner';
     }
 
-    const roles = getInviteableOrganizationRolesForActor(isGlobalAdmin ? profile?.systemRole : effectiveActorRole);
+    const roles = getInviteableOrganizationRolesForActor({
+      systemRole: profile?.systemRole,
+      organizationRole: effectiveActorRole
+    });
     
     return roles.map(r => ({
       value: r,
       label: r === 'admin' ? t('dashboard.invite.role_admin', 'Administrador') :
-             r === 'manager' ? t('dashboard.invite.role_manager', 'Manager') :
+             r === 'manager' ? t('dashboard.invite.role_manager', 'Gestor') :
              r === 'member' ? t('dashboard.invite.role_member', 'Membro') :
-             t('dashboard.invite.role_viewer', 'Viewer')
+             t('dashboard.invite.role_viewer', 'Visualizador')
     }));
   };
 
@@ -240,8 +238,8 @@ export function InviteModal({
           >
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <h2 className="text-xl font-bold text-[#F5F7FA]">{t('dashboard.invite.title', 'Convidar uma pessoa')}</h2>
-                <p className="text-[#A0A7B5] text-sm mt-1">{t('dashboard.invite.subtitle', 'Escolha a função e como deseja compartilhar o convite.')}</p>
+                <h2 className="text-xl font-bold text-[#F5F7FA]">{t('dashboard.invite.title', `Convidar para ${organization?.name || 'Organização'}`)}</h2>
+                <p className="text-[#A0A7B5] text-sm mt-1">{t('dashboard.invite.subtitle', 'Escolha o nível de acesso à organização e como deseja compartilhar o convite.')}</p>
               </div>
               <button 
                 type="button"
@@ -314,10 +312,10 @@ export function InviteModal({
                  {isGlobalAdmin ? (
                    <div className="space-y-4">
                      <p className="text-[#A0A7B5] text-xs px-2 -mt-2">
-                       Você está criando um convite como administrador global. Escolha abaixo para qual organização deseja enviar este convite.
+                       Você está criando um convite com acesso administrativo global. Escolha a organização que receberá esta pessoa.
                      </p>
                      <div>
-                       <label className="block text-sm font-medium text-[#A0A7B5] mb-2">Organização Alvo</label>
+                       <label className="block text-sm font-medium text-[#A0A7B5] mb-2">Organização do convite</label>
                        {loadingOrgs ? (
                           <div className="w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-[#F5F7FA] opacity-50 flex items-center">
                              Carregando organizações...
@@ -329,10 +327,10 @@ export function InviteModal({
                             disabled={formDisabled}
                             className="w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-[#F5F7FA] focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all outline-none disabled:opacity-50"
                           >
-                            <option value="">(Usar organização atual do Dashboard)</option>
+                            <option value="">Usar organização atual: {organization?.name || ''}</option>
                             {adminOrgs.map((org: any) => (
                                <option key={org.id} value={org.id}>
-                                  {org.name} ({org.id.substring(0,6)}...)
+                                  {org.name}
                                </option>
                             ))}
                           </select>
@@ -358,7 +356,7 @@ export function InviteModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.role_label', 'Qual será a função dessa pessoa?')}</label>
+                  <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.role_label', 'Qual será o nível de acesso desta pessoa?')}</label>
                   <div className="flex flex-col gap-2">
                     {getInviteableRoles().map(opt => (
                       <button
@@ -372,18 +370,22 @@ export function InviteModal({
                             : 'bg-[#050505] border-white/10 hover:border-white/20'
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between mb-1">
                            <span className={`font-semibold ${role === opt.value ? 'text-[#2B85EB]' : 'text-[#F5F7FA]'}`}>
                              {opt.label}
                            </span>
                            {role === opt.value && <Check className="w-5 h-5 text-[#2B85EB]" />}
                         </div>
+                        <p className="text-xs text-[#A0A7B5]">
+                          {getOrganizationRoleDescription(opt.value)}
+                        </p>
                       </button>
                     ))}
                   </div>
-                  <p className="text-[#A0A7B5]/70 text-xs mt-3 px-1 leading-relaxed">
-                     {t('dashboard.invite.role_explanation', 'Esta função define o nível de permissão no painel de segurança e gerenciamento do MillionsNest. Ela é totalmente independente das funções ministeriais (como Ministro, Vocal, Instrumentista, etc.), que são de responsabilidade do painel do MusicScale.')}
-                  </p>
+                  <div className="mt-4 p-4 bg-[#050505] border border-white/10 rounded-xl">
+                    <h4 className="text-sm font-medium text-[#F5F7FA] mb-1">Função no MusicScale</h4>
+                    <p className="text-xs text-[#A0A7B5]">Líder, Ministro, Músico, Vocal e outras funções são definidas dentro do MusicScale depois que a pessoa entrar.</p>
+                  </div>
                 </div>
                 
                 {fallbackLink && createdInviteUrl && (

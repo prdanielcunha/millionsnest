@@ -4,7 +4,7 @@ import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
-  AlertCircle, CircleHelp
+  AlertCircle, CircleHelp, CreditCard
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSupportHub } from '../support/SupportHubContext.js';
@@ -462,113 +462,92 @@ export function EcosystemWorkspaceHome({
           {/* Sidebar */}
           <div className="space-y-6">
             
-            {/* ACTIONS */}
+                        {/* 1. Card principal (Central Premium) */}
+            <div className="bg-gradient-to-b from-[#1A1D24] to-[#050505] border border-white/10 rounded-3xl p-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-[#2B85EB]/20 text-[#2B85EB] flex items-center justify-center mx-auto mb-4">
+                <Users className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">{t('workspace.team.access_title', 'Equipe e Acesso')}</h3>
+              <p className="text-sm text-[#A0A7B5] mb-6 px-2">
+                {t('workspace.team.access_desc', 'Convide sua equipe para colaborar e configure as permissões de acesso.')}
+              </p>
+              
+              <div className="flex justify-between items-center text-sm mb-6 bg-[#050505] p-3 rounded-xl border border-white/5">
+                <span className="text-[#A0A7B5]">Vagas</span>
+                <span className="text-[#2B85EB] font-semibold">
+                  {maxUsersLimit === -1 ? `${occupiedSlots} / ∞` : `${occupiedSlots} / ${maxUsersLimit}`}
+                </span>
+              </div>
+
+              {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
+                <button
+                  type="button"
+                  onClick={onOpenInviteModal}
+                  className="w-full py-3.5 bg-[#2B85EB] hover:bg-[#3B95FB] text-white font-semibold rounded-xl transition-all shadow-[0_0_20px_rgba(43,133,235,0.3)] mb-4"
+                >
+                  {t('musicscale.actions.invite', 'Convidar pessoas')}
+                </button>
+              )}
+              
+              {(currentUserPerms['organization.settings.update'] || isGlobalAdmin) && (
+                <button
+                  type="button"
+                  onClick={onNavigateToOrganizationSettings}
+                  className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors"
+                >
+                  {t('workspace.advanced_org_management', 'Gestão avançada de organização')}
+                </button>
+              )}
+            </div>
+
+            {/* 2. Aprenda e configure */}
             <div className="bg-[#050505] border border-white/5 rounded-2xl p-6">
-              <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('musicscale.actions.title', 'Ações Rápidas')}</h3>
-              <div className="space-y-2"> 
-                <button type="button"  
-                  onClick={() => { if (musicScaleApp) onLaunchApp(musicScaleApp); }}
-                  disabled={!isReadyToOpen}
-                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"> 
-                  <span className="flex items-center gap-3"><Play className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.open_app', 'Abrir sistema')}</span> 
-                </button>
-                
-                {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
-                  <button 
-                    type="button"
-                    onClick={onOpenInviteModal}
-                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
-                  > 
-                    <span className="flex items-center gap-3"><User className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.invite', 'Convidar pessoas')}</span> 
-                  </button>
-                )}
-                
-                {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
-                  <button 
-                    type="button"
-                    onClick={onNavigateToOrganizationMembers}
-                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
-                  > 
-                    <span className="flex items-center gap-3"><Users className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.manage_team', 'Gerenciar equipe')}</span> 
-                  </button>
-                )}
-                
-                {(currentUserPerms['organization.billing.manage'] || isGlobalAdmin) && (
-                  <button 
-                    type="button"
-                    onClick={onNavigateToBilling}
-                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group"
-                  > 
-                    <span className="flex items-center gap-3"><Settings className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.view_sub', 'Ver assinatura')}</span> 
-                  </button>
-                )}
-                
-                <button type="button"  
+              <h3 className="text-sm font-bold text-white mb-4">{t('workspace.learn_and_config', 'Aprenda e configure')}</h3>
+              <div className="space-y-2">
+                <button type="button"
                   onClick={() => onSelectMusicScaleSection('resources')}
-                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]"> 
-                  <span className="flex items-center gap-3"><ExternalLink className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.learn_more', 'Conhecer recursos')}</span> 
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]">
+                  <span className="flex items-center gap-3"><ExternalLink className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.learn_more', 'Tutoriais e Recursos')}</span>
                 </button>
-                
-                <button  
+                <button
                   type="button"
                   onClick={openRequest}
-                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]"> 
-                  <span className="flex items-center gap-3"><Mail className="w-4 h-4 text-[#A0A7B5]" /> {t('support.actions.need_help', t('musicscale.actions.need_help', 'Preciso de ajuda'))}</span> 
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]">
+                  <span className="flex items-center gap-3"><Mail className="w-4 h-4 text-[#A0A7B5]" /> {t('support.actions.need_help', 'Falar com Suporte')}</span>
                 </button>
               </div>
             </div>
 
-            {/* TEAM SUMMARY */}
+            {/* 3. Organização e acesso */}
             <div className="bg-[#050505] border border-white/5 rounded-2xl p-6">
-              <div className="flex items-center gap-3 mb-4"> 
-                <div className="w-8 h-8 rounded-lg bg-white/5 text-white flex items-center justify-center shrink-0"> 
-                  <Users className="w-4 h-4" /> 
-                </div> 
-                <h3 className="font-bold text-white">{t('musicscale.team.title', 'Equipe')}</h3>
-              </div>
-              <p className="text-sm text-[#A0A7B5] mb-6">
-                {t('musicscale.team.desc', 'Convide líderes, músicos e vocais para trabalharem na mesma organização.')}
-              </p>
-              
-              <div className="flex flex-col gap-2 mb-6"> 
-                <div className="flex justify-between items-center text-sm"> 
-                  <span className="text-[#A0A7B5]">{t('musicscale.team.members', `${members.length} membros`, { count: members.length })}</span> 
-                  <span className="text-white font-medium">{members.length}</span> 
-                </div> 
-                <div className="flex justify-between items-center text-sm"> 
-                  <span className="text-[#A0A7B5]">{t('musicscale.team.invites', `${pendingInvites.length} convites`, { count: pendingInvites.length })}</span> 
-                  <span className="text-white font-medium">{pendingInvites.length}</span> 
-                </div> 
-                <div className="mt-2 pt-2 border-t border-white/5 flex justify-between items-center text-sm font-semibold"> 
-                  <span className="text-white">Total</span> 
-                  <span className="text-[#2B85EB]"> 
-                    {maxUsersLimit === -1 
-                      ? t('musicscale.team.slots_unlimited', `${occupiedSlots} vagas (ilimitado)`, { used: occupiedSlots })
-                      : t('musicscale.team.slots', `${occupiedSlots}/${maxUsersLimit} vagas`, { used: occupiedSlots, total: maxUsersLimit })
-                    }
-                  </span> 
-                </div>
-              </div>
-              
-              <div className="flex flex-col gap-2 mt-4">
-                {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
-                  <button 
-                    type="button"
-                    onClick={onOpenInviteModal}
-                    className="w-full py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] text-white font-semibold rounded-xl transition-colors text-sm"
-                  >
-                    {t('musicscale.actions.invite_person', 'Convidar pessoa')}
-                  </button>
-                )}
+              <h3 className="text-sm font-bold text-white mb-4">{t('workspace.quick_access', 'Acesso rápido')}</h3>
+              <div className="flex flex-col gap-2">
                 {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
-                  <button 
+                  <button
                     type="button"
                     onClick={onNavigateToOrganizationMembers}
-                    className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-xl transition-colors text-sm border border-white/5"
+                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-[#A0A7B5] hover:text-white transition-colors text-sm"
                   >
-                    {t('musicscale.actions.view_team_and_invites', 'Ver equipe e convites')}
+                    <span className="flex items-center gap-3"><User className="w-4 h-4" /> {t('workspace.pending_invites', 'Convites e Equipe')}</span>
                   </button>
                 )}
+                {(currentUserPerms['organization.billing.manage'] || isGlobalAdmin) && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToBilling}
+                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-[#A0A7B5] hover:text-white transition-colors text-sm"
+                  >
+                    <span className="flex items-center gap-3"><CreditCard className="w-4 h-4" /> {t('workspace.plans_and_sub', 'Planos e Assinatura')}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { if (musicScaleApp) onLaunchApp(musicScaleApp); }}
+                  disabled={!isReadyToOpen}
+                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-[#A0A7B5] hover:text-white transition-colors disabled:opacity-50 text-sm"
+                >
+                  <span className="flex items-center gap-3"><Play className="w-4 h-4" /> {t('musicscale.actions.open_app', 'Abrir sistema')}</span>
+                </button>
               </div>
             </div>
           </div>

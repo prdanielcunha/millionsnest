@@ -583,7 +583,16 @@ export default {
       team_desc: "Manage who has access to the organization and dashboard security.",
       slots_allocated: "Slots filled",
       invite_action: "Invite Member",
-      manage_team_action: "View Team"
+      manage_team_action: "View Team",
+      team: {
+        access_title: "Team and Access",
+        access_desc: "Invite your team to collaborate and configure access permissions."
+      },
+      advanced_org_management: "Advanced organization management",
+      learn_and_config: "Learn and configure",
+      quick_access: "Quick access",
+      pending_invites: "Invites and Team",
+      plans_and_sub: "Plans and Subscription"
     },
     musicscale: {
       
@@ -924,6 +933,12 @@ export default {
       }
     },
     invite: {
+      title: "Invite to {{orgName}}",
+      subtitle: "Choose the organization access level and how you want to share the invitation.",
+      role_manager: "Manager",
+      role_viewer: "Viewer",
+      role_label: "What will be this person's access level?",
+      role_owner: "Owner",
       email_hint: "Use the email the person will log in with. The invite will be secured for this account.",
       email_required: "Enter the person's email.",
       role_admin: "Administrator",
@@ -950,11 +965,7 @@ export default {
         generic: "Could not create the invite. Try again.",
         organizations_load: "Could not load the organizations list.",
       },
-
-      title: "Invite a person",
-      subtitle: "Choose the role and how you want to share the invite.",
       email_label: "Person's email",
-            role_label: "What will be this person's role?",
       share_method: "How do you want to send it?",
       whatsapp: "Send via WhatsApp",
       copy_link: "Copy link",

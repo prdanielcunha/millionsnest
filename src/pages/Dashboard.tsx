@@ -23,6 +23,7 @@ import { canPurchasePlanAgain, isSubscriptionValid, normalizeDateToMs } from "..
 import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
 import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
+import { getInviteableOrganizationRolesForActor, getOrganizationRoleLabel } from "../lib/organizationRoles.js";
 
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
@@ -2778,19 +2779,27 @@ export function Dashboard() {
 
                 {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin' || profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin') && (
                   <div>
-                    <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Função no Ecossistema / Organização</label>
-                    <select
-                      value={editingMemberRole}
-                      onChange={(e) => setEditingMemberRole(e.target.value)}
-                      className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
-                    >
-                      <option value="owner">Dono (Owner)</option>
-                      <option value="admin">Administrador (Admin)</option>
-                      <option value="leader">Líder / Ministro</option>
-                      <option value="secretary">Operador / Secretaria</option>
-                      <option value="member">Membro Padrão</option>
-                      <option value="guest">Visitante (Apenas Leitura)</option>
-                    </select>
+                    <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Nível de acesso na Organização</label>
+                    {editingMember?.role === 'owner' ? (
+                       <div className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-[#A0A7B5] text-sm opacity-70 cursor-not-allowed">
+                         {t('dashboard.invite.role_owner', 'Proprietário')}
+                       </div>
+                    ) : (
+                       <select
+                         value={editingMemberRole}
+                         onChange={(e) => setEditingMemberRole(e.target.value)}
+                         className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
+                       >
+                         {getInviteableOrganizationRolesForActor({
+                           systemRole: profile?.systemRole,
+                           organizationRole: profile?.organizationRole
+                         }).map((r) => (
+                           <option key={r} value={r}>
+                             {getOrganizationRoleLabel(r)}
+                           </option>
+                         ))}
+                       </select>
+                    )}
                   </div>
                 )}
 

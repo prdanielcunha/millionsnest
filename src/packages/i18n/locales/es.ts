@@ -592,7 +592,16 @@ export default {
       team_desc: "Administra quién tiene acceso a la organización y seguridad del panel.",
       slots_allocated: "Cupos llenos",
       invite_action: "Invitar Miembro",
-      manage_team_action: "Ver Equipo"
+      manage_team_action: "Ver Equipo",
+      team: {
+        access_title: "Equipo y Acceso",
+        access_desc: "Invita a tu equipo a colaborar y configura los permisos de acceso."
+      },
+      advanced_org_management: "Gestión avanzada de organización",
+      learn_and_config: "Aprende y configura",
+      quick_access: "Acceso rápido",
+      pending_invites: "Invitaciones y Equipo",
+      plans_and_sub: "Planes y Suscripción"
     },
     musicscale: {
       
@@ -932,6 +941,12 @@ export default {
       }
     },
     invite: {
+      title: "Invitar a {{orgName}}",
+      subtitle: "Elige el nivel de acceso a la organización y cómo deseas compartir la invitación.",
+      role_manager: "Gestor",
+      role_viewer: "Visualizador",
+      role_label: "¿Cuál será el nivel de acceso de esta persona?",
+      role_owner: "Propietario",
       email_hint: "Usa el correo con el que la persona iniciará sesión. La invitación estará protegida para esta cuenta.",
       email_required: "Ingresa el correo de la persona.",
       role_admin: "Administrador",
@@ -958,11 +973,7 @@ export default {
         generic: "No se pudo crear la invitación. Inténtalo de nuevo.",
         organizations_load: "No se pudo cargar la lista de organizaciones.",
       },
-
-      title: "Invitar a una persona",
-      subtitle: "Elige el rol y cómo deseas compartir la invitación.",
       email_label: "Correo electrónico de la persona",
-            role_label: "¿Cuál será el rol de esta persona?",
       share_method: "¿Cómo deseas enviarlo?",
       whatsapp: "Enviar por WhatsApp",
       copy_link: "Copiar enlace",

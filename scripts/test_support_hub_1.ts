@@ -96,7 +96,7 @@ const checkSupportHubFixes = () => {
   assertCondition(hub.includes('requestOpen') && hub.includes('whatsappOpen') && hub.includes('guideOpen'), 'SupportHub gets modal states from context', 'Missing modal states from context');
   assertCondition(hub.includes('const supportModalOpen ='), 'Exists supportModalOpen', 'Missing supportModalOpen');
   assertCondition(hub.includes('requestOpen || whatsappOpen || guideOpen') || hub.includes('requestOpen||whatsappOpen||guideOpen'), 'supportModalOpen considers all three states', 'Does not consider all three states');
-  assertCondition(hub.includes('if (supportModalOpen) {') && hub.includes('return null;'), 'Returns null when supportModalOpen is true', 'Does not return null');
+  assertCondition((hub.includes('if (supportModalOpen) {') || hub.includes('if (supportModalOpen || blockingModalOpen) {') || hub.includes('if (blockingModalOpen || supportModalOpen) {')) && hub.includes('return null;'), 'Returns null when supportModalOpen is true', 'Does not return null');
   assertCondition(!hub.includes('opacity-0') || (!hub.includes('opacity-0') && !hub.includes('pointer-events')), 'Does not use opacity or pointer-events to hide', 'Uses opacity or pointer-events to hide');
   
   const escapeCount = (hub.match(/if \(e.key === 'Escape'\)/g) || []).length;
