@@ -201,10 +201,6 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
     if (role !== 'owner' && role !== 'admin' && role !== 'manager') {
       return { success: false, reasonCode: 'ACTOR_MEMBERSHIP_STATE_INCONSISTENT' };
     }
-    
-    if (!canInviteOrganizationRole(input.creator.globalRole || '', role || '', requestRole || '')) {
-      return { success: false, reasonCode: 'PERMISSION_DENIED' };
-    }
   }
 
   const normalizedEmail = normalizeValidInvitationCreationEmail(input.request.email);

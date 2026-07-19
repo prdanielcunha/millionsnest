@@ -150,9 +150,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       } catch {}
 
+      // return { success: true }
       return { success: true, activeOrganizationId: orgId };
     } catch (err: any) {
-      const errorMessage = err.message || 'Unknown error during switch';
       setOrganizationSwitchError(errorMessage);
       console.error("Failed to switch organization", err);
       return { success: false, error: errorMessage };

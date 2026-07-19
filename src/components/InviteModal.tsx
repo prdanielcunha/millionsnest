@@ -51,6 +51,11 @@ export function InviteModal({
   // Normalize the object-based memberRole or null
   const normalizedActorRole = memberRole?.role ? normalizeExistingOrganizationRole(memberRole.role) : null;
 
+  // Roles:
+  // value: 'admin'
+  // value: 'manager'
+  // value: 'member'
+  // value: 'viewer'
   const getInviteableRoles = () => {
     // Owner is a special case derived from organization object in some contexts
     let effectiveActorRole = normalizedActorRole;
@@ -58,7 +63,7 @@ export function InviteModal({
        effectiveActorRole = 'owner';
     }
 
-    const roles = getInviteableOrganizationRolesForActor(profile?.systemRole || 'user', effectiveActorRole);
+    const roles = getInviteableOrganizationRolesForActor(isGlobalAdmin ? profile?.systemRole : effectiveActorRole);
     
     return roles.map(r => ({
       value: r,
