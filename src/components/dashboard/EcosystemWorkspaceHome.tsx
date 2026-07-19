@@ -114,163 +114,225 @@ export function EcosystemWorkspaceHome({
   };
 
   const renderHomeWorkspace = () => {
+    const musicScaleApp = installedApps.find(app => app.id === 'musicscale');
+    const isLoading = msCatalogState === "loading";
+    const hasPaymentIssue = msCatalogState === "payment_issue";
+    const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
+    const progressPercent = maxUsersLimit > 0 ? Math.min(100, (occupiedSlots / maxUsersLimit) * 100) : 0;
+
     return (
-      <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-        <h2 className="text-2xl font-bold text-white mb-2">{t('workspace.intro', 'Seus aplicativos, organização e equipe em um só lugar')}</h2>
+      <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-12">
+        {/* Welcome Section */}
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-1">{t('workspace.intro', 'Sua Central de Gerenciamento')}</h2>
+          <p className="text-[#A0A7B5] text-sm leading-relaxed max-w-xl">
+            {t('workspace.sub_intro', 'Gerencie a preparação do seu ministério de louvor e controle os acessos de segurança da sua equipe.')}
+          </p>
+        </div>
         
-        {installedApps.length > 0 && (
-          <div className="mt-8">
-            <h3 className="text-lg font-bold text-white mb-4">{t('workspace.apps_title', 'Seus aplicativos')}</h3>
-            <div className={`grid gap-4 ${installedApps.length === 1 ? 'grid-cols-1 max-w-[480px]' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
-              {installedApps.map(app => {
-                if (app.id === 'musicscale') {
-                  const isLoading = msCatalogState === "loading";
-                  const hasPaymentIssue = msCatalogState === "payment_issue";
-                  
-                  const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
-                  const teamStarted = members.length > 1 || pendingInvites.length > 0;
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* LEFT/MAIN COLUMN: MusicScale (Louvor e Ministério) */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-1.5 h-6 bg-[#2B85EB] rounded-full"></span>
+              <h3 className="text-lg font-bold text-white tracking-tight">{t('workspace.musicscale_group_title', 'MusicScale — Excelência no Louvor')}</h3>
+            </div>
 
-                  return (
-                    <div key={app.id} className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-2xl p-6 flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                            <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
-                          </div>
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            msCatalogState === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                            msCatalogState === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                            hasPaymentIssue ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                            isLoading ? 'bg-white/10 text-white border border-white/20' :
-                            'bg-white/10 text-[#A0A7B5]'
-                          }`}>
-                            {isLoading 
-                              ? t('workspace.loading', 'Carregando')
-                              : hasPaymentIssue 
-                                ? t('workspace.payment_pending', 'Pagamento pendente')
-                                : t(`musicscale.status.${msCatalogState}`, msCatalogState)
-                            }
-                          </span>
-                        </div>
-                        <h4 className="text-lg font-bold text-white mb-1">MusicScale</h4>
-                        <p className="text-sm text-[#A0A7B5] mb-6 line-clamp-2">{app.shortDescription || app.description}</p>
-                      </div>
-                      
-                      <button
-                        type="button"
-                        aria-label={app.name}
-                        onClick={() => {
-                          if (hasPaymentIssue) onNavigateToBilling();
-                          else onLaunchApp(app);
-                        }}
-                        disabled={isLoading || (!isReadyToOpen && !hasPaymentIssue)}
-                        className={`w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 ${
-                          hasPaymentIssue ? 'bg-red-500 hover:bg-red-600 text-white' :
-                          isReadyToOpen ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20' :
-                          'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
-                        }`}
-                      >
-                        {isLoading ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : (hasPaymentIssue ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
-                        {hasPaymentIssue ? t('workspace.resolve_payment', 'Regularizar pagamento') : t('workspace.open_app', `Abrir ${app.name}`, { appName: app.name })}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onSelectWorkspace('musicscale');
-                          onSelectMusicScaleSection('resources');
-                        }}
-                        className="w-full py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10 mt-3 text-sm"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        {t('musicscale.hero.learn_more', 'Conhecer recursos')}
-                      </button>
-                      
-                      <div className="mt-4 text-center">
-                        {(!teamStarted) ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onSelectWorkspace('musicscale');
-                              onSelectMusicScaleSection('getting-started');
-                            }}
-                            className="inline-flex items-center gap-1.5 text-xs text-[#2B85EB] hover:text-[#3B95FB] font-medium transition-colors"
-                          >
-                            <span className="px-1.5 py-0.5 rounded-[4px] bg-[#2B85EB]/20 text-[#2B85EB] font-bold uppercase tracking-wider text-[9px] mr-1">
-                              {t('musicscale.center.badges.recommended', 'Recomendado')}
-                            </span>
-                            {t('musicscale.home.new_here', 'Novo por aqui? Veja os primeiros passos')} &rarr;
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onSelectWorkspace('musicscale');
-                              onSelectMusicScaleSection('getting-started');
-                            }}
-                            className="inline-flex items-center gap-1.5 text-xs text-[#A0A7B5] hover:text-white font-medium transition-colors"
-                          >
-                            {t('musicscale.home.review_steps', 'Rever primeiros passos')} &rarr;
-                          </button>
-                        )}
-                      </div>
+            {musicScaleApp ? (
+              <div className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-3xl p-6 md:p-8 flex flex-col justify-between relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-[#2B85EB]/5 blur-[80px] rounded-full pointer-events-none group-hover:bg-[#2B85EB]/10 transition-colors" />
+                
+                <div className="relative z-10">
+                  <div className="flex items-start justify-between mb-6">
+                    <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center shrink-0 border border-white/10 shadow-sm">
+                      <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-8 h-8 object-contain" />
                     </div>
-                  );
-                }
-
-                // Generic App
-                return (
-                  <div key={app.id} className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-2xl p-6 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                          <LayoutGrid className="w-6 h-6 text-white" />
-                        </div>
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-500/20 text-green-400 border border-green-500/30">
-                          {t('workspace.available', 'Disponível')}
-                        </span>
-                      </div>
-                      <h4 className="text-lg font-bold text-white mb-1">{app.name}</h4>
-                      <p className="text-sm text-[#A0A7B5] mb-6 line-clamp-2">{app.shortDescription || app.description}</p>
-                    </div>
-                    
-                    <button
-                      type="button"
-                      aria-label={app.name}
-                      onClick={() => onLaunchApp(app)}
-                      className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                      {t('workspace.open_app', `Abrir ${app.name}`, { appName: app.name })}
-                    </button>
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      msCatalogState === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                      msCatalogState === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                      hasPaymentIssue ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                      isLoading ? 'bg-white/10 text-white border border-white/20' :
+                      'bg-white/10 text-[#A0A7B5]'
+                    }`}>
+                      {isLoading 
+                        ? t('workspace.loading', 'Carregando')
+                        : hasPaymentIssue 
+                          ? t('workspace.payment_pending', 'Pagamento pendente')
+                          : t(`musicscale.status.${msCatalogState}`, msCatalogState)
+                      }
+                    </span>
                   </div>
-                );
-              })}
+
+                  <h4 className="text-xl font-bold text-white mb-2">MusicScale</h4>
+                  <p className="text-sm text-[#A0A7B5] mb-8 leading-relaxed">
+                    {musicScaleApp.shortDescription || musicScaleApp.description || t('musicscale.description_default', 'A ferramenta definitiva para organização de repertórios, escalas de músicos e preparação fluida do ministério.')}
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-[#A0A7B5] mb-8"> 
+                    <span className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-2.5 py-1 rounded-lg"><Music className="w-3.5 h-3.5 text-[#2B85EB]"/> {t('musicscale.features.repertoire', 'Repertórios')}</span> 
+                    <span className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-2.5 py-1 rounded-lg"><Clock className="w-3.5 h-3.5 text-[#2B85EB]"/> {t('musicscale.features.scales', 'Escalas')}</span> 
+                    <span className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-2.5 py-1 rounded-lg"><Users className="w-3.5 h-3.5 text-[#2B85EB]"/> {t('musicscale.features.musicians', 'Músicos')}</span> 
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (hasPaymentIssue) onNavigateToBilling();
+                      else onLaunchApp(musicScaleApp);
+                    }}
+                    disabled={isLoading || (!isReadyToOpen && !hasPaymentIssue)}
+                    className={`flex-1 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 text-sm ${
+                      hasPaymentIssue ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
+                      isReadyToOpen ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20' :
+                      'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
+                    }`}
+                  >
+                    {isLoading ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : (hasPaymentIssue ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
+                    {hasPaymentIssue ? t('workspace.resolve_payment', 'Regularizar pagamento') : t('workspace.open_app', `Abrir ${musicScaleApp.name}`, { appName: musicScaleApp.name })}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelectWorkspace('musicscale');
+                      onSelectMusicScaleSection('resources');
+                    }}
+                    className="py-3.5 px-5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-sm"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    {t('musicscale.hero.learn_more', 'Conhecer recursos')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-[#050505] border border-white/5 rounded-3xl p-8 text-center">
+                <Music className="w-10 h-10 text-white/20 mx-auto mb-4" />
+                <p className="text-sm text-[#A0A7B5]">{t('workspace.no_apps_found', 'Nenhum aplicativo habilitado no momento.')}</p>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT COLUMN: Organization, Team, Access and Limits */}
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-1.5 h-6 bg-purple-500 rounded-full"></span>
+              <h3 className="text-lg font-bold text-white tracking-tight">{t('workspace.org_group_title', 'Organização e Acesso')}</h3>
+            </div>
+
+            {/* ORGANIZATION CARD */}
+            <div className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-3xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-white text-base">{organization?.name || t('workspace.organization_unnamed', 'Sua Organização')}</h4>
+                  <p className="text-xs text-[#A0A7B5] mt-1 font-mono">slug: {organization?.slug || '...'}</p>
+                </div>
+                {(currentUserPerms['organization.settings.update'] || isGlobalAdmin) && (
+                  <button 
+                    onClick={onNavigateToOrganizationSettings}
+                    className="p-2 hover:bg-white/5 rounded-xl text-[#A0A7B5] hover:text-white transition-all border border-transparent hover:border-white/5"
+                    title={t('workspace.org_settings_title', 'Ajustes da Organização')}
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="border-t border-white/5 pt-4 flex items-center justify-between text-sm">
+                <span className="text-[#A0A7B5]">{t('workspace.plan_label', 'Plano atual:')}</span>
+                <span className="font-semibold text-purple-400 capitalize bg-purple-500/10 px-2.5 py-1 rounded-lg border border-purple-500/20 text-xs">
+                  {organization?.apps?.musicscale?.plan || subscription?.planId || t('workspace.plan_starter', 'Starter')}
+                </span>
+              </div>
+
+              {(currentUserPerms['organization.billing.manage'] || isGlobalAdmin) && (
+                <button
+                  type="button"
+                  onClick={onNavigateToBilling}
+                  className="w-full py-2.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all"
+                >
+                  {t('workspace.billing_action', 'Gerenciar Assinatura')}
+                </button>
+              )}
+            </div>
+
+            {/* TEAM AND MEMBERSHIP CARD */}
+            <div className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-3xl p-6 space-y-6">
+              <div>
+                <h4 className="font-bold text-white text-base flex items-center gap-2">
+                  <Users className="w-4 h-4 text-[#A0A7B5]" />
+                  {t('workspace.team_title', 'Membros e Equipe')}
+                </h4>
+                <p className="text-xs text-[#A0A7B5] mt-1">
+                  {t('workspace.team_desc', 'Administre quem tem acesso à organização e segurança do painel.')}
+                </p>
+              </div>
+
+              {/* Slots progress bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-[#A0A7B5]">{t('workspace.slots_allocated', 'Vagas preenchidas')}</span>
+                  <span className="text-white">
+                    {maxUsersLimit === -1 ? `${occupiedSlots} / ∞` : `${occupiedSlots} / ${maxUsersLimit}`}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                  <div 
+                    className="h-full bg-gradient-to-r from-[#2B85EB] to-purple-500 rounded-full transition-all duration-500"
+                    style={{ width: `${maxUsersLimit === -1 ? 100 : progressPercent}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+                {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
+                  <button
+                    type="button"
+                    onClick={onOpenInviteModal}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-[#2B85EB] hover:bg-[#3B95FB] text-white transition-all"
+                  >
+                    {t('workspace.invite_action', 'Convidar Membro')}
+                  </button>
+                )}
+                {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToOrganizationMembers}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all"
+                  >
+                    {t('workspace.manage_team_action', 'Ver Equipe')}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
-        <div className="mt-8">
-          <h3 className="text-lg font-bold text-white mb-4">{t('support.hub.central_action.title', 'Ajuda e suporte')}</h3>
+        {/* Support Section */}
+        <div className="pt-6 border-t border-white/5">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-1.5 h-6 bg-green-500 rounded-full"></span>
+            <h3 className="text-lg font-bold text-white tracking-tight">{t('workspace.help_group_title', 'Ajuda e Suporte')}</h3>
+          </div>
           <button
             type="button"
             onClick={openHub}
             aria-label={t('support.hub.central_action.aria', 'Abrir a Central de Ajuda e suporte')}
-            className="w-full md:max-w-[480px] min-h-[44px] flex items-center gap-4 bg-[#050505] border border-white/10 hover:border-[#2B85EB]/50 rounded-2xl p-4 text-left transition-colors group focus:outline-none focus:ring-2 focus:ring-[#2B85EB]"
+            className="w-full md:max-w-xl min-h-[44px] flex items-center gap-4 bg-[#050505] border border-white/10 hover:border-[#2B85EB]/50 rounded-3xl p-5 text-left transition-colors group focus:outline-none focus:ring-2 focus:ring-[#2B85EB]"
           >
-            <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center shrink-0 group-hover:bg-[#2B85EB]/20 transition-colors">
-              <CircleHelp className="w-5 h-5" />
+            <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center shrink-0 group-hover:bg-[#2B85EB]/20 transition-colors">
+              <CircleHelp className="w-6 h-6" />
             </div>
             <div className="flex-1">
-              <h4 className="text-sm font-bold text-white group-hover:text-[#2B85EB] transition-colors">{t('support.hub.central_action.title', 'Ajuda e suporte')}</h4>
-              <p className="text-xs text-[#A0A7B5] mt-0.5 leading-snug">{t('support.hub.central_action.description', 'Envie uma solicitação, fale pelo WhatsApp ou consulte guias rápidos.')}</p>
+              <h4 className="text-base font-bold text-white group-hover:text-[#2B85EB] transition-colors">{t('support.hub.central_action.title', 'Central de Ajuda & Suporte')}</h4>
+              <p className="text-xs text-[#A0A7B5] mt-1 leading-relaxed">{t('support.hub.central_action.description', 'Envie uma solicitação, fale pelo WhatsApp ou consulte guias rápidos do ecossistema.')}</p>
             </div>
-            <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/5 text-white/50 group-hover:bg-[#2B85EB] group-hover:text-white transition-colors">
+            <div className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-white/5 text-white/50 group-hover:bg-[#2B85EB] group-hover:text-white transition-colors">
               <ArrowRight className="w-4 h-4" />
             </div>
           </button>
         </div>
-
       </div>
     );
   };

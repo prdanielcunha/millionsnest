@@ -4,6 +4,7 @@ import {
   InvitationRole
 } from './InvitationAcceptancePlanner.js';
 import { isValidInvitationOrganizationId } from '../../lib/InvitationRedirectPolicy.js';
+import { canInviteOrganizationRole } from '../../lib/organizationRoles.js';
 
 export const INVITATION_TTL_MS = 604800000;
 
@@ -16,7 +17,9 @@ export type InvitationCreatorGlobalRole =
 export type InvitationCreatorMembershipRole =
   | 'owner'
   | 'admin'
-  | 'member';
+  | 'manager'
+  | 'member'
+  | 'viewer';
 
 export type InvitationCreatorIdentity = {
   uid?: string;
@@ -112,7 +115,7 @@ export function isInvitationCreatorGlobalRole(value: unknown): value is Invitati
 }
 
 export function isInvitationCreatorMembershipRole(value: unknown): value is InvitationCreatorMembershipRole {
-  return value === 'owner' || value === 'admin' || value === 'member';
+  return value === 'owner' || value === 'admin' || value === 'manager' || value === 'member' || value === 'viewer';
 }
 
 function normalizeValidInvitationCreationEmail(value: unknown): string | null {
@@ -190,11 +193,17 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
       return { success: false, reasonCode: 'ACTOR_MEMBERSHIP_STATE_INCONSISTENT' };
     }
     const role = input.creatorMembership.role;
-    if (role === 'member') {
+    const requestRole = input.request.role;
+    
+    if (role === 'member' || role === 'viewer') {
       return { success: false, reasonCode: 'PERMISSION_DENIED' };
     }
-    if (role !== 'owner' && role !== 'admin') {
+    if (role !== 'owner' && role !== 'admin' && role !== 'manager') {
       return { success: false, reasonCode: 'ACTOR_MEMBERSHIP_STATE_INCONSISTENT' };
+    }
+    
+    if (!canInviteOrganizationRole(role || '', requestRole || '')) {
+      return { success: false, reasonCode: 'PERMISSION_DENIED' };
     }
   }
 

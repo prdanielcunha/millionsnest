@@ -1408,10 +1408,17 @@ export function Dashboard() {
                       <div className="relative inline-block ml-4">
                          <select 
                            value={activeOrgId}
-                           onChange={(e) => {
-                              switchOrganization(e.target.value).then(() => {
-                                 window.location.reload();
-                              });
+                           onChange={async (e) => {
+                             const selectedOrgId = e.target.value;
+                             const toastId = feedback.loading("Alterando organização ativa...");
+                             try {
+                               await switchOrganization(selectedOrgId);
+                               feedback.dismiss(toastId);
+                               feedback.success("Organização alterada com sucesso!");
+                             } catch (err: any) {
+                               feedback.dismiss(toastId);
+                               feedback.error(`Não foi possível alterar a organização: ${err.message || "Erro desconhecido"}`);
+                             }
                            }}
                            className="appearance-none bg-white/5 border border-white/10 hover:border-white/20 text-sm rounded-xl px-3 py-1.5 outline-none cursor-pointer text-[#A0A7B5] transition-all max-w-[200px] truncate"
                          >
@@ -1935,10 +1942,16 @@ export function Dashboard() {
                            <button 
                              key={org.id}
                              disabled={activeOrgId === org.id}
-                             onClick={() => {
-                               switchOrganization(org.id).then(() => {
-                                  window.location.reload();
-                               });
+                             onClick={async () => {
+                               const toastId = feedback.loading("Alternando organização ativa...");
+                               try {
+                                 await switchOrganization(org.id);
+                                 feedback.dismiss(toastId);
+                                 feedback.success("Organização alterada com sucesso!");
+                               } catch (err: any) {
+                                 feedback.dismiss(toastId);
+                                 feedback.error(`Não foi possível alterar a organização: ${err.message || "Erro desconhecido"}`);
+                               }
                              }}
                              className={`flex items-center justify-between p-4 rounded-xl border transition-all text-left ${activeOrgId === org.id ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 cursor-default' : 'bg-[#050505] border-white/5 hover:border-white/10 cursor-pointer'}`}
                            >

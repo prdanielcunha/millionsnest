@@ -570,14 +570,29 @@ export default {
       overview: "Inicio"
     },
     workspace: {
-      intro: "Tus aplicaciones, organización y equipo en un solo lugar",
+      intro: "Tu Centro de Gestión",
+      sub_intro: "Gestiona la preparación de tu ministerio de adoración y controla el acceso de seguridad de tu equipo.",
       spaces_title: "Tus espacios",
       apps_title: "Tus aplicaciones",
       open_app: "Abrir {{appName}}",
       available: "Disponible",
       loading: "Cargando",
       payment_pending: "Pago pendiente",
-      resolve_payment: "Regularizar pago"
+      resolve_payment: "Regularizar pago",
+      no_apps_found: "Ninguna aplicación habilitada en este momento.",
+      musicscale_group_title: "MusicScale — Excelencia en la Adoración",
+      org_group_title: "Organización y Acceso",
+      help_group_title: "Ayuda y Soporte",
+      organization_unnamed: "Tu Organización",
+      org_settings_title: "Ajustes de la Organización",
+      plan_label: "Plan actual:",
+      plan_starter: "Starter",
+      billing_action: "Gestionar Suscripción",
+      team_title: "Miembros y Equipo",
+      team_desc: "Administra quién tiene acceso a la organización y seguridad del panel.",
+      slots_allocated: "Cupos llenos",
+      invite_action: "Invitar Miembro",
+      manage_team_action: "Ver Equipo"
     },
     musicscale: {
       

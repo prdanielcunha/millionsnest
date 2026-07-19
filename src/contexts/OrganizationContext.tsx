@@ -81,6 +81,21 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [loadingOrg, setLoadingOrg] = useState(!cachedContext);
 
   useEffect(() => {
+    const handleTenantSwitch = () => {
+      setOrganization(null);
+      setMemberRole(null);
+      setMusicScalePlan('starter');
+      setMusicScaleEntitlements(MUSIC_SCALE_PLANS.starter);
+      setLoadingOrg(true);
+    };
+
+    window.addEventListener('mn_tenant_switched', handleTenantSwitch);
+    return () => {
+      window.removeEventListener('mn_tenant_switched', handleTenantSwitch);
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
 
     async function loadOrganization() {

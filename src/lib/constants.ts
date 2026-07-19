@@ -3,8 +3,10 @@ export const CURRENT_PERMISSIONS_VERSION = 2;
 export const ROLE_KEYS = {
   OWNER: 'owner',
   ADMIN: 'admin',
-  SECRETARY: 'secretary',
+  MANAGER: 'manager',
   MEMBER: 'member',
+  VIEWER: 'viewer',
+  SECRETARY: 'secretary',
   GUEST: 'guest',
 } as const;
 

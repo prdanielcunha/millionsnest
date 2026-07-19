@@ -577,14 +577,29 @@ export default {
       overview: "Início"
     },
     workspace: {
-      intro: "Seus aplicativos, organização e equipe em um só lugar",
+      intro: "Sua Central de Gerenciamento",
+      sub_intro: "Gerencie a preparação do seu ministério de louvor e controle os acessos de segurança da sua equipe.",
       spaces_title: "Seus espaços",
       apps_title: "Seus aplicativos",
       open_app: "Abrir {{appName}}",
       available: "Disponível",
       loading: "Carregando",
       payment_pending: "Pagamento pendente",
-      resolve_payment: "Regularizar pagamento"
+      resolve_payment: "Regularizar pagamento",
+      no_apps_found: "Nenhum aplicativo habilitado no momento.",
+      musicscale_group_title: "MusicScale — Excelência no Louvor",
+      org_group_title: "Organização e Acesso",
+      help_group_title: "Ajuda e Suporte",
+      organization_unnamed: "Sua Organização",
+      org_settings_title: "Ajustes da Organização",
+      plan_label: "Plano atual:",
+      plan_starter: "Starter",
+      billing_action: "Gerenciar Assinatura",
+      team_title: "Membros e Equipe",
+      team_desc: "Administre quem tem acesso à organização e segurança do painel.",
+      slots_allocated: "Vagas preenchidas",
+      invite_action: "Convidar Membro",
+      manage_team_action: "Ver Equipe"
     },
     musicscale: {
       center: {

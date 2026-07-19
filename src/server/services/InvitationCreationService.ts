@@ -13,7 +13,7 @@ import {
   resolveCanonicalInvitationCapacity,
   normalizeInvitationTemporalMs
 } from './InvitationAcceptanceServerPolicy.js';
-import { normalizeInvitationEmail } from './InvitationAcceptancePlanner.js';
+import { normalizeInvitationEmail, isInvitationRole, InvitationRole } from './InvitationAcceptancePlanner.js';
 
 export async function createInvitation(req: Request, res: Response) {
   try {
@@ -35,7 +35,7 @@ export async function createInvitation(req: Request, res: Response) {
     if (typeof email !== 'string') {
       return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_EMAIL' });
     }
-    if (role !== 'admin' && role !== 'member') {
+    if (!isInvitationRole(role)) {
       return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_ROLE' });
     }
     

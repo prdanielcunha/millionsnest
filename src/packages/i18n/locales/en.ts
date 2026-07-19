@@ -561,14 +561,29 @@ export default {
       overview: "Home"
     },
     workspace: {
-      intro: "Your apps, organization, and team in one place",
+      intro: "Your Management Hub",
+      sub_intro: "Manage your worship ministry preparation and control your team security access.",
       spaces_title: "Your spaces",
       apps_title: "Your apps",
       open_app: "Open {{appName}}",
       available: "Available",
       loading: "Loading",
       payment_pending: "Payment pending",
-      resolve_payment: "Resolve payment"
+      resolve_payment: "Resolve payment",
+      no_apps_found: "No apps enabled at this moment.",
+      musicscale_group_title: "MusicScale — Worship Excellence",
+      org_group_title: "Organization & Access",
+      help_group_title: "Help & Support",
+      organization_unnamed: "Your Organization",
+      org_settings_title: "Organization Settings",
+      plan_label: "Current plan:",
+      plan_starter: "Starter",
+      billing_action: "Manage Subscription",
+      team_title: "Members & Team",
+      team_desc: "Manage who has access to the organization and dashboard security.",
+      slots_allocated: "Slots filled",
+      invite_action: "Invite Member",
+      manage_team_action: "View Team"
     },
     musicscale: {
       

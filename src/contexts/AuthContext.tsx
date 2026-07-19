@@ -32,7 +32,7 @@ interface AuthContextType {
   canonicalContext: any | null;
   loading: boolean;
   logout: () => Promise<void>;
-  switchOrganization: (orgId: string) => Promise<void>;
+  switchOrganization: (orgId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -57,8 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [loading, setLoading] = useState(true);
 
-  const switchOrganization = async (orgId: string) => {
-    if (!user || !profile) return;
+  const switchOrganization = async (orgId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!user || !profile) {
+      throw new Error('User not authenticated');
+    }
+    
     try {
       const idToken = await user.getIdToken();
       const res = await fetch('/api/v1/user/active-organization', {
@@ -71,21 +74,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       if (!res.ok) {
-         throw new Error('Failed to switch active organization');
+         let errorMsg = 'Failed to switch active organization';
+         try {
+           const errJson = await res.json();
+           if (errJson.reasonCode) errorMsg = errJson.reasonCode;
+         } catch {}
+         throw new Error(errorMsg);
       }
 
+      // 1. Update Profile in memory and cache
       const updatedProfile = { ...profile, organizationId: orgId, activeOrganizationId: orgId };
       setProfile(updatedProfile);
       localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
-      localStorage.removeItem('mn_support_session');
       
-      analytics.track('app_usage', {
-        userId: user.uid,
-        organizationId: orgId,
-        metadata: { action: 'switch_organization' }
+      // 2. Update Canonical Context in memory
+      setCanonicalContext((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          activeOrganizationId: orgId,
+          organizationId: orgId
+        };
       });
-    } catch (e) {
-      console.error("Failed to switch organization", e);
+
+      // 3. Clear transient tenant data to prevent data leakage (P0-C requirement)
+      localStorage.removeItem('mn_org_context');
+      localStorage.removeItem('mn_support_session');
+      localStorage.removeItem('musicscale_active_tab');
+      localStorage.removeItem('musicscale_selected_scale_id');
+      localStorage.removeItem('musicscale_selected_song_id');
+      
+      // 4. Dispatch custom event to notify listeners (like OrganizationContext)
+      window.dispatchEvent(new CustomEvent('mn_tenant_switched', { detail: { organizationId: orgId } }));
+
+      try {
+        analytics.track('app_usage', {
+          userId: user.uid,
+          organizationId: orgId,
+          metadata: { action: 'switch_organization' }
+        });
+      } catch {}
+
+      return { success: true };
+    } catch (err: any) {
+      console.error("Failed to switch organization", err);
+      throw err;
     }
   };
 

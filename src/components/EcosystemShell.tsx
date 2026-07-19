@@ -13,6 +13,7 @@ import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
+import { feedback } from '../packages/ui/feedback.js';
 
 interface EcosystemShellProps {
   children: ReactNode;
@@ -184,9 +185,17 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                   {canonicalContext.organizations.filter((org:any) => org.status !== 'archived').map((org: any) => (
                     <button
                       key={org.id}
-                      onClick={() => {
+                      onClick={async () => {
                         setOrgMenuOpen(false);
-                        switchOrganization(org.id).then(() => window.location.reload());
+                        const toastId = feedback.loading("Alternando organização ativa...");
+                        try {
+                          await switchOrganization(org.id);
+                          feedback.dismiss(toastId);
+                          feedback.success("Organização alterada com sucesso!");
+                        } catch (err: any) {
+                          feedback.dismiss(toastId);
+                          feedback.error(`Não foi possível alterar a organização: ${err.message || "Erro desconhecido"}`);
+                        }
                       }}
                       className="w-full flex items-center justify-between px-3 py-2 text-sm text-[#F5F7FA] hover:bg-white/5 rounded-lg transition-colors group"
                     >

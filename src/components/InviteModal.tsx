@@ -9,7 +9,7 @@ interface InviteModalProps {
   isOpen: boolean;
   onClose: () => void;
   handleCreateInvite: (
-    role: "admin" | "member",
+    role: "admin" | "manager" | "member" | "viewer",
     email: string,
     overrideOrgId?: string
   ) => Promise<{
@@ -19,7 +19,7 @@ interface InviteModalProps {
       organizationId: string;
       organizationName: string;
       email: string;
-      role: "admin" | "member";
+      role: "admin" | "manager" | "member" | "viewer";
       status: "pending";
       expiresAtMs: number;
     };
@@ -41,7 +41,38 @@ export function InviteModal({
   onUpgradeClick,
   canInvite = true
 }: InviteModalProps) {
-  const [role, setRole] = useState<"admin" | "member">('member');
+  const { userProfile, user } = useAuth();
+  const { organization, memberRole } = useOrganization();
+  const { t } = useTranslation();
+  
+  const isGlobalAdmin = userProfile?.systemRole === 'ceo' || userProfile?.systemRole === 'global_admin' || userProfile?.systemRole === 'ecosystem_owner' || userProfile?.systemRole === 'founder';
+
+  const getInviteableRoles = () => {
+    if (isGlobalAdmin || memberRole === 'owner' || organization?.ownerUid === user?.uid) {
+      return [
+        { value: 'admin', label: t('dashboard.invite.role_admin', 'Administrador') },
+        { value: 'manager', label: t('dashboard.invite.role_manager', 'Manager') },
+        { value: 'member', label: t('dashboard.invite.role_member', 'Membro') },
+        { value: 'viewer', label: t('dashboard.invite.role_viewer', 'Viewer') }
+      ];
+    }
+    if (memberRole === 'admin') {
+      return [
+        { value: 'manager', label: t('dashboard.invite.role_manager', 'Manager') },
+        { value: 'member', label: t('dashboard.invite.role_member', 'Membro') },
+        { value: 'viewer', label: t('dashboard.invite.role_viewer', 'Viewer') }
+      ];
+    }
+    if (memberRole === 'manager') {
+      return [
+        { value: 'member', label: t('dashboard.invite.role_member', 'Membro') },
+        { value: 'viewer', label: t('dashboard.invite.role_viewer', 'Viewer') }
+      ];
+    }
+    return [];
+  };
+
+  const [role, setRole] = useState<"admin" | "manager" | "member" | "viewer">('member');
   const [email, setEmail] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,16 +84,14 @@ export function InviteModal({
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [fallbackLink, setFallbackLink] = useState(false);
-  
-  const { userProfile, user } = useAuth();
-  const { organization } = useOrganization();
-  const { t } = useTranslation();
-  
-  const isGlobalAdmin = userProfile?.systemRole === 'ceo' || userProfile?.systemRole === 'global_admin' || userProfile?.systemRole === 'ecosystem_owner' || userProfile?.systemRole === 'founder';
 
   useEffect(() => {
     if (isOpen) {
-      setRole('member');
+      const options = getInviteableRoles();
+      if (options.length > 0) {
+        const defaultOption = options.find(o => o.value === 'member') || options[0];
+        setRole(defaultOption.value as any);
+      }
       setEmail('');
       setCopiedLink(false);
       setIsLoading(false);
@@ -71,7 +100,7 @@ export function InviteModal({
       setSuccessMsg('');
       setFallbackLink(false);
     }
-  }, [isOpen]);
+  }, [isOpen, memberRole, organization, isGlobalAdmin]);
 
   useEffect(() => {
     if (isOpen && isGlobalAdmin && user) {
@@ -327,15 +356,16 @@ export function InviteModal({
                   <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.role_label', 'Qual será a função dessa pessoa?')}</label>
                   <select
                     value={role}
-                    onChange={(e) => setRole(e.target.value as "admin" | "member")}
+                    onChange={(e) => setRole(e.target.value as "admin" | "manager" | "member" | "viewer")}
                     disabled={formDisabled}
                     className="w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-[#F5F7FA] focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all outline-none disabled:opacity-50"
                   >
-                    <option value="admin">{t('dashboard.invite.role_admin', 'Administrador')}</option>
-                    <option value="member">{t('dashboard.invite.role_member', 'Membro')}</option>
+                    {getInviteableRoles().map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
-                  <p className="text-[#A0A7B5]/70 text-xs mt-2 px-1">
-                     {t('dashboard.invite.role_explanation', 'Esta função define o acesso à organização. Funções ministeriais, como líder, músico ou vocal, são configuradas dentro do MusicScale.')}
+                  <p className="text-[#A0A7B5]/70 text-xs mt-2 px-1 leading-relaxed">
+                     {t('dashboard.invite.role_explanation', 'Esta função define o nível de permissão no painel de segurança e gerenciamento do MillionsNest. Ela é totalmente independente das funções ministeriais (como Ministro, Vocal, Instrumentista, etc.), que são de responsabilidade do painel do MusicScale.')}
                   </p>
                 </div>
                 

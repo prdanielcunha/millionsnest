@@ -5,15 +5,15 @@ export function normalizeInvitationEmail(value: unknown): string | null {
   return trimmed;
 }
 
-export type InvitationRole = 'admin' | 'member';
-export type ExistingMembershipRole = 'owner' | 'admin' | 'member';
+export type InvitationRole = 'admin' | 'manager' | 'member' | 'viewer';
+export type ExistingMembershipRole = 'owner' | 'admin' | 'manager' | 'member' | 'viewer' | 'leader' | 'secretary' | 'guest';
 
 export function isInvitationRole(value: unknown): value is InvitationRole {
-  return value === 'admin' || value === 'member';
+  return value === 'admin' || value === 'manager' || value === 'member' || value === 'viewer';
 }
 
 export function isExistingMembershipRole(value: unknown): value is ExistingMembershipRole {
-  return value === 'owner' || value === 'admin' || value === 'member';
+  return ['owner', 'admin', 'manager', 'member', 'viewer', 'leader', 'secretary', 'guest'].includes(value as string);
 }
 
 export type AuthenticatedInvitationIdentity = {
@@ -64,7 +64,7 @@ export type InvitationAcceptanceInput = {
 export type InvitationAcceptanceSuccess = {
   success: true;
   action: 'CREATE_MEMBERSHIP' | 'ALREADY_MEMBER';
-  membershipRole: 'admin' | 'member' | 'owner';
+  membershipRole: string;
   consumeInviteUse: boolean;
   reasonCode: 'INVITATION_CAN_BE_ACCEPTED' | 'ALREADY_MEMBER';
 };
