@@ -32,7 +32,10 @@ interface AuthContextType {
   canonicalContext: any | null;
   loading: boolean;
   logout: () => Promise<void>;
-  switchOrganization: (orgId: string) => Promise<{ success: boolean; error?: string }>;
+  switchOrganization: (orgId: string) => Promise<{ success: boolean; activeOrganizationId?: string; error?: string }>;
+  switchingOrganizationId: string | null;
+  organizationSwitchError: string | null;
+  clearOrganizationSwitchError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -41,7 +44,10 @@ const AuthContext = createContext<AuthContextType>({
   canonicalContext: null,
   loading: true,
   logout: async () => {},
-  switchOrganization: async () => {},
+  switchOrganization: async () => ({ success: false }),
+  switchingOrganizationId: null,
+  organizationSwitchError: null,
+  clearOrganizationSwitchError: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -56,11 +62,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
   const [loading, setLoading] = useState(true);
+  const [switchingOrganizationId, setSwitchingOrganizationId] = useState<string | null>(null);
+  const [organizationSwitchError, setOrganizationSwitchError] = useState<string | null>(null);
 
-  const switchOrganization = async (orgId: string): Promise<{ success: boolean; error?: string }> => {
-    if (!user || !profile) {
-      throw new Error('User not authenticated');
+  const clearOrganizationSwitchError = () => setOrganizationSwitchError(null);
+
+  const switchOrganization = async (orgId: string): Promise<{ success: boolean; activeOrganizationId?: string; error?: string }> => {
+    if (!user || !profile || !canonicalContext) {
+      return { success: false, error: 'User not authenticated or context not loaded' };
     }
+    
+    if (!orgId) {
+      return { success: false, error: 'Invalid organization ID' };
+    }
+    
+    const existsInContext = canonicalContext.organizations?.some((org: any) => org.id === orgId);
+    if (!existsInContext) {
+      return { success: false, error: 'User does not belong to this organization' };
+    }
+    
+    if (canonicalContext.activeOrganizationId === orgId) {
+      return { success: true, activeOrganizationId: orgId };
+    }
+    
+    if (switchingOrganizationId) {
+       return { success: false, error: 'Another switch is in progress' };
+    }
+    
+    setSwitchingOrganizationId(orgId);
+    setOrganizationSwitchError(null);
     
     try {
       const idToken = await user.getIdToken();
@@ -73,38 +103,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
          body: JSON.stringify({ organizationId: orgId })
       });
       
-      if (!res.ok) {
-         let errorMsg = 'Failed to switch active organization';
-         try {
-           const errJson = await res.json();
-           if (errJson.reasonCode) errorMsg = errJson.reasonCode;
-         } catch {}
-         throw new Error(errorMsg);
+      const jsonRes = await res.json();
+      
+      if (!res.ok || !jsonRes.success || jsonRes.activeOrganizationId !== orgId) {
+         throw new Error(jsonRes.reasonCode || 'Failed to switch active organization');
       }
 
-      // 1. Update Profile in memory and cache
-      const updatedProfile = { ...profile, organizationId: orgId, activeOrganizationId: orgId };
+      const ctxRes = await fetch('/api/user/organization-context', {
+         headers: { 'Authorization': `Bearer ${idToken}` }
+      });
+      
+      if (!ctxRes.ok) {
+         throw new Error('Failed to load updated organization context');
+      }
+      
+      const updatedCtx = await ctxRes.json();
+      
+      if (updatedCtx.activeOrganizationId !== orgId) {
+         throw new Error('Server confirmed switch but returned incorrect context');
+      }
+
+      setCanonicalContext(updatedCtx);
+
+      const updatedProfile = { 
+        ...profile, 
+        organizationId: orgId, 
+        activeOrganizationId: orgId,
+        primaryOrganizationId: updatedCtx.primaryOrganizationId
+      };
       setProfile(updatedProfile);
       localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
       
-      // 2. Update Canonical Context in memory
-      setCanonicalContext((prev: any) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          activeOrganizationId: orgId,
-          organizationId: orgId
-        };
-      });
-
-      // 3. Clear transient tenant data to prevent data leakage (P0-C requirement)
       localStorage.removeItem('mn_org_context');
       localStorage.removeItem('mn_support_session');
       localStorage.removeItem('musicscale_active_tab');
       localStorage.removeItem('musicscale_selected_scale_id');
       localStorage.removeItem('musicscale_selected_song_id');
       
-      // 4. Dispatch custom event to notify listeners (like OrganizationContext)
       window.dispatchEvent(new CustomEvent('mn_tenant_switched', { detail: { organizationId: orgId } }));
 
       try {
@@ -115,10 +150,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       } catch {}
 
-      return { success: true };
+      return { success: true, activeOrganizationId: orgId };
     } catch (err: any) {
+      const errorMessage = err.message || 'Unknown error during switch';
+      setOrganizationSwitchError(errorMessage);
       console.error("Failed to switch organization", err);
-      throw err;
+      return { success: false, error: errorMessage };
+    } finally {
+      setSwitchingOrganizationId(null);
     }
   };
 
@@ -254,8 +293,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     canonicalContext,
     loading,
     logout,
-    switchOrganization
-  }), [user, profile, canonicalContext, loading]);
+    switchOrganization,
+    switchingOrganizationId,
+    organizationSwitchError,
+    clearOrganizationSwitchError,
+  }), [user, profile, canonicalContext, loading, switchingOrganizationId, organizationSwitchError]);
 
   return (
     <AuthContext.Provider value={contextValue}>

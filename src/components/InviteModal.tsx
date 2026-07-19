@@ -4,6 +4,7 @@ import { X, Copy, Check, MessageCircle, AlertCircle, Loader2 } from 'lucide-reac
 import { useAuth } from '../contexts/AuthContext.js';
 import { useTranslation } from 'react-i18next';
 import { useOrganization } from '../contexts/OrganizationContext.js';
+import { getInviteableOrganizationRolesForActor, normalizeExistingOrganizationRole } from '../lib/organizationRoles.js';
 
 interface InviteModalProps {
   isOpen: boolean;
@@ -41,35 +42,31 @@ export function InviteModal({
   onUpgradeClick,
   canInvite = true
 }: InviteModalProps) {
-  const { userProfile, user } = useAuth();
+  const { profile, user } = useAuth();
   const { organization, memberRole } = useOrganization();
   const { t } = useTranslation();
   
-  const isGlobalAdmin = userProfile?.systemRole === 'ceo' || userProfile?.systemRole === 'global_admin' || userProfile?.systemRole === 'ecosystem_owner' || userProfile?.systemRole === 'founder';
+  const isGlobalAdmin = profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin' || profile?.systemRole === 'ecosystem_owner' || profile?.systemRole === 'founder';
+  
+  // Normalize the object-based memberRole or null
+  const normalizedActorRole = memberRole?.role ? normalizeExistingOrganizationRole(memberRole.role) : null;
 
   const getInviteableRoles = () => {
-    if (isGlobalAdmin || memberRole === 'owner' || organization?.ownerUid === user?.uid) {
-      return [
-        { value: 'admin', label: t('dashboard.invite.role_admin', 'Administrador') },
-        { value: 'manager', label: t('dashboard.invite.role_manager', 'Manager') },
-        { value: 'member', label: t('dashboard.invite.role_member', 'Membro') },
-        { value: 'viewer', label: t('dashboard.invite.role_viewer', 'Viewer') }
-      ];
+    // Owner is a special case derived from organization object in some contexts
+    let effectiveActorRole = normalizedActorRole;
+    if (organization?.ownerUid === user?.uid) {
+       effectiveActorRole = 'owner';
     }
-    if (memberRole === 'admin') {
-      return [
-        { value: 'manager', label: t('dashboard.invite.role_manager', 'Manager') },
-        { value: 'member', label: t('dashboard.invite.role_member', 'Membro') },
-        { value: 'viewer', label: t('dashboard.invite.role_viewer', 'Viewer') }
-      ];
-    }
-    if (memberRole === 'manager') {
-      return [
-        { value: 'member', label: t('dashboard.invite.role_member', 'Membro') },
-        { value: 'viewer', label: t('dashboard.invite.role_viewer', 'Viewer') }
-      ];
-    }
-    return [];
+
+    const roles = getInviteableOrganizationRolesForActor(profile?.systemRole || 'user', effectiveActorRole);
+    
+    return roles.map(r => ({
+      value: r,
+      label: r === 'admin' ? t('dashboard.invite.role_admin', 'Administrador') :
+             r === 'manager' ? t('dashboard.invite.role_manager', 'Manager') :
+             r === 'member' ? t('dashboard.invite.role_member', 'Membro') :
+             t('dashboard.invite.role_viewer', 'Viewer')
+    }));
   };
 
   const [role, setRole] = useState<"admin" | "manager" | "member" | "viewer">('member');
@@ -87,6 +84,7 @@ export function InviteModal({
 
   useEffect(() => {
     if (isOpen) {
+      window.dispatchEvent(new CustomEvent('mn_modal_opened'));
       const options = getInviteableRoles();
       if (options.length > 0) {
         const defaultOption = options.find(o => o.value === 'member') || options[0];
@@ -99,6 +97,8 @@ export function InviteModal({
       setErrorMsg('');
       setSuccessMsg('');
       setFallbackLink(false);
+    } else {
+      window.dispatchEvent(new CustomEvent('mn_modal_closed'));
     }
   }, [isOpen, memberRole, organization, isGlobalAdmin]);
 
@@ -354,17 +354,29 @@ export function InviteModal({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.role_label', 'Qual será a função dessa pessoa?')}</label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as "admin" | "manager" | "member" | "viewer")}
-                    disabled={formDisabled}
-                    className="w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-[#F5F7FA] focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all outline-none disabled:opacity-50"
-                  >
+                  <div className="flex flex-col gap-2">
                     {getInviteableRoles().map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      <button
+                        key={opt.value}
+                        type="button"
+                        disabled={formDisabled}
+                        onClick={() => setRole(opt.value as any)}
+                        className={`w-full text-left p-4 rounded-xl border transition-all ${
+                          role === opt.value
+                            ? 'bg-[#2B85EB]/10 border-[#2B85EB] shadow-[0_0_15px_rgba(43,133,235,0.1)]'
+                            : 'bg-[#050505] border-white/10 hover:border-white/20'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        <div className="flex items-center justify-between">
+                           <span className={`font-semibold ${role === opt.value ? 'text-[#2B85EB]' : 'text-[#F5F7FA]'}`}>
+                             {opt.label}
+                           </span>
+                           {role === opt.value && <Check className="w-5 h-5 text-[#2B85EB]" />}
+                        </div>
+                      </button>
                     ))}
-                  </select>
-                  <p className="text-[#A0A7B5]/70 text-xs mt-2 px-1 leading-relaxed">
+                  </div>
+                  <p className="text-[#A0A7B5]/70 text-xs mt-3 px-1 leading-relaxed">
                      {t('dashboard.invite.role_explanation', 'Esta função define o nível de permissão no painel de segurança e gerenciamento do MillionsNest. Ela é totalmente independente das funções ministeriais (como Ministro, Vocal, Instrumentista, etc.), que são de responsabilidade do painel do MusicScale.')}
                   </p>
                 </div>

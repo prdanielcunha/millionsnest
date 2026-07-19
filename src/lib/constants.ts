@@ -6,8 +6,6 @@ export const ROLE_KEYS = {
   MANAGER: 'manager',
   MEMBER: 'member',
   VIEWER: 'viewer',
-  SECRETARY: 'secretary',
-  GUEST: 'guest',
 } as const;
 
 export type RoleKey = typeof ROLE_KEYS[keyof typeof ROLE_KEYS];

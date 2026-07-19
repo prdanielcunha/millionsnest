@@ -1402,32 +1402,6 @@ export function Dashboard() {
                 <div className="flex items-center gap-3 flex-wrap mb-1">
                   <h1 className="text-2xl md:text-3xl font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
                     Olá, {profile?.displayName?.split(' ')[0] || user.email?.split('@')[0]}
-                    
-                    {/* Org Switcher for Users with Multiple Orgs */}
-                    {userOrgs.length > 1 && (
-                      <div className="relative inline-block ml-4">
-                         <select 
-                           value={activeOrgId}
-                           onChange={async (e) => {
-                             const selectedOrgId = e.target.value;
-                             const toastId = feedback.loading("Alterando organização ativa...");
-                             try {
-                               await switchOrganization(selectedOrgId);
-                               feedback.dismiss(toastId);
-                               feedback.success("Organização alterada com sucesso!");
-                             } catch (err: any) {
-                               feedback.dismiss(toastId);
-                               feedback.error(`Não foi possível alterar a organização: ${err.message || "Erro desconhecido"}`);
-                             }
-                           }}
-                           className="appearance-none bg-white/5 border border-white/10 hover:border-white/20 text-sm rounded-xl px-3 py-1.5 outline-none cursor-pointer text-[#A0A7B5] transition-all max-w-[200px] truncate"
-                         >
-                           {userOrgs.map((org: any) => (
-                             <option key={org.id} value={org.id} className="bg-[#0B0F19] text-[#F5F7FA]">{org.name}</option>
-                           ))}
-                         </select>
-                      </div>
-                    )}
                   </h1>
                 </div>
                 

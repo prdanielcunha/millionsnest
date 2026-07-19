@@ -150,31 +150,20 @@ export function SupportHub() {
     }
   }, [hubOpen]);
 
-  const [anyModalOpen, setAnyModalOpen] = useState(false);
+  const [blockingModalOpen, setBlockingModalOpen] = useState(false);
 
   useEffect(() => {
-    const checkModals = () => {
-      // Find active modals in the document (invite modal, editing member modal, etc.)
-      const modalElements = document.querySelectorAll('.fixed.z-50, .fixed.z-\\[100\\], .fixed.z-\\[100\\]');
-      let found = false;
-      modalElements.forEach(el => {
-        if (hubRootRef.current && !el.contains(hubRootRef.current)) {
-          found = true;
-        }
-      });
-      const dialog = document.querySelector('[role="dialog"]');
-      if (dialog && hubRootRef.current && !hubRootRef.current.contains(dialog)) {
-        found = true;
-      }
-      setAnyModalOpen(found);
+    const handleModalOpen = () => setBlockingModalOpen(true);
+    const handleModalClose = () => setBlockingModalOpen(false);
+
+    // Fallback if some modals use native dialog events
+    window.addEventListener('mn_modal_opened', handleModalOpen);
+    window.addEventListener('mn_modal_closed', handleModalClose);
+
+    return () => {
+      window.removeEventListener('mn_modal_opened', handleModalOpen);
+      window.removeEventListener('mn_modal_closed', handleModalClose);
     };
-
-    checkModals();
-
-    const observer = new MutationObserver(checkModals);
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    return () => observer.disconnect();
   }, []);
 
   const currentGuide = resolveSupportGuide({
@@ -185,7 +174,7 @@ export function SupportHub() {
 
   const supportModalOpen = requestOpen || whatsappOpen || guideOpen;
 
-  if (supportModalOpen || anyModalOpen) {
+  if (supportModalOpen || blockingModalOpen) {
     return null;
   }
 

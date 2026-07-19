@@ -197,6 +197,18 @@ export function EcosystemWorkspaceHome({
                     type="button"
                     onClick={() => {
                       onSelectWorkspace('musicscale');
+                      onSelectMusicScaleSection('getting-started');
+                    }}
+                    className="py-3.5 px-5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-sm"
+                  >
+                    <Info className="w-4 h-4" />
+                    {t('musicscale.hero.getting_started', 'Primeiros passos')}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelectWorkspace('musicscale');
                       onSelectMusicScaleSection('resources');
                     }}
                     className="py-3.5 px-5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-sm"
@@ -557,24 +569,6 @@ export function EcosystemWorkspaceHome({
                     {t('musicscale.actions.view_team_and_invites', 'Ver equipe e convites')}
                   </button>
                 )}
-              </div>
-            </div>
-
-            {/* HELP INFO */}
-            <div className="bg-[#050505] border border-white/5 rounded-2xl p-6"> 
-              <h3 className="text-sm font-bold text-white mb-2">Não sabe por onde começar?</h3> 
-              <p className="text-xs text-[#A0A7B5] mb-4">Veja o passo a passo para preparar sua equipe, adicionar músicas e criar sua primeira escala.</p> 
-              <div className="space-y-2"> 
-                <button type="button"  onClick={() => onSelectMusicScaleSection('getting-started')} className="text-sm text-[#2B85EB] hover:text-[#3B95FB] font-medium block min-h-[44px]"> 
-                  Aprender a usar &rarr;
-                </button> 
-                <button 
-                  type="button"
-                  onClick={openRequest}
-                  className="text-sm text-[#A0A7B5] hover:text-white font-medium block min-h-[44px] text-left"
-                > 
-                  {t('support.actions.contact_support', t('musicscale.help.contact_support', 'Falar com suporte'))}
-                </button> 
               </div>
             </div>
           </div>

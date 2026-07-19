@@ -202,7 +202,7 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
       return { success: false, reasonCode: 'ACTOR_MEMBERSHIP_STATE_INCONSISTENT' };
     }
     
-    if (!canInviteOrganizationRole(role || '', requestRole || '')) {
+    if (!canInviteOrganizationRole(input.creator.globalRole || '', role || '', requestRole || '')) {
       return { success: false, reasonCode: 'PERMISSION_DENIED' };
     }
   }

@@ -12,7 +12,7 @@ export type InviteableOrganizationRole = 'admin' | 'manager' | 'member' | 'viewe
 
 export const INVITEABLE_ORGANIZATION_ROLES: InviteableOrganizationRole[] = ['admin', 'manager', 'member', 'viewer'];
 
-export function normalizeOrganizationRole(role: string): string {
+export function normalizeExistingOrganizationRole(role: string): string {
   if (!role) return 'viewer';
   const r = role.toLowerCase().trim();
   if (r === 'secretary') return 'manager';
@@ -21,11 +21,32 @@ export function normalizeOrganizationRole(role: string): string {
 }
 
 export function isInviteableOrganizationRole(role: string): role is InviteableOrganizationRole {
-  return ['admin', 'manager', 'member', 'viewer'].includes(normalizeOrganizationRole(role));
+  return INVITEABLE_ORGANIZATION_ROLES.includes(role as any);
+}
+
+export function getInviteableOrganizationRolesForActor(actorSystemRole: string | undefined | null, actorOrganizationRole: string | undefined | null): InviteableOrganizationRole[] {
+  const normalizedSys = (actorSystemRole || '').toLowerCase();
+  
+  if (normalizedSys === 'ceo' || normalizedSys === 'global_admin' || normalizedSys === 'ecosystem_owner' || normalizedSys === 'founder') {
+    return ['admin', 'manager', 'member', 'viewer'];
+  }
+
+  const normalizedOrg = actorOrganizationRole ? normalizeExistingOrganizationRole(actorOrganizationRole) : '';
+  
+  if (normalizedOrg === 'owner') {
+    return ['admin', 'manager', 'member', 'viewer'];
+  }
+  if (normalizedOrg === 'admin') {
+    return ['manager', 'member', 'viewer'];
+  }
+  if (normalizedOrg === 'manager') {
+    return ['member', 'viewer'];
+  }
+  return [];
 }
 
 export function getOrganizationRoleLabel(role: string, locale: 'pt' | 'en' | 'es' = 'pt'): string {
-  const normalized = normalizeOrganizationRole(role);
+  const normalized = normalizeExistingOrganizationRole(role);
   const labels: Record<string, Record<'pt' | 'en' | 'es', string>> = {
     owner: { pt: 'Proprietário', en: 'Owner', es: 'Propietario' },
     admin: { pt: 'Administrador', en: 'Administrator', es: 'Administrador' },
@@ -38,7 +59,7 @@ export function getOrganizationRoleLabel(role: string, locale: 'pt' | 'en' | 'es
 }
 
 export function getOrganizationRoleDescription(role: string, locale: 'pt' | 'en' | 'es' = 'pt'): string {
-  const normalized = normalizeOrganizationRole(role);
+  const normalized = normalizeExistingOrganizationRole(role);
   const descriptions: Record<string, Record<'pt' | 'en' | 'es', string>> = {
     owner: {
       pt: 'Controle total da organização, cobrança e aplicativos.',
@@ -75,7 +96,7 @@ export function getOrganizationRoleDescription(role: string, locale: 'pt' | 'en'
 }
 
 export function getRoleHierarchyScore(role: string): number {
-  const normalized = normalizeOrganizationRole(role);
+  const normalized = normalizeExistingOrganizationRole(role);
   switch (normalized) {
     case 'owner': return 100;
     case 'admin': return 80;
@@ -86,18 +107,7 @@ export function getRoleHierarchyScore(role: string): number {
   }
 }
 
-export function canInviteOrganizationRole(actorRole: string, targetRole: string): boolean {
-  const actor = normalizeOrganizationRole(actorRole);
-  const target = normalizeOrganizationRole(targetRole);
-  
-  if (actor === 'owner') {
-    return ['admin', 'manager', 'member', 'viewer'].includes(target);
-  }
-  if (actor === 'admin') {
-    return ['manager', 'member', 'viewer'].includes(target);
-  }
-  if (actor === 'manager') {
-    return ['member', 'viewer'].includes(target);
-  }
-  return false;
+export function canInviteOrganizationRole(actorSystemRole: string, actorOrganizationRole: string, targetRole: string): boolean {
+  if (!isInviteableOrganizationRole(targetRole)) return false;
+  return getInviteableOrganizationRolesForActor(actorSystemRole, actorOrganizationRole).includes(targetRole as InviteableOrganizationRole);
 }
