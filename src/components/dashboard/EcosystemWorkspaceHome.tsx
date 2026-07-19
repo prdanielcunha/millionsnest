@@ -4,7 +4,7 @@ import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
-  AlertCircle, CircleHelp, CreditCard
+  AlertCircle, CircleHelp, CreditCard, Rocket, BookOpen, UserPlus, ChevronRight
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSupportHub } from '../support/SupportHubContext.js';
@@ -57,7 +57,7 @@ export function EcosystemWorkspaceHome({
   onSelectMusicScaleSection
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
-  const { openHub, openRequest } = useSupportHub();
+  const { openHub } = useSupportHub();
 
   // Selector UI
   const renderWorkspaceSelector = () => {
@@ -412,10 +412,61 @@ export function EcosystemWorkspaceHome({
     );
 
     const overviewContent = (
+      <div className="space-y-6">
+        {/* 2. CARD PRINCIPAL HORIZONTAL */}
+        <button
+          type="button"
+          id="btn-sidebar-open-musicscale"
+          onClick={() => {
+            if (isReadyToOpen && musicScaleApp) {
+              onLaunchApp(musicScaleApp);
+            }
+          }}
+          disabled={!isReadyToOpen}
+          className="w-full bg-gradient-to-br from-[#0B1528] to-[#020617] border border-white/10 hover:border-[#2B85EB]/40 hover:bg-[#2B85EB]/5 rounded-3xl p-6 transition-all focus:outline-none focus:ring-2 focus:ring-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden block"
+        >
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            {/* Lado esquerdo */}
+            <div className="flex items-center gap-4 text-left">
+              <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center shrink-0 border border-white/10">
+                <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-6 h-6 object-contain" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                  {t('workspace.open_musicscale_title', 'Abrir MusicScale')}
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    msCatalogState === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                    msCatalogState === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                    hasPaymentIssue ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                    isLoading ? 'bg-white/10 text-white border border-white/20' :
+                    'bg-white/10 text-[#A0A7B5]'
+                  }`}>
+                    {isLoading 
+                      ? t('musicscale.status.loading', 'Carregando')
+                      : hasPaymentIssue 
+                        ? t('musicscale.status.payment_issue', 'Pagamento pendente')
+                        : t(`musicscale.status.${msCatalogState}`, msCatalogState)
+                    }
+                  </span>
+                </h3>
+                <p className="text-sm text-[#A0A7B5] mt-1">
+                  {t('workspace.open_musicscale_desc', 'Continue de onde parou e organize repertórios, integrantes e escalas.')}
+                </p>
+              </div>
+            </div>
+            {/* Lado direito */}
+            <div className="flex items-center gap-3 shrink-0 mt-2 sm:mt-0">
+              <span className="font-semibold text-white group-hover:text-[#2B85EB] transition-colors">{t('workspace.open_cta', 'Abrir')}</span>
+              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-[#2B85EB]/20 transition-all">
+                <ArrowRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-[#2B85EB] transition-colors" />
+              </div>
+            </div>
+          </div>
+        </button>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Column */}
+          {/* Main Column (Recursos do MusicScale) */}
           <div className="lg:col-span-2 space-y-6">
-            {/* FEATURES */}
             <div>
               <h3 className="text-lg font-bold text-white mb-4">{t('musicscale.features.title', 'Recursos do MusicScale')}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -462,102 +513,109 @@ export function EcosystemWorkspaceHome({
           {/* Sidebar */}
           <div className="space-y-6">
             
-                        {/* 1. Card principal (Central Premium) */}
-            <button
-              type="button"
-              id="btn-sidebar-open-musicscale"
-              onClick={() => {
-                if (isReadyToOpen && musicScaleApp) {
-                  onLaunchApp(musicScaleApp);
-                }
-              }}
-              disabled={!isReadyToOpen}
-              className="w-full text-left bg-gradient-to-br from-[#0B1528] to-[#020617] border border-white/10 hover:border-[#2B85EB]/40 hover:bg-[#2B85EB]/5 rounded-3xl p-6 transition-all focus:outline-none focus:ring-2 focus:ring-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden block"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center shrink-0 border border-white/10">
-                  <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-6 h-6 object-contain" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                    msCatalogState === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                    msCatalogState === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                    hasPaymentIssue ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                    isLoading ? 'bg-white/10 text-white border border-white/20' :
-                    'bg-white/10 text-[#A0A7B5]'
-                  }`}>
-                    {isLoading 
-                      ? t('workspace.loading', 'Carregando')
-                      : hasPaymentIssue 
-                        ? t('workspace.payment_pending', 'Pagamento pendente')
-                        : t(`musicscale.status.${msCatalogState}`, msCatalogState)
-                    }
-                  </span>
-                  <ArrowRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white group-hover:translate-x-1 transition-all" />
-                </div>
-              </div>
-
-              <h3 className="text-lg font-bold text-white mb-2">
-                {t('workspace.open_musicscale_title', 'Abrir MusicScale')}
-              </h3>
-              <p className="text-sm text-[#A0A7B5] leading-relaxed">
-                {t('workspace.open_musicscale_desc', 'Entre no aplicativo e continue organizando seu ministério.')}
-              </p>
-            </button>
-
-            {/* 2. Aprenda e configure */}
+            {/* 2. Aprenda e configure -> Comece por aqui */}
             <div className="bg-[#050505] border border-white/5 rounded-2xl p-6">
-              <h3 className="text-sm font-bold text-white mb-4">{t('workspace.learn_and_config', 'Aprenda e configure')}</h3>
-              <div className="space-y-2">
-                <button type="button"
-                  onClick={() => onSelectMusicScaleSection('resources')}
-                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]">
-                  <span className="flex items-center gap-3"><ExternalLink className="w-4 h-4 text-[#A0A7B5]" /> {t('musicscale.actions.learn_more', 'Tutoriais e Recursos')}</span>
+              <h3 className="text-sm font-bold text-white mb-4">{t('workspace.start_here', 'Comece por aqui')}</h3>
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => onSelectMusicScaleSection('getting-started')}
+                  className="w-full text-left flex items-start gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all group min-h-[80px] outline-none focus:ring-2 focus:ring-[#2B85EB]"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center shrink-0 group-hover:bg-[#2B85EB]/20 transition-colors">
+                    <Rocket className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-white mb-0.5">{t('workspace.getting_started', 'Primeiros passos')}</span>
+                      <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors group-hover:translate-x-0.5" />
+                    </div>
+                    <p className="text-xs text-[#A0A7B5] leading-relaxed">{t('workspace.getting_started_desc', 'Configure sua organização e prepare sua equipe.')}</p>
+                  </div>
                 </button>
                 <button
                   type="button"
-                  onClick={openRequest}
-                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-white transition-colors group min-h-[44px]">
-                  <span className="flex items-center gap-3"><Mail className="w-4 h-4 text-[#A0A7B5]" /> {t('support.actions.need_help', 'Falar com Suporte')}</span>
+                  onClick={() => onSelectMusicScaleSection('resources')}
+                  className="w-full text-left flex items-start gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all group min-h-[80px] outline-none focus:ring-2 focus:ring-[#2B85EB]"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 group-hover:bg-purple-500/20 transition-colors">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-white mb-0.5">{t('workspace.know_resources', 'Conhecer recursos')}</span>
+                      <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors group-hover:translate-x-0.5" />
+                    </div>
+                    <p className="text-xs text-[#A0A7B5] leading-relaxed">{t('workspace.know_resources_desc', 'Entenda repertório, cifras, integrantes e escalas.')}</p>
+                  </div>
                 </button>
               </div>
             </div>
 
             {/* 3. Organização e acesso */}
             <div className="bg-[#050505] border border-white/5 rounded-2xl p-6">
-              <h3 className="text-sm font-bold text-white mb-4">{t('workspace.quick_access', 'Acesso rápido')}</h3>
-              <div className="flex flex-col gap-2">
+              <h3 className="text-sm font-bold text-white mb-4">{t('workspace.org_and_access', 'Organização e acesso')}</h3>
+              <div className="flex flex-col gap-3">
                 {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
                   <button
                     type="button"
                     onClick={onOpenInviteModal}
-                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-[#A0A7B5] hover:text-white transition-colors text-sm"
+                    className="w-full text-left flex items-start gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all group min-h-[80px] outline-none focus:ring-2 focus:ring-[#2B85EB]"
                   >
-                    <span className="flex items-center gap-3"><Users className="w-4 h-4" /> {t('musicscale.actions.invite', 'Convidar pessoas')}</span>
+                    <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0 group-hover:bg-amber-500/20 transition-colors">
+                      <UserPlus className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-white mb-0.5">{t('workspace.invite_person', 'Convidar pessoa')}</span>
+                        <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors group-hover:translate-x-0.5" />
+                      </div>
+                      <p className="text-xs text-[#A0A7B5] leading-relaxed">{t('workspace.invite_person_desc', 'Adicione alguém com o nível de acesso correto.')}</p>
+                    </div>
                   </button>
                 )}
                 {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
                   <button
                     type="button"
                     onClick={onNavigateToOrganizationMembers}
-                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-[#A0A7B5] hover:text-white transition-colors text-sm"
+                    className="w-full text-left flex items-start gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all group min-h-[80px] outline-none focus:ring-2 focus:ring-[#2B85EB]"
                   >
-                    <span className="flex items-center gap-3"><User className="w-4 h-4" /> {t('workspace.pending_invites', 'Convites e Equipe')}</span>
+                    <div className="w-10 h-10 rounded-lg bg-green-500/10 text-green-400 flex items-center justify-center shrink-0 group-hover:bg-green-500/20 transition-colors">
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-white mb-0.5">{t('workspace.manage_team', 'Gerenciar equipe')}</span>
+                        <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors group-hover:translate-x-0.5" />
+                      </div>
+                      <p className="text-xs text-[#A0A7B5] leading-relaxed">{t('workspace.manage_team_desc', 'Confira integrantes, convites e permissões.')}</p>
+                    </div>
                   </button>
                 )}
                 {(currentUserPerms['organization.billing.manage'] || isGlobalAdmin) && (
                   <button
                     type="button"
                     onClick={onNavigateToBilling}
-                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-[#A0A7B5] hover:text-white transition-colors text-sm"
+                    className="w-full text-left flex items-start gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all group min-h-[80px] outline-none focus:ring-2 focus:ring-[#2B85EB]"
                   >
-                    <span className="flex items-center gap-3"><CreditCard className="w-4 h-4" /> {t('workspace.plans_and_sub', 'Planos e Assinatura')}</span>
+                    <div className="w-10 h-10 rounded-lg bg-blue-500/10 text-[#2B85EB] flex items-center justify-center shrink-0 group-hover:bg-blue-500/20 transition-colors">
+                      <CreditCard className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-white mb-0.5">{t('workspace.view_subscription', 'Ver assinatura')}</span>
+                        <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors group-hover:translate-x-0.5" />
+                      </div>
+                      <p className="text-xs text-[#A0A7B5] leading-relaxed">{t('workspace.view_subscription_desc', 'Consulte plano, acesso e situação da assinatura.')}</p>
+                    </div>
                   </button>
                 )}
               </div>
             </div>
+
           </div>
         </div>
+      </div>
     );
 
     return (

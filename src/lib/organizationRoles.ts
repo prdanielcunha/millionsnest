@@ -43,10 +43,10 @@ export function getInviteableOrganizationRolesForActor(actor: OrganizationInvite
     return ['admin', 'manager', 'member', 'viewer'];
   }
   if (org === 'admin') {
-    return ['admin', 'manager', 'member', 'viewer'];
+    return ['manager', 'member', 'viewer'];
   }
   if (org === 'manager') {
-    return ['manager', 'member', 'viewer'];
+    return ['member', 'viewer'];
   }
   return [];
 }

@@ -561,6 +561,19 @@ export default {
       overview: "Home"
     },
     workspace: {
+      start_here: "Start here",
+      getting_started: "Getting started",
+      getting_started_desc: "Set up your organization and prepare your team.",
+      know_resources: "Know resources",
+      know_resources_desc: "Understand repertoire, chord charts, members and schedules.",
+      org_and_access: "Organization & access",
+      invite_person: "Invite person",
+      invite_person_desc: "Add someone with the correct access level.",
+      manage_team: "Manage team",
+      manage_team_desc: "Check members, invites and permissions.",
+      view_subscription: "View subscription",
+      view_subscription_desc: "Check plan, access and subscription status.",
+      open_cta: "Open",
       intro: "Your Management Hub",
       sub_intro: "Manage your worship ministry preparation and control your team security access.",
       spaces_title: "Your spaces",
@@ -594,7 +607,7 @@ export default {
       pending_invites: "Invites and Team",
       plans_and_sub: "Plans and Subscription",
       open_musicscale_title: "Open MusicScale",
-      open_musicscale_desc: "Open the app and continue organizing your ministry."
+      open_musicscale_desc: "Pick up where you left off and organize repertoires, members and schedules."
     },
     musicscale: {
       
@@ -879,9 +892,10 @@ export default {
         unavailable: "Unavailable"
       },
       status: {
-        active: "Active",
-        trialing: "Trial",
-        payment_issue: "Payment issue",
+        active: "Available",
+        trialing: "Trial period",
+        loading: "Loading",
+        payment_issue: "Payment pending",
         unavailable: "Unavailable"
       },
       checklist: {

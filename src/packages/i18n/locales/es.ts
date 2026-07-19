@@ -570,6 +570,19 @@ export default {
       overview: "Inicio"
     },
     workspace: {
+      start_here: "Comienza aquí",
+      getting_started: "Primeros pasos",
+      getting_started_desc: "Configura tu organización y prepara a tu equipo.",
+      know_resources: "Conocer recursos",
+      know_resources_desc: "Entiende el repertorio, acordes, integrantes y escalas.",
+      org_and_access: "Organización y acceso",
+      invite_person: "Invitar persona",
+      invite_person_desc: "Agrega a alguien con el nivel de acceso correcto.",
+      manage_team: "Gestionar equipo",
+      manage_team_desc: "Revisa integrantes, invitaciones y permisos.",
+      view_subscription: "Ver suscripción",
+      view_subscription_desc: "Consulta el plan, acceso y estado de la suscripción.",
+      open_cta: "Abrir",
       intro: "Tu Centro de Gestión",
       sub_intro: "Gestiona la preparación de tu ministerio de adoración y controla el acceso de seguridad de tu equipo.",
       spaces_title: "Tus espacios",
@@ -603,7 +616,7 @@ export default {
       pending_invites: "Invitaciones y Equipo",
       plans_and_sub: "Planes y Suscripción",
       open_musicscale_title: "Abrir MusicScale",
-      open_musicscale_desc: "Entra en la aplicación y continúa organizando tu ministerio."
+      open_musicscale_desc: "Continúa donde lo dejaste y organiza repertorios, integrantes y escalas."
     },
     musicscale: {
       
@@ -887,9 +900,10 @@ export default {
         unavailable: "No disponible"
       },
       status: {
-        active: "Activo",
-        trialing: "Prueba",
-        payment_issue: "Problema de pago",
+        active: "Disponible",
+        trialing: "Período de prueba",
+        loading: "Cargando",
+        payment_issue: "Pago pendiente",
         unavailable: "No disponible"
       },
       checklist: {

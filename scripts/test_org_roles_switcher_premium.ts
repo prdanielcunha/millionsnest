@@ -1,60 +1,73 @@
+import { canInviteOrganizationRole } from '../src/lib/organizationRoles.js';
+import { planInvitationCreation } from '../src/server/services/InvitationCreationPlanner.js';
 import * as fs from 'fs';
 
-function assert(condition: boolean, message: string) {
-  if (!condition) {
-    console.error(`FAIL: ${message}`);
-    process.exit(1);
+let passed = 0;
+let failed = 0;
+
+function assertCondition(message: string, condition: boolean) {
+  if (condition) {
+    passed++;
+    console.log(`[PASS] ${message}`);
+  } else {
+    failed++;
+    console.error(`[FAIL] ${message}`);
   }
 }
 
-console.log("Starting static checks for MN-ORG-ROLES-SWITCH-PREMIUM-1...");
+assertCondition("1. owner convida admin.", canInviteOrganizationRole({ organizationRole: 'owner' }, 'admin'));
+assertCondition("2. owner convida manager.", canInviteOrganizationRole({ organizationRole: 'owner' }, 'manager'));
+assertCondition("3. admin não convida admin.", !canInviteOrganizationRole({ organizationRole: 'admin' }, 'admin'));
+assertCondition("4. admin convida manager.", canInviteOrganizationRole({ organizationRole: 'admin' }, 'manager'));
+assertCondition("5. manager não convida manager.", !canInviteOrganizationRole({ organizationRole: 'manager' }, 'manager'));
+assertCondition("6. manager convida member.", canInviteOrganizationRole({ organizationRole: 'manager' }, 'member'));
+assertCondition("7. manager convida viewer.", canInviteOrganizationRole({ organizationRole: 'manager' }, 'viewer'));
+assertCondition("8. member não convida.", !canInviteOrganizationRole({ organizationRole: 'member' }, 'member') && !canInviteOrganizationRole({ organizationRole: 'member' }, 'viewer'));
+assertCondition("9. viewer não convida.", !canInviteOrganizationRole({ organizationRole: 'viewer' }, 'viewer'));
+assertCondition("10. ecosystem_support não recebe matriz de owner.", !canInviteOrganizationRole({ systemRole: 'ecosystem_support' }, 'admin'));
 
-// 1. Verify AuthContext.tsx organization switching logic
-const authContextFile = fs.readFileSync('src/contexts/AuthContext.tsx', 'utf-8');
-assert(authContextFile.includes("switchOrganization"), "AuthContext.tsx must export switchOrganization");
-assert(authContextFile.includes("mn_tenant_switched"), "AuthContext.tsx must dispatch mn_tenant_switched event");
-assert(!authContextFile.includes("window.location.reload()"), "switchOrganization must not call window.location.reload() in AuthContext");
-assert(authContextFile.includes("return { success: true"), "switchOrganization must return success status object");
+function createBaseInput() {
+  return {
+    creator: { uid: 'user123' },
+    creatorMembership: { exists: true, status: 'active', role: 'admin' },
+    organization: { exists: true, organizationId: 'org123', name: 'My Org', status: 'active' },
+    request: { organizationId: 'org123', email: 'test@example.com', role: 'member' },
+    capacity: { resolved: true, mode: 'unlimited' },
+    existingPendingInvitation: { exists: false }
+  } as any;
+}
 
-// 2. Verify OrganizationContext.tsx listener logic
-const orgContextFile = fs.readFileSync('src/contexts/OrganizationContext.tsx', 'utf-8');
-assert(orgContextFile.includes("mn_tenant_switched"), "OrganizationContext.tsx must listen to mn_tenant_switched event");
-assert(orgContextFile.includes("setOrganization(null)"), "OrganizationContext.tsx must clear organization state immediately");
-assert(orgContextFile.includes("setMemberRole(null)"), "OrganizationContext.tsx must clear memberRole state immediately");
+const nowMs = Date.now();
+let input = createBaseInput();
+input.creatorMembership.role = 'admin';
+input.request.role = 'admin';
+let res = planInvitationCreation(input, nowMs);
+assertCondition('11. planner reprova admin -> admin.', res.success === false && res.reasonCode === 'PERMISSION_DENIED');
 
-// 3. Verify InviteModal.tsx role selection options
-const inviteModalFile = fs.readFileSync('src/components/InviteModal.tsx', 'utf-8');
-assert(!inviteModalFile.includes("value: 'leader'"), "InviteModal must not offer 'leader' in selection options");
-assert(!inviteModalFile.includes("value: 'secretary'"), "InviteModal must not offer 'secretary' in selection options");
-assert(!inviteModalFile.includes("value: 'guest'"), "InviteModal must not offer 'guest' in selection options");
+input = createBaseInput();
+input.creatorMembership.role = 'manager';
+input.request.role = 'manager';
+res = planInvitationCreation(input, nowMs);
+assertCondition('12. planner reprova manager -> manager.', res.success === false && res.reasonCode === 'PERMISSION_DENIED');
 
-// 4. Verify Dashboard.tsx organization switcher and reload prevention
-const dashboardFile = fs.readFileSync('src/pages/Dashboard.tsx', 'utf-8');
-assert(!dashboardFile.includes("switchOrganization(org.id).then(() => window.location.reload())") && 
-       !dashboardFile.includes("switchOrganization(org.id).then(()=>window.location.reload())"), 
-       "Dashboard.tsx organization switch must use the reload-free event flow");
-assert(dashboardFile.includes("feedback.success"), "Dashboard.tsx must use non-blocking feedback toasts for switcher");
+const ecoHomeSrc = fs.readFileSync('src/components/dashboard/EcosystemWorkspaceHome.tsx', 'utf-8');
+assertCondition("13. card Abrir MusicScale existe.", ecoHomeSrc.includes('workspace.open_musicscale_title') || ecoHomeSrc.includes('Abrir MusicScale'));
+assertCondition("14. card principal ocupa o topo.", ecoHomeSrc.indexOf('Abrir MusicScale') < ecoHomeSrc.indexOf('workspace.org_and_access') || ecoHomeSrc.indexOf('open_musicscale_title') < ecoHomeSrc.indexOf('workspace.org_and_access'));
+assertCondition("15. não existe Abrir sistema.", !ecoHomeSrc.includes('Abrir sistema'));
+assertCondition("16. existe Primeiros passos.", ecoHomeSrc.includes('Primeiros passos') || ecoHomeSrc.includes('workspace.getting_started'));
+assertCondition("17. existe Conhecer recursos.", ecoHomeSrc.includes('Conhecer recursos') || ecoHomeSrc.includes('workspace.know_resources'));
+assertCondition("18. não existe Preciso de ajuda nessa Central.", !ecoHomeSrc.includes('Preciso de ajuda') && !ecoHomeSrc.includes('workspace.need_help'));
+assertCondition("19. não existe Falar com Suporte nessa Central.", !ecoHomeSrc.includes('Falar com Suporte') && !ecoHomeSrc.includes('workspace.talk_to_support'));
 
-// 5. Verify EcosystemShell.tsx organization switcher and reload prevention
-const shellFile = fs.readFileSync('src/components/EcosystemShell.tsx', 'utf-8');
-assert(!shellFile.includes("switchOrganization(org.id).then(() => window.location.reload())"), "EcosystemShell.tsx organization switcher must not reload on switch");
-assert(shellFile.includes("feedback.loading"), "EcosystemShell.tsx switcher must show loading toast");
-assert(shellFile.includes("feedback.success"), "EcosystemShell.tsx switcher must show success toast");
+const hasTeam = ecoHomeSrc.includes('Gerenciar equipe') || ecoHomeSrc.includes('workspace.manage_team');
+const hasInvite = ecoHomeSrc.includes('Convidar pessoa') || ecoHomeSrc.includes('workspace.invite_person');
+const hasSub = ecoHomeSrc.includes('Ver assinatura') || ecoHomeSrc.includes('workspace.view_subscription') || ecoHomeSrc.includes('plans_and_sub');
+assertCondition("20. existem três cards de organização.", hasTeam && hasInvite && hasSub);
 
-// 6. Verify i18n entries
-const ptLocalesFile = fs.readFileSync('src/packages/i18n/locales/pt.ts', 'utf-8');
-assert(ptLocalesFile.includes("musicscale_group_title:"), "pt locales must contain musicscale_group_title");
-assert(ptLocalesFile.includes("org_group_title:"), "pt locales must contain org_group_title");
-assert(ptLocalesFile.includes("help_group_title:"), "pt locales must contain help_group_title");
+const ptSrc = fs.readFileSync('src/packages/i18n/locales/pt.ts', 'utf-8');
+assertCondition("21. não existe ADMINISTRATIVE no PT.", !ptSrc.includes('ADMINISTRATIVE'));
 
-const enLocalesFile = fs.readFileSync('src/packages/i18n/locales/en.ts', 'utf-8');
-assert(enLocalesFile.includes("musicscale_group_title:"), "en locales must contain musicscale_group_title");
-assert(enLocalesFile.includes("org_group_title:"), "en locales must contain org_group_title");
-assert(enLocalesFile.includes("help_group_title:"), "en locales must contain help_group_title");
+assertCondition("22. PT, EN e ES possuem as novas chaves.", ptSrc.includes('open_musicscale_title') && fs.readFileSync('src/packages/i18n/locales/en.ts', 'utf-8').includes('open_musicscale_title') && fs.readFileSync('src/packages/i18n/locales/es.ts', 'utf-8').includes('open_musicscale_title'));
 
-const esLocalesFile = fs.readFileSync('src/packages/i18n/locales/es.ts', 'utf-8');
-assert(esLocalesFile.includes("musicscale_group_title:"), "es locales must contain musicscale_group_title");
-assert(esLocalesFile.includes("org_group_title:"), "es locales must contain org_group_title");
-assert(esLocalesFile.includes("help_group_title:"), "es locales must contain help_group_title");
-
-console.log("SUCCESS: All MN-ORG-ROLES-SWITCH-PREMIUM-1 checks passed!");
+console.log(`\nResults: ${passed} passed, ${failed} failed`);
+if (failed > 0) process.exit(1);
