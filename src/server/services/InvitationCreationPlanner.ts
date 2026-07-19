@@ -213,6 +213,21 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
     return { success: false, reasonCode: 'INVALID_INVITE_ROLE' };
   }
 
+  const canInvite = canInviteOrganizationRole(
+    {
+      systemRole: input.creator.globalRole,
+      organizationRole: input.creatorMembership.role
+    },
+    requestRole
+  );
+
+  if (!canInvite) {
+    return {
+      success: false,
+      reasonCode: 'PERMISSION_DENIED'
+    };
+  }
+
   if (input.existingPendingInvitation.exists) {
     if (input.existingPendingInvitation.status === 'pending') {
       if (typeof input.existingPendingInvitation.emailNormalized !== 'string' || !isValidInvitationCreationEmail(input.existingPendingInvitation.emailNormalized)) {

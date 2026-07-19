@@ -601,7 +601,9 @@ export default {
       learn_and_config: "Aprende y configura",
       quick_access: "Acceso rápido",
       pending_invites: "Invitaciones y Equipo",
-      plans_and_sub: "Planes y Suscripción"
+      plans_and_sub: "Planes y Suscripción",
+      open_musicscale_title: "Abrir MusicScale",
+      open_musicscale_desc: "Entra en la aplicación y continúa organizando tu ministerio."
     },
     musicscale: {
       

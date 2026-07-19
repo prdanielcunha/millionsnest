@@ -592,7 +592,9 @@ export default {
       learn_and_config: "Learn and configure",
       quick_access: "Quick access",
       pending_invites: "Invites and Team",
-      plans_and_sub: "Plans and Subscription"
+      plans_and_sub: "Plans and Subscription",
+      open_musicscale_title: "Open MusicScale",
+      open_musicscale_desc: "Open the app and continue organizing your ministry."
     },
     musicscale: {
       

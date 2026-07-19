@@ -463,42 +463,47 @@ export function EcosystemWorkspaceHome({
           <div className="space-y-6">
             
                         {/* 1. Card principal (Central Premium) */}
-            <div className="bg-gradient-to-b from-[#1A1D24] to-[#050505] border border-white/10 rounded-3xl p-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-[#2B85EB]/20 text-[#2B85EB] flex items-center justify-center mx-auto mb-4">
-                <Users className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-white mb-2">{t('workspace.team.access_title', 'Equipe e Acesso')}</h3>
-              <p className="text-sm text-[#A0A7B5] mb-6 px-2">
-                {t('workspace.team.access_desc', 'Convide sua equipe para colaborar e configure as permissões de acesso.')}
-              </p>
-              
-              <div className="flex justify-between items-center text-sm mb-6 bg-[#050505] p-3 rounded-xl border border-white/5">
-                <span className="text-[#A0A7B5]">Vagas</span>
-                <span className="text-[#2B85EB] font-semibold">
-                  {maxUsersLimit === -1 ? `${occupiedSlots} / ∞` : `${occupiedSlots} / ${maxUsersLimit}`}
-                </span>
+            <button
+              type="button"
+              id="btn-sidebar-open-musicscale"
+              onClick={() => {
+                if (isReadyToOpen && musicScaleApp) {
+                  onLaunchApp(musicScaleApp);
+                }
+              }}
+              disabled={!isReadyToOpen}
+              className="w-full text-left bg-gradient-to-br from-[#0B1528] to-[#020617] border border-white/10 hover:border-[#2B85EB]/40 hover:bg-[#2B85EB]/5 rounded-3xl p-6 transition-all focus:outline-none focus:ring-2 focus:ring-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden block"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center shrink-0 border border-white/10">
+                  <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-6 h-6 object-contain" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    msCatalogState === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                    msCatalogState === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                    hasPaymentIssue ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                    isLoading ? 'bg-white/10 text-white border border-white/20' :
+                    'bg-white/10 text-[#A0A7B5]'
+                  }`}>
+                    {isLoading 
+                      ? t('workspace.loading', 'Carregando')
+                      : hasPaymentIssue 
+                        ? t('workspace.payment_pending', 'Pagamento pendente')
+                        : t(`musicscale.status.${msCatalogState}`, msCatalogState)
+                    }
+                  </span>
+                  <ArrowRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white group-hover:translate-x-1 transition-all" />
+                </div>
               </div>
 
-              {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
-                <button
-                  type="button"
-                  onClick={onOpenInviteModal}
-                  className="w-full py-3.5 bg-[#2B85EB] hover:bg-[#3B95FB] text-white font-semibold rounded-xl transition-all shadow-[0_0_20px_rgba(43,133,235,0.3)] mb-4"
-                >
-                  {t('musicscale.actions.invite', 'Convidar pessoas')}
-                </button>
-              )}
-              
-              {(currentUserPerms['organization.settings.update'] || isGlobalAdmin) && (
-                <button
-                  type="button"
-                  onClick={onNavigateToOrganizationSettings}
-                  className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors"
-                >
-                  {t('workspace.advanced_org_management', 'Gestão avançada de organização')}
-                </button>
-              )}
-            </div>
+              <h3 className="text-lg font-bold text-white mb-2">
+                {t('workspace.open_musicscale_title', 'Abrir MusicScale')}
+              </h3>
+              <p className="text-sm text-[#A0A7B5] leading-relaxed">
+                {t('workspace.open_musicscale_desc', 'Entre no aplicativo e continue organizando seu ministério.')}
+              </p>
+            </button>
 
             {/* 2. Aprenda e configure */}
             <div className="bg-[#050505] border border-white/5 rounded-2xl p-6">
@@ -522,6 +527,15 @@ export function EcosystemWorkspaceHome({
             <div className="bg-[#050505] border border-white/5 rounded-2xl p-6">
               <h3 className="text-sm font-bold text-white mb-4">{t('workspace.quick_access', 'Acesso rápido')}</h3>
               <div className="flex flex-col gap-2">
+                {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
+                  <button
+                    type="button"
+                    onClick={onOpenInviteModal}
+                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-[#A0A7B5] hover:text-white transition-colors text-sm"
+                  >
+                    <span className="flex items-center gap-3"><Users className="w-4 h-4" /> {t('musicscale.actions.invite', 'Convidar pessoas')}</span>
+                  </button>
+                )}
                 {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
                   <button
                     type="button"
@@ -540,14 +554,6 @@ export function EcosystemWorkspaceHome({
                     <span className="flex items-center gap-3"><CreditCard className="w-4 h-4" /> {t('workspace.plans_and_sub', 'Planos e Assinatura')}</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => { if (musicScaleApp) onLaunchApp(musicScaleApp); }}
-                  disabled={!isReadyToOpen}
-                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 text-[#A0A7B5] hover:text-white transition-colors disabled:opacity-50 text-sm"
-                >
-                  <span className="flex items-center gap-3"><Play className="w-4 h-4" /> {t('musicscale.actions.open_app', 'Abrir sistema')}</span>
-                </button>
               </div>
             </div>
           </div>

@@ -1920,9 +1920,13 @@ export function Dashboard() {
                              onClick={async () => {
                                const toastId = feedback.loading("Alternando organização ativa...");
                                try {
-                                 await switchOrganization(org.id);
+                                 const res = await switchOrganization(org.id);
                                  feedback.dismiss(toastId);
-                                 feedback.success("Organização alterada com sucesso!");
+                                 if (res.success) {
+                                   feedback.success("Organização alterada com sucesso!");
+                                 } else {
+                                   feedback.error(`Não foi possível alterar a organização: ${res.error || "Erro desconhecido"}`);
+                                 }
                                } catch (err: any) {
                                  feedback.dismiss(toastId);
                                  feedback.error(`Não foi possível alterar a organização: ${err.message || "Erro desconhecido"}`);
