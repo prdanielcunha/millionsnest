@@ -14,6 +14,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
+import { MusicScaleHandoffService } from './src/server/services/MusicScaleHandoffService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
 import { 
@@ -4428,276 +4429,34 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         console.error('[HANDOFF_ERROR] Database not initialized');
         return res.status(500).json({ error: 'Database not initialized' });
       }
+
+      const handoffService = new MusicScaleHandoffService(db, admin.auth());
+      const result = await handoffService.processHandoff({
+        uid: decoded.uid,
+        appId,
+        orgId,
+        supportMode,
+      });
+
+      return res.json(result);
+    } catch (e: any) {
+      const isForbidden = e.message.includes('Forbidden') || e.message.includes('Access denied');
+      const status = isForbidden ? 403 : 500;
       
-      const userDoc = await db.collection('users').doc(decoded.uid).get();
-      const userData = userDoc.exists ? userDoc.data() : null;
-      const systemRole = userData?.systemRole;
-      const isGlobalAdmin = systemRole === 'ceo' || systemRole === 'admin' || systemRole === 'global_admin';
-      
-      let verifiedSupportMode = false;
-      if (supportMode === true) {
-        if (!isGlobalAdmin) {
-           return res.status(403).json({ error: 'Forbidden: only global admins can use support mode' });
-        }
-        verifiedSupportMode = true;
-      }
-
-      // PASSO 1: Resolver organizationId do usuário usando Canonical Resolver
-      const orgContext = await resolveUserOrganizationContext(decoded.uid);
-      const candidateOrgs = new Set<string>();
-
-      // A. Apenas permitimos orgId arbitrário se for Global Admin
-      if (orgId && typeof orgId === 'string' && orgId.trim() !== '') {
-        if (isGlobalAdmin) {
-           candidateOrgs.add(orgId.trim());
-        }
-      }
-
-      // Validação Crítica de Segurança: Se o usuário (não-admin) mandou um orgId específico para handoff
-      if (!isGlobalAdmin && orgId && typeof orgId === 'string' && orgId.trim() !== '') {
-         const cleanOrgId = orgId.trim();
-         // Verify if cleanOrgId is in the user's canonical context active list
-         const isLegit = orgContext.organizations.some(o => o.id === cleanOrgId && o.status !== 'archived');
-         
-         if (isLegit) {
-            candidateOrgs.add(cleanOrgId);
-         } else {
-            console.error(`[HANDOFF_SECURITY_VIOLATION] User ${decoded.uid} attempted to access unowned/unassociated orgId: ${cleanOrgId}`);
-            return res.status(403).json({ error: 'Forbidden: You do not have access to this organization.' });
-         }
-      }
-
-      // Adiciona o current active do context
-      if (orgContext.activeOrganizationId) candidateOrgs.add(orgContext.activeOrganizationId);
-      if (orgContext.primaryOrganizationId) candidateOrgs.add(orgContext.primaryOrganizationId);
-      orgContext.organizations.filter(o => o.status !== 'archived').forEach(o => candidateOrgs.add(o.id));
-
-      const candidateOrgsList = Array.from(candidateOrgs);
-      const validStatuses = ['active', 'trialing', 'trial', 'past_due', 'pro'];
-
-      let chosenOrgId: string | null = null;
-      let subscriptionFound = false;
-      let subscriptionStatus: string | null = null;
-      let existingSubData: any = null;
-
-      // PASSO 2: Buscar subscriptions/{organizationId} em Firestore
-      for (const oId of candidateOrgsList) {
-        const subDoc = await db.collection('subscriptions').doc(oId).get();
-        if (subDoc.exists) {
-          existingSubData = subDoc.data();
-          const status = existingSubData?.status;
-          if (status && validStatuses.includes(status)) {
-            chosenOrgId = oId;
-            subscriptionFound = true;
-            subscriptionStatus = status;
-            break;
-          }
-        }
-      }
-
-      logSubscriptionFound = subscriptionFound;
-      logSubscriptionStatus = subscriptionStatus;
-
-      // PASSO 3: Se NÃO for global admin, SEMPRE consultamos o Stripe em tempo real
-      if (!isGlobalAdmin) {
-        logStripeLookupPerformed = true;
-        const stripe = getStripe();
-        if (stripe) {
-          let stripeSubObj: any = null;
-          const email = decoded.email || userData?.email;
-          const stripeCustomerId = userData?.stripeCustomerId || userData?.subscription?.stripeCustomerId || existingSubData?.stripeCustomerId;
-          const stripeSubscriptionId = existingSubData?.stripeSubscriptionId;
-
-          // A. Tentar recuperar diretamente pelo ID de assinatura (super veloz!)
-          if (stripeSubscriptionId) {
-            try {
-              const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-              if (validStatuses.includes(sub.status)) {
-                stripeSubObj = sub;
-              }
-            } catch (err) {
-              console.warn('[HANDOFF_STRIPE_ALWAYS_CHECK] Direct Retrieve failed:', err);
-            }
-          }
-
-          // B. Se não encontrou por ID de assinatura, tentar por customerId
-          if (!stripeSubObj && stripeCustomerId) {
-            try {
-              const subs = await stripe.subscriptions.list({ customer: stripeCustomerId, limit: 10, status: 'all' });
-              const validSub = subs.data.find((s: any) => validStatuses.includes(s.status));
-              if (validSub) {
-                stripeSubObj = validSub;
-              }
-            } catch (err) {
-              console.warn('[HANDOFF_STRIPE_ALWAYS_CHECK] Stripe list by customerId failed:', err);
-            }
-          }
-
-          // C. Se ainda não encontrou, buscar por e-mail do usuário
-          if (!stripeSubObj && email) {
-            try {
-              const customers = await stripe.customers.list({ email: email, limit: 10 });
-              for (const cust of customers.data) {
-                const subs = await stripe.subscriptions.list({ customer: cust.id, limit: 10, status: 'all' });
-                const validSub = subs.data.find((s: any) => validStatuses.includes(s.status));
-                if (validSub) {
-                  stripeSubObj = validSub;
-                  break;
-                }
-              }
-            } catch (err) {
-              console.warn('[HANDOFF_STRIPE_ALWAYS_CHECK] Stripe lookup by email failed:', err);
-            }
-          }
-
-          // D. Se ainda não encontrou, tentar por checkout sessions
-          if (!stripeSubObj && stripeCustomerId) {
-            try {
-              const checkouts = await stripe.checkout.sessions.list({ customer: stripeCustomerId, limit: 10 });
-              const completedSession = checkouts.data.find((s: any) => s.status === 'complete' && s.subscription);
-              if (completedSession) {
-                const subId = completedSession.subscription as string;
-                const sub = await stripe.subscriptions.retrieve(subId);
-                if (validStatuses.includes(sub.status)) {
-                  stripeSubObj = sub;
-                }
-              }
-            } catch (err) {
-              console.warn('[HANDOFF_STRIPE_ALWAYS_CHECK] Stripe lookup by checkout sessions failed:', err);
-            }
-          }
-
-          if (stripeSubObj) {
-            let targetOrgId = chosenOrgId;
-            if (!targetOrgId && candidateOrgsList.length > 0) {
-               targetOrgId = candidateOrgsList[0];
-            }
-            if (!targetOrgId) {
-               const userDocSnap = await db.collection('users').doc(decoded.uid).get();
-               const userDoc = userDocSnap.exists ? userDocSnap.data() : null;
-               if (userDoc && userDoc.organizationId && userDoc.organizationId !== decoded.uid) {
-                  targetOrgId = userDoc.organizationId;
-               } else {
-                  targetOrgId = db.collection('organizations').doc().id;
-               }
-            }
-            
-            console.log(`[HANDOFF_STRIPE_ALWAYS_CHECK] Active Stripe subscription verified. Syncing dynamically for uid: ${decoded.uid}, org: ${targetOrgId}`);
-            
-            await upsertEcosystemSubscription({
-              userId: decoded.uid,
-              orgId: targetOrgId,
-              subscription: stripeSubObj,
-              eventCreatedTs: Math.floor(Date.now() / 1000),
-              event_type: 'handoff_always_check',
-              userEmail: email
-            });
-
-            logSelfHealingExecuted = true;
-            chosenOrgId = targetOrgId;
-            subscriptionFound = true;
-            subscriptionStatus = stripeSubObj.status;
-            logSubscriptionFound = true;
-            logSubscriptionStatus = stripeSubObj.status;
-          } else {
-            console.log(`[HANDOFF_STRIPE_ALWAYS_CHECK] No active subscription found on Stripe for user: ${decoded.uid}`);
-            
-            // Se existia uma assinatura localmente, removemos ou cancelamos no Firestore
-            const targetOrgId = chosenOrgId || (candidateOrgsList.length > 0 ? candidateOrgsList[0] : decoded.uid);
-            const batch = db.batch();
-            batch.set(db.collection('subscriptions').doc(targetOrgId), {
-              status: 'canceled',
-              features: {
-                globalLibrary: false,
-                musicScale: false
-              },
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
-            batch.set(db.collection('organizations').doc(targetOrgId), {
-              subscriptionStatus: 'canceled',
-              status: 'canceled',
-              'apps.musicscale.access': false,
-              'apps.musicscale.status': 'canceled',
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
-            batch.set(db.collection('users').doc(decoded.uid), {
-              subscriptionStatus: 'canceled',
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
-            await batch.commit();
-
-            subscriptionFound = false;
-            subscriptionStatus = 'canceled';
-            logSubscriptionFound = false;
-            logSubscriptionStatus = 'canceled';
-          }
-        }
-      }
-
-      // Determinar o orgId definitivo para usar no Custom Token
-      const finalOrgId = chosenOrgId || (candidateOrgsList.length > 0 ? candidateOrgsList[0] : (orgId || decoded.uid));
-      logOrgId = finalOrgId;
-
-      // PASSO 4 & PASSO 5: Validação final (somente falha se não for global_admin e não encontrarmos assinatura)
-      if (!isGlobalAdmin && !subscriptionFound) {
-        const errMessage = 'Access denied: Subscription missing. Reason: No active subscription found in Firestore or Stripe for users organizations.';
-        console.error(`[HANDOFF_DENIED] uid: ${decoded.uid}, org: ${finalOrgId}. details: ${errMessage}`);
-        
-        // Print clean handover logger
+      if (status === 500) {
+        console.error('[API Handoff Fatal Error]', e);
+        // Print clean handoff logger even on failure
         console.log('[HANDOFF]', {
-           uid: decoded.uid,
-           organizationId: finalOrgId,
-           subscriptionFound: false,
-           subscriptionStatus: null,
+           uid: logUid,
+           organizationId: logOrgId,
+           subscriptionFound: logSubscriptionFound,
+           subscriptionStatus: logSubscriptionStatus,
            stripeLookupPerformed: logStripeLookupPerformed,
            selfHealingExecuted: logSelfHealingExecuted,
-           accessGranted: false
+           accessGranted: logAccessGranted
         });
-
-        return res.status(403).json({ error: errMessage });
       }
-
-      logAccessGranted = true;
-
-      // Print clean handover logger
-      console.log('[HANDOFF]', {
-         uid: decoded.uid,
-         organizationId: finalOrgId,
-         subscriptionFound: subscriptionFound,
-         subscriptionStatus: subscriptionStatus,
-         stripeLookupPerformed: logStripeLookupPerformed,
-         selfHealingExecuted: logSelfHealingExecuted,
-         accessGranted: true
-      });
-
-      const customToken = await admin.auth().createCustomToken(decoded.uid, {
-        orgId: finalOrgId,
-        appId: appId,
-        supportMode: verifiedSupportMode,
-      });
-
-      return res.json({
-        customToken,
-        orgId: finalOrgId,
-        uid: decoded.uid,
-        expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes
-      });
-    } catch (e: any) {
-      console.error('[API Handoff Fatal Error]', e);
-      // Print clean handoff logger even on failure
-      console.log('[HANDOFF]', {
-         uid: logUid,
-         organizationId: logOrgId,
-         subscriptionFound: logSubscriptionFound,
-         subscriptionStatus: logSubscriptionStatus,
-         stripeLookupPerformed: logStripeLookupPerformed,
-         selfHealingExecuted: logSelfHealingExecuted,
-         accessGranted: logAccessGranted
-      });
-      return res.status(500).json({ error: `Internal Error: ${e?.message || e}` });
+      return res.status(status).json({ error: e.message });
     }
   });
 
