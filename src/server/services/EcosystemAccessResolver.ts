@@ -101,7 +101,7 @@ export async function resolveEcosystemAppAccess(params: {
   }
   
   const userData = userDoc.data() || {};
-  if (userData.status === 'inactive' || userData.status === 'suspended' || userData.disabled === true) {
+  if (userData.status === 'inactive' || userData.status === 'suspended' || userData.status === 'disabled' || userData.disabled === true) {
     return { ...defaultDenied, denialReason: DENIAL_REASONS.USER_INACTIVE };
   }
 
@@ -119,7 +119,7 @@ export async function resolveEcosystemAppAccess(params: {
   }
   
   const orgData = orgDoc.data() || {};
-  if (orgData.status === 'archived' || orgData.status === 'inactive' || orgData.status === 'suspended' || orgData.disabled === true) {
+  if (orgData.status === 'archived' || orgData.status === 'inactive' || orgData.status === 'suspended' || orgData.status === 'disabled' || orgData.disabled === true) {
      return { ...defaultDenied, systemRole, denialReason: DENIAL_REASONS.ORGANIZATION_INACTIVE };
   }
 
@@ -131,7 +131,7 @@ export async function resolveEcosystemAppAccess(params: {
       isGlobalAccess: true,
       accessSource: 'global_system_role',
       systemRole,
-      roles: ['global_admin'],
+      roles: systemRole ? [systemRole] : [],
       permissions: ['*'],
       scopes: { '*': ['*'] },
       decisionState: 'granted',
@@ -158,6 +158,7 @@ export async function resolveEcosystemAppAccess(params: {
   
   const memData = memDoc.data() || {};
   if (
+    memData.enabled === false || 
     memData.status === 'inactive' || 
     memData.status === 'suspended' || 
     memData.status === 'disabled' || 
@@ -281,7 +282,11 @@ export async function resolveEcosystemAppAccess(params: {
      let cancellationScheduled = false;
 
      if (subIsValid && appIsValid) {
-        canonicalStatus = (subscriptionStatus === 'active' || organizationAppStatus === 'active') ? 'active' : 'trialing';
+        if (subscriptionStatus === 'active') {
+           canonicalStatus = 'active';
+        } else if (subscriptionStatus === 'trialing') {
+           canonicalStatus = 'trialing';
+        }
         if (subData.cancelAtPeriodEnd === true || subData.cancel_at_period_end === true) {
            cancellationScheduled = true;
         }

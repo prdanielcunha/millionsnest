@@ -2,36 +2,90 @@ import { resolveEcosystemAppAccess, DENIAL_REASONS } from '../src/server/service
 import type { EcosystemAppId, CanonicalMusicScaleSubscriptionStatus, CanonicalAppAccessState, MusicScaleIndividualAccessSource } from '../src/server/services/EcosystemAccessResolver.js';
 import * as admin from 'firebase-admin';
 
+
+
+
+import { createRequire } from 'module';
+const requireModule = createRequire(import.meta.url);
+let networkAttempts = 0;
+const originalFetch = globalThis.fetch;
+let originalHttpReq: any;
+let originalHttpsReq: any;
+let httpModule: any;
+let httpsModule: any;
+try {
+  httpModule = requireModule('http');
+  httpsModule = requireModule('https');
+  originalHttpReq = httpModule.request;
+  originalHttpsReq = httpsModule.request;
+} catch (e) {}
+
+function installNetworkGuard() {
+  networkAttempts = 0;
+  globalThis.fetch = () => { networkAttempts++; throw new Error("Network not allowed"); };
+  if (httpModule) {
+    httpModule.request = () => { networkAttempts++; throw new Error("Network not allowed"); };
+  }
+  if (httpsModule) {
+    httpsModule.request = () => { networkAttempts++; throw new Error("Network not allowed"); };
+  }
+}
+
+function restoreNetworkGuard() {
+  globalThis.fetch = originalFetch;
+  if (httpModule) httpModule.request = originalHttpReq;
+  if (httpsModule) httpsModule.request = originalHttpsReq;
+}
+
+
 class MockDocumentReference {
   constructor(public path: string, private db: MockFirestore) {}
   async get() {
+    this.db.documentReads++;
     const data = this.db.getData(this.path);
     return {
       exists: data !== null && data !== undefined,
-      data: () => data,
+      data: () => data ? JSON.parse(JSON.stringify(data)) : null,
       id: this.path.split('/').pop()
     };
   }
-  set() { throw new Error('Write operation set() not allowed'); }
-  update() { throw new Error('Write operation update() not allowed'); }
-  delete() { throw new Error('Write operation delete() not allowed'); }
+  set() { this.db.writeAttempts++; throw new Error('Write operation set() not allowed'); }
+  update() { this.db.writeAttempts++; throw new Error('Write operation update() not allowed'); }
+  delete() { this.db.writeAttempts++; throw new Error('Write operation delete() not allowed'); }
+  create() { this.db.writeAttempts++; throw new Error('Write operation create() not allowed'); }
 }
 
 class MockCollectionReference {
-  constructor(public path: string, private db: MockFirestore) {}
+  constructor(public path: string, private db: MockFirestore) {
+    this.db.collectionCalls.push(path);
+  }
   doc(id?: string) {
     if (!id) throw new Error('doc() must be called with id');
     return new MockDocumentReference(`${this.path}/${id}`, this.db);
   }
+  where() { this.db.queryAttempts++; throw new Error('Query where() not allowed'); }
+  orderBy() { this.db.queryAttempts++; throw new Error('Query orderBy() not allowed'); }
+  limit() { this.db.queryAttempts++; throw new Error('Query limit() not allowed'); }
+  get() { this.db.queryAttempts++; throw new Error('Query get() not allowed'); }
 }
 
 class MockFirestore {
   private data: Record<string, any> = {};
   public accessedPaths: string[] = [];
+  public collectionCalls: string[] = [];
+  public documentReads = 0;
+  public queryAttempts = 0;
+  public writeAttempts = 0;
+  public batchAttempts = 0;
+  public transactionAttempts = 0;
+  public initialSnapshot = '';
 
   setMockData(path: string, data: any) {
     this.data[path] = data;
+    this.initialSnapshot = JSON.stringify(this.data);
   }
+
+  getSnapshot() { return JSON.stringify(this.data); }
 
   getData(path: string) {
     this.accessedPaths.push(path);
@@ -42,12 +96,15 @@ class MockFirestore {
     return new MockCollectionReference(path, this);
   }
 
-  batch() { throw new Error('Write operation batch() not allowed'); }
-  runTransaction() { throw new Error('Write operation runTransaction() not allowed'); }
+  batch() { this.batchAttempts++; throw new Error('Write operation batch() not allowed'); }
+  runTransaction() { this.transactionAttempts++; throw new Error('Write operation runTransaction() not allowed'); }
+  recursiveDelete() { this.writeAttempts++; throw new Error('Write operation recursiveDelete() not allowed'); }
 }
+
 
 let passed = 0;
 let failed = 0;
+
 
 async function runTest(
   name: string, 
@@ -59,7 +116,9 @@ async function runTest(
 ) {
   const db = new MockFirestore();
   setupData(db);
+  db.initialSnapshot = db.getSnapshot();
 
+  installNetworkGuard();
   try {
     const result = await resolveEcosystemAppAccess({
       uid,
@@ -75,6 +134,8 @@ async function runTest(
     console.error(`❌ FAIL: ${name}`);
     console.error(err);
     failed++;
+  } finally {
+    restoreNetworkGuard();
   }
 }
 
@@ -185,28 +246,40 @@ async function runAllTests() {
     db.setMockData('users/u1', { status: 'active', systemRole: 'admin' });
     db.setMockData('organizations/org1', { status: 'active' });
   }, res => {
-    if (res.isGlobalAccess) throw new Error('Admin should not get global access');
+    if (res.isGlobalAccess || res.accessible || res.denialReason !== DENIAL_REASONS.MEMBERSHIP_NOT_FOUND) throw new Error('Expected MEMBERSHIP_NOT_FOUND');
+    if (res.permissions.includes('*') || Object.keys(res.scopes || {}).includes('*')) throw new Error('Should not have global permissions');
+    if (res.roles.includes('global_admin')) throw new Error('Should not have global_admin role');
+    if (res.accessSource !== 'denied') throw new Error('Expected accessSource denied');
   });
 
   await runTest('18. owner não recebe acesso global', 'u1', 'org1', 'musicscale', db => {
     db.setMockData('users/u1', { status: 'active', systemRole: 'owner' });
     db.setMockData('organizations/org1', { status: 'active' });
   }, res => {
-    if (res.isGlobalAccess) throw new Error('Owner should not get global access');
+    if (res.isGlobalAccess || res.accessible || res.denialReason !== DENIAL_REASONS.MEMBERSHIP_NOT_FOUND) throw new Error('Expected MEMBERSHIP_NOT_FOUND');
+    if (res.permissions.includes('*') || Object.keys(res.scopes || {}).includes('*')) throw new Error('Should not have global permissions');
+    if (res.roles.includes('global_admin')) throw new Error('Should not have global_admin role');
+    if (res.accessSource !== 'denied') throw new Error('Expected accessSource denied');
   });
 
   await runTest('19. member não recebe acesso global', 'u1', 'org1', 'musicscale', db => {
     db.setMockData('users/u1', { status: 'active', systemRole: 'member' });
     db.setMockData('organizations/org1', { status: 'active' });
   }, res => {
-    if (res.isGlobalAccess) throw new Error('Member should not get global access');
+    if (res.isGlobalAccess || res.accessible || res.denialReason !== DENIAL_REASONS.MEMBERSHIP_NOT_FOUND) throw new Error('Expected MEMBERSHIP_NOT_FOUND');
+    if (res.permissions.includes('*') || Object.keys(res.scopes || {}).includes('*')) throw new Error('Should not have global permissions');
+    if (res.roles.includes('global_admin')) throw new Error('Should not have global_admin role');
+    if (res.accessSource !== 'denied') throw new Error('Expected accessSource denied');
   });
 
   await runTest('20. papel desconhecido não recebe acesso global', 'u1', 'org1', 'musicscale', db => {
     db.setMockData('users/u1', { status: 'active', systemRole: 'unknown_role' });
     db.setMockData('organizations/org1', { status: 'active' });
   }, res => {
-    if (res.isGlobalAccess) throw new Error('Unknown role should not get global access');
+    if (res.isGlobalAccess || res.accessible || res.denialReason !== DENIAL_REASONS.MEMBERSHIP_NOT_FOUND) throw new Error('Expected MEMBERSHIP_NOT_FOUND');
+    if (res.permissions.includes('*') || Object.keys(res.scopes || {}).includes('*')) throw new Error('Should not have global permissions');
+    if (res.roles.includes('global_admin')) throw new Error('Should not have global_admin role');
+    if (res.accessSource !== 'denied') throw new Error('Expected accessSource denied');
   });
 
   // MEMBERSHIP
@@ -290,7 +363,7 @@ async function runAllTests() {
   await runTest('37. subscription trialing + organization app active concede', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db, 'user', 'active', 'active', true, 'trialing', 'active');
   }, res => {
-    if (!res.accessible || res.entitlement?.canonicalStatus !== 'active') throw new Error('Expected active');
+    if (!res.accessible || res.entitlement?.canonicalStatus !== 'trialing') throw new Error('Expected trialing');
   });
 
   await runTest('38. subscription active + cancelAtPeriodEnd true concede e marca cancellationScheduled', 'u1', 'org1', 'musicscale', db => {
@@ -457,26 +530,41 @@ async function runAllTests() {
 
   await runTest('65. Resolver não busca por e-mail', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db);
-  }, res => {
-    // Cannot technically test "busca por e-mail" strictly without intercepting but we can check paths
+  }, (res, db) => {
+    if (db.queryAttempts !== 0) throw new Error('Executed a query attempt (possibly search by email)');
+    if (db.accessedPaths.some(p => p.includes('@'))) throw new Error('Accessed a path containing an email address');
+    if (db.collectionCalls.some(c => c === 'users' && db.queryAttempts > 0)) throw new Error('Attempted query on users collection');
   });
 
   await runTest('66. Resolver não consulta Stripe', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db);
-  }, res => {
-    // Network is mocked
+  }, async (res, db) => {
+    if (networkAttempts !== 0) throw new Error('Executed a network attempt (possibly Stripe)');
+    const fs = await import('fs');
+    const resolverCode = fs.readFileSync('src/server/services/EcosystemAccessResolver.ts', 'utf8');
+    if (resolverCode.includes('import Stripe') || resolverCode.includes('stripe.') || resolverCode.includes('axios') || resolverCode.includes('checkout.sessions')) {
+      throw new Error('Resolver contains structural evidence of Stripe/HTTP integration');
+    }
   });
 
   await runTest('67. Resolver não escreve no Firestore', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db);
-  }, res => {
-    // Tested by the mock throwing on write operations
+  }, (res, db) => {
+    if (db.writeAttempts !== 0 || db.batchAttempts !== 0 || db.transactionAttempts !== 0) {
+      throw new Error('Write attempts detected');
+    }
   });
 
   await runTest('68. Resolver não repara documentos', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db);
-  }, res => {
-    // Tested by mock
+    db.setMockData('organizations/org1/members/u1', { status: 'invalid_status_repair_test' });
+  }, (res, db) => {
+    if (db.writeAttempts !== 0 || db.batchAttempts !== 0 || db.transactionAttempts !== 0) {
+      throw new Error('Write operation executed');
+    }
+    if (db.getSnapshot() !== db.initialSnapshot) {
+       throw new Error('Document was altered by resolver (snapshot mismatch)');
+    }
   });
 
   await runTest('69. O organizationId retornado é exatamente o solicitado e validado', 'u1', 'org1', 'musicscale', db => {
@@ -545,6 +633,116 @@ async function runAllTests() {
     db.setMockData('organizations/org1', { status: 'active' });
   }, res => {
     if (!res.accessible || !res.isGlobalAccess) throw new Error('Expected global access');
+  });
+
+  
+  await runTest('76. user.status disabled nega USER_INACTIVE', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'active', 'active');
+    db.setMockData('users/u1', { status: 'disabled', systemRole: 'user' });
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.USER_INACTIVE) throw new Error('Expected USER_INACTIVE');
+  });
+  await runTest('77. organization.status disabled nega ORGANIZATION_INACTIVE', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'user', 'disabled', 'active', true, 'active', 'active');
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.ORGANIZATION_INACTIVE) throw new Error('Expected ORGANIZATION_INACTIVE');
+  });
+  await runTest('78. membership.enabled false nega MEMBERSHIP_INACTIVE', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'active', 'active');
+    db.setMockData('organizations/org1/members/u1', { status: 'active', enabled: false });
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.MEMBERSHIP_INACTIVE) throw new Error('Expected MEMBERSHIP_INACTIVE');
+  });
+  await runTest('79. membership.enabled true permite prosseguir', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'active', 'active');
+    db.setMockData('organizations/org1/members/u1', { status: 'active', enabled: true, appAccess: { musicscale: { enabled: true } } });
+  }, res => {
+    if (!res.accessible) throw new Error('Expected access');
+  });
+  await runTest('80. ceo retorna roles exatamente [\"ceo\"]', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'ceo');
+  }, res => {
+    if (!res.accessible || res.roles.length !== 1 || res.roles[0] !== 'ceo') throw new Error('Expected roles: ["ceo"]');
+  });
+  await runTest('81. global_admin retorna roles exatamente [\"global_admin\"]', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'global_admin');
+  }, res => {
+    if (!res.accessible || res.roles.length !== 1 || res.roles[0] !== 'global_admin') throw new Error('Expected roles: ["global_admin"]');
+  });
+  await runTest('82. ecosystem_owner retorna roles exatamente [\"ecosystem_owner\"]', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'ecosystem_owner');
+  }, res => {
+    if (!res.accessible || res.roles.length !== 1 || res.roles[0] !== 'ecosystem_owner') throw new Error('Expected roles: ["ecosystem_owner"]');
+  });
+  await runTest('83. founder retorna roles exatamente [\"founder\"]', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'founder');
+  }, res => {
+    if (!res.accessible || res.roles.length !== 1 || res.roles[0] !== 'founder') throw new Error('Expected roles: ["founder"]');
+  });
+  await runTest('84. subscription trialing + app active retorna canonicalStatus trialing', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'trialing', 'active');
+  }, res => {
+    if (!res.accessible || res.entitlement?.canonicalStatus !== 'trialing') throw new Error('Expected trialing canonicalStatus');
+  });
+  await runTest('85. subscription active + app trialing retorna canonicalStatus active', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'active', 'trialing');
+  }, res => {
+    if (!res.accessible || res.entitlement?.canonicalStatus !== 'active') throw new Error('Expected active canonicalStatus');
+  });
+  await runTest('86. writeAttempts permanece zero', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db);
+  }, (res, db) => {
+    if (db.writeAttempts !== 0) throw new Error('Expected writeAttempts 0');
+  });
+  await runTest('87. batchAttempts permanece zero', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db);
+  }, (res, db) => {
+    if (db.batchAttempts !== 0) throw new Error('Expected batchAttempts 0');
+  });
+  await runTest('88. transactionAttempts permanece zero', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db);
+  }, (res, db) => {
+    if (db.transactionAttempts !== 0) throw new Error('Expected transactionAttempts 0');
+  });
+  await runTest('89. queryAttempts permanece zero', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db);
+  }, (res, db) => {
+    if (db.queryAttempts !== 0) throw new Error('Expected queryAttempts 0');
+  });
+  await runTest('90. networkAttempts permanece zero', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db);
+  }, (res, db) => {
+    if (networkAttempts !== 0) throw new Error('Expected networkAttempts 0');
+  });
+  await runTest('91. somente paths permitidos foram lidos no fluxo MusicScale organizacional', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db);
+  }, (res, db) => {
+    const allowed = ['users/u1', 'organizations/org1', 'organizations/org1/members/u1', 'subscriptions/org1'];
+    for (const path of db.accessedPaths) {
+      if (!allowed.includes(path)) throw new Error('Accessed unallowed path: ' + path);
+    }
+  });
+  await runTest('92. acesso global não lê membership', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'ceo');
+  }, (res, db) => {
+    if (db.accessedPaths.some(p => p.includes('members'))) throw new Error('Global access should not read membership');
+  });
+  await runTest('93. acesso global não lê subscription', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'ceo');
+  }, (res, db) => {
+    if (db.accessedPaths.some(p => p.includes('subscriptions'))) throw new Error('Global access should not read subscription');
+  });
+  await runTest('94. admin não recebe role global nem permissões globais', 'u1', 'org1', 'musicscale', db => {
+    db.setMockData('users/u1', { status: 'active', systemRole: 'admin' });
+    db.setMockData('organizations/org1', { status: 'active' });
+  }, res => {
+    if (res.isGlobalAccess || res.accessible || res.denialReason !== DENIAL_REASONS.MEMBERSHIP_NOT_FOUND) throw new Error('Expected MEMBERSHIP_NOT_FOUND, got ' + res.denialReason);
+  });
+  await runTest('95. canceled com data futura continua negado após o endurecimento', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'canceled', 'active');
+    db.setMockData('subscriptions/org1', { status: 'canceled', currentPeriodEnd: { toMillis: () => Date.now() + 100000 } });
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.SUBSCRIPTION_INACTIVE) throw new Error('Expected SUBSCRIPTION_INACTIVE');
   });
 
   console.log(`\nTests finished. Passed: ${passed}, Failed: ${failed}`);
