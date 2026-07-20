@@ -470,45 +470,6 @@ export function EcosystemWorkspaceHome({
           {/* Sidebar */}
           <div className="space-y-6">
             
-            {/* 2. Aprenda e configure -> Comece por aqui */}
-            <div className="bg-[#050505] border border-white/5 rounded-2xl p-6">
-              <h3 className="text-sm font-bold text-white mb-4">{t('workspace.start_here', 'Comece por aqui')}</h3>
-              <div className="flex flex-col gap-3">
-                <button
-                  type="button"
-                  onClick={() => onSelectMusicScaleSection('getting-started')}
-                  className="w-full text-left flex items-start gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all group min-h-[80px] outline-none focus:ring-2 focus:ring-[#2B85EB]"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center shrink-0 group-hover:bg-[#2B85EB]/20 transition-colors">
-                    <Rocket className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-white mb-0.5">{t('workspace.getting_started', 'Primeiros passos')}</span>
-                      <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors group-hover:translate-x-0.5" />
-                    </div>
-                    <p className="text-xs text-[#A0A7B5] leading-relaxed">{t('workspace.getting_started_desc', 'Configure sua organização e prepare sua equipe.')}</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSelectMusicScaleSection('resources')}
-                  className="w-full text-left flex items-start gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all group min-h-[80px] outline-none focus:ring-2 focus:ring-[#2B85EB]"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 group-hover:bg-purple-500/20 transition-colors">
-                    <BookOpen className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-white mb-0.5">{t('workspace.know_resources', 'Conhecer recursos')}</span>
-                      <ChevronRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-white transition-colors group-hover:translate-x-0.5" />
-                    </div>
-                    <p className="text-xs text-[#A0A7B5] leading-relaxed">{t('workspace.know_resources_desc', 'Entenda repertório, cifras, integrantes e escalas.')}</p>
-                  </div>
-                </button>
-              </div>
-            </div>
-
             {/* 3. Organização e acesso */}
             <div className="bg-[#050505] border border-white/5 rounded-2xl p-6">
               <h3 className="text-sm font-bold text-white mb-4">{t('workspace.org_and_access', 'Organização e acesso')}</h3>
