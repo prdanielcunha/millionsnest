@@ -57,7 +57,7 @@ export function EcosystemWorkspaceHome({
   onSelectMusicScaleSection
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
-  const { openHub, openRequest } = useSupportHub();
+  const { openHub } = useSupportHub();
 
   // Selector UI
   const renderWorkspaceSelector = () => {
@@ -389,66 +389,38 @@ export function EcosystemWorkspaceHome({
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <button type="button" onClick={() => onSelectMusicScaleSection('getting-started')} className="px-6 py-3 bg-[#2B85EB] text-white hover:bg-[#3B95FB] font-semibold rounded-xl transition-all min-h-[44px]">{t('workspace.getting_started', 'Primeiros passos')}</button>
-            <button type="button" onClick={() => onSelectMusicScaleSection('resources')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">{t('workspace.know_resources', 'Conhecer recursos')}</button>
-          </div>
+              <button
+                type="button"
+                id="btn-sidebar-open-musicscale"
+                onClick={() => {
+                  if (isReadyToOpen && musicScaleApp) {
+                    onLaunchApp(musicScaleApp);
+                  }
+                }}
+                disabled={!isReadyToOpen}
+                className={`px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 ${
+                  isReadyToOpen
+                    ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20'
+                    : 'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
+                }`}
+              >
+                {isLoading ? (
+                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                ) : hasPaymentIssue ? (
+                  t('workspace.payment_pending', 'Pagamento pendente')
+                ) : (
+                  t('workspace.open_app', 'Abrir MusicScale', { appName: 'MusicScale' })
+                )}
+              </button>
+              <button type="button" onClick={() => onSelectMusicScaleSection('getting-started')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">{t('workspace.getting_started', 'Primeiros passos')}</button>
+              <button type="button" onClick={() => onSelectMusicScaleSection('resources')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">{t('workspace.know_resources', 'Conhecer recursos')}</button>
+            </div>
           </div>
         </div>
     );
 
     const overviewContent = (
       <div className="space-y-6">
-        {/* 2. CARD PRINCIPAL HORIZONTAL */}
-        <button
-          type="button"
-          id="btn-sidebar-open-musicscale"
-          onClick={() => {
-            if (isReadyToOpen && musicScaleApp) {
-              onLaunchApp(musicScaleApp);
-            }
-          }}
-          disabled={!isReadyToOpen}
-          className="w-full bg-gradient-to-br from-[#0B1528] to-[#020617] border border-white/10 hover:border-[#2B85EB]/40 hover:bg-[#2B85EB]/5 rounded-3xl p-6 transition-all focus:outline-none focus:ring-2 focus:ring-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden block"
-        >
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            {/* Lado esquerdo */}
-            <div className="flex items-center gap-4 text-left">
-              <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center shrink-0 border border-white/10">
-                <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-6 h-6 object-contain" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                  {t('workspace.open_musicscale_title', 'Abrir MusicScale')}
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                    msCatalogState === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                    msCatalogState === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                    hasPaymentIssue ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                    isLoading ? 'bg-white/10 text-white border border-white/20' :
-                    'bg-white/10 text-[#A0A7B5]'
-                  }`}>
-                    {isLoading 
-                      ? t('musicscale.status.loading', 'Carregando')
-                      : hasPaymentIssue 
-                        ? t('musicscale.status.payment_issue', 'Pagamento pendente')
-                        : t(`musicscale.status.${msCatalogState}`, msCatalogState)
-                    }
-                  </span>
-                </h3>
-                <p className="text-sm text-[#A0A7B5] mt-1">
-                  {t('workspace.open_musicscale_desc', 'Continue de onde parou e organize repertórios, integrantes e escalas.')}
-                </p>
-              </div>
-            </div>
-            {/* Lado direito */}
-            <div className="flex items-center gap-3 shrink-0 mt-2 sm:mt-0">
-              <span className="font-semibold text-white group-hover:text-[#2B85EB] transition-colors">{t('workspace.open_cta', 'Abrir')}</span>
-              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-[#2B85EB]/20 transition-all">
-                <ArrowRight className="w-4 h-4 text-[#A0A7B5] group-hover:text-[#2B85EB] transition-colors" />
-              </div>
-            </div>
-          </div>
-        </button>
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Column (Recursos do MusicScale) */}
           <div className="lg:col-span-2 space-y-6">
@@ -669,7 +641,6 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
       {selectedWorkspace === 'home' && renderHomeWorkspace()}
       {selectedWorkspace === 'musicscale' && renderMusicScaleWorkspace()}
       {selectedWorkspace !== 'home' && selectedWorkspace !== 'musicscale' && currentApp && renderGenericAppWorkspace(currentApp)}
-      {false && <button onClick={openRequest} />}
     </div>
   );
 }

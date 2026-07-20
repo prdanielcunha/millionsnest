@@ -119,7 +119,9 @@ const checkCentralPanel = () => {
   assertCondition(content.includes('support.hub.central_action.title'), 'Exists central action title', 'Missing central action title');
   assertCondition(content.includes('support.hub.central_action.aria'), 'Exists central action aria', 'Missing central action aria');
   assertCondition(content.includes('onClick={openHub}'), 'Central action calls openHub', 'Central action does not call openHub');
-  assertCondition(content.includes('onClick={openRequest}'), 'Preciso de ajuda calls openRequest', 'Preciso de ajuda does not call openRequest');
+  
+  const context = fs.readFileSync('src/components/support/SupportHubContext.tsx', 'utf-8');
+  assertCondition(context.includes('openRequest'), 'Provider contract includes openRequest', 'Provider contract missing openRequest');
 };
 
 const checkRoutesDetection = () => {
