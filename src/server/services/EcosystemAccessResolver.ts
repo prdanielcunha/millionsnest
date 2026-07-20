@@ -3,6 +3,31 @@ import { isCanonicalGlobalRole } from '../../../src/lib/permissionService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
+
+export type CanonicalAppAccessState = 'granted' | 'denied';
+
+export type CanonicalMusicScaleSubscriptionStatus =
+  | 'active'
+  | 'trialing'
+  | 'inactive'
+  | 'missing'
+  | 'unknown';
+
+export type MusicScaleIndividualAccessSource =
+  | 'explicit_enabled'
+  | 'membership_compatibility'
+  | 'explicit_disabled'
+  | 'global_system_role';
+
+export type MusicScaleEntitlementDecision = {
+  subscriptionStatus: string | null;
+  organizationAppStatus: string | null;
+  canonicalStatus: CanonicalMusicScaleSubscriptionStatus;
+  cancellationScheduled: boolean;
+  currentPeriodEndMs: number | null;
+  individualAccessSource: MusicScaleIndividualAccessSource;
+};
+
 export type ResolvedAppAccess = {
   appId: EcosystemAppId;
   organizationId: string;
@@ -15,6 +40,8 @@ export type ResolvedAppAccess = {
   permissions: string[];
   scopes?: Record<string, string[]>;
   denialReason?: string;
+  decisionState?: CanonicalAppAccessState;
+  entitlement?: MusicScaleEntitlementDecision;
 };
 
 export const DENIAL_REASONS = {
@@ -29,6 +56,9 @@ export const DENIAL_REASONS = {
   APP_NOT_ENABLED: 'APP_NOT_ENABLED',
   ENTITLEMENT_NOT_CONFIGURED: 'ENTITLEMENT_NOT_CONFIGURED',
   SUBSCRIPTION_INACTIVE: 'SUBSCRIPTION_INACTIVE',
+  SUBSCRIPTION_NOT_FOUND: 'SUBSCRIPTION_NOT_FOUND',
+  SUBSCRIPTION_PAYMENT_REQUIRED: 'SUBSCRIPTION_PAYMENT_REQUIRED',
+  ENTITLEMENT_INACTIVE: 'ENTITLEMENT_INACTIVE',
   MEMBER_APP_ACCESS_DISABLED: 'MEMBER_APP_ACCESS_DISABLED',
   PERMISSION_DENIED: 'PERMISSION_DENIED',
   SCOPE_DENIED: 'SCOPE_DENIED',
@@ -51,6 +81,7 @@ export async function resolveEcosystemAppAccess(params: {
     accessSource: 'denied',
     roles: [],
     permissions: [],
+    decisionState: 'denied'
   };
 
   if (!uid) {
@@ -88,7 +119,7 @@ export async function resolveEcosystemAppAccess(params: {
   }
   
   const orgData = orgDoc.data() || {};
-  if (orgData.status === 'archived' || orgData.status === 'inactive' || orgData.status === 'suspended') {
+  if (orgData.status === 'archived' || orgData.status === 'inactive' || orgData.status === 'suspended' || orgData.disabled === true) {
      return { ...defaultDenied, systemRole, denialReason: DENIAL_REASONS.ORGANIZATION_INACTIVE };
   }
 
@@ -102,7 +133,18 @@ export async function resolveEcosystemAppAccess(params: {
       systemRole,
       roles: ['global_admin'],
       permissions: ['*'],
-      scopes: { '*': ['*'] }
+      scopes: { '*': ['*'] },
+      decisionState: 'granted',
+      ...(appId === 'musicscale' ? {
+         entitlement: {
+            subscriptionStatus: null,
+            organizationAppStatus: null,
+            canonicalStatus: 'active',
+            cancellationScheduled: false,
+            currentPeriodEndMs: null,
+            individualAccessSource: 'global_system_role'
+         }
+      } : {})
     };
   }
 
@@ -115,7 +157,14 @@ export async function resolveEcosystemAppAccess(params: {
   }
   
   const memData = memDoc.data() || {};
-  if (memData.status === 'inactive' || memData.status === 'suspended') {
+  if (
+    memData.status === 'inactive' || 
+    memData.status === 'suspended' || 
+    memData.status === 'disabled' || 
+    memData.status === 'removed' || 
+    memData.status === 'revoked' || 
+    memData.status === 'archived'
+  ) {
      return { ...defaultDenied, systemRole, denialReason: DENIAL_REASONS.MEMBERSHIP_INACTIVE };
   }
   
@@ -148,14 +197,149 @@ export async function resolveEcosystemAppAccess(params: {
         organizationRole,
         roles: memData.appAccess.nestFinance.roles || [],
         permissions: memData.appAccess.nestFinance.permissions || [],
-        scopes: memData.appAccess.nestFinance.scopes || {}
+        scopes: memData.appAccess.nestFinance.scopes || {},
+        decisionState: 'granted'
      };
   }
 
-  // Comportamento legacy pro MusicScale (mesmo que a integridade completa esteja fora daqui)
+  // Comportamento canônico para MusicScale
   if (appId === 'musicscale') {
-     return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.ENTITLEMENT_NOT_CONFIGURED };
+     let individualAccessSource: MusicScaleIndividualAccessSource = 'membership_compatibility';
+     
+     if (memData.appAccess?.musicscale?.enabled === false) {
+        individualAccessSource = 'explicit_disabled';
+        return { 
+           ...defaultDenied, 
+           systemRole, 
+           organizationRole, 
+           denialReason: DENIAL_REASONS.MEMBER_APP_ACCESS_DISABLED,
+           decisionState: 'denied',
+           entitlement: {
+              subscriptionStatus: null,
+              organizationAppStatus: null,
+              canonicalStatus: 'missing',
+              cancellationScheduled: false,
+              currentPeriodEndMs: null,
+              individualAccessSource
+           }
+        };
+     } else if (memData.appAccess?.musicscale?.enabled === true) {
+        individualAccessSource = 'explicit_enabled';
+     }
+
+     const subRef = db.collection('subscriptions').doc(organizationId);
+     const subDoc = await subRef.get();
+     
+     if (!subDoc.exists) {
+        return {
+           ...defaultDenied,
+           systemRole,
+           organizationRole,
+           denialReason: DENIAL_REASONS.SUBSCRIPTION_NOT_FOUND,
+           decisionState: 'denied',
+           entitlement: {
+              subscriptionStatus: null,
+              organizationAppStatus: null,
+              canonicalStatus: 'missing',
+              cancellationScheduled: false,
+              currentPeriodEndMs: null,
+              individualAccessSource
+           }
+        };
+     }
+
+     const subData = subDoc.data() || {};
+     const subscriptionStatus = subData.status;
+
+     const orgAppAccess = orgData.apps?.musicscale;
+     if (!orgAppAccess) {
+        return {
+           ...defaultDenied,
+           systemRole,
+           organizationRole,
+           denialReason: DENIAL_REASONS.ENTITLEMENT_NOT_CONFIGURED,
+           decisionState: 'denied',
+           entitlement: {
+              subscriptionStatus,
+              organizationAppStatus: null,
+              canonicalStatus: 'missing',
+              cancellationScheduled: false,
+              currentPeriodEndMs: subData.currentPeriodEnd ? (subData.currentPeriodEnd.toMillis ? subData.currentPeriodEnd.toMillis() : (subData.currentPeriodEnd.seconds ? subData.currentPeriodEnd.seconds * 1000 : null)) : null,
+              individualAccessSource
+           }
+        };
+     }
+
+     const organizationAppStatus = orgAppAccess.status;
+     let canonicalStatus: CanonicalMusicScaleSubscriptionStatus = 'unknown';
+     let denialReason: string | undefined = undefined;
+
+     const validStatuses = ['active', 'trialing'];
+     const subIsValid = validStatuses.includes(subscriptionStatus);
+     const appIsValid = validStatuses.includes(organizationAppStatus);
+
+     let cancellationScheduled = false;
+
+     if (subIsValid && appIsValid) {
+        canonicalStatus = (subscriptionStatus === 'active' || organizationAppStatus === 'active') ? 'active' : 'trialing';
+        if (subData.cancelAtPeriodEnd === true || subData.cancel_at_period_end === true) {
+           cancellationScheduled = true;
+        }
+     } else {
+        if (['past_due', 'unpaid', 'incomplete', 'paused'].includes(subscriptionStatus)) {
+           denialReason = DENIAL_REASONS.SUBSCRIPTION_PAYMENT_REQUIRED;
+        } else if (['canceled', 'none', 'expired', 'incomplete_expired'].includes(subscriptionStatus)) {
+           denialReason = DENIAL_REASONS.SUBSCRIPTION_INACTIVE;
+        } else if (!subIsValid) {
+           denialReason = DENIAL_REASONS.SUBSCRIPTION_INACTIVE; // Fallback
+        } else if (!appIsValid) {
+           denialReason = DENIAL_REASONS.ENTITLEMENT_INACTIVE;
+        }
+        canonicalStatus = 'inactive';
+     }
+
+     const currentPeriodEndMs = (subData.currentPeriodEnd && typeof subData.currentPeriodEnd.toMillis === 'function') 
+        ? subData.currentPeriodEnd.toMillis() 
+        : (subData.currentPeriodEnd && typeof subData.currentPeriodEnd.seconds === 'number' 
+           ? subData.currentPeriodEnd.seconds * 1000 
+           : null);
+
+     const entitlement: MusicScaleEntitlementDecision = {
+        subscriptionStatus,
+        organizationAppStatus,
+        canonicalStatus,
+        cancellationScheduled,
+        currentPeriodEndMs,
+        individualAccessSource
+     };
+
+     if (denialReason) {
+        return {
+           ...defaultDenied,
+           systemRole,
+           organizationRole,
+           denialReason,
+           decisionState: 'denied',
+           entitlement
+        };
+     }
+
+     return {
+        appId,
+        organizationId,
+        accessible: true,
+        isGlobalAccess: false,
+        accessSource: 'organization_membership',
+        systemRole,
+        organizationRole,
+        roles: memData.appAccess?.musicscale?.roles || [],
+        permissions: memData.appAccess?.musicscale?.permissions || [],
+        scopes: memData.appAccess?.musicscale?.scopes || {},
+        decisionState: 'granted',
+        entitlement
+     };
   }
 
   return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.APP_NOT_ENABLED };
 }
+
