@@ -892,10 +892,10 @@ export default {
         unavailable: "Unavailable"
       },
       status: {
-        active: "Available",
+        available: "Available",
         trialing: "Trial period",
-        loading: "Loading",
         payment_issue: "Payment pending",
+        loading: "Loading",
         unavailable: "Unavailable"
       },
       checklist: {

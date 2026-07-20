@@ -158,5 +158,27 @@ for (const file of files) {
 
 assertCondition(`85. Ausência de resíduos (${residuesList.join(', ')})`, !hasResidues);
 
+// 8. MusicScaleDisplayStatus Fixes
+assertCondition("86. O componente não utiliza t(`musicscale.status.${msCatalogState}`, msCatalogState)", !homeSrc.includes("t(`musicscale.status.${msCatalogState}`, msCatalogState)"));
+assertCondition("87. msCatalogState não é utilizado como fallback visível", !homeSrc.includes(", msCatalogState)"));
+assertCondition("88. Existe MusicScaleDisplayStatus ou contrato equivalente", homeSrc.includes("MusicScaleDisplayStatus") || homeSrc.includes("musicScaleDisplayStatus"));
+assertCondition("89. isLoading resolve para loading", homeSrc.includes("isLoading") && homeSrc.includes("'loading'"));
+assertCondition("90. hasPaymentIssue resolve para payment_issue", homeSrc.includes("hasPaymentIssue") && homeSrc.includes("'payment_issue'"));
+assertCondition("91. trialing resolve para trialing", homeSrc.includes("msCatalogState === 'trialing'") && homeSrc.includes("'trialing'"));
+assertCondition("92. isReadyToOpen resolve para available", homeSrc.includes("isReadyToOpen") && homeSrc.includes("'available'"));
+assertCondition("93. estado desconhecido sem acesso resolve para unavailable", homeSrc.includes("'unavailable'"));
+assertCondition("94. administrative com isReadyToOpen true resolve para available", homeSrc.includes("isReadyToOpen") && homeSrc.includes("'available'"));
+assertCondition("95. PT contém Disponível", ptSrc.includes('available:') && ptSrc.includes('Disponível'));
+assertCondition("96. PT contém Período de teste", ptSrc.includes('trialing:') && ptSrc.includes('Período de teste'));
+assertCondition("97. PT contém Pagamento pendente", ptSrc.includes('payment_issue:') && ptSrc.includes('Pagamento pendente'));
+assertCondition("98. PT contém Carregando", ptSrc.includes('loading:') && ptSrc.includes('Carregando'));
+assertCondition("99. PT contém Indisponível", ptSrc.includes('unavailable:') && ptSrc.includes('Indisponível'));
+assertCondition("100. EN possui as cinco traduções", enSrc.includes('available:') && enSrc.includes('trialing:') && enSrc.includes('payment_issue:') && enSrc.includes('loading:') && enSrc.includes('unavailable:'));
+assertCondition("101. ES possui as cinco traduções", esSrc.includes('available:') && esSrc.includes('trialing:') && esSrc.includes('payment_issue:') && esSrc.includes('loading:') && esSrc.includes('unavailable:'));
+assertCondition("102. Nenhum identificador interno é renderizado diretamente", !homeSrc.includes(">{msCatalogState}<"));
+assertCondition("103. Não existe ADMINISTRATIVE visível ou como fallback", !homeSrc.includes("ADMINISTRATIVE") && !ptSrc.includes("ADMINISTRATIVE"));
+assertCondition("104. Não existe Administrative visível ou como fallback", !homeSrc.includes("Administrative") && !ptSrc.includes("Administrative"));
+assertCondition("105. O badge usa exclusivamente o estado visual normalizado", homeSrc.includes("musicscale.status.${musicScaleDisplayStatus}"));
+
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

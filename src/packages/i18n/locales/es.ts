@@ -900,10 +900,10 @@ export default {
         unavailable: "No disponible"
       },
       status: {
-        active: "Disponible",
+        available: "Disponible",
         trialing: "Período de prueba",
-        loading: "Cargando",
         payment_issue: "Pago pendiente",
+        loading: "Cargando",
         unavailable: "No disponible"
       },
       checklist: {

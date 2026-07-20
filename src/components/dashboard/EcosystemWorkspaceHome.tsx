@@ -120,6 +120,23 @@ export function EcosystemWorkspaceHome({
     const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
     const progressPercent = maxUsersLimit > 0 ? Math.min(100, (occupiedSlots / maxUsersLimit) * 100) : 0;
 
+    type MusicScaleDisplayStatus =
+      | 'available'
+      | 'trialing'
+      | 'payment_issue'
+      | 'loading'
+      | 'unavailable';
+
+    const musicScaleDisplayStatus: MusicScaleDisplayStatus = isLoading
+      ? 'loading'
+      : hasPaymentIssue
+        ? 'payment_issue'
+        : msCatalogState === 'trialing'
+          ? 'trialing'
+          : isReadyToOpen
+            ? 'available'
+            : 'unavailable';
+
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-12">
         {/* Welcome Section */}
@@ -148,18 +165,13 @@ export function EcosystemWorkspaceHome({
                       <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-8 h-8 object-contain" />
                     </div>
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      msCatalogState === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                      msCatalogState === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                      hasPaymentIssue ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                      isLoading ? 'bg-white/10 text-white border border-white/20' :
+                      musicScaleDisplayStatus === 'available' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                      musicScaleDisplayStatus === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                      musicScaleDisplayStatus === 'payment_issue' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                      musicScaleDisplayStatus === 'loading' ? 'bg-white/10 text-white border border-white/20' :
                       'bg-white/10 text-[#A0A7B5]'
                     }`}>
-                      {isLoading 
-                        ? t('workspace.loading', 'Carregando')
-                        : hasPaymentIssue 
-                          ? t('workspace.payment_pending', 'Pagamento pendente')
-                          : t(`musicscale.status.${msCatalogState}`, msCatalogState)
-                      }
+                      {t(`musicscale.status.${musicScaleDisplayStatus}`, t('musicscale.status.unavailable'))}
                     </span>
                   </div>
 
@@ -355,6 +367,23 @@ export function EcosystemWorkspaceHome({
     
     const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
     
+    type MusicScaleDisplayStatus =
+      | 'available'
+      | 'trialing'
+      | 'payment_issue'
+      | 'loading'
+      | 'unavailable';
+
+    const musicScaleDisplayStatus: MusicScaleDisplayStatus = isLoading
+      ? 'loading'
+      : hasPaymentIssue
+        ? 'payment_issue'
+        : msCatalogState === 'trialing'
+          ? 'trialing'
+          : isReadyToOpen
+            ? 'available'
+            : 'unavailable';
+
     const orgActive = !!organization;
     const msActive = msIsInstalled;
     const teamStarted = members.length > 1 || pendingInvites.length > 0;
@@ -368,12 +397,12 @@ export function EcosystemWorkspaceHome({
               <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-8 h-8" />
               <h2 className="text-xl font-bold text-white tracking-tight">MusicScale</h2>
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${ 
-                msCatalogState === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 
-                msCatalogState === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 
-                msCatalogState === 'payment_issue' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 
+                musicScaleDisplayStatus === 'available' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 
+                musicScaleDisplayStatus === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 
+                musicScaleDisplayStatus === 'payment_issue' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 
                 'bg-white/10 text-[#A0A7B5]'
               }`}> 
-                {t(`musicscale.status.${msCatalogState}`, msCatalogState)}
+                {t(`musicscale.status.${musicScaleDisplayStatus}`, t('musicscale.status.unavailable'))}
               </span>
             </div>
             

@@ -907,10 +907,10 @@ export default {
         unavailable: "Indisponível"
       },
       status: {
-        active: "Disponível",
+        available: "Disponível",
         trialing: "Período de teste",
-        loading: "Carregando",
         payment_issue: "Pagamento pendente",
+        loading: "Carregando",
         unavailable: "Indisponível"
       },
       checklist: {
