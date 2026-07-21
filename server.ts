@@ -14,7 +14,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
-import { MusicScaleHandoffService } from './src/server/services/MusicScaleHandoffService.js';
+import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
 import { 
@@ -4402,62 +4402,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
   });
 
   app.post('/api/ecosystem/create-handoff', express.json(), async (req, res) => {
-    let logUid: string | null = null;
-    let logOrgId: string | null = null;
-    let logSubscriptionFound = false;
-    let logSubscriptionStatus: string | null = null;
-    let logStripeLookupPerformed = false;
-    let logSelfHealingExecuted = false;
-    let logAccessGranted = false;
-
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      const token = authHeader.split('Bearer ')[1];
-      const decoded = await admin.auth().verifyIdToken(token);
-      logUid = decoded.uid;
-      
-      const { appId, orgId, supportMode } = req.body;
-      if (appId !== 'musicscale') {
-        return res.status(400).json({ error: 'Invalid app' });
-      }
-
-      if (!db) {
-        console.error('[HANDOFF_ERROR] Database not initialized');
-        return res.status(500).json({ error: 'Database not initialized' });
-      }
-
-      const handoffService = new MusicScaleHandoffService(db, admin.auth());
-      const result = await handoffService.processHandoff({
-        uid: decoded.uid,
-        appId,
-        orgId,
-        supportMode,
-      });
-
-      return res.json(result);
-    } catch (e: any) {
-      const isForbidden = e.message.includes('Forbidden') || e.message.includes('Access denied');
-      const status = isForbidden ? 403 : 500;
-      
-      if (status === 500) {
-        console.error('[API Handoff Fatal Error]', e);
-        // Print clean handoff logger even on failure
-        console.log('[HANDOFF]', {
-           uid: logUid,
-           organizationId: logOrgId,
-           subscriptionFound: logSubscriptionFound,
-           subscriptionStatus: logSubscriptionStatus,
-           stripeLookupPerformed: logStripeLookupPerformed,
-           selfHealingExecuted: logSelfHealingExecuted,
-           accessGranted: logAccessGranted
-        });
-      }
-      return res.status(status).json({ error: e.message });
-    }
+    return handleMusicScaleHandoffRequest(req, res, {
+      verifyIdToken: (token) => admin.auth().verifyIdToken(token),
+      getDb: () => db || null,
+      createCustomToken: (uid, claims) => admin.auth().createCustomToken(uid, claims),
+      now: () => Date.now(),
+      logger: console
+    });
   });
 
   // Forçar sincronização com Stripe
