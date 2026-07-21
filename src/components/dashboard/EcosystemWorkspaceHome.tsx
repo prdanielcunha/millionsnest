@@ -18,8 +18,19 @@ interface EcosystemWorkspaceHomeProps {
   pendingInvites: any[];
   currentUserPerms: Record<string, boolean>;
   isGlobalAdmin: boolean;
-  msIsInstalled: boolean;
-  msCatalogState: string;
+  musicScaleAccess: {
+    accessible: boolean;
+    catalogState:
+      | 'available'
+      | 'trialing'
+      | 'active'
+      | 'cancel_scheduled'
+      | 'payment_issue'
+      | 'administrative'
+      | 'unavailable'
+      | 'loading'
+      | 'error';
+  } | null;
   musicScaleApp?: EcosystemApp;
   occupiedSlots: number;
   maxUsersLimit: number;
@@ -42,8 +53,7 @@ export function EcosystemWorkspaceHome({
   pendingInvites,
   currentUserPerms,
   isGlobalAdmin,
-  msIsInstalled,
-  msCatalogState,
+  musicScaleAccess,
   musicScaleApp,
   occupiedSlots,
   maxUsersLimit,
@@ -115,9 +125,10 @@ export function EcosystemWorkspaceHome({
 
   const renderHomeWorkspace = () => {
     const musicScaleApp = installedApps.find(app => app.id === 'musicscale');
-    const isLoading = msCatalogState === "loading";
-    const hasPaymentIssue = msCatalogState === "payment_issue";
-    const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
+    const isLoading = musicScaleAccess?.catalogState === "loading";
+    const isError = musicScaleAccess?.catalogState === "error";
+    const hasPaymentIssue = musicScaleAccess?.catalogState === "payment_issue";
+    const isReadyToOpen = musicScaleAccess?.accessible === true;
     const progressPercent = maxUsersLimit > 0 ? Math.min(100, (occupiedSlots / maxUsersLimit) * 100) : 0;
 
     type MusicScaleDisplayStatus =
@@ -131,7 +142,7 @@ export function EcosystemWorkspaceHome({
       ? 'loading'
       : hasPaymentIssue
         ? 'payment_issue'
-        : msCatalogState === 'trialing'
+        : musicScaleAccess?.catalogState === 'trialing'
           ? 'trialing'
           : isReadyToOpen
             ? 'available'
@@ -362,10 +373,11 @@ export function EcosystemWorkspaceHome({
   };
 
     const renderMusicScaleWorkspace = () => {
-    const isLoading = msCatalogState === "loading";
-    const hasPaymentIssue = msCatalogState === "payment_issue";
+    const isLoading = musicScaleAccess?.catalogState === "loading";
+    const isError = musicScaleAccess?.catalogState === "error";
+    const hasPaymentIssue = musicScaleAccess?.catalogState === "payment_issue";
     
-    const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
+    const isReadyToOpen = musicScaleAccess?.accessible === true;
     
     type MusicScaleDisplayStatus =
       | 'available'
@@ -378,14 +390,14 @@ export function EcosystemWorkspaceHome({
       ? 'loading'
       : hasPaymentIssue
         ? 'payment_issue'
-        : msCatalogState === 'trialing'
+        : musicScaleAccess?.catalogState === 'trialing'
           ? 'trialing'
           : isReadyToOpen
             ? 'available'
             : 'unavailable';
 
     const orgActive = !!organization;
-    const msActive = msIsInstalled;
+    const msActive = isReadyToOpen;
     const teamStarted = members.length > 1 || pendingInvites.length > 0;
 
     const heroContent = (

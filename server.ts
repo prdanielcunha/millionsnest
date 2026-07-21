@@ -15,6 +15,7 @@ import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
+import { handleEcosystemAccessProjectionRequest } from './src/server/services/EcosystemAccessProjectionService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
 import { 
@@ -4406,6 +4407,16 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       verifyIdToken: (token) => admin.auth().verifyIdToken(token),
       getDb: () => db || null,
       createCustomToken: (uid, claims) => admin.auth().createCustomToken(uid, claims),
+      now: () => Date.now(),
+      logger: console
+    });
+  });
+
+  app.post('/api/ecosystem/access-projection', express.json(), async (req, res) => {
+    return handleEcosystemAccessProjectionRequest(req, res, {
+      verifyIdToken: (token) => admin.auth().verifyIdToken(token),
+      getDb: () => db || null,
+      resolveAccess: resolveEcosystemAppAccess,
       now: () => Date.now(),
       logger: console
     });

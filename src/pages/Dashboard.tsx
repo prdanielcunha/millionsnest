@@ -35,6 +35,7 @@ import { ECOSYSTEM_APPS, EcosystemApp } from "../lib/apps.js";
 import { ecosystemPlatform } from "../sdk/ecosystem.js";
 import { SupportHubProvider } from "../components/support/SupportHubContext.js";
 import { SupportHub } from "../components/support/SupportHub.js";
+import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -45,15 +46,6 @@ const getVisualState = (sub: any) => {
   const status = sub.status || '';
   const cancelAtPeriodEnd = sub.cancelAtPeriodEnd === true;
   
-  let endMs = 0;
-  if (sub.currentPeriodEnd) {
-     endMs = sub.currentPeriodEnd._seconds ? sub.currentPeriodEnd._seconds * 1000 : 
-             (sub.currentPeriodEnd.seconds ? sub.currentPeriodEnd.seconds * 1000 : 
-             new Date(sub.currentPeriodEnd).getTime());
-  }
-
-  const hasAccess = Date.now() < endMs;
-
   if (status === 'trialing') {
      if (cancelAtPeriodEnd) return 'cancel_scheduled';
      return 'trialing';
@@ -63,7 +55,6 @@ const getVisualState = (sub: any) => {
      return 'active';
   }
   if (status === 'canceled') {
-     if (hasAccess) return 'canceled_with_access';
      return 'canceled_expired';
   }
   if (status === 'past_due' || status === 'unpaid' || status === 'incomplete') {
@@ -122,6 +113,60 @@ export function Dashboard() {
   const [organization, setOrganization] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const [musicScaleProjection, setMusicScaleProjection] = useState<MusicScaleAccessProjection | null>(null);
+  const [musicScaleProjectionLoading, setMusicScaleProjectionLoading] = useState(false);
+  const [musicScaleProjectionError, setMusicScaleProjectionError] = useState<string | null>(null);
+  const musicScaleProjectionAbortControllerRef = useRef<AbortController | null>(null);
+
+  const refreshMusicScaleAccessProjection = async (orgId: string) => {
+    if (!user || !orgId) return;
+
+    if (musicScaleProjectionAbortControllerRef.current) {
+      musicScaleProjectionAbortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    musicScaleProjectionAbortControllerRef.current = abortController;
+
+    setMusicScaleProjectionLoading(true);
+    setMusicScaleProjectionError(null);
+
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/ecosystem/access-projection', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store'
+        },
+        body: JSON.stringify({ organizationId: orgId }),
+        signal: abortController.signal
+      });
+
+      if (!res.ok) {
+        throw new Error('Falha ao obter projeção');
+      }
+
+      const data = await res.json();
+      
+      if (abortController.signal.aborted) return;
+      
+      if (data.success && data.organizationId === orgId && data.apps?.musicscale?.appId === 'musicscale' && data.apps.musicscale.organizationId === orgId) {
+        setMusicScaleProjection(data.apps.musicscale);
+      } else {
+        throw new Error('Projeção inválida');
+      }
+    } catch (e: any) {
+      if (abortController.signal.aborted) return;
+      setMusicScaleProjectionError(e.message || 'Erro');
+      setMusicScaleProjection(null);
+    } finally {
+      if (!abortController.signal.aborted) {
+        setMusicScaleProjectionLoading(false);
+      }
+    }
+  };
   
   // Organization Edit States
   const [isEditingOrg, setIsEditingOrg] = useState(false);
@@ -158,7 +203,18 @@ export function Dashboard() {
       return;
     }
     
-    if (!organization?.enabledApps?.includes(app.id) && app.id !== 'musicscale') {
+    if (app.id === 'musicscale') {
+      if (
+        !musicScaleProjection ||
+        musicScaleProjection.organizationId !== activeContextOrgId ||
+        !musicScaleProjection.accessible ||
+        musicScaleProjectionLoading ||
+        musicScaleProjectionError
+      ) {
+        feedback.error('Acesso indisponível ao MusicScale.');
+        return;
+      }
+    } else if (!organization?.enabledApps?.includes(app.id)) {
        feedback.error(`Módulo Indisponível: O aplicativo ${app.name} não está habilitado para a sua organização.`);
        return;
     }
@@ -166,7 +222,7 @@ export function Dashboard() {
     // Mostrando feedback enquanto processa o handoff
     const toastId = feedback.loading(`Verificando credenciais para o ${app.name}...`);
     try {
-      if (isGlobalAdmin && profile?.organizationRole !== 'owner') {
+      if (isGlobalAdmin && profile?.organizationRole !== 'owner' && app.id !== 'musicscale') {
          createAuditLog({
            actorUid: user!.uid,
            actorEmail: user!.email || '',
@@ -181,11 +237,11 @@ export function Dashboard() {
       feedback.dismiss(toastId);
     } catch (e: any) {
       feedback.dismiss(toastId);
-      if (!isGlobalAdmin) {
+      if (app.id !== 'musicscale' && isGlobalAdmin) {
+        feedback.error(`Erro ao abrir: ${e.message || 'Falha ao iniciar módulo.'}`);
+      } else {
         setSubscriptionBlockedApp(app);
         setSubscriptionBlockedReason(e.message || 'Assinatura inválida ou inativa.');
-      } else {
-        feedback.error(`Erro ao abrir: ${e.message || 'Falha ao iniciar módulo.'}`);
       }
     }
   };
@@ -579,6 +635,7 @@ export function Dashboard() {
      }
 
      await loadOrganizationData(orgId, requestId);
+     await refreshMusicScaleAccessProjection(orgId);
   };
   useEffect(() => {
     if (organization?.name) {
@@ -1072,10 +1129,13 @@ export function Dashboard() {
     setJoinRequests([]);
     setAuditLogs([]);
     setLoadingSub(true);
+    setMusicScaleProjection(null);
+    setMusicScaleProjectionError(null);
     
     const requestId = ++requestSequenceRef.current;
     currentActiveOrgIdRef.current = activeContextOrgId;
     loadOrganizationData(activeContextOrgId, requestId);
+    refreshMusicScaleAccessProjection(activeContextOrgId);
     // Subscribe to real-time organization updates for immediate database sync
     const orgId = activeContextOrgId;
     const orgRef = doc(db, "organizations", orgId);
@@ -1147,60 +1207,7 @@ export function Dashboard() {
     return <Navigate to="/login" replace />;
   }
 
-  const isTrialing = subscription?.status === "trialing" || subscription?.status === "trial";
-  const isActive = subscription?.status === "active" || subscription?.status === "pro";
-  const isCanceled = subscription?.status === "canceled";
-
-  type MusicScaleCatalogState =
-    | "available"
-    | "trialing"
-    | "active"
-    | "cancel_scheduled"
-    | "payment_issue"
-    | "administrative"
-    | "loading";
-
-  const getMusicScaleCatalogState = (): MusicScaleCatalogState => {
-    if (loadingSub || loading) return "loading";
-    if (isGlobalAdmin) return "administrative";
-    
-    if (!subscription || !subscription.status) return "available";
-    
-    const status = subscription.status.toLowerCase();
-    
-    if (['past_due', 'unpaid', 'incomplete', 'paused'].includes(status)) {
-       return "payment_issue";
-    }
-    
-    if (status === 'canceled') {
-       if (subscription.currentPeriodEnd) {
-          const endMs = normalizeDateToMs(subscription.currentPeriodEnd);
-          if (Date.now() < endMs) {
-             return "cancel_scheduled";
-          }
-       }
-       return "available"; // Expired
-    }
-    
-    if (status === 'trialing' || status === 'trial') {
-       if (subscription.cancelAtPeriodEnd || subscription.cancel_at_period_end) {
-          return "cancel_scheduled";
-       }
-       return "trialing";
-    }
-    
-    if (status === 'active' || status === 'pro') {
-       if (subscription.cancelAtPeriodEnd || subscription.cancel_at_period_end) {
-          return "cancel_scheduled";
-       }
-       return "active";
-    }
-    
-    return "available";
-  };
-
-  const msCatalogState = getMusicScaleCatalogState();
-  const msIsInstalled = ["trialing", "active", "cancel_scheduled", "administrative"].includes(msCatalogState);
+  const msIsInstalled = musicScaleProjection?.accessible === true;
 
   const installedApps = ECOSYSTEM_APPS.filter(app => {
     if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
@@ -1215,6 +1222,13 @@ export function Dashboard() {
   const selectedWorkspace = (() => {
     if (activeTab === "overview") {
       if (tab === "apps" && subTab) {
+         if (subTab === 'musicscale') {
+           if (musicScaleProjectionLoading) return 'musicscale'; // Let it render loading state
+           if (!msIsInstalled) {
+             // Se estivermos na URL /dashboard/apps/musicscale mas não temos acesso, voltamos para home
+             return "home";
+           }
+         }
          return installedApps.some(a => a.id === subTab) ? subTab : "home"; 
       } else if (tab === "overview") {
          return "home";
@@ -1462,8 +1476,10 @@ export function Dashboard() {
                 pendingInvites={pendingInvites}
                 currentUserPerms={currentUserPerms}
                 isGlobalAdmin={isGlobalAdmin}
-                msIsInstalled={msIsInstalled}
-                msCatalogState={msCatalogState}
+                musicScaleAccess={{
+                  accessible: musicScaleProjection?.accessible === true,
+                  catalogState: musicScaleProjectionError ? 'error' : musicScaleProjectionLoading ? 'loading' : musicScaleProjection?.catalogState || 'available'
+                }}
                 musicScaleApp={musicScaleApp}
                 occupiedSlots={occupiedSlots}
                 maxUsersLimit={maxUsersLimit}
@@ -1509,11 +1525,11 @@ export function Dashboard() {
                                <Link className="w-3.5 h-3.5" /> Site
                             </a>
                          )}
-                         {isTrialing ? (
+                         {getVisualState(subscription) === 'trialing' ? (
                            <span className="px-3 py-1 bg-[#F59E0B]/10 text-[#F59E0B] text-[10px] font-bold rounded-full border border-[#F59E0B]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
                              <Clock className="w-3.5 h-3.5" /> Trial Ativo
                            </span>
-                         ) : isActive ? (
+                         ) : getVisualState(subscription) === 'active' || getVisualState(subscription) === 'cancel_scheduled' ? (
                            <span className="px-3 py-1 bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold rounded-full border border-[#10B981]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
                              <ShieldCheck className="w-3.5 h-3.5" /> Ativo
                            </span>
@@ -1588,18 +1604,25 @@ export function Dashboard() {
                         let isWarningState = false;
 
                         if (isMusicScale) {
-                           switch (msCatalogState) {
-                              case 'loading': cardStatusText = t('loading', 'Carregando...'); break;
-                              case 'trialing': cardStatusText = t('dashboard.apps.trialing', 'Em teste'); break;
-                              case 'active': cardStatusText = t('dashboard.apps.active', 'Ativo'); break;
-                              case 'cancel_scheduled': cardStatusText = t('dashboard.apps.cancel_scheduled', 'Cancelamento agendado'); break;
-                              case 'payment_issue': 
-                                 cardStatusText = t('dashboard.apps.payment_issue', 'Pagamento pendente'); 
-                                 isWarningState = true;
-                                 break;
-                              case 'administrative': cardStatusText = t('dashboard.apps.administrative', 'Acesso administrativo'); break;
-                              case 'available': cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
-                              default: cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
+                           if (musicScaleProjectionError) {
+                               cardStatusText = t('error', 'Erro');
+                               isWarningState = true;
+                           } else if (musicScaleProjectionLoading) {
+                               cardStatusText = t('loading', 'Carregando...');
+                           } else {
+                               switch (musicScaleProjection?.catalogState) {
+                                  case 'trialing': cardStatusText = t('dashboard.apps.trialing', 'Em teste'); break;
+                                  case 'active': cardStatusText = t('dashboard.apps.active', 'Ativo'); break;
+                                  case 'cancel_scheduled': cardStatusText = t('dashboard.apps.cancel_scheduled', 'Cancelamento agendado'); break;
+                                  case 'payment_issue': 
+                                     cardStatusText = t('dashboard.apps.payment_issue', 'Pagamento pendente'); 
+                                     isWarningState = true;
+                                     break;
+                                  case 'administrative': cardStatusText = t('dashboard.apps.administrative', 'Acesso administrativo'); break;
+                                  case 'available': cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
+                                  case 'unavailable': cardStatusText = t('dashboard.apps.unavailable', 'Acesso indisponível'); break;
+                                  default: cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
+                               }
                            }
                         } else {
                            cardStatusText = isInstalled ? 'Instalado' : 
@@ -1637,7 +1660,7 @@ export function Dashboard() {
                             <h4 className="text-lg font-semibold text-[#F5F7FA] mb-1">{app.name}</h4>
                             <p className="text-[#A0A7B5] text-xs leading-relaxed mb-6 flex-1">
                               {app.description}
-                              {isMusicScale && msCatalogState === 'cancel_scheduled' && formattedRenewal && (
+                              {isMusicScale && musicScaleProjection?.catalogState === 'cancel_scheduled' && formattedRenewal && (
                                 <span className="block mt-2 text-white/40">Acesso até {formattedRenewal}</span>
                               )}
                             </p>
@@ -1661,7 +1684,14 @@ export function Dashboard() {
                                   </button>
                                 )
                               ) : isMusicScale ? (
-                                msCatalogState === 'loading' ? (
+                                musicScaleProjectionError ? (
+                                  <button
+                                    onClick={() => refreshMusicScaleAccessProjection(activeContextOrgId!)}
+                                    className="flex-1 w-full py-2.5 bg-white/5 text-[#A0A7B5] border border-white/5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white/10 transition-all shadow-sm active:scale-95"
+                                  >
+                                    Tentar novamente
+                                  </button>
+                                ) : musicScaleProjectionLoading ? (
                                   <button
                                     disabled
                                     className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-wait border border-white/5"
@@ -1669,7 +1699,7 @@ export function Dashboard() {
                                     <div className="w-3.5 h-3.5 border border-[#A0A7B5]/30 border-t-[#A0A7B5] rounded-full animate-spin" />
                                     {t('loading', 'Carregando...')}
                                   </button>
-                                ) : msCatalogState === 'payment_issue' ? (
+                                ) : musicScaleProjection?.catalogState === 'payment_issue' ? (
                                   <button
                                     onClick={() => navigate('/dashboard/billing')}
                                     className="flex-1 w-full py-2.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-red-500/20 transition-all shadow-sm active:scale-95"
