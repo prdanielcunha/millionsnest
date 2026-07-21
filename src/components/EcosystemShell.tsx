@@ -13,6 +13,7 @@ import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
+import { feedback } from '../packages/ui/feedback.js';
 
 interface EcosystemShellProps {
   children: ReactNode;
@@ -21,7 +22,7 @@ interface EcosystemShellProps {
 }
 
 export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList }: EcosystemShellProps) {
-  const { user, profile, canonicalContext, logout, switchOrganization } = useAuth();
+  const { user, profile, canonicalContext, logout, switchOrganization, switchingOrganizationId } = useAuth();
   
   let organization: any = null;
   let currentUserPerms: any = {};
@@ -51,8 +52,23 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
         e.preventDefault();
         setDiagnosticsOpen(prev => !prev);
       }
+      if (e.key === 'Escape') {
+        setOrgMenuOpen(false);
+        setProfileMenuOpen(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('#org-switcher-container')) {
+        setOrgMenuOpen(false);
+      }
+      if (!target.closest('#profile-menu-container')) {
+        setProfileMenuOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', handleClickOutside);
 
     const checkDegraded = setInterval(() => {
        setIsDegraded(window.navigator.onLine === false || (window as any)._mn_degraded_mode);
@@ -67,6 +83,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
 
     return () => {
        window.removeEventListener('keydown', handleKeyDown);
+       window.removeEventListener('mousedown', handleClickOutside);
        clearInterval(checkDegraded);
        eventBus.unsubscribe('action.contextual.open_musicscale', handleOpenMusicScale);
     };
@@ -154,10 +171,15 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
           
           <div className="hidden md:flex border-l border-white/10 h-4 mx-1" />
 
-          <div className="relative group shrink-0 min-w-0">
+          <div className="relative group shrink-0 min-w-0" id="org-switcher-container">
             <button 
-              onClick={() => setOrgMenuOpen(!orgMenuOpen)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors min-w-0"
+              onClick={() => {
+                if (canonicalContext?.organizations && canonicalContext.organizations.length > 1) {
+                   setOrgMenuOpen(!orgMenuOpen);
+                }
+              }}
+              aria-label="Organização atual"
+              className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors min-w-0 ${canonicalContext?.organizations && canonicalContext.organizations.length > 1 ? 'hover:bg-white/5 cursor-pointer' : 'cursor-default'}`}
             >
               <div className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center border border-white/10 shrink-0">
                 <Building2 className="w-3.5 h-3.5 text-[#F5F7FA]" />
@@ -165,7 +187,9 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
               <span className="text-sm font-semibold truncate max-w-[120px] md:max-w-[200px]">
                 {organization?.name || 'Carregando...'}
               </span>
-              <ChevronDown className="w-3.5 h-3.5 text-[#A0A7B5] opacity-50 group-hover:opacity-100 transition-opacity" />
+              {canonicalContext?.organizations && canonicalContext.organizations.length > 1 && (
+                <ChevronDown className="w-3.5 h-3.5 text-[#A0A7B5] opacity-50 group-hover:opacity-100 transition-opacity" />
+              )}
             </button>
 
             {/* Org Switcher Menu */}
@@ -181,26 +205,50 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                   <div className="px-3 py-2 text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest mb-1">
                     Selecionar Organização
                   </div>
-                  {canonicalContext.organizations.filter((org:any) => org.status !== 'archived').map((org: any) => (
-                    <button
-                      key={org.id}
-                      onClick={() => {
-                        setOrgMenuOpen(false);
-                        switchOrganization(org.id).then(() => window.location.reload());
-                      }}
-                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-[#F5F7FA] hover:bg-white/5 rounded-lg transition-colors group"
-                    >
-                      <div className="flex flex-col items-start gap-1">
-                        <span className="truncate max-w-[160px] font-medium text-left">{org.name}</span>
-                        <div className="flex flex-wrap gap-1 mt-0.5">
-                           {org.userRole === 'owner' && <span className="text-[9px] px-1.5 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-md leading-none flex items-center">Dono</span>}
-                           {org.userRole === 'admin' && <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-md leading-none flex items-center">Admin</span>}
-                           {org.id === canonicalContext.primaryOrganizationId && <span className="text-[9px] px-1.5 py-0.5 bg-[#2B85EB]/10 text-[#2B85EB] border border-[#2B85EB]/20 rounded-md leading-none flex items-center">Principal</span>}
+                  {canonicalContext.organizations.filter((org:any) => org.status !== 'archived').map((org: any) => {
+                    const isSwitchingThis = switchingOrganizationId === org.id;
+                    const isCurrent = canonicalContext.activeOrganizationId === org.id;
+                    
+                    return (
+                      <button
+                        key={org.id}
+                        disabled={!!switchingOrganizationId || isCurrent}
+                        onClick={async () => {
+                          if (isCurrent || switchingOrganizationId) return;
+                          // Don't close immediately to show loading state on the button
+                          const toastId = feedback.loading("Alternando organização ativa...");
+                          try {
+                            const res = await switchOrganization(org.id);
+                            feedback.dismiss(toastId);
+                            if (res.success) {
+                               feedback.success("Organização alterada com sucesso!");
+                               setOrgMenuOpen(false);
+                            } else {
+                               feedback.error(`Não foi possível alterar a organização: ${res.error || "Erro desconhecido"}`);
+                            }
+                          } catch (err: any) {
+                            feedback.dismiss(toastId);
+                            feedback.error(`Não foi possível alterar a organização: ${err.message || "Erro desconhecido"}`);
+                          }
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-sm text-[#F5F7FA] hover:bg-white/5 rounded-lg transition-colors group ${isCurrent ? 'opacity-50 cursor-default bg-white/5' : ''} ${switchingOrganizationId && !isSwitchingThis ? 'opacity-30 cursor-not-allowed' : ''}`}
+                      >
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="truncate max-w-[160px] font-medium text-left">{org.name}</span>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                             {org.userRole === 'owner' && <span className="text-[9px] px-1.5 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-md leading-none flex items-center">Dono</span>}
+                             {org.userRole === 'admin' && <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-md leading-none flex items-center">Admin</span>}
+                             {org.id === canonicalContext.primaryOrganizationId && <span className="text-[9px] px-1.5 py-0.5 bg-[#2B85EB]/10 text-[#2B85EB] border border-[#2B85EB]/20 rounded-md leading-none flex items-center">Principal</span>}
+                          </div>
                         </div>
-                      </div>
-                      {canonicalContext.activeOrganizationId === org.id && <Check className="w-4 h-4 text-[#2B85EB] shrink-0" />}
-                    </button>
-                  ))}
+                        {isSwitchingThis ? (
+                           <Loader2 className="w-4 h-4 text-[#2B85EB] shrink-0 animate-spin" />
+                        ) : isCurrent ? (
+                           <Check className="w-4 h-4 text-[#2B85EB] shrink-0" />
+                        ) : null}
+                      </button>
+                    );
+                  })}
                   
                   {canonicalContext.needsRepair && (
                      <div className="mt-2 pt-2 border-t border-white/5 px-2">
@@ -343,7 +391,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
           </Tooltip.Provider>
 
           {/* User Profile */}
-          <div className="relative">
+          <div className="relative" id="profile-menu-container">
             <button 
               onClick={() => setProfileMenuOpen(!profileMenuOpen)}
               className="w-8 h-8 rounded-full border border-white/10 overflow-hidden ml-1 hover:border-white/30 transition-colors"

@@ -3,9 +3,9 @@ export const CURRENT_PERMISSIONS_VERSION = 2;
 export const ROLE_KEYS = {
   OWNER: 'owner',
   ADMIN: 'admin',
-  SECRETARY: 'secretary',
+  MANAGER: 'manager',
   MEMBER: 'member',
-  GUEST: 'guest',
+  VIEWER: 'viewer',
 } as const;
 
 export type RoleKey = typeof ROLE_KEYS[keyof typeof ROLE_KEYS];

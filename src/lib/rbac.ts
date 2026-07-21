@@ -1,4 +1,5 @@
 import { ROLE_KEYS, PERMISSION_KEYS } from "./constants.js";
+import { normalizeExistingOrganizationRole } from "./organizationRoles.js";
 
 export interface AppPermissions {
   [PERMISSION_KEYS.ORG_UPDATE_SETTINGS]: boolean;
@@ -19,7 +20,26 @@ export { CURRENT_PERMISSIONS_VERSION, ROLE_KEYS, PERMISSION_KEYS } from "./const
 import { CURRENT_PERMISSIONS_VERSION } from "./constants.js";
 
 export function getDefaultPermissions(role: string): AppPermissions {
-  switch (role) {
+  const normalized = normalizeExistingOrganizationRole(role);
+  
+  // Custom check for legacy "leader" role since it has its own legacy permissions
+  if (role === 'leader') {
+    return {
+      'organization.settings.update': false,
+      'organization.members.manage': false,
+      'organization.members.invite': false,
+      'organization.roles.manage': false,
+      'organization.billing.manage': false,
+      'organization.apps.manage': false,
+      'organization.audit.view': false,
+      'musicscale.songs.manage': false,
+      'musicscale.songs.edit': true,
+      'musicscale.scales.manage': true,
+      'musicscale.teams.manage': true,
+    };
+  }
+
+  switch (normalized) {
     case 'owner':
       return {
         'organization.settings.update': true,
@@ -43,41 +63,27 @@ export function getDefaultPermissions(role: string): AppPermissions {
         'organization.billing.manage': false,
         'organization.apps.manage': false,
         'organization.audit.view': true,
-        'musicscale.songs.manage': true,
-        'musicscale.songs.edit': true,
-        'musicscale.scales.manage': true,
-        'musicscale.teams.manage': true,
-      };
-    case 'leader':
-      return {
-        'organization.settings.update': false,
-        'organization.members.manage': false,
-        'organization.members.invite': false,
-        'organization.roles.manage': false,
-        'organization.billing.manage': false,
-        'organization.apps.manage': false,
-        'organization.audit.view': false,
         'musicscale.songs.manage': false,
-        'musicscale.songs.edit': true, // Operacional, minimal but not admin
-        'musicscale.scales.manage': true,
-        'musicscale.teams.manage': true,
+        'musicscale.songs.edit': false,
+        'musicscale.scales.manage': false,
+        'musicscale.teams.manage': false,
       };
-    case 'secretary':
+    case 'manager':
       return {
         'organization.settings.update': false,
-        'organization.members.manage': false,
+        'organization.members.manage': true,
         'organization.members.invite': true,
         'organization.roles.manage': false,
         'organization.billing.manage': false,
         'organization.apps.manage': false,
         'organization.audit.view': false,
-        'musicscale.songs.manage': true,
-        'musicscale.songs.edit': true,
-        'musicscale.scales.manage': true,
-        'musicscale.teams.manage': true,
+        'musicscale.songs.manage': false,
+        'musicscale.songs.edit': false,
+        'musicscale.scales.manage': false,
+        'musicscale.teams.manage': false,
       };
     case 'member':
-    case 'guest':
+    case 'viewer':
     default:
       return {
         'organization.settings.update': false,
@@ -96,8 +102,9 @@ export function getDefaultPermissions(role: string): AppPermissions {
 }
 
 export function normalizePermissions(permissions: any, role: string, version?: number): AppPermissions {
+  const normRole = normalizeExistingOrganizationRole(role);
   if (version === CURRENT_PERMISSIONS_VERSION && permissions) {
-    if (role === 'owner') return getDefaultPermissions('owner');
+    if (normRole === 'owner') return getDefaultPermissions('owner');
     return permissions as AppPermissions;
   }
   
@@ -118,7 +125,7 @@ export function normalizePermissions(permissions: any, role: string, version?: n
      if (permissions['musicScale.manageTeams'] !== undefined) defaultPerms['musicscale.teams.manage'] = permissions['musicScale.manageTeams'];
   }
   
-  if (role === 'owner') {
+  if (normRole === 'owner') {
      // enforce owner full access
      return getDefaultPermissions('owner');
   }

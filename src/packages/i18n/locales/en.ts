@@ -138,6 +138,11 @@ export default {
     chat_online: "Online",
     chat_choose: "Choose what you want to talk about:",
     chat_opt_plans: "Plans and Pricing",
+    pre_sales_question: "Pre-sales questions",
+    pre_sales_prompt: "How can we help before you subscribe?",
+    public_contact_loading: "Loading...",
+    public_contact_error: "An error occurred while generating the contact link. Please try again or check your popup blocker.",
+    footer_contact_aria: "Contact us via WhatsApp",
     chat_opt_support: "Questions & Support",
     chat_opt_partnership: "Partnership & Sales",
     chat_human_support: "Human Support",
@@ -363,4 +368,629 @@ export default {
     final_cta_button: "Começar teste grátis",
     final_cta_secondary: "Ver preços"
 }
+,
+  dashboard: {
+    support: {
+      actions: {
+        need_help: "I need help",
+        contact_support: "Talk to support"
+      },
+      modal: {
+        title: "Submit a request",
+        description: "Tell us what happened and our team will receive the necessary details to assist you.",
+        security_notice: "Do not send passwords, access codes, or complete card details.",
+        submitting: "Sending...",
+        submit: "Submit request"
+      },
+      fields: {
+        name: "Name",
+        email: "Email",
+        whatsapp: "WhatsApp, optional",
+        category: "Subject",
+        message: "How can we help?"
+      },
+      categories: {
+        general: "General question",
+        access: "Access and login",
+        billing: "Subscription and billing",
+        organization: "Organization and team",
+        musicscale: "MusicScale",
+        bug: "Error or unexpected behavior",
+        other: "Other subject"
+      },
+      validation: {
+        message_too_short: "Tell us a bit more about what happened (minimum 20 characters)."
+      },
+      errors: {
+        UNAUTHENTICATED: "Your session has expired. Please sign in again.",
+        ORGANIZATION_CONTEXT_MISMATCH: "The active organization has changed. Close this window and try again.",
+        MEMBERSHIP_REQUIRED: "You do not have access to the selected organization.",
+        RATE_LIMITED: "You have sent several requests in a short time. Please wait a few minutes.",
+        MESSAGE_TOO_SHORT: "Tell us a bit more about what happened.",
+        INVALID_WHATSAPP: "Please check the WhatsApp number.",
+        INTERNAL_ERROR: "Could not send right now. Please try again."
+      },
+      success: {
+        received: "We received your request.",
+        protocol: "Protocol: {{reference}}",
+        close: "Close",
+        send_another: "Submit another request"
+      },
+      security: {
+        confidentiality: "Your data is protected by MillionsNest ecosystem encryption."
+      },
+      accessibility: {
+        close_dialog: "Close support form",
+        character_counter: "{{current}} of 4000 characters"
+      },
+      priority: {
+        badge: "Priority support",
+        description: "Your access includes priority support.",
+        global_override: "Full access granted by your ecosystem role."
+      },
+      capabilities: {
+        loading: "Checking your support channels..."
+      },
+      hub: {
+        title: "How can we help?",
+        description: "Choose the best way to continue.",
+        expand: "Open help",
+        collapse: "Close help",
+        accessibility: {
+          close_dialog: "Close guide"
+        },
+        menu_aria: "Help and support options",
+        close_aria: "Close Help Center",
+        central_action: {
+          title: "Help and support",
+          description: "Send a request, talk via WhatsApp, or check quick guides.",
+          open: "Open Help Center",
+          aria: "Open the Help and Support Center"
+        },
+        request: {
+          title: "Send a request",
+          description: "Tell us what happened and receive a protocol."
+        },
+        whatsapp: {
+          title: "Talk via WhatsApp",
+          description: "Chat through our priority support channel.",
+          locked: "Available on the Pro plan."
+        },
+        guide: {
+          title: "Help about this page",
+          description: "View a quick guide for this screen."
+        }
+      },
+      whatsapp: {
+        modal: {
+          title: "Talk via WhatsApp",
+          description: "WhatsApp will open with a ready message. You can review it before sending."
+        }
+      },
+      guides: {
+        understood: "Got it",
+        close_aria: "Close guide",
+        musicscale_overview: {
+          title: "MusicScale Overview",
+          intro: "This screen brings together app access, subscription status, and paths to explore or configure MusicScale.",
+          sections: {
+            open: "Use Open MusicScale to launch the application.",
+            resources: "Learn resources explains what is available.",
+            getting_started: "Getting started guides you through the initial setup.",
+            subscription: "Subscription status informs if access is available.",
+            management: "Team and payment matters are managed by MillionsNest."
+          },
+          tip: "Start with Getting Started when the team is not yet set up."
+        },
+        organization: {
+          title: "Organization Data",
+          intro: "On this screen, you can check the information that identifies the organization within the ecosystem.",
+          sections: {
+            name: "Check the name displayed in the applications.",
+            address: "Review the public address when this option is available.",
+            apps: "See which applications are linked.",
+            auth: "Only authorized people can change the data.",
+            scope: "Changes affect the active organization, not all organizations in the account."
+          },
+          tip: "Check the organization name before inviting the team."
+        },
+        account: {
+          title: "Account and Profile",
+          intro: "This screen gathers the personal information used to identify you in MillionsNest.",
+          sections: {
+            name: "Check your display name.",
+            email: "See the email associated with your access.",
+            edit: "Update only the data available for editing.",
+            orgs: "Your access to organizations is managed separately.",
+            roles: "Changing the profile does not automatically change your roles in the team."
+          },
+          tip: "Use a name that your team will easily recognize."
+        },
+        musicscale_resources: {
+          title: "MusicScale Resources",
+          intro: "Learn how the MusicScale structure works.",
+          sections: {
+            repertoire: "Repertoire gathers the songs.",
+            library: "The Live Library lets you import ready chords.",
+            chords: "Chords help musicians study.",
+            members: "Members defines the team's talents.",
+            scales: "Scales organize services and ministrations."
+          },
+          tip: "Start by setting up the Repertoire and then create Scales."
+        },
+        musicscale_getting_started: {
+          title: "Getting Started",
+          intro: "The ideal flow to start with MusicScale.",
+          sections: {
+            org: "Check your organization.",
+            team: "Invite your first members.",
+            songs: "Add your first songs.",
+            chords: "Review chords and lyrics.",
+            members: "Assign instruments to members.",
+            scales: "Build your first scale."
+          },
+          tip: "Following the steps helps with deployment."
+        },
+        team: {
+          title: "Team Members",
+          intro: "Understand team management.",
+          sections: {
+            active: "Active members have access to the organization.",
+            pending: "Pending invites await acceptance.",
+            new: "You can add new members according to your plan.",
+            seats: "Your plan dictates user capacity.",
+            roles: "Roles determine administrative power."
+          }
+        },
+        billing: {
+          title: "Subscriptions and Billing",
+          intro: "Billing is centralized in MillionsNest.",
+          sections: {
+            plan: "View current plan and activated features.",
+            seats: "Manage seat usage in your organization.",
+            status: "Status can be active, canceled, or pending.",
+            payments: "Your payment is managed by Stripe.",
+            features: "Upgrade plans to unlock more capabilities."
+          }
+        }
+      }
+    },
+    navigation: {
+      home: "Home",
+      my_apps: "My apps",
+      overview: "Home"
+    },
+    workspace: {
+      start_here: "Start here",
+      getting_started: "Getting started",
+      getting_started_desc: "Set up your organization and prepare your team.",
+      know_resources: "Know resources",
+      know_resources_desc: "Understand repertoire, chord charts, members and schedules.",
+      org_and_access: "Organization & access",
+      invite_person: "Invite person",
+      invite_person_desc: "Add someone with the correct access level.",
+      manage_team: "Manage team",
+      manage_team_desc: "Check members, invites and permissions.",
+      view_subscription: "View subscription",
+      view_subscription_desc: "Check plan, access and subscription status.",
+      open_cta: "Open",
+      intro: "Your Management Hub",
+      sub_intro: "Manage your worship ministry preparation and control your team security access.",
+      spaces_title: "Your spaces",
+      apps_title: "Your apps",
+      open_app: "Open {{appName}}",
+      available: "Available",
+      loading: "Loading",
+      payment_pending: "Payment pending",
+      resolve_payment: "Resolve payment",
+      no_apps_found: "No apps enabled at this moment.",
+      musicscale_group_title: "MusicScale — Worship Excellence",
+      org_group_title: "Organization & Access",
+      help_group_title: "Help & Support",
+      organization_unnamed: "Your Organization",
+      org_settings_title: "Organization Settings",
+      plan_label: "Current plan:",
+      plan_starter: "Starter",
+      billing_action: "Manage Subscription",
+      team_title: "Members & Team",
+      team_desc: "Manage who has access to the organization and dashboard security.",
+      slots_allocated: "Slots filled",
+      invite_action: "Invite Member",
+      manage_team_action: "View Team",
+      team: {
+        access_title: "Team and Access",
+        access_desc: "Invite your team to collaborate and configure access permissions."
+      },
+      advanced_org_management: "Advanced organization management",
+      learn_and_config: "Learn and configure",
+      quick_access: "Quick access",
+      pending_invites: "Invites and Team",
+      plans_and_sub: "Plans and Subscription",
+      open_musicscale_title: "Open MusicScale",
+      open_musicscale_desc: "Pick up where you left off and organize repertoires, members and schedules."
+    },
+    musicscale: {
+      
+      center: {
+            "common": {
+                  "can_do": "You can",
+                  "where_to_find": "Where to find",
+                  "in_practice": "In practice",
+                  "what_is": "What it is",
+                  "why_important": "Why it's important",
+                  "how_to": "How to do it",
+                  "expected_result": "Expected result",
+                  "important": "Important",
+                  "global_collection": "Global collection",
+                  "optional": "Optional"
+            },
+            "paths": {
+                  "repertoire_songs": "Repertoire → Songs",
+                  "repertoire_chords": "Repertoire → Chords",
+                  "repertoire_lyrics": "Repertoire → Lyrics",
+                  "live_library": "Live Library",
+                  "ai_import": "Repertoire → Songs → Import with AI",
+                  "members": "Members",
+                  "scales_band": "Scales → Band Scales",
+                  "scales_songs": "Scales → Song Scales"
+            },
+            "tabs": {
+                  "overview": "Overview",
+                  "resources": "Resources",
+                  "getting_started": "Getting Started"
+            },
+            "badges": {
+                  "recommended": "Recommended",
+                  "guide": "Guide"
+            },
+            "overview": {
+                  "start_here": "START HERE",
+                  "no_team_title": "Prepare your team to use MusicScale",
+                  "no_team_desc": "Invite the people who will participate in the organization and then continue the configuration inside MusicScale.",
+                  "team_title": "Continue your first steps",
+                  "team_desc": "Learn how to add songs to the Repertoire, consult chords and lyrics, and set up your first scales.",
+                  "btn_continue": "Continue getting started",
+                  "btn_invite": "Invite someone",
+                  "ask_admin_invite": "Ask an organization administrator to invite the team.",
+                  "resolve_payment": "Settle subscription",
+                  "ask_admin_payment": "Ask the subscription manager to settle access.",
+                  "summary_org": "Organization ready",                  
+                  "summary_ms": "MusicScale active",
+                  "summary_team": "Team started"
+            },
+            "resources": {
+                  "title": "Get to know MusicScale inside",
+                  "description": "Understand where songs, chords, lyrics, scales, and members are located, and how each area connects in team preparation.",
+                  "view_in_ms": "View in MusicScale",
+                  "view_aria": "View {{resource}} in MusicScale",
+                  "unavailable_aria": "{{resource}} unavailable in MusicScale",
+                  "billing_aria": "Settle subscription to access {{resource}}",
+                  "regularize_subscription": "Settle subscription",
+                  "ask_billing_owner": "Ask the subscription manager to settle access.",
+                  "unavailable": "MusicScale unavailable",
+                  "groups": {
+                        "music_content": "Music and content",
+                        "team_scales": "Team and scales"
+                  },
+                  "flow": {
+                        "live_library": "Live Library",
+                        "repertoire": "Song Repertoire",
+                        "chords": "Chords",
+                        "lyrics": "Lyrics",
+                        "music_scale": "Song Scale",
+                        "members": "Members",
+                        "band_scale": "Band Scale",
+                        "imports_to": "imports to",
+                        "supplies_songs_to": "supplies songs to",
+                        "forms": "forms",
+                        "can_link_to": "can link to",
+                        "optional_link": "optional",
+                        "notice_title": "How the Repertoire works",
+                        "notice_text": "In MusicScale, Repertoire is your organization's song collection. You don't create a separate repertoire for each service. For a date or event, create a Song Scale and choose songs from the Repertoire."
+                  },
+                  "repertoire": {
+                        "title": "Song Repertoire",
+                        "desc": "It's your organization's song collection. It contains all songs registered or imported for the team.",
+                        "practice": "Open a song to check its details, lyrics or chords. Then, choose this song when creating a service scale.",
+                        "where": "Repertoire → Songs",
+                        "can_do": [
+                              "search by title or artist",
+                              "open song details",
+                              "consult lyrics, chords and key when available",
+                              "choose songs when creating a Song Scale"
+                        ]
+                  },
+                  "library": {
+                        "title": "Live Library",
+                        "desc": "A global and updated collection of songs ready to import into your organization's Repertoire.",
+                        "practice": "Find a ready song, check its content and import it into your organization's Repertoire.",
+                        "where": "Live Library",
+                        "can_do": [
+                              "search songs",
+                              "check available content",
+                              "find lyrics, chords and key when available",
+                              "import songs to Repertoire"
+                        ]
+                  },
+                  "chords": {
+                        "title": "Chords",
+                        "desc": "Consult the chords of the songs that are part of your organization's Repertoire.",
+                        "practice": "Quickly find the chord and key the band needs to prepare.",
+                        "where": "Repertoire → Chords",
+                        "can_do": [
+                              "search songs",
+                              "consult chords and key",
+                              "filter the collection",
+                              "prepare band material"
+                        ]
+                  },
+                  "lyrics": {
+                        "title": "Lyrics",
+                        "desc": "Consult the lyrics of the songs registered in the Repertoire.",
+                        "practice": "Open the full lyrics to review the order and parts of the song.",
+                        "where": "Repertoire → Lyrics",
+                        "can_do": [
+                              "search songs",
+                              "consult full lyrics",
+                              "review order and parts",
+                              "prepare vocals and ministers"
+                        ]
+                  },
+                  "ai_import": {
+                        "title": "Smart Import",
+                        "desc": "Transform disorganized chords or lyrics into structured content for MusicScale.",
+                        "notice": "Availability depends on the features included in the plan.",
+                        "where": "Repertoire → Songs → Import with AI",
+                        "can_do": [
+                              "paste chords",
+                              "paste lyrics",
+                              "organize content",
+                              "review before saving"
+                        ]
+                  },
+                  "music_scales": {
+                        "title": "Song Scales",
+                        "desc": "Organize the songs that will be sung and played on a date and event type.",
+                        "practice": "Create the scale for Sunday service, choose the songs and link the participating band.",
+                        "where": "Scales → Song Scales",
+                        "can_do": [
+                              "choose date and time",
+                              "choose event and location",
+                              "select songs from Repertoire",
+                              "link a Band Scale",
+                              "consult occasion details"
+                        ]
+                  },
+                  "members": {
+                        "title": "Members",
+                        "desc": "View the people who participate in the ministry and their specialties.",
+                        "practice": "Find who plays drums, keyboard or guitar and who participates in vocals.",
+                        "where": "Members",
+                        "can_do": [
+                              "locate musicians",
+                              "locate vocals",
+                              "locate ministers",
+                              "consult instruments, voices and specialties"
+                        ]
+                  },
+                  "band_scales": {
+                        "title": "Band Scales",
+                        "desc": "Organize the musicians, vocals, ministers and roles that will perform on a date or event.",
+                        "practice": "Define lead vocal, backing vocals, keyboard, guitar, bass and drums for the service.",
+                        "where": "Scales → Band Scales",
+                        "can_do": [
+                              "choose members",
+                              "define roles",
+                              "organize band and vocals",
+                              "link the band to a Song Scale"
+                        ]
+                  },
+                  "preparation_result": {
+                        "title": "Everything connected to prepare the team",
+                        "text": "The Repertoire gathers the songs. Chords and Lyrics help in studying. Members form the Band Scale. The Song Scale organizes what will be presented on each date and can receive the band that will perform in that event."
+                  },
+                  "open_ms": "Open MusicScale"
+            },
+            "getting_started": {
+                  "title": "First steps in MusicScale",
+                  "description": "Let's prepare your organization, your team and the initial setup. You can complete each step at your own pace.",
+                  "operational_notice": "The Repertoire, chords, lyrics, members and scales steps take place inside MusicScale. Open the app and follow the guidelines below.",
+                  "sections": {
+                        "millionsnest": "Preparation in MillionsNest",
+                        "musicscale": "Continue in MusicScale"
+                  },
+                  "statuses": {
+                        "completed": "Completed",
+                        "attention": "Needs attention",
+                        "continue_in_ms": "Continue in MusicScale",
+                        "pending": "Pending",
+                        "pending_invite": "Invite sent"
+                  },
+                  "organization": {
+                        "ready_title": "Organization ready",
+                        "attention_title": "Check your organization",
+                        "ready_description": "Your church or organization is already created in MillionsNest.",
+                        "attention_description": "Confirm the church or organization details before continuing.",
+                        "check_action": "Check details",
+                        "admin_notice": "An administrator can update these details."
+                  },
+                  "team": {
+                        "connected_title": "Team connected",
+                        "invite_sent_title": "Invite sent",
+                        "invite_title": "Invite your team",
+                        "connected_description": "Your organization already has other active people.",
+                        "waiting_description": "An invitation is waiting for the person to join the organization.",
+                        "empty_description": "Invite the first people who will use MusicScale with you.",
+                        "manage_action": "View team and invitations",
+                        "invite_another_action": "Invite another person",
+                        "invite_action": "Invite someone",
+                        "no_permission": "Ask an administrator to invite or manage the team."
+                  },
+                  "steps": {
+                        "team": {
+                              "important": "The Administrator or Member role defines access to MillionsNest. Inside MusicScale, you can specify what each person does on the team, such as vocals, drums, keyboard, or leadership."
+                        },
+                        "songs": {
+                              "title": "Add songs to Repertoire",
+                              "what": "The Repertoire gathers all your organization's songs.",
+                              "why": "Repertoire songs can be chosen in Song Scales.",
+                              "how": "In MusicScale, open Repertoire → Songs. Add manually, use smart import or import via Live Library.",
+                              "result": "The songs used by the organization will be available in a single collection.",
+                              "action": "Open MusicScale"
+                        },
+                        "content": {
+                              "title": "Check chords and lyrics",
+                              "what": "Chords and Lyrics are views of the content of the songs already in the Repertoire.",
+                              "why": "The team quickly finds the necessary material to study.",
+                              "how": "Open Repertoire → Chords or Repertoire → Lyrics.",
+                              "result": "Musicians and vocals will have access to the necessary content for preparation.",
+                              "action": "Open MusicScale"
+                        },
+                        "members": {
+                              "title": "Organize the members",
+                              "what": "The Members area gathers musicians, vocals, ministers, roles and specialties.",
+                              "why": "This information helps build Band Scales more clearly.",
+                              "how": "Open Members and check if roles and specialties are correct.",
+                              "result": "MusicScale will know who can play each instrument or role.",
+                              "action": "Open MusicScale"
+                        },
+                        "band_scale": {
+                              "title": "Build a Band Scale",
+                              "what": "The Band Scale defines who will perform and what each person's role will be.",
+                              "why": "The team understands who will participate and how it will be formed.",
+                              "how": "Open Scales → Band Scales, choose the members and define the roles.",
+                              "result": "The band and vocals for the occasion will be organized.",
+                              "action": "Open MusicScale"
+                        },
+                        "music_scale": {
+                              "title": "Create a Song Scale",
+                              "what": "The Song Scale gathers the songs for a date and event type.",
+                              "why": "The team knows what will be sung and played.",
+                              "how": "Open Scales → Song Scales, choose the date, event type, location and songs from Repertoire. You can also link the Band Scale.",
+                              "result": "The songs and team for that event will be organized.",
+                              "action": "Open MusicScale"
+                        },
+                        "review": {
+                              "title": "Check everything before the service",
+                              "what": "Before the service, check if songs, lyrics, chords and members are correct.",
+                              "why": "A well-informed team can prepare better.",
+                              "how": "Review the Song Scale and the linked Band Scale.",
+                              "result": "Everyone will have clarity on what to prepare and when to participate.",
+                              "action": "Open MusicScale"
+                        }
+                  }
+            },
+            "fallback": {
+                  "guide_step": "Guide step",
+                  "resource": "Resource"
+            }
+      },
+      hero: {
+        title: "Your ministry organized in one place",
+        open: "Open MusicScale",
+        learn_more: "Learn features",
+        unavailable: "Unavailable"
+      },
+      status: {
+        available: "Available",
+        trialing: "Trial period",
+        payment_issue: "Payment pending",
+        loading: "Loading",
+        unavailable: "Unavailable"
+      },
+      checklist: {
+        title: "Start here",
+        org_active: "Active organization",
+        ms_active: "MusicScale activated",
+        team_started: "Team started",
+        roles_defined: "Roles defined",
+        action_invite: "Invite your team",
+        action_open: "Open MusicScale and start organizing your ministry",
+        completed: "{{count}} completed"
+      },
+      actions: {
+        title: "Quick actions",
+        open: "Open MusicScale",
+        invite: "Invite people",
+        invite_person: "Invite person",
+        view_team_and_invites: "View team and invites",
+        manage_team: "Manage team",
+        view_sub: "View subscription",
+        learn_more: "Learn features",
+        need_help: "I need help"
+      },
+      team: {
+        title: "Team",
+        desc: "Invite leaders, musicians, and vocalists to work in the same organization.",
+        members: "{{count}} members",
+        invites: "{{count}} invites",
+        slots: "{{used}}/{{total}} slots",
+        slots_unlimited: "{{used}} slots (unlimited)",
+        go_to_invites: "Go to invites",
+        manage_team: "Manage team"
+      },
+      features: {
+        title: "MusicScale Features",
+        repertoire: "Repertoires",
+        repertoire_desc: "Manage church's catalog",
+        scales: "Scales",
+        scales_desc: "Organize ministrations",
+        musicians: "Musicians",
+        musicians_desc: "Manage profiles and roles",
+        preparation: "Preparation",
+        preparation_desc: "Files and rehearsals",
+        open: "Open MusicScale"
+      },
+      help: {
+        title: "Don't know where to start?",
+        desc: "Learn about MusicScale features or talk to our team.",
+        how_it_works: "See how it works",
+        contact_support: "Contact support"
+      }
+    },
+    invite: {
+      title: "Invite to {{orgName}}",
+      subtitle: "Choose the organization access level and how you want to share the invitation.",
+      role_manager: "Manager",
+      role_viewer: "Viewer",
+      role_label: "What will be this person's access level?",
+      role_owner: "Owner",
+      email_hint: "Use the email the person will log in with. The invite will be secured for this account.",
+      email_required: "Enter the person's email.",
+      role_admin: "Administrator",
+      role_member: "Member",
+      role_explanation: "This role defines access to the organization. Ministerial roles, such as leader, musician, or vocalist, are configured inside MusicScale.",
+      creating: "Creating invite...",
+      created_securely: "Invite created securely.",
+      whatsapp_opened: "WhatsApp opened with the invite.",
+      popup_blocked: "Invite created. Copy the link below or allow pop-ups to open WhatsApp.",
+      clipboard_blocked: "Invite created, but the browser blocked automatic copying.",
+      manual_link_label: "Invite link",
+      close: "Close",
+      errors: {
+        session_expired: "Your session has expired. Refresh the page and try again.",
+        invalid_email: "Enter a valid email.",
+        invalid_role: "Choose a valid role.",
+        permission_denied: "You do not have permission to invite people to this organization.",
+        organization_not_found: "The selected organization was not found.",
+        organization_inactive: "This organization is not active.",
+        already_pending: "A pending invite already exists for this email. Revoke the previous invite before creating another one.",
+        member_limit: "The plan's member limit has been reached.",
+        limit_unavailable: "Could not confirm the plan limit right now. Try again.",
+        timeout: "Creating the invite took longer than expected. Check your connection before trying again.",
+        generic: "Could not create the invite. Try again.",
+        organizations_load: "Could not load the organizations list.",
+      },
+      email_label: "Person's email",
+      share_method: "How do you want to send it?",
+      whatsapp: "Send via WhatsApp",
+      copy_link: "Copy link",
+      link_copied: "Link copied",
+      access_denied: "Access Denied",
+      access_denied_description: "Only administrators can invite new members to the organization."
+    },
+    genericApp: {
+      open: "Open App"
+    }
+  }
 };

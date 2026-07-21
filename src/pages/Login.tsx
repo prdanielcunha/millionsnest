@@ -5,6 +5,7 @@ import { auth, googleProvider } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
+import { parseInvitationRedirectPath } from "../lib/InvitationRedirectPolicy.js";
 import { useTranslation } from "react-i18next";
 import { MillionsNestLogo } from "../components/MillionsNestLogo.js";
 
@@ -23,22 +24,29 @@ export function Login() {
     // invite_org_id injection removed to prevent blindly trusting invalid organization ids bypassing Join.tsx validations
     if (authLoading) return;
     
-    if (user && profile) {
+    if (user) {
       // Check for invite redirect first
       const inviteRedirect = sessionStorage.getItem('mn_invite_redirect');
-      if (inviteRedirect) {
-        // Keep it in session to be picked up by Join, but navigate there first
-        navigate(inviteRedirect);
+      const parsedRedirect = parseInvitationRedirectPath(inviteRedirect);
+
+      if (parsedRedirect.valid) {
+        navigate(parsedRedirect.data.path);
         return;
       }
       
-      // UX Optimized: Check if user was trying to buy something before login
-      const purchaseIntent = sessionStorage.getItem('purchase_intent');
-      if (purchaseIntent) {
-        sessionStorage.removeItem('purchase_intent');
-        navigate(`/checkout?plan=${purchaseIntent}`);
-      } else {
-        navigate('/dashboard');
+      if (inviteRedirect !== null) {
+        sessionStorage.removeItem('mn_invite_redirect');
+      }
+      
+      if (profile) {
+          // UX Optimized: Check if user was trying to buy something before login
+          const purchaseIntent = sessionStorage.getItem('purchase_intent');
+          if (purchaseIntent) {
+            sessionStorage.removeItem('purchase_intent');
+            navigate(`/checkout?plan=${purchaseIntent}`);
+          } else {
+            navigate('/dashboard');
+          }
       }
     }
   }, [user, profile, authLoading, navigate]);

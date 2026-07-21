@@ -81,6 +81,21 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [loadingOrg, setLoadingOrg] = useState(!cachedContext);
 
   useEffect(() => {
+    const handleTenantSwitch = () => {
+      setOrganization(null);
+      setMemberRole(null);
+      setMusicScalePlan('starter');
+      setMusicScaleEntitlements(MUSIC_SCALE_PLANS.starter);
+      setLoadingOrg(true);
+    };
+
+    window.addEventListener('mn_tenant_switched', handleTenantSwitch);
+    return () => {
+      window.removeEventListener('mn_tenant_switched', handleTenantSwitch);
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
 
     async function loadOrganization() {
@@ -98,23 +113,26 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setLoadingOrg(true);
-      try {
-        let orgId = profile.activeOrganizationId || profile.primaryOrganizationId || profile.organizationId;
-        
-        // Support Mode Logic
-        if (profile.systemRole === 'ceo' || profile.systemRole === 'admin') {
-           try {
-             const supportSessionStr = localStorage.getItem('mn_support_session');
-             if (supportSessionStr) {
-               const supportSession = JSON.parse(supportSessionStr);
-               if (supportSession?.active && supportSession?.targetOrganizationId) {
-                  orgId = supportSession.targetOrganizationId;
-               }
+      let orgId = profile.activeOrganizationId || profile.primaryOrganizationId || profile.organizationId;
+      
+      // Support Mode Logic
+      if (profile.systemRole === 'ceo' || profile.systemRole === 'admin') {
+         try {
+           const supportSessionStr = localStorage.getItem('mn_support_session');
+           if (supportSessionStr) {
+             const supportSession = JSON.parse(supportSessionStr);
+             if (supportSession?.active && supportSession?.targetOrganizationId) {
+                orgId = supportSession.targetOrganizationId;
              }
-           } catch(e) {}
-        }
-        
+           }
+         } catch(e) {}
+      }
+      
+      if (!organization || organization.id !== orgId) {
+        setLoadingOrg(true);
+      }
+
+      try {
         const orgRef = doc(db, "organizations", orgId);
         const orgSnap = await withTimeout(getDoc(orgRef), 8000, "Firestore timeout loading org");
 

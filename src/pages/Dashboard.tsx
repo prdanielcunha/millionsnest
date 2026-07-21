@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext.js";
-import { Navigate, useNavigate, useParams, useLocation } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useLocation, useSearchParams } from "react-router-dom";
 import { 
   Music, ArrowRight, Settings, ExternalLink, ShieldCheck, 
   CreditCard, LayoutGrid, User, Clock, AlertCircle, ChevronRight, Building2,
@@ -23,14 +23,18 @@ import { canPurchasePlanAgain, isSubscriptionValid, normalizeDateToMs } from "..
 import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
 import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
+import { getInviteableOrganizationRolesForActor, getOrganizationRoleLabel } from "../lib/organizationRoles.js";
 
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
+import { EcosystemWorkspaceHome } from "../components/dashboard/EcosystemWorkspaceHome.js";
 import { OrganizationManager } from "../components/OrganizationManager.js";
 import { InviteModal } from "../components/InviteModal.js";
 import { UnifiedTimeline } from "../components/UnifiedTimeline.js";
 import { ECOSYSTEM_APPS, EcosystemApp } from "../lib/apps.js";
 import { ecosystemPlatform } from "../sdk/ecosystem.js";
+import { SupportHubProvider } from "../components/support/SupportHubContext.js";
+import { SupportHub } from "../components/support/SupportHub.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -73,6 +77,18 @@ export function Dashboard() {
   const { t } = useTranslation(['dashboard', 'common']);
   const { user, profile, loading, logout, switchOrganization, canonicalContext } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawSection = searchParams.get('section');
+  const validSections = ['overview', 'resources', 'getting-started'];
+  const activeSection = validSections.includes(rawSection) ? rawSection : 'overview';
+  
+  const handleSelectMusicScaleSection = (section: 'overview' | 'resources' | 'getting-started') => {
+    setSearchParams({ section });
+  };
+  
+  const onNavigateToOrganizationSettings = () => {
+    navigate('/dashboard/organization');
+  };
   const { tab, subTab } = useParams();
   
   const activeOrgId = canonicalContext?.activeOrganizationId || profile?.organizationId;
@@ -99,11 +115,7 @@ export function Dashboard() {
       setActiveTabInternal(initialTab);
     }
     
-    if (tab === 'apps') {
-      setTimeout(() => {
-        document.getElementById('apps-catalog')?.scrollIntoView({ behavior: 'smooth' });
-      }, 300);
-    }
+    
   }, [tab]);
 
   const [subscription, setSubscription] = useState<any>(null);
@@ -403,7 +415,6 @@ export function Dashboard() {
     }
   };
 
-  const autoSyncAttemptedRef = useRef<Set<string>>(new Set());
   const requestSequenceRef = useRef<number>(0);
   const currentActiveOrgIdRef = useRef<string | null>(null);
 
@@ -421,14 +432,6 @@ export function Dashboard() {
          setSubscription(currentSubData as any);
       } else {
          setSubscription(null);
-      }
-
-      if (!autoSyncAttemptedRef.current.has(orgId)) {
-         if (!currentSubData || currentSubData.status === 'trialing') {
-            autoSyncAttemptedRef.current.add(orgId);
-            syncSubscriptionWithStripe(orgId);
-            return; 
-         }
       }
 
       let currentOrgData: any = null;
@@ -543,6 +546,7 @@ export function Dashboard() {
     } finally {
       if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
         setLoadingSub(false);
+        window.performance?.mark?.('dashboard_interactive');
       }
     }
   };
@@ -797,69 +801,81 @@ export function Dashboard() {
     }
   };
 
-  const handleCreateInvite = async (role: string, method: 'whatsapp' | 'copy', email?: string, overrideOrgId?: string) => {
+  const handleCreateInvite = async (
+    role: "admin" | "member",
+    email: string,
+    overrideOrgId?: string
+  ): Promise<{
+    inviteUrl: string;
+    invitation: {
+      id: string;
+      organizationId: string;
+      organizationName: string;
+      email: string;
+      role: "admin" | "member";
+      status: "pending";
+      expiresAtMs: number;
+    };
+  }> => {
+    if (!user) throw new Error("UNAUTHENTICATED");
+    const orgId = overrideOrgId || activeContextOrgId;
+    if (!email) throw new Error("INVALID_INVITE_EMAIL");
+
+    const idToken = await user.getIdToken();
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 10000);
+
+    let res;
     try {
-      const orgId = overrideOrgId || activeContextOrgId;
-      
-      // Enforce user limits client-side securely
-      const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
-      const maxUsersLimit = entitlements?.limits?.users ?? 10;
-      const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
-      
-      if (maxUsersLimit !== -1 && occupiedSlots >= maxUsersLimit) {
-        alert(`Limite de usuários atingido! Sua organização está utilizando ${occupiedSlots} de ${maxUsersLimit} vagas disponíveis no plano atual (${entitlements.name}). Faça o upgrade do seu plano para liberar mais vagas.`);
-        return;
-      }
-
-      const inviteId = Math.random().toString(36).substring(2, 10);
-      const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      
-      const inviteRef = doc(db, `organizations/${orgId}/invites`, inviteId);
-      await setDoc(inviteRef, {
-        id: inviteId,
-        organizationId: orgId,
-        organizationName: organization?.name || 'Organização',
-        tokenHash: token,
-        invitedEmail: email || null,
-        role,
-        status: 'pending',
-        type: email ? 'email' : 'link',
-        createdBy: user?.uid,
-        createdBySystemRole: profile?.systemRole || null,
-        createdAt: serverTimestamp(),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        maxUses: 1,
-        usedCount: 0
+      res = await fetch('/api/v1/invitations', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          organizationId: orgId,
+          email,
+          role
+        }),
+        signal: abortController.signal
       });
-      
-      const link = `${window.location.origin}/join/${orgId}?token=${token}`;
-      
-      if (method === 'whatsapp') {
-        const text = encodeURIComponent(`Você foi convidado para entrar na organização ${organization?.name || 'Nossa Organização'} na MillionsNest.\n\nAcesse: ${link}`);
-        window.open(`https://wa.me/?text=${text}`, '_blank');
-        analytics.track('invite_sent', { userId: user?.uid, organizationId: orgId, metadata: { method: 'whatsapp', role } });
-      } else {
-        await navigator.clipboard.writeText(link);
-        setCopiedLink(true);
-        setTimeout(() => setCopiedLink(false), 2000);
-        analytics.track('invite_link_copied', { userId: user?.uid, organizationId: orgId, metadata: { role } });
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+         throw new Error("TIMEOUT");
       }
-
-      if (isGlobalAdmin && profile?.organizationRole !== 'owner') {
-        createAuditLog({
-           actorUid: user!.uid,
-           actorEmail: user!.email || '',
-           actorSystemRole: profile?.systemRole,
-           action: 'admin_created_invite',
-           targetOrganizationId: orgId,
-           metadata: { role, method },
-           source: 'global_admin'
-        });
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao gerar convite.");
+      throw new Error("GENERIC");
+    } finally {
+      clearTimeout(timeoutId);
     }
+
+    const data = await res.json();
+    if (!res.ok || data.success !== true) {
+      throw new Error(data.reasonCode || "GENERIC");
+    }
+
+    if (typeof data.invitePath !== 'string' || !data.invitePath.startsWith('/join/')) {
+       throw new Error("GENERIC");
+    }
+    
+    if (!data.invitation || !data.invitation.id || !data.invitation.organizationId) {
+       throw new Error("GENERIC");
+    }
+
+    const finalUrl = new URL(data.invitePath, window.location.origin);
+    if (finalUrl.origin !== window.location.origin) {
+       throw new Error("GENERIC");
+    }
+
+    setPendingInvites(prev => {
+      if (prev.some(inv => inv.id === data.invitation.id)) return prev;
+      return [...prev, data.invitation];
+    });
+
+    return {
+      inviteUrl: finalUrl.toString(),
+      invitation: data.invitation
+    };
   };
 
   const handleAcceptJoinRequest = async (requestId: string) => {
@@ -1186,6 +1202,44 @@ export function Dashboard() {
   const msCatalogState = getMusicScaleCatalogState();
   const msIsInstalled = ["trialing", "active", "cancel_scheduled", "administrative"].includes(msCatalogState);
 
+  const installedApps = ECOSYSTEM_APPS.filter(app => {
+    if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
+    if (app.id === 'musicscale') return msIsInstalled;
+    return organization?.enabledApps?.includes(app.id);
+  });
+  const musicScaleApp = ECOSYSTEM_APPS.find(a => a.id === 'musicscale');
+  const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
+  const maxUsersLimit = entitlements?.limits?.users ?? 10;
+  const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
+
+  const selectedWorkspace = (() => {
+    if (activeTab === "overview") {
+      if (tab === "apps" && subTab) {
+         return installedApps.some(a => a.id === subTab) ? subTab : "home"; 
+      } else if (tab === "overview") {
+         return "home";
+      } else {
+         if (installedApps.length === 1) {
+            return installedApps[0].id;
+         }
+         return "home";
+      }
+    }
+    return "home";
+  })();
+
+  const handleSelectWorkspace = (workspaceId: string) => {
+    if(workspaceId !== 'musicscale' && searchParams.has('section')) {
+      searchParams.delete('section');
+      setSearchParams(searchParams);
+    }
+    if (workspaceId === "home") {
+      navigate('/dashboard/overview');
+    } else {
+      navigate(`/dashboard/apps/${workspaceId}`);
+    }
+  };
+
   const formattedRenewal = subscription?.currentPeriodEnd 
     ? new Date(normalizeDateToMs(subscription.currentPeriodEnd)).toLocaleDateString('pt-BR') 
     : null;
@@ -1264,7 +1318,13 @@ export function Dashboard() {
 
   const breadcrumbs = [];
   if (activeTab === 'overview') {
-    breadcrumbs.push({ label: 'Visão Geral' });
+    if (selectedWorkspace === 'home') {
+       breadcrumbs.push({ label: t('dashboard.navigation.home', 'Início') });
+    } else {
+       const app = installedApps.find(a => a.id === selectedWorkspace);
+       breadcrumbs.push({ label: t('dashboard.navigation.my_apps', 'Meus aplicativos') });
+       breadcrumbs.push({ label: app ? app.name : selectedWorkspace });
+    }
   } else if (activeTab === 'organization') {
     breadcrumbs.push({ label: 'Organização', path: '/dashboard/organization' });
     if (tab === 'team' || subTab === 'members') breadcrumbs.push({ label: 'Equipe' });
@@ -1276,6 +1336,7 @@ export function Dashboard() {
   }
 
   return (
+    <SupportHubProvider organizationId={activeContextOrgId || null} organizationName={organization?.name || null} appId="core">
     <EcosystemShell activeAppId="core" breadcrumbList={breadcrumbs}>
       <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-[#2B85EB]/5 blur-[150px] rounded-full pointer-events-none" />
       
@@ -1286,7 +1347,7 @@ export function Dashboard() {
             onClick={() => setActiveTab("overview")}
             className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "overview" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
           >
-            Visão Geral
+            {t('dashboard.navigation.overview', 'Início')}
           </button>
           {(currentUserPerms['organization.settings.update'] || isGlobalAdmin) && (
             <button 
@@ -1342,25 +1403,6 @@ export function Dashboard() {
                 <div className="flex items-center gap-3 flex-wrap mb-1">
                   <h1 className="text-2xl md:text-3xl font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
                     Olá, {profile?.displayName?.split(' ')[0] || user.email?.split('@')[0]}
-                    
-                    {/* Org Switcher for Users with Multiple Orgs */}
-                    {userOrgs.length > 1 && (
-                      <div className="relative inline-block ml-4">
-                         <select 
-                           value={activeOrgId}
-                           onChange={(e) => {
-                              switchOrganization(e.target.value).then(() => {
-                                 window.location.reload();
-                              });
-                           }}
-                           className="appearance-none bg-white/5 border border-white/10 hover:border-white/20 text-sm rounded-xl px-3 py-1.5 outline-none cursor-pointer text-[#A0A7B5] transition-all max-w-[200px] truncate"
-                         >
-                           {userOrgs.map((org: any) => (
-                             <option key={org.id} value={org.id} className="bg-[#0B0F19] text-[#F5F7FA]">{org.name}</option>
-                           ))}
-                         </select>
-                      </div>
-                    )}
                   </h1>
                 </div>
                 
@@ -1411,7 +1453,32 @@ export function Dashboard() {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
             >
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <EcosystemWorkspaceHome 
+                selectedWorkspace={selectedWorkspace}
+                installedApps={installedApps}
+                organization={organization}
+                subscription={subscription}
+                members={members}
+                pendingInvites={pendingInvites}
+                currentUserPerms={currentUserPerms}
+                isGlobalAdmin={isGlobalAdmin}
+                msIsInstalled={msIsInstalled}
+                msCatalogState={msCatalogState}
+                musicScaleApp={musicScaleApp}
+                occupiedSlots={occupiedSlots}
+                maxUsersLimit={maxUsersLimit}
+                onSelectWorkspace={handleSelectWorkspace}
+                onLaunchApp={(app) => handleLaunchEcosystemApp(app, currentUserPerms)}
+                onOpenInviteModal={() => setIsInviteModalOpen(true)}
+                onNavigateToOrganizationMembers={() => navigate('/dashboard/organization/members')}
+                onNavigateToBilling={() => setActiveTab('billing')}
+                onNavigateToOrganizationSettings={onNavigateToOrganizationSettings}
+                activeSection={activeSection as 'overview' | 'resources' | 'getting-started'}
+                onSelectMusicScaleSection={handleSelectMusicScaleSection}
+              />
+
+              {selectedWorkspace === 'home' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left Column: Main Content */}
                 <div className="col-span-1 lg:col-span-2 space-y-6">
                   
@@ -1731,14 +1798,13 @@ export function Dashboard() {
                           Ver Todos ({members.length})
                         </button>
                       )}
-                    </div>
                   </div>
-
                 </div>
-              </div>
+                  </div>
+                </div>
+              )}
             </motion.section>
           )}
-
           {activeTab === "organization" && (
             <motion.section
               key="organization"
@@ -1851,10 +1917,20 @@ export function Dashboard() {
                            <button 
                              key={org.id}
                              disabled={activeOrgId === org.id}
-                             onClick={() => {
-                               switchOrganization(org.id).then(() => {
-                                  window.location.reload();
-                               });
+                             onClick={async () => {
+                               const toastId = feedback.loading("Alternando organização ativa...");
+                               try {
+                                 const res = await switchOrganization(org.id);
+                                 feedback.dismiss(toastId);
+                                 if (res.success) {
+                                   feedback.success("Organização alterada com sucesso!");
+                                 } else {
+                                   feedback.error(`Não foi possível alterar a organização: ${res.error || "Erro desconhecido"}`);
+                                 }
+                               } catch (err: any) {
+                                 feedback.dismiss(toastId);
+                                 feedback.error(`Não foi possível alterar a organização: ${err.message || "Erro desconhecido"}`);
+                               }
                              }}
                              className={`flex items-center justify-between p-4 rounded-xl border transition-all text-left ${activeOrgId === org.id ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 cursor-default' : 'bg-[#050505] border-white/5 hover:border-white/10 cursor-pointer'}`}
                            >
@@ -2629,6 +2705,7 @@ export function Dashboard() {
             occupiedSlots={occupiedSlots}
             maxUsersLimit={maxUsersLimit}
             onUpgradeClick={() => setActiveTab("billing")}
+            canInvite={Boolean(currentUserPerms['organization.members.invite'] || isGlobalAdmin)}
           />
         );
       })()}
@@ -2706,19 +2783,27 @@ export function Dashboard() {
 
                 {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin' || profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin') && (
                   <div>
-                    <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Função no Ecossistema / Organização</label>
-                    <select
-                      value={editingMemberRole}
-                      onChange={(e) => setEditingMemberRole(e.target.value)}
-                      className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
-                    >
-                      <option value="owner">Dono (Owner)</option>
-                      <option value="admin">Administrador (Admin)</option>
-                      <option value="leader">Líder / Ministro</option>
-                      <option value="secretary">Operador / Secretaria</option>
-                      <option value="member">Membro Padrão</option>
-                      <option value="guest">Visitante (Apenas Leitura)</option>
-                    </select>
+                    <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Nível de acesso na Organização</label>
+                    {editingMember?.role === 'owner' ? (
+                       <div className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-[#A0A7B5] text-sm opacity-70 cursor-not-allowed">
+                         {t('dashboard.invite.role_owner', 'Proprietário')}
+                       </div>
+                    ) : (
+                       <select
+                         value={editingMemberRole}
+                         onChange={(e) => setEditingMemberRole(e.target.value)}
+                         className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
+                       >
+                         {getInviteableOrganizationRolesForActor({
+                           systemRole: profile?.systemRole,
+                           organizationRole: profile?.organizationRole
+                         }).map((r) => (
+                           <option key={r} value={r}>
+                             {getOrganizationRoleLabel(r)}
+                           </option>
+                         ))}
+                       </select>
+                    )}
                   </div>
                 )}
 
@@ -2792,5 +2877,7 @@ export function Dashboard() {
       </AnimatePresence>
 
     </EcosystemShell>
+    <SupportHub />
+    </SupportHubProvider>
   );
 }

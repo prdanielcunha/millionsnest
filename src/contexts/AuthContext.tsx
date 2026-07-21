@@ -6,6 +6,7 @@ import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from "../lib/rbac.
 import { analytics } from "../lib/analytics.js";
 import { withTimeout } from "../lib/utils.js";
 import { sanitizeForFirestore } from "../lib/firestoreUtils.js";
+import { parseInvitationRedirectPath } from "../lib/InvitationRedirectPolicy.js";
 
 interface UserProfile {
   uid: string;
@@ -19,7 +20,7 @@ interface UserProfile {
   activeOrganizationId?: string;
   organizations?: string[]; // Standardized ecosystem field
   subscriptionStatus?: string; // Standardized ecosystem field
-  systemRole?: 'ceo' | 'admin' | 'global_admin' | 'user';
+  systemRole?: 'ceo' | 'global_admin' | 'ecosystem_owner' | 'founder' | 'ecosystem_support' | 'user';
   lastLoginAt: any;
   createdAt: any;
   updatedAt?: any;
@@ -31,7 +32,10 @@ interface AuthContextType {
   canonicalContext: any | null;
   loading: boolean;
   logout: () => Promise<void>;
-  switchOrganization: (orgId: string) => Promise<void>;
+  switchOrganization: (orgId: string) => Promise<{ success: boolean; activeOrganizationId?: string; error?: string }>;
+  switchingOrganizationId: string | null;
+  organizationSwitchError: string | null;
+  clearOrganizationSwitchError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -40,7 +44,10 @@ const AuthContext = createContext<AuthContextType>({
   canonicalContext: null,
   loading: true,
   logout: async () => {},
-  switchOrganization: async () => {},
+  switchOrganization: async () => ({ success: false }),
+  switchingOrganizationId: null,
+  organizationSwitchError: null,
+  clearOrganizationSwitchError: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -55,29 +62,102 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
   const [loading, setLoading] = useState(true);
+  const [switchingOrganizationId, setSwitchingOrganizationId] = useState<string | null>(null);
+  const [organizationSwitchError, setOrganizationSwitchError] = useState<string | null>(null);
 
-  const switchOrganization = async (orgId: string) => {
-    if (!user || !profile) return;
+  const clearOrganizationSwitchError = () => setOrganizationSwitchError(null);
+
+  const switchOrganization = async (orgId: string): Promise<{ success: boolean; activeOrganizationId?: string; error?: string }> => {
+    if (!user || !profile || !canonicalContext) {
+      return { success: false, error: 'User not authenticated or context not loaded' };
+    }
+    
+    if (!orgId) {
+      return { success: false, error: 'Invalid organization ID' };
+    }
+    
+    const existsInContext = canonicalContext.organizations?.some((org: any) => org.id === orgId);
+    if (!existsInContext) {
+      return { success: false, error: 'User does not belong to this organization' };
+    }
+    
+    if (canonicalContext.activeOrganizationId === orgId) {
+      return { success: true, activeOrganizationId: orgId };
+    }
+    
+    if (switchingOrganizationId) {
+       return { success: false, error: 'Another switch is in progress' };
+    }
+    
+    setSwitchingOrganizationId(orgId);
+    setOrganizationSwitchError(null);
+    
     try {
-      const userRef = doc(db, "users", user.uid);
-      await setDoc(userRef, { 
-        organizationId: orgId,
-        activeOrganizationId: orgId
-      }, { merge: true });
-      const updatedProfile = { ...profile, organizationId: orgId, activeOrganizationId: orgId };
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/v1/user/active-organization', {
+         method: 'POST',
+         headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+         },
+         body: JSON.stringify({ organizationId: orgId })
+      });
+      
+      const jsonRes = await res.json();
+      
+      if (!res.ok || !jsonRes.success || jsonRes.activeOrganizationId !== orgId) {
+         throw new Error(jsonRes.reasonCode || 'Failed to switch active organization');
+      }
+
+      const ctxRes = await fetch('/api/user/organization-context', {
+         headers: { 'Authorization': `Bearer ${idToken}` }
+      });
+      
+      if (!ctxRes.ok) {
+         throw new Error('Failed to load updated organization context');
+      }
+      
+      const updatedCtx = await ctxRes.json();
+      
+      if (updatedCtx.activeOrganizationId !== orgId) {
+         throw new Error('Server confirmed switch but returned incorrect context');
+      }
+
+      setCanonicalContext(updatedCtx);
+
+      const updatedProfile = { 
+        ...profile, 
+        organizationId: orgId, 
+        activeOrganizationId: orgId,
+        primaryOrganizationId: updatedCtx.primaryOrganizationId
+      };
       setProfile(updatedProfile);
       localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
+      
+      localStorage.removeItem('mn_org_context');
       localStorage.removeItem('mn_support_session');
+      localStorage.removeItem('musicscale_active_tab');
+      localStorage.removeItem('musicscale_selected_scale_id');
+      localStorage.removeItem('musicscale_selected_song_id');
       
-      // We must reload the page or tell OrganizationContext to refetch, changing profile.organizationId should trigger OrganizationContext's useEffect
-      
-      analytics.track('app_usage', {
-        userId: user.uid,
-        organizationId: orgId,
-        metadata: { action: 'switch_organization' }
-      });
-    } catch (e) {
-      console.error("Failed to switch organization", e);
+      window.dispatchEvent(new CustomEvent('mn_tenant_switched', { detail: { organizationId: orgId } }));
+
+      try {
+        analytics.track('app_usage', {
+          userId: user.uid,
+          organizationId: orgId,
+          metadata: { action: 'switch_organization' }
+        });
+      } catch {}
+
+      return { success: true, activeOrganizationId: orgId };
+    } catch (err: any) {
+      const errorMessage = err instanceof Error ? err.message : 'Não foi possível alterar a organização.';
+      setOrganizationSwitchError(errorMessage);
+      console.error("Failed to switch organization", err);
+      return { success: false, error: errorMessage };
+    } finally {
+      setSwitchingOrganizationId(null);
     }
   };
 
@@ -103,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             let mergeData: any = { lastLoginAt: serverTimestamp() };
             
             try {
-              const idToken = await currentUser.getIdToken(true);
+              const idToken = await currentUser.getIdToken();
               const res = await fetch('/api/user/organization-context', {
                 headers: { 'Authorization': `Bearer ${idToken}` }
               });
@@ -111,16 +191,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const canonicalCtx = await res.json();
                 setCanonicalContext(canonicalCtx);
                 if (canonicalCtx.activeOrganizationId && canonicalCtx.activeOrganizationId !== userData.activeOrganizationId) {
-                  mergeData.activeOrganizationId = canonicalCtx.activeOrganizationId;
                   userData.activeOrganizationId = canonicalCtx.activeOrganizationId;
                 }
                 if (canonicalCtx.primaryOrganizationId && canonicalCtx.primaryOrganizationId !== userData.primaryOrganizationId) {
-                  mergeData.primaryOrganizationId = canonicalCtx.primaryOrganizationId;
                   userData.primaryOrganizationId = canonicalCtx.primaryOrganizationId;
                 }
-                // Avoid using legacy userData.organizationId locally if activeOrganizationId exists
                 if (canonicalCtx.activeOrganizationId) {
-                  mergeData.organizationId = canonicalCtx.activeOrganizationId;
                   userData.organizationId = canonicalCtx.activeOrganizationId;
                 }
               }
@@ -128,115 +204,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               console.error('Falha ao buscar contexto canônico no AuthContext:', ctxErr);
             }
 
-            const inviteOrgId = localStorage.getItem('invite_org_id');
-            const inviteRole = localStorage.getItem('invite_role') || 'member';
-
-            // Automatic promotion by email removed per security audit
-
-            if (inviteOrgId) {
-              const currentOrgs = userData.organizations || [];
-              if (!currentOrgs.includes(inviteOrgId)) {
-                mergeData.organizations = [...currentOrgs, inviteOrgId];
-                userData.organizations = mergeData.organizations;
-                
-                // Add member doc to org
-                const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${inviteOrgId}`);
-                const newMemberRef = doc(db, `organizations/${inviteOrgId}/members`, currentUser.uid);
-                const memberData = sanitizeForFirestore({
-                  uid: currentUser.uid,
-                  organizationId: inviteOrgId,
-                  role: inviteRole,
-                  organizationRole: inviteRole,
-                  permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-                  permissions: getDefaultPermissions(inviteRole),
-                  createdAt: serverTimestamp()
-                });
-                await setDoc(orgMemberRef, memberData, { merge: true });
-                await setDoc(newMemberRef, memberData, { merge: true });
-              }
-              // Switch active org to the invited org
-              mergeData.organizationId = inviteOrgId;
-              mergeData.activeOrganizationId = inviteOrgId;
-              mergeData.primaryOrganizationId = inviteOrgId;
-              userData.organizationId = inviteOrgId;
-              userData.activeOrganizationId = inviteOrgId;
-              userData.primaryOrganizationId = inviteOrgId;
-              localStorage.removeItem('invite_org_id');
-              localStorage.removeItem('invite_role');
-            }
-
-            await setDoc(userRef, sanitizeForFirestore(mergeData), { merge: true });
+            // Automatic promotion by email and localStorage invites removed per security audit P0-A
+            setDoc(userRef, sanitizeForFirestore(mergeData), { merge: true }).catch(err => {
+               console.error("Falha silenciosa ao atualizar lastLoginAt:", err);
+            });
             
             const updatedProfile = { ...userData, lastLoginAt: new Date() };
             setProfile(updatedProfile);
             localStorage.setItem('mn_user_profile', JSON.stringify(updatedProfile));
             
-            analytics.track('login', {
-              userId: currentUser.uid,
-              organizationId: updatedProfile.activeOrganizationId || updatedProfile.organizationId
+            // Fire and forget analytics
+            Promise.resolve().then(() => {
+              analytics.track('login', {
+                userId: currentUser.uid,
+                organizationId: updatedProfile.activeOrganizationId || updatedProfile.organizationId
+              });
             });
           } else {
-            // Criar novo usuário e usa um ID único para seu workspace pessoal
-            const targetOrgId = doc(collection(db, 'organizations')).id;
-
-            const newProfile: Partial<UserProfile> = {
-              uid: currentUser.uid,
-              email: currentUser.email,
-              displayName: currentUser.displayName,
-              photoURL: currentUser.photoURL,
-              products: [],
-              lastLoginAt: serverTimestamp(),
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-              organizationId: targetOrgId,
-              primaryOrganizationId: targetOrgId,
-              activeOrganizationId: targetOrgId,
-              organizations: [targetOrgId],
-              subscriptionStatus: 'none',
-              systemRole: undefined
-            };
+            // New user without profile
+            const inviteRedirect = sessionStorage.getItem('mn_invite_redirect');
+            const parsedRedirect = parseInvitationRedirectPath(inviteRedirect);
             
-            await setDoc(userRef, sanitizeForFirestore(newProfile));
-
-            // Cria a organization default dele
-            const orgRef = doc(db, 'organizations', targetOrgId as string);
-            await setDoc(orgRef, sanitizeForFirestore({
-              id: targetOrgId,
-              name: `Organização de ${currentUser.displayName || currentUser.email?.split('@')[0]}`,
-              slug: targetOrgId, // default slug
-              ownerUid: currentUser.uid, // standardized field
-              enabledApps: ['musicscale'], // default apps access
-              subscriptionPlan: 'monthly',
-              subscriptionStatus: 'none',
-              status: 'active',
-              createdAt: serverTimestamp()
-            }), { merge: true });
-
-            const orgMemberRef = doc(db, 'organization_members', `${currentUser.uid}_${targetOrgId}`);
-            const newMemberRef = doc(db, `organizations/${targetOrgId}/members`, currentUser.uid);
-            const memberData = sanitizeForFirestore({
-              uid: currentUser.uid,
-              organizationId: targetOrgId,
-              role: 'owner',
-              organizationRole: 'owner',
-              permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-              permissions: getDefaultPermissions('owner'),
-              createdAt: serverTimestamp()
-            });
-            await setDoc(orgMemberRef, memberData, { merge: true });
-            await setDoc(newMemberRef, memberData, { merge: true });
-
-            setProfile(newProfile as UserProfile);
-            localStorage.setItem('mn_user_profile', JSON.stringify(newProfile));
+            if (parsedRedirect.valid) {
+                // Let Login/App handle the redirect to /join
+                // Do not bootstrap automatically. Just set loading false and return.
+                setProfile(null); // Or minimal profile if needed, but null forces them to stay in the flow
+            } else {
+                if (inviteRedirect !== null) {
+                    sessionStorage.removeItem('mn_invite_redirect');
+                }
+                try {
+                   const idToken = await currentUser.getIdToken(true);
+                   const bootRes = await fetch('/api/v1/onboarding/bootstrap', {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${idToken}` }
+                   });
+                   if (bootRes.ok) {
+                      // Re-fetch user profile
+                      const newUserSnap = await getDoc(userRef);
+                      if (newUserSnap.exists()) {
+                         const newProfileData = newUserSnap.data() as UserProfile;
+                         setProfile(newProfileData);
+                         localStorage.setItem('mn_user_profile', JSON.stringify(newProfileData));
+                         
+                         Promise.resolve().then(() => {
+                           analytics.track('signup', {
+                             userId: currentUser.uid,
+                             organizationId: newProfileData.activeOrganizationId
+                           });
+                         });
+                      }
+                   }
+                } catch (bootErr) {
+                   console.error("Erro no bootstrap do usuário:", bootErr);
+                }
+            }
             
-            // Cleanup any residual local storage invites
+            // Cleanup any residual local storage invites just in case
             localStorage.removeItem('invite_org_id');
             localStorage.removeItem('invite_role');
-
-            analytics.track('signup', {
-              userId: currentUser.uid,
-              organizationId: targetOrgId
-            });
           }
         } catch (error) {
           console.error("Erro ao carregar ou criar perfil do usuário:", error);
@@ -248,6 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       setLoading(false);
+      window.performance?.mark?.('auth_restored');
     });
 
     return unsubscribe;
@@ -266,8 +293,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     canonicalContext,
     loading,
     logout,
-    switchOrganization
-  }), [user, profile, canonicalContext, loading]);
+    switchOrganization,
+    switchingOrganizationId,
+    organizationSwitchError,
+    clearOrganizationSwitchError,
+  }), [user, profile, canonicalContext, loading, switchingOrganizationId, organizationSwitchError]);
 
   return (
     <AuthContext.Provider value={contextValue}>
