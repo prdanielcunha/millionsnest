@@ -27,7 +27,7 @@ export interface MusicScaleAccessProjection {
 }
 
 export interface EcosystemAccessProjectionResponse {
-  success: true;
+  success: boolean;
   organizationId: string;
   generatedAtMs: number;
   apps: {

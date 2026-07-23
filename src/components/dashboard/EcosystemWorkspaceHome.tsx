@@ -126,6 +126,7 @@ export function EcosystemWorkspaceHome({
   };
 
   const renderHomeWorkspace = () => {
+    const musicScaleApp = installedApps.find(app => app.id === 'musicscale');
     const isLoading = musicScaleAccess?.catalogState === "loading";
     const isError = musicScaleAccess?.catalogState === "error";
     const hasPaymentIssue = musicScaleAccess?.catalogState === "payment_issue";
@@ -218,19 +219,19 @@ export function EcosystemWorkspaceHome({
                   <button
                     type="button"
                     onClick={() => {
-                      if (hasPaymentIssue || musicScaleDisplayStatus === 'available') onNavigateToBilling();
+                      if (hasPaymentIssue) onNavigateToBilling();
                       else if (isError) onRetryMusicScaleAccess();
-                      else if (isReadyToOpen) onLaunchApp(musicScaleApp);
+                      else onLaunchApp(musicScaleApp);
                     }}
-                    disabled={isLoading || (!isReadyToOpen && !hasPaymentIssue && !isError && musicScaleDisplayStatus !== 'available')}
+                    disabled={isLoading || (!isReadyToOpen && !hasPaymentIssue && !isError)}
                     className={`flex-1 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 text-sm ${
                       hasPaymentIssue || isError ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
-                      isReadyToOpen || musicScaleDisplayStatus === 'available' ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20' :
+                      isReadyToOpen ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20' :
                       'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
                     }`}
                   >
                     {isLoading ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : ((hasPaymentIssue || isError) ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
-                    {isError ? 'Tentar Novamente' : hasPaymentIssue ? t('workspace.resolve_payment', 'Regularizar pagamento') : musicScaleDisplayStatus === 'available' ? t('workspace.view_plans', 'Ver planos') : t('workspace.open_app', `Abrir ${musicScaleApp.name}`, { appName: musicScaleApp.name })}
+                    {isError ? 'Tentar Novamente' : hasPaymentIssue ? t('workspace.resolve_payment', 'Regularizar pagamento') : t('workspace.open_app', `Abrir ${musicScaleApp.name}`, { appName: musicScaleApp.name })}
                   </button>
 
                   <button
@@ -473,33 +474,39 @@ export function EcosystemWorkspaceHome({
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <button
-                type="button"
-                id="btn-sidebar-open-musicscale"
-                onClick={() => {
-                  if (hasPaymentIssue || musicScaleDisplayStatus === 'available') onNavigateToBilling();
-                  else if (isError) onRetryMusicScaleAccess();
-                  else if (isReadyToOpen && musicScaleApp) onLaunchApp(musicScaleApp);
-                }}
-                disabled={isLoading || (!isReadyToOpen && !hasPaymentIssue && !isError && musicScaleDisplayStatus !== 'available')}
-                className={`px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 ${
-                  hasPaymentIssue || isError ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
-                  isReadyToOpen || musicScaleDisplayStatus === 'available' ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20' :
-                  'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
-                }`}
-              >
-                {isLoading ? (
-                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                ) : isError ? (
-                  'Tentar Novamente'
-                ) : hasPaymentIssue ? (
-                  t('workspace.resolve_payment', 'Regularizar pagamento')
-                ) : musicScaleDisplayStatus === 'available' ? (
-                  t('workspace.view_plans', 'Ver planos')
-                ) : (
-                  t('workspace.open_app', 'Abrir MusicScale', { appName: 'MusicScale' })
-                )}
-              </button>
+              {isError ? (
+                <button
+                  type="button"
+                  onClick={onRetryMusicScaleAccess}
+                  className="px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20"
+                >
+                  Tentar Novamente
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  id="btn-sidebar-open-musicscale"
+                  onClick={() => {
+                    if (isReadyToOpen && musicScaleApp) {
+                      onLaunchApp(musicScaleApp);
+                    }
+                  }}
+                  disabled={!isReadyToOpen}
+                  className={`px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 ${
+                    isReadyToOpen
+                      ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20'
+                      : 'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
+                  }`}
+                >
+                  {isLoading ? (
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : hasPaymentIssue ? (
+                    t('workspace.payment_pending', 'Pagamento pendente')
+                  ) : (
+                    t('workspace.open_app', 'Abrir MusicScale', { appName: 'MusicScale' })
+                  )}
+                </button>
+              )}
               <button type="button" onClick={() => onSelectMusicScaleSection('getting-started')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">{t('workspace.getting_started', 'Primeiros passos')}</button>
               <button type="button" onClick={() => onSelectMusicScaleSection('resources')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">{t('workspace.know_resources', 'Conhecer recursos')}</button>
             </div>
