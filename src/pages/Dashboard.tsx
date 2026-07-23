@@ -118,6 +118,8 @@ export function Dashboard() {
   const [musicScaleProjectionLoading, setMusicScaleProjectionLoading] = useState(false);
   const [musicScaleProjectionError, setMusicScaleProjectionError] = useState<string | null>(null);
   const musicScaleProjectionAbortControllerRef = useRef<AbortController | null>(null);
+  const musicScaleProjectionSeqRef = useRef<number>(0);
+  const musicScaleExpectedOrgRef = useRef<string | null>(null);
 
   const refreshMusicScaleAccessProjection = async (orgId: string) => {
     if (!user || !orgId) return;
@@ -127,6 +129,8 @@ export function Dashboard() {
     }
     const abortController = new AbortController();
     musicScaleProjectionAbortControllerRef.current = abortController;
+    const reqSeq = ++musicScaleProjectionSeqRef.current;
+    musicScaleExpectedOrgRef.current = orgId;
 
     setMusicScaleProjectionLoading(true);
     setMusicScaleProjectionError(null);
@@ -150,7 +154,7 @@ export function Dashboard() {
 
       const data = await res.json();
       
-      if (abortController.signal.aborted) return;
+      if (abortController.signal.aborted || reqSeq !== musicScaleProjectionSeqRef.current || musicScaleExpectedOrgRef.current !== orgId) return;
       
       if (data.success && data.organizationId === orgId && data.apps?.musicscale?.appId === 'musicscale' && data.apps.musicscale.organizationId === orgId) {
         setMusicScaleProjection(data.apps.musicscale);
@@ -158,11 +162,11 @@ export function Dashboard() {
         throw new Error('Projeção inválida');
       }
     } catch (e: any) {
-      if (abortController.signal.aborted) return;
+      if (abortController.signal.aborted || reqSeq !== musicScaleProjectionSeqRef.current || musicScaleExpectedOrgRef.current !== orgId) return;
       setMusicScaleProjectionError(e.message || 'Erro');
       setMusicScaleProjection(null);
     } finally {
-      if (!abortController.signal.aborted) {
+      if (!abortController.signal.aborted && reqSeq === musicScaleProjectionSeqRef.current && musicScaleExpectedOrgRef.current === orgId) {
         setMusicScaleProjectionLoading(false);
       }
     }
@@ -1119,6 +1123,12 @@ export function Dashboard() {
       setPendingInvites([]);
       setJoinRequests([]);
       setAuditLogs([]);
+      setMusicScaleProjection(null);
+      setMusicScaleProjectionError(null);
+      if (musicScaleProjectionAbortControllerRef.current) {
+        musicScaleProjectionAbortControllerRef.current.abort();
+      }
+      musicScaleExpectedOrgRef.current = null;
       return;
     }
 
@@ -1151,6 +1161,9 @@ export function Dashboard() {
 
     return () => {
       unsubscribeOrg();
+      if (musicScaleProjectionAbortControllerRef.current) {
+        musicScaleProjectionAbortControllerRef.current.abort();
+      }
     };
   }, [user, activeContextOrgId]);
 

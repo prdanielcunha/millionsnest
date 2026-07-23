@@ -374,6 +374,17 @@ export function EcosystemWorkspaceHome({
 
     const renderMusicScaleWorkspace = () => {
     const isLoading = musicScaleAccess?.catalogState === "loading";
+    
+    if (isLoading) {
+      return (
+        <div className="w-full h-64 border border-white/5 bg-white/5 rounded-3xl p-6 md:p-10 flex flex-col items-center justify-center gap-4 animate-pulse">
+          <div className="w-8 h-8 rounded-full bg-white/10" />
+          <div className="w-32 h-4 rounded bg-white/10" />
+          <div className="w-48 h-3 rounded bg-white/5" />
+        </div>
+      );
+    }
+
     const isError = musicScaleAccess?.catalogState === "error";
     const hasPaymentIssue = musicScaleAccess?.catalogState === "payment_issue";
     
