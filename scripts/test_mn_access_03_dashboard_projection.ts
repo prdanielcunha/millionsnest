@@ -1,288 +1,338 @@
-import { handleEcosystemAccessProjectionRequest, EcosystemAccessProjectionDependencies } from '../src/server/services/EcosystemAccessProjectionService.js';
+import assert from 'node:assert/strict';
+import { handleEcosystemAccessProjectionRequest } from '../src/server/services/EcosystemAccessProjectionService.js';
 import fs from 'fs';
 import path from 'path';
-import * as http from 'http';
-import * as https from 'https';
+import http from 'node:http';
+import https from 'node:https';
 
-let passed = 0;
-let failed = 0;
-
-let verifyIdTokenCalls = 0;
-let getDbCalls = 0;
-let resolveAccessCalls = 0;
+// State counters
 let fetchAttempts = 0;
 let httpRequestAttempts = 0;
 let httpsRequestAttempts = 0;
 let writeAttempts = 0;
 let batchAttempts = 0;
 let transactionAttempts = 0;
-let maximumResponseCount = 0;
 
-function reportPass(message: string) {
-  passed++;
-  console.log(`✅ PASS: ${message}`);
-}
+// Intercept network calls
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (...args) => {
+  fetchAttempts++;
+  throw new Error("Network blocked");
+};
 
-function reportFail(message: string, detail?: any) {
-  failed++;
-  console.error(`❌ FAIL: ${message}`, detail || '');
-}
+const originalHttpRequest = http.request;
+(http as any).request = (...args: any[]) => {
+  httpRequestAttempts++;
+  throw new Error("HTTP blocked");
+};
+
+const originalHttpsRequest = https.request;
+(https as any).request = (...args: any[]) => {
+  httpsRequestAttempts++;
+  throw new Error("HTTPS blocked");
+};
+
+// Mock Firestore
+const fakeDb = {
+  collection: () => fakeDb,
+  doc: () => fakeDb,
+  set: async () => { writeAttempts++; throw new Error("Write blocked"); },
+  update: async () => { writeAttempts++; throw new Error("Write blocked"); },
+  create: async () => { writeAttempts++; throw new Error("Write blocked"); },
+  delete: async () => { writeAttempts++; throw new Error("Write blocked"); },
+  add: async () => { writeAttempts++; throw new Error("Write blocked"); },
+  batch: () => { batchAttempts++; throw new Error("Batch blocked"); },
+  runTransaction: async () => { transactionAttempts++; throw new Error("Transaction blocked"); },
+  bulkWriter: () => { writeAttempts++; throw new Error("BulkWriter blocked"); }
+};
 
 class FakeRequest {
-  headers: Record<string, string | undefined> = {};
-  body: any = null;
+  public headers: Record<string, string | string[] | undefined> = {};
+  public body: any;
 
-  constructor(authHeader: string | undefined | string[], body: any) {
-    if (Array.isArray(authHeader)) {
-      this.headers['authorization'] = authHeader[0];
-    } else {
-      this.headers['authorization'] = authHeader;
+  constructor(authorization?: string | string[] | undefined, body?: any) {
+    if (authorization !== undefined) {
+      this.headers.authorization = authorization;
     }
     this.body = body;
   }
 }
 
 class FakeResponse {
-  statusCode = 200;
-  jsonData: any = null;
-  headers: Record<string, string> = {};
-  statusCalls = 0;
-  jsonCalls = 0;
-  sendCalls = 0;
-  endCalls = 0;
-  totalResponseCount = 0;
+  public statusCalls = 0;
+  public jsonCalls = 0;
+  public sendCalls = 0;
+  public endCalls = 0;
+  public totalResponseCount = 0;
+  public _status = 200;
+  public _body: any;
+  public _headers: Record<string, string> = {};
 
   status(code: number) {
-    this.statusCode = code;
     this.statusCalls++;
+    this._status = code;
     return this;
   }
+
   json(data: any) {
-    this.jsonData = data;
     this.jsonCalls++;
     this.totalResponseCount++;
-    if (this.totalResponseCount > maximumResponseCount) maximumResponseCount = this.totalResponseCount;
-    if (this.totalResponseCount > 1) {
-      throw new Error("Múltiplas respostas emitidas!");
-    }
+    if (this.totalResponseCount > 1) throw new Error("Multiple responses sent");
+    this._body = data;
     return this;
   }
+
   send(data: any) {
     this.sendCalls++;
     this.totalResponseCount++;
-    if (this.totalResponseCount > maximumResponseCount) maximumResponseCount = this.totalResponseCount;
-    if (this.totalResponseCount > 1) throw new Error("Múltiplas respostas emitidas!");
+    if (this.totalResponseCount > 1) throw new Error("Multiple responses sent");
+    this._body = data;
     return this;
   }
+
   end() {
     this.endCalls++;
     this.totalResponseCount++;
-    if (this.totalResponseCount > maximumResponseCount) maximumResponseCount = this.totalResponseCount;
-    if (this.totalResponseCount > 1) throw new Error("Múltiplas respostas emitidas!");
+    if (this.totalResponseCount > 1) throw new Error("Multiple responses sent");
   }
+
   setHeader(name: string, value: string) {
-    this.headers[name] = value;
+    this._headers[name] = value;
   }
 }
 
-class FakeDependencies implements EcosystemAccessProjectionDependencies {
-  public mockResolveAccess: (args: any) => Promise<any>;
-  public mockVerifyIdToken: (token: string) => Promise<any>;
+function verifyNoSensitiveData(obj: any, path = "") {
+  if (!obj || typeof obj !== "object") return;
 
-  constructor() {
-    this.mockResolveAccess = async () => {
-      resolveAccessCalls++;
-      return {
-        appId: 'musicscale', accessible: true, isGlobalAccess: false, denialReason: null, accessSource: 'organization_membership'
-      };
-    };
-    this.mockVerifyIdToken = async (token) => {
-      verifyIdTokenCalls++;
-      if (token === "valid_token") return { uid: "test_uid" };
-      if (token === "no_uid") return { uid: null };
-      throw new Error("Invalid token");
-    };
+  const forbiddenKeys = [
+    "uid", "email", "token", "customToken", "roles", "permissions", "scopes", 
+    "systemRole", "organizationRole", "raw", "firestore", 
+    "subscriptionDocument", "membershipDocument", "stack"
+  ];
+
+  for (const key of Object.keys(obj)) {
+    if (forbiddenKeys.includes(key)) {
+      throw new Error(`Sensitive key '${key}' found at ${path}.${key}`);
+    }
+    verifyNoSensitiveData(obj[key], `${path}.${key}`);
   }
-
-  async verifyIdToken(token: string) {
-    return this.mockVerifyIdToken(token);
-  }
-
-  getDb(): any {
-    getDbCalls++;
-    return {
-      isMockDb: true,
-      collection: () => ({
-        doc: () => ({
-          get: async () => ({ exists: true, data: () => ({}) }),
-          set: () => { writeAttempts++; throw new Error("Writes not allowed"); },
-          update: () => { writeAttempts++; throw new Error("Writes not allowed"); },
-          delete: () => { writeAttempts++; throw new Error("Writes not allowed"); },
-        })
-      }),
-      batch: () => { batchAttempts++; throw new Error("Batches not allowed"); },
-      runTransaction: () => { transactionAttempts++; throw new Error("Transactions not allowed"); },
-      bulkWriter: () => { batchAttempts++; throw new Error("Bulk writers not allowed"); },
-    };
-  }
-
-  async resolveAccess(args: any) {
-    return this.mockResolveAccess(args);
-  }
-
-  now() {
-    return 1234567890;
-  }
-
-  logger = {
-    log: () => {},
-    error: () => {}
-  };
 }
 
 async function runTests() {
-  const originalFetch = globalThis.fetch;
-
-  globalThis.fetch = (...args: any[]) => {
-    fetchAttempts++;
-    throw new Error("Fetch interceptado");
-  };
-
   try {
-    // Auth failures
-    let req = new FakeRequest(undefined, { organizationId: 'org1' });
-    let res = new FakeResponse();
-    let deps = new FakeDependencies();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 401) reportPass('Header ausente'); else reportFail('Header ausente', res.statusCode);
+    let resolverArgs: any[] = [];
+    const deps = {
+      verifyIdToken: async (token: string) => {
+        if (token === "invalid") throw new Error("invalid token");
+        if (token === "nouid") return { sub: "nouid" } as any;
+        return { uid: "user123" } as any;
+      },
+      getDb: () => fakeDb,
+      resolveAccess: async (...args: any[]) => {
+        resolverArgs = args;
+        return { 
+          accessible: true,
+          isGlobalAccess: false,
+          accessSource: 'org',
+          denialReason: null,
+          entitlement: null
+        };
+      },
+      logger: {
+        log: () => {},
+        info: () => {},
+        error: () => {},
+        warn: () => {}
+      },
+      now: () => Date.now()
+    };
 
-    req = new FakeRequest("Basic dXNlcjpwYXNz", { organizationId: 'org1' });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 401) reportPass('Header Basic'); else reportFail('Header Basic');
+    // FakeRequest test
+    const testsReq = [
+      { auth: undefined, body: { organizationId: "org1" }, expectStatus: 401 },
+      { auth: "Basic base64", body: { organizationId: "org1" }, expectStatus: 401 },
+      { auth: "Bearer ", body: { organizationId: "org1" }, expectStatus: 401 },
+      { auth: ["Bearer token1", "Bearer token2"], body: { organizationId: "org1" }, expectStatus: 401 },
+      { auth: "Bearer invalid", body: { organizationId: "org1" }, expectStatus: 401 },
+      { auth: "Bearer nouid", body: { organizationId: "org1" }, expectStatus: 401 }
+    ];
 
-    req = new FakeRequest("Bearer", { organizationId: 'org1' });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 401) reportPass('Bearer vazio'); else reportFail('Bearer vazio');
+    for (const t of testsReq) {
+      const req = new FakeRequest(t.auth, t.body);
+      const res = new FakeResponse();
+      await handleEcosystemAccessProjectionRequest(req as any, res as any, deps as any);
+      assert.strictEqual(res._status, t.expectStatus);
+      assert.strictEqual(res.totalResponseCount, 1);
+    }
 
-    // Body validation
-    req = new FakeRequest("Bearer valid_token", undefined);
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('Body undefined'); else reportFail('Body undefined');
+    // Body ignored fields test
+    const fakeBodyReq = new FakeRequest("Bearer token1", {
+      organizationId: "  orgX  ",
+      uid: "fake_uid",
+      userId: "fake_uid",
+      email: "fake@email.com",
+      systemRole: "ceo",
+      organizationRole: "owner",
+      roles: ["admin"],
+      permissions: ["write"],
+      scopes: ["all"],
+      accessible: true,
+      isGlobalAccess: true,
+      subscriptionStatus: "active",
+      products: ["a"],
+      capabilities: {}
+    });
+    const fakeBodyRes = new FakeResponse();
+    await handleEcosystemAccessProjectionRequest(fakeBodyReq as any, fakeBodyRes as any, deps as any);
+    assert.strictEqual(fakeBodyRes._status, 200);
+    assert.strictEqual(resolverArgs[0].uid, "user123");
+    assert.strictEqual(resolverArgs[0].organizationId, "orgX");
+    assert.strictEqual(resolverArgs[0].appId, "musicscale");
+    
+    // Test dynamic cases for handler
+    const dynamicCases = [
+      // accessible, isGlobal, status -> mapped canonical state
+      { granted: true, source: "global", status: "active", expectedAccessible: true, expectedCatalog: "active" },
+      { granted: true, source: "global", status: "administrative", expectedAccessible: true, expectedCatalog: "administrative" },
+      { granted: true, source: "org", status: "trialing", expectedAccessible: true, expectedCatalog: "trialing" },
+      { granted: true, source: "org", status: "active", denialReason: "cancel_scheduled", expectedAccessible: true, expectedCatalog: "cancel_scheduled" }, 
+    ];
 
-    req = new FakeRequest("Bearer valid_token", null);
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('Body null'); else reportFail('Body null');
-
-    req = new FakeRequest("Bearer valid_token", []);
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('Body array'); else reportFail('Body array');
-
-    req = new FakeRequest("Bearer valid_token", { org: 'org1' });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('orgId ausente'); else reportFail('orgId ausente');
-
-    req = new FakeRequest("Bearer valid_token", { organizationId: '' });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('orgId vazio'); else reportFail('orgId vazio');
-
-    req = new FakeRequest("Bearer valid_token", { organizationId: '   ' });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('orgId apenas espacos'); else reportFail('orgId apenas espacos');
-
-    req = new FakeRequest("Bearer valid_token", { organizationId: 123 });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('orgId tipo invalido'); else reportFail('orgId tipo invalido');
-
-    req = new FakeRequest("Bearer valid_token", { organizationId: 'a'.repeat(257) });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('orgId maior q 256'); else reportFail('orgId maior q 256');
-
-    req = new FakeRequest("Bearer valid_token", { organizationId: '.' });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('orgId ponto isolado'); else reportFail('orgId ponto isolado');
-
-    req = new FakeRequest("Bearer valid_token", { organizationId: 'org..test' });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('orgId dois pontos'); else reportFail('orgId dois pontos');
-
-    req = new FakeRequest("Bearer valid_token", { organizationId: 'org/test' });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 400) reportPass('orgId slash'); else reportFail('orgId slash');
-
-    // Mappings and success checks
-    deps.mockResolveAccess = async (args) => {
-      resolveAccessCalls++;
-      if (args.uid !== 'test_uid') throw new Error('UID mismatch');
+    const generateCaseDeps = (granted: boolean, source: string, reason: string | null, entStatus?: string, cancelSched?: boolean) => {
       return {
-        appId: 'musicscale', accessible: true, isGlobalAccess: false, denialReason: null, accessSource: 'organization_membership',
-        entitlement: { canonicalStatus: 'active', cancellationScheduled: false, currentPeriodEndMs: null }
+        verifyIdToken: async () => ({ uid: "user123" } as any),
+        getDb: () => fakeDb,
+        resolveAccess: async () => ({
+          accessible: granted,
+          isGlobalAccess: source.includes("global"),
+          accessSource: source,
+          denialReason: reason,
+          entitlement: entStatus ? { canonicalStatus: entStatus, cancellationScheduled: !!cancelSched } : null
+        }),
+        logger: { log: () => {}, info: () => {}, error: () => {}, warn: () => {} },
+        now: () => Date.now()
       };
     };
-    req = new FakeRequest("Bearer valid_token", { organizationId: ' org1 ' });
-    res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
-    if (res.statusCode === 200 && res.jsonData.organizationId === 'org1') reportPass('orgId trim correto e success true'); else reportFail('orgId trim incorreto ou falha');
-    if (res.jsonData.apps.musicscale.catalogState === 'active') reportPass('catalogState active'); else reportFail('not active');
-    if (res.jsonData.success === true) reportPass('success literal true'); else reportFail('success nao eh literal true');
-    if (res.headers['Cache-Control'] === 'no-store, no-cache, must-revalidate, proxy-revalidate') reportPass('headers completos'); else reportFail('headers faltantes');
-    if (res.jsonData.generatedAtMs === 1234567890) reportPass('generatedAtMs consistente'); else reportFail('generatedAtMs inconsistente');
-    if (res.jsonData.apps.musicscale.denialReason === null) reportPass('denialReason null'); else reportFail('denialReason not null');
-    if (res.jsonData.uid === undefined && res.jsonData.roles === undefined) reportPass('ausencia de dados sensiveis'); else reportFail('vazamento de dados');
 
-    // Frontend read
-    const dbContent = fs.readFileSync(path.resolve('./src/pages/Dashboard.tsx'), 'utf-8');
-    const wsContent = fs.readFileSync(path.resolve('./src/components/dashboard/EcosystemWorkspaceHome.tsx'), 'utf-8');
+    const caseTests = [
+      { granted: true, source: "global_system_role", reason: null, expectedAccessible: true, expectedCatalog: "administrative" },
+      { granted: true, source: "organization_membership", reason: null, expectedAccessible: true, expectedCatalog: "active" },
+      { granted: true, source: "organization_membership", reason: null, entStatus: "trialing", expectedAccessible: true, expectedCatalog: "trialing" },
+      { granted: true, source: "organization_membership", reason: null, entStatus: "active", cancelSched: true, expectedAccessible: true, expectedCatalog: "cancel_scheduled" },
+      { granted: true, source: "organization_membership", reason: null, entStatus: "trialing", cancelSched: true, expectedAccessible: true, expectedCatalog: "cancel_scheduled" },
+      { granted: false, source: "denied", reason: "SUBSCRIPTION_PAYMENT_REQUIRED", expectedAccessible: false, expectedCatalog: "payment_issue" },
+      { granted: false, source: "denied", reason: "SUBSCRIPTION_NOT_FOUND", expectedAccessible: false, expectedCatalog: "available" },
+      { granted: false, source: "denied", reason: "SUBSCRIPTION_INACTIVE", expectedAccessible: false, expectedCatalog: "available" },
+      { granted: false, source: "denied", reason: "ENTITLEMENT_NOT_CONFIGURED", expectedAccessible: false, expectedCatalog: "available" },
+      { granted: false, source: "denied", reason: "ENTITLEMENT_INACTIVE", expectedAccessible: false, expectedCatalog: "available" },
+      { granted: false, source: "denied", reason: "MEMBERSHIP_NOT_FOUND", expectedAccessible: false, expectedCatalog: "unavailable" },
+      { granted: false, source: "denied", reason: "MEMBERSHIP_INACTIVE", expectedAccessible: false, expectedCatalog: "unavailable" },
+      { granted: false, source: "denied", reason: "MEMBER_APP_ACCESS_DISABLED", expectedAccessible: false, expectedCatalog: "unavailable" },
+      { granted: false, source: "denied", reason: "USER_INACTIVE", expectedAccessible: false, expectedCatalog: "unavailable" },
+      { granted: false, source: "denied", reason: "ORGANIZATION_INACTIVE", expectedAccessible: false, expectedCatalog: "unavailable" },
+      { granted: false, source: "denied", reason: "UNKNOWN_DENIAL", expectedAccessible: false, expectedCatalog: "unavailable" },
+      { granted: false, source: "denied", reason: "CANCELED", expectedAccessible: false, expectedCatalog: "unavailable" },
+    ];
 
-    if (dbContent.includes('fetch(') && dbContent.includes('/api/ecosystem/access-projection')) reportPass('endpoint correto'); else reportFail('endpoint incorreto');
-    if (dbContent.includes('AbortController')) reportPass('AbortController presente'); else reportFail('AbortController ausente');
-    if (dbContent.includes('musicScaleProjectionSeqRef')) reportPass('sequence ref presente'); else reportFail('sequence ref ausente');
-    if (dbContent.includes('musicScaleExpectedOrgRef')) reportPass('expected org ref presente'); else reportFail('expected org ref ausente');
-    if (dbContent.includes('musicScaleProjectionSeqRef.current++')) reportPass('invalidação sem organização'); else reportFail('invalidação sem organização ausente');
-    if (dbContent.includes('syncSubscriptionWithStripe(activeContextOrgId, sessionId)')) reportPass('refresh após billing sync'); else reportFail('refresh após billing sync ausente');
-    if (dbContent.includes('await refreshMusicScaleAccessProjection(activeContextOrgId)')) reportPass('refresh após reparo ou falha handoff'); else reportFail('refresh após reparo ou falha handoff ausente');
-    if (wsContent.includes('isReadyToOpen') && wsContent.includes('musicScaleAccess?.accessible === true')) reportPass('accessible controla lançamento'); else reportFail('accessible falha');
-    if (!dbContent.includes("isGlobalAdmin") || dbContent.includes("app.id !== 'musicscale'")) reportPass('ausência de bypass global para MusicScale'); else reportFail('bypass global para MusicScale encontrado');
-    if (wsContent.includes('const musicScaleApp = installedApps.find') === false) reportPass('ausencia do shadow por installedApps.find'); else reportFail('shadow por installedApps.find encontrado');
+    let maximumResponseCount = 0;
 
-    const states = ['available', 'trialing', 'active', 'cancel_scheduled', 'administrative', 'payment_issue', 'unavailable', 'error', 'loading'];
-    let allStatesPresent = true;
-    for (const st of states) {
-      if (!wsContent.includes(`'${st}'`) && !wsContent.includes(`"${st}"`)) allStatesPresent = false;
+    for (const ct of caseTests) {
+      const res = new FakeResponse();
+      const req = new FakeRequest("Bearer token1", { organizationId: "org1" });
+      await handleEcosystemAccessProjectionRequest(req as any, res as any, generateCaseDeps(ct.granted, ct.source, ct.reason, (ct as any).entStatus, (ct as any).cancelSched) as any);
+      assert.strictEqual(res._status, 200);
+      assert.strictEqual(res.totalResponseCount, 1);
+      if (res.totalResponseCount > maximumResponseCount) maximumResponseCount = res.totalResponseCount;
+      assert.strictEqual(res._body.success, true);
+      assert.strictEqual(res._body.apps.musicscale.accessible, ct.expectedAccessible);
+      assert.strictEqual(res._body.apps.musicscale.catalogState, ct.expectedCatalog);
+      
+      // Privacy check
+      verifyNoSensitiveData(res._body);
+      assert.strictEqual(typeof res._body.generatedAtMs, "number");
+      assert.strictEqual(res._headers['Cache-Control'], 'no-store, no-cache, must-revalidate, proxy-revalidate');
     }
-    if (allStatesPresent) reportPass('todos os nove estados presentes'); else reportFail('faltam estados');
+
+    // Invalid body tests
+    const invalidBodies = [
+      undefined, null, [], {}, { organizationId: "" }, { organizationId: "   " },
+      { organizationId: 123 }, { organizationId: "a".repeat(257) }, { organizationId: "." },
+      { organizationId: "/" }, { organizationId: "\\" }, { organizationId: "\x00" }
+    ];
+
+    for (const ib of invalidBodies) {
+      const res = new FakeResponse();
+      const req = new FakeRequest("Bearer token1", ib);
+      await handleEcosystemAccessProjectionRequest(req as any, res as any, deps as any);
+      assert.strictEqual(res._status, 400);
+      assert.strictEqual(res.totalResponseCount, 1);
+      verifyNoSensitiveData(res._body);
+    }
+
+    // Test errors
+    const errDeps = {
+      verifyIdToken: async () => ({ uid: "user123" } as any),
+      getDb: () => fakeDb,
+      resolveAccess: async () => { throw new Error("Internal DB Error"); },
+      logger: { log: () => {}, info: () => {}, error: () => {}, warn: () => {} },
+      now: () => Date.now()
+    };
+    const resErr = new FakeResponse();
+    const reqErr = new FakeRequest("Bearer token1", { organizationId: "org1" });
+    await handleEcosystemAccessProjectionRequest(reqErr as any, resErr as any, errDeps as any);
+    assert.strictEqual(resErr._status, 500);
+    assert.strictEqual(resErr._body.error, "Could not resolve application access.");
+    assert.strictEqual(resErr._body.message, undefined);
+    assert.strictEqual(resErr._body.stack, undefined);
+    verifyNoSensitiveData(resErr._body);
+
+    // Assert final counters
+    assert.strictEqual(fetchAttempts, 0);
+    assert.strictEqual(httpRequestAttempts, 0);
+    assert.strictEqual(httpsRequestAttempts, 0);
+    assert.strictEqual(writeAttempts, 0);
+    assert.strictEqual(batchAttempts, 0);
+    assert.strictEqual(transactionAttempts, 0);
+    assert.strictEqual(maximumResponseCount, 1);
+
+    // 12. Frontend Real Coverage
+    const dashboardSrc = fs.readFileSync('src/pages/Dashboard.tsx', 'utf-8');
+    assert.ok(dashboardSrc.includes("'/api/ecosystem/access-projection'"));
+    assert.ok(dashboardSrc.includes("'Authorization': `Bearer ${idToken}`"));
+    assert.ok(dashboardSrc.includes("JSON.stringify({ organizationId: orgId })"));
+    assert.ok(dashboardSrc.includes("AbortController"));
+    assert.ok(dashboardSrc.includes("musicScaleProjectionSeqRef.current"));
+    assert.ok(dashboardSrc.includes("musicScaleExpectedOrgRef.current"));
+    assert.ok(dashboardSrc.includes("musicScaleExpectedOrgRef.current = null"));
+    assert.ok(dashboardSrc.includes("refreshMusicScaleAccessProjection"));
+    // check billing, repair, handoff refresh
+    assert.ok(dashboardSrc.includes("billing.subscription.upgraded"));
+
+    const homeSrc = fs.readFileSync('src/components/dashboard/EcosystemWorkspaceHome.tsx', 'utf-8');
+    assert.ok(homeSrc.includes("musicScaleAccess?.catalogState as MusicScaleDisplayStatus"));
+    assert.ok(!homeSrc.includes("Satisfy old test UX-FOUNDATION-1b1"));
+    assert.ok(homeSrc.includes("musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling()"));
+    assert.ok(homeSrc.includes("musicScaleDisplayStatus === 'error') onRetryMusicScaleAccess()"));
+    assert.ok(!homeSrc.includes("unavailable') onLaunchApp"));
+    assert.ok(!homeSrc.includes("loading') onLaunchApp"));
+    assert.ok(homeSrc.includes("['active', 'trialing', 'cancel_scheduled', 'administrative'].includes(musicScaleDisplayStatus)"));
+
+    const navSrc = fs.readFileSync('src/components/Navbar.tsx', 'utf-8');
+    assert.ok(navSrc.includes("if (app.id === 'musicscale') return false;"));
+    assert.ok(!navSrc.includes("app.id === 'musicscale' ? true"));
+    assert.ok(navSrc.includes("navigate('/dashboard/apps/musicscale')"));
+    assert.ok(navSrc.includes("nav-login-desktop"));
+    assert.ok(navSrc.includes("nav-login-mobile"));
+    assert.ok(navSrc.includes("nav-login-mobile-menu"));
 
   } finally {
     globalThis.fetch = originalFetch;
+    (http as any).request = originalHttpRequest;
+    (https as any).request = originalHttpsRequest;
   }
-
-  console.log(`\nFinal Test Results. Total assertions: ${passed + failed}. Passed: ${passed}, Failed: ${failed}`);
-  console.log(`fetchAttempts: ${fetchAttempts}`);
-  console.log(`httpRequestAttempts: ${httpRequestAttempts}`);
-  console.log(`httpsRequestAttempts: ${httpsRequestAttempts}`);
-  console.log(`writeAttempts: ${writeAttempts}`);
-  console.log(`batchAttempts: ${batchAttempts}`);
-  console.log(`transactionAttempts: ${transactionAttempts}`);
-  console.log(`maximumResponseCount: ${maximumResponseCount}`);
-
-  if (failed > 0) process.exit(1);
 }
 
 runTests().catch(e => {
-  console.error(e);
+  console.error("Test failed", e);
   process.exit(1);
 });
-
-

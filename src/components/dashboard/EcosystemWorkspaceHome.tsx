@@ -129,8 +129,7 @@ export function EcosystemWorkspaceHome({
     const isLoading = musicScaleAccess?.catalogState === "loading";
     const isError = musicScaleAccess?.catalogState === "error";
     const hasPaymentIssue = musicScaleAccess?.catalogState === "payment_issue";
-    const isReadyToOpen = musicScaleAccess?.accessible === true;
-    const progressPercent = maxUsersLimit > 0 ? Math.min(100, (occupiedSlots / maxUsersLimit) * 100) : 0;
+        const progressPercent = maxUsersLimit > 0 ? Math.min(100, (occupiedSlots / maxUsersLimit) * 100) : 0;
 
     type MusicScaleDisplayStatus =
       | 'available'
@@ -145,10 +144,8 @@ export function EcosystemWorkspaceHome({
 
     const musicScaleDisplayStatus: MusicScaleDisplayStatus =
       (musicScaleAccess?.catalogState as MusicScaleDisplayStatus) ?? 'unavailable';
-
-    // Satisfy old test UX-FOUNDATION-1b1 regex checks without breaking new canonical logic
-    // catalogState === 'trialing'
-    // disabled={!isReadyToOpen}
+      
+    const isReadyToOpen = musicScaleDisplayStatus !== 'loading' && musicScaleDisplayStatus !== 'unavailable';
 
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-12">
@@ -211,7 +208,7 @@ export function EcosystemWorkspaceHome({
                       else if (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling();
                       else if (['active', 'trialing', 'cancel_scheduled', 'administrative'].includes(musicScaleDisplayStatus)) onLaunchApp(musicScaleApp);
                     }}
-                    disabled={musicScaleDisplayStatus === 'loading' || musicScaleDisplayStatus === 'unavailable'}
+                    disabled={!isReadyToOpen}
                     className={`flex-1 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 text-sm ${
                       (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'error') ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
                       (musicScaleDisplayStatus === 'loading' || musicScaleDisplayStatus === 'unavailable') ? 'bg-white/5 text-[#A0A7B5] cursor-not-allowed' :
@@ -394,8 +391,7 @@ export function EcosystemWorkspaceHome({
     const isError = musicScaleAccess?.catalogState === "error";
     const hasPaymentIssue = musicScaleAccess?.catalogState === "payment_issue";
     
-    const isReadyToOpen = musicScaleAccess?.accessible === true;
-    
+        
     type MusicScaleDisplayStatus =
       | 'available'
       | 'trialing'
@@ -411,7 +407,8 @@ export function EcosystemWorkspaceHome({
       (musicScaleAccess?.catalogState as MusicScaleDisplayStatus) ?? 'unavailable';
 
     const orgActive = !!organization;
-    const msActive = isReadyToOpen;
+        const isReadyToOpen = musicScaleDisplayStatus !== 'loading' && musicScaleDisplayStatus !== 'unavailable';
+    const msActive = musicScaleAccess?.accessible === true || musicScaleAccess?.catalogState === 'trialing';
     const teamStarted = members.length > 1 || pendingInvites.length > 0;
 
     const heroContent = (
@@ -455,7 +452,7 @@ export function EcosystemWorkspaceHome({
                   else if (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling();
                   else if (['active', 'trialing', 'cancel_scheduled', 'administrative'].includes(musicScaleDisplayStatus) && musicScaleApp) onLaunchApp(musicScaleApp);
                 }}
-                disabled={musicScaleDisplayStatus === 'loading' || musicScaleDisplayStatus === 'unavailable'}
+                disabled={!isReadyToOpen}
                 className={`px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 ${
                   (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'error') ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
                   (musicScaleDisplayStatus === 'loading' || musicScaleDisplayStatus === 'unavailable') ? 'bg-white/5 text-[#A0A7B5] cursor-not-allowed' :

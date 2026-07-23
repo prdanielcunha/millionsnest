@@ -67,15 +67,17 @@ export function Navbar() {
     const isGlobalAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(profile?.systemRole || 'user');
 
     const myApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = app.id === 'musicscale' ? true : organization?.enabledApps?.includes(app.id);
+      if (app.id === 'musicscale') return false;
+      const isInstalled = organization?.enabledApps?.includes(app.id);
       return isInstalled || app.status === 'active';
     }).map(app => {
-      const isInstalled = app.id === 'musicscale' ? true : organization?.enabledApps?.includes(app.id);
+      const isInstalled = organization?.enabledApps?.includes(app.id);
       return { ...app, isInstalled };
-    }).filter(app => app.isInstalled || app.id === 'musicscale'); // ensure we show installed or flagship
+    }).filter(app => app.isInstalled); // ensure we show installed or flagship
 
     const discoverApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = app.id === 'musicscale' ? true : organization?.enabledApps?.includes(app.id);
+      if (app.id === 'musicscale') return false;
+      const isInstalled = organization?.enabledApps?.includes(app.id);
       return !isInstalled && app.status !== 'active';
     });
 
@@ -102,6 +104,45 @@ export function Navbar() {
             </div>
             
             <div className="p-3 overflow-y-auto max-h-[60vh] custom-scrollbar bg-[#0B0F19]/50">
+              {/* MusicScale Neutral Shortcut */}
+              <div className="mb-6">
+                <div className="px-3 py-2 text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest mb-2">
+                  Destaque
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <div className="group relative flex flex-col p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all">
+                    <div className="flex items-start gap-4">
+                      <button
+                        onClick={() => {
+                          setLauncherOpen(false);
+                          navigate('/dashboard/apps/musicscale');
+                        }}
+                        className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-[10px] transition-all shadow-inner bg-white/5 text-[#A0A7B5] cursor-pointer group-hover:scale-105 group-hover:border-white/10"
+                      >
+                        <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
+                      </button>
+                      <div className="flex flex-col flex-1 min-w-0 pt-0.5">
+                        <span className="text-sm font-semibold text-white truncate transition-colors">MusicScale</span>
+                        <span className="text-[11px] text-[#A0A7B5] line-clamp-2 mt-1 leading-relaxed">
+                          Software de organização e escalas para igrejas.
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center gap-2 pl-[4rem]">
+                      <button
+                        onClick={() => {
+                          setLauncherOpen(false);
+                          navigate('/dashboard/apps/musicscale');
+                        }}
+                        className="px-4 py-1.5 bg-white/10 text-white text-xs font-semibold rounded-lg hover:bg-white/20 transition-all shadow-md active:scale-95"
+                      >
+                        Ver acesso no painel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* My Apps Section */}
               {myApps.length > 0 && (
                 <div className="mb-6">
