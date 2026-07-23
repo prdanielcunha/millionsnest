@@ -3,13 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useOrganization } from '../contexts/OrganizationContext.js';
 import { MillionsNestLogo } from './MillionsNestLogo.js';
-import { LayoutDashboard, LogOut, Menu, X, Search, LayoutGrid, Music, Users, ShieldCheck, CreditCard, Wallet, Calendar, QrCode } from 'lucide-react';
+import { LayoutDashboard, LogOut, Menu, X, Search, LayoutGrid, Music, Users, ShieldCheck, CreditCard, Wallet, Calendar, QrCode, LogIn } from 'lucide-react';
 import { LanguageSwitcher } from './LanguageSwitcher.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils.js';
 import { useTranslation } from 'react-i18next';
 import { ECOSYSTEM_APPS, type EcosystemApp } from '../lib/apps.js';
-import { isSubscriptionValid } from '../lib/subscriptionHelpers.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 
 export function Navbar() {
@@ -53,6 +52,10 @@ export function Navbar() {
   const handleLaunch = async (app: EcosystemApp) => {
     setLauncherOpen(false);
     if (!profile || !organization) return;
+    if (app.id === 'musicscale') {
+      navigate('/dashboard/apps/musicscale');
+      return;
+    }
     try {
       await openEcosystemModule(app.id, user, profile, organization, currentUserPerms);
     } catch (e: any) {
@@ -64,15 +67,15 @@ export function Navbar() {
     const isGlobalAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(profile?.systemRole || 'user');
 
     const myApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = app.id === 'musicscale' ? (isSubscriptionValid(subscription) || isGlobalAdmin) : organization?.enabledApps?.includes(app.id);
+      const isInstalled = app.id === 'musicscale' ? true : organization?.enabledApps?.includes(app.id);
       return isInstalled || app.status === 'active';
     }).map(app => {
-      const isInstalled = app.id === 'musicscale' ? (isSubscriptionValid(subscription) || isGlobalAdmin) : organization?.enabledApps?.includes(app.id);
+      const isInstalled = app.id === 'musicscale' ? true : organization?.enabledApps?.includes(app.id);
       return { ...app, isInstalled };
     }).filter(app => app.isInstalled || app.id === 'musicscale'); // ensure we show installed or flagship
 
     const discoverApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = app.id === 'musicscale' ? (isSubscriptionValid(subscription) || isGlobalAdmin) : organization?.enabledApps?.includes(app.id);
+      const isInstalled = app.id === 'musicscale' ? true : organization?.enabledApps?.includes(app.id);
       return !isInstalled && app.status !== 'active';
     });
 
@@ -221,7 +224,7 @@ export function Navbar() {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
           <MillionsNestLogo className="h-10 md:h-12 w-auto transition-transform group-hover:scale-105" />
-          <span className="font-semibold text-lg tracking-tight text-[#F5F7FA]">MillionsNest</span>
+          <span className="font-semibold text-lg tracking-tight text-[#F5F7FA] hidden sm:block">MillionsNest</span>
         </Link>
 
         {/* Desktop Nav */}
@@ -287,7 +290,10 @@ export function Navbar() {
             </div>
           ) : (
             <>
-              <Link to="/login" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:login', 'Entrar')}</Link>
+              <Link id="nav-login-desktop" to="/login" aria-label={t('common:login', 'Entrar')} className="text-sm font-semibold text-white px-5 py-2 rounded-lg bg-[#2B85EB]/10 border border-[#2B85EB]/30 hover:bg-[#2B85EB]/20 transition-all focus-visible:ring-2 focus-visible:ring-[#2B85EB] flex items-center gap-2 min-h-[40px]">
+                <LogIn className="w-4 h-4" />
+                {t('common:login', 'Entrar')}
+              </Link>
               <button onClick={() => {
                 sessionStorage.setItem('purchase_intent', 'musicscale_starter_monthly');
                 navigate('/login');
@@ -322,6 +328,11 @@ export function Navbar() {
                 {renderCommandCenter()}
               </div>
             </>
+          )}
+          {!user && (
+            <Link id="nav-login-mobile" to="/login" aria-label={t('common:login', 'Entrar')} className="text-sm font-semibold text-white px-3 py-2 rounded-lg bg-[#2B85EB]/10 border border-[#2B85EB]/30 hover:bg-[#2B85EB]/20 transition-all focus-visible:ring-2 focus-visible:ring-[#2B85EB] flex items-center min-h-[40px]">
+              {t('common:login', 'Entrar')}
+            </Link>
           )}
           <button 
             className="text-[#A0A7B5] hover:text-white transition-colors"
@@ -364,7 +375,7 @@ export function Navbar() {
                </>
             ) : (
                <>
-                <Link to="/login" className="text-lg font-medium text-[#A0A7B5] hover:text-white text-center py-2" onClick={() => setMobileMenuOpen(false)}>{t('common:login', 'Entrar')}</Link>
+                <Link id="nav-login-mobile-menu" to="/login" aria-label={t('common:login', 'Entrar')} className="text-lg font-medium text-[#A0A7B5] hover:text-white text-center py-2" onClick={() => setMobileMenuOpen(false)}>{t('common:login', 'Entrar')}</Link>
                 <button onClick={() => { 
                   sessionStorage.setItem('purchase_intent', 'musicscale_starter_monthly');
                   setMobileMenuOpen(false);

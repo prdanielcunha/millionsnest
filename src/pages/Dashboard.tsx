@@ -241,7 +241,12 @@ export function Dashboard() {
       feedback.dismiss(toastId);
     } catch (e: any) {
       feedback.dismiss(toastId);
-      if (app.id !== 'musicscale' && isGlobalAdmin) {
+      if (app.id === 'musicscale') {
+        if (activeContextOrgId) {
+          await refreshMusicScaleAccessProjection(activeContextOrgId);
+        }
+        feedback.error('Não foi possível iniciar o MusicScale neste momento. Tente novamente.');
+      } else if (isGlobalAdmin) {
         feedback.error(`Erro ao abrir: ${e.message || 'Falha ao iniciar módulo.'}`);
       } else {
         setSubscriptionBlockedApp(app);
@@ -1123,12 +1128,15 @@ export function Dashboard() {
       setPendingInvites([]);
       setJoinRequests([]);
       setAuditLogs([]);
-      setMusicScaleProjection(null);
-      setMusicScaleProjectionError(null);
+      
       if (musicScaleProjectionAbortControllerRef.current) {
         musicScaleProjectionAbortControllerRef.current.abort();
       }
+      musicScaleProjectionSeqRef.current++;
       musicScaleExpectedOrgRef.current = null;
+      setMusicScaleProjection(null);
+      setMusicScaleProjectionError(null);
+      setMusicScaleProjectionLoading(false);
       return;
     }
 
@@ -1163,6 +1171,10 @@ export function Dashboard() {
       unsubscribeOrg();
       if (musicScaleProjectionAbortControllerRef.current) {
         musicScaleProjectionAbortControllerRef.current.abort();
+      }
+      musicScaleProjectionSeqRef.current++;
+      if (musicScaleExpectedOrgRef.current === activeContextOrgId) {
+        musicScaleExpectedOrgRef.current = null;
       }
     };
   }, [user, activeContextOrgId]);
