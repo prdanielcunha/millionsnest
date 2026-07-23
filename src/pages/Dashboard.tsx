@@ -1504,6 +1504,11 @@ export function Dashboard() {
                 onNavigateToOrganizationSettings={onNavigateToOrganizationSettings}
                 activeSection={activeSection as 'overview' | 'resources' | 'getting-started'}
                 onSelectMusicScaleSection={handleSelectMusicScaleSection}
+                onRetryMusicScaleAccess={() => {
+                  if (activeContextOrgId) {
+                    refreshMusicScaleAccessProjection(activeContextOrgId);
+                  }
+                }}
               />
 
               {selectedWorkspace === 'home' && (

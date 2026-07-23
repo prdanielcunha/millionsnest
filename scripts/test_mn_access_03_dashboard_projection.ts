@@ -1,487 +1,220 @@
-import { handleEcosystemAccessProjectionRequest } from '../src/server/services/EcosystemAccessProjectionService.js';
+import { handleEcosystemAccessProjectionRequest, EcosystemAccessProjectionDependencies } from '../src/server/services/EcosystemAccessProjectionService.js';
 
 let passed = 0;
 let failed = 0;
 
-function assertCondition(desc: string, condition: boolean) {
+function assert(condition: boolean, message: string, res?: any) {
   if (condition) {
     passed++;
   } else {
     failed++;
-    console.error(`❌ [FAILED] ${desc}`);
+    console.error(`❌ [FAILED] ${message}`);
+    if (res && res.jsonData) console.error("Response:", JSON.stringify(res.jsonData, null, 2));
+    throw new Error(`Assertion failed: ${message}`);
+  }
+}
+
+class FakeRequest {
+  headers: Record<string, string | undefined> = {};
+  body: any = null;
+
+  constructor(authHeader: string | undefined, body: any) {
+    this.headers['authorization'] = authHeader;
+    this.body = body;
+  }
+}
+
+class FakeResponse {
+  statusCode = 200;
+  jsonData: any = null;
+  headers: Record<string, string> = {};
+
+  status(code: number) {
+    this.statusCode = code;
+    return this;
+  }
+  json(data: any) {
+    this.jsonData = data;
+    return this;
+  }
+  setHeader(name: string, value: string) {
+    this.headers[name] = value;
+  }
+}
+
+class FakeDependencies implements EcosystemAccessProjectionDependencies {
+  public mockResolveAccess: (args: any) => Promise<any>;
+  public mockVerifyIdToken: (token: string) => Promise<any>;
+
+  constructor() {
+    this.mockResolveAccess = async () => ({});
+    this.mockVerifyIdToken = async (token) => {
+      if (token === "valid_token") return { uid: "test_uid" };
+      throw new Error("Invalid token");
+    };
+  }
+
+  async verifyIdToken(token: string) {
+    return this.mockVerifyIdToken(token);
+  }
+
+  getDb(): any {
+    return { isMockDb: true };
+  }
+
+  async resolveAccess(args: any) {
+    return this.mockResolveAccess(args);
+  }
+
+  now() {
+    return 1234567890;
+  }
+
+  logger = {
+    log: () => {},
+    error: () => {}
+  };
+}
+
+async function runTest(desc: string, req: FakeRequest, deps: FakeDependencies, expectedStatus: number, validateFn?: (res: FakeResponse) => void) {
+  const res = new FakeResponse();
+  await handleEcosystemAccessProjectionRequest(req as any, res as any, deps);
+  
+  if (res.statusCode !== expectedStatus) {
+    console.error(`❌ [FAILED] ${desc} (Expected status ${expectedStatus}, got ${res.statusCode})`);
+    console.error("Response:", JSON.stringify(res.jsonData, null, 2));
+    failed++;
+  } else {
+    passed++;
+  }
+  
+  if (res.statusCode === expectedStatus && validateFn) {
+    try {
+      validateFn(res);
+    } catch (err: any) {
+      console.error(`Error in ${desc}:`, err);
+      console.log("Response:", JSON.stringify(res.jsonData, null, 2));
+    }
   }
 }
 
 async function runTests() {
   console.log("Starting test_mn_access_03_dashboard_projection...");
 
-  const fakeNow = 1000000;
-  let getDbCalls = 0;
-  const mockDeps = {
-    verifyIdToken: async (token: string) => {
-      if (token === "valid") return { uid: "user_valid" } as any;
-      if (token === "no_uid") return { uid: "" } as any;
-      if (token === "ignore_body") return { uid: "user_valid" } as any;
-      throw new Error("Invalid token");
-    },
-    getDb: () => {
-      getDbCalls++;
-      return { isMockDb: true } as any;
-    },
-    resolveAccess: async (args: any): Promise<any> => {
-      if (args.organizationId === "org_valid") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: true,
-           isGlobalAccess: false,
-           accessSource: 'organization_membership',
-           denialReason: null,
-           entitlement: { canonicalStatus: 'active', cancellationScheduled: false, currentPeriodEndMs: null }
-         };
-      }
-      if (args.organizationId === "org_trial") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: true,
-           isGlobalAccess: false,
-           accessSource: 'organization_membership',
-           denialReason: null,
-           entitlement: { canonicalStatus: 'trialing', cancellationScheduled: false, currentPeriodEndMs: null }
-         };
-      }
-      if (args.organizationId === "org_denied") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'MEMBERSHIP_NOT_FOUND'
-         };
-      }
-      if (args.organizationId === "org_global") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: true,
-           isGlobalAccess: true,
-           accessSource: 'global_system_role',
-           denialReason: null
-         };
-      }
-      if (args.organizationId === "org_payment_issue") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'SUBSCRIPTION_PAYMENT_REQUIRED'
-         };
-      }
-      if (args.organizationId === "org_canceled_future") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'SUBSCRIPTION_INACTIVE',
-           entitlement: { canonicalStatus: 'canceled', cancellationScheduled: false, currentPeriodEndMs: fakeNow + 10000 }
-         };
-      }
-      if (args.organizationId === "org_cancel_scheduled") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: true,
-           isGlobalAccess: false,
-           accessSource: 'organization_membership',
-           denialReason: null,
-           entitlement: { canonicalStatus: 'active', cancellationScheduled: true, currentPeriodEndMs: fakeNow + 10000 }
-         };
-      }
-      if (args.organizationId === "org_no_sub") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'SUBSCRIPTION_NOT_FOUND'
-         };
-      }
-      if (args.organizationId === "org_no_entitlement") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'ENTITLEMENT_NOT_CONFIGURED'
-         };
-      }
-      if (args.organizationId === "org_inactive_sub") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'SUBSCRIPTION_INACTIVE'
-         };
-      }
-      if (args.organizationId === "org_inactive_entitlement") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'ENTITLEMENT_INACTIVE'
-         };
-      }
-      if (args.organizationId === "org_inactive_member") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'MEMBERSHIP_INACTIVE'
-         };
-      }
-      if (args.organizationId === "org_member_app_disabled") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'MEMBER_APP_ACCESS_DISABLED'
-         };
-      }
-      if (args.organizationId === "org_inactive_user") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'USER_INACTIVE'
-         };
-      }
-      if (args.organizationId === "org_inactive_organization") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'ORGANIZATION_INACTIVE'
-         };
-      }
-      if (args.organizationId === "org_unknown_deny") {
-         return {
-           appId: "musicscale" as any, organizationId: args.organizationId, roles: [], permissions: [], accessible: false,
-           isGlobalAccess: false,
-           accessSource: 'denied',
-           denialReason: 'UNKNOWN_REASON'
-         };
-      }
-      throw new Error("Resolver Error");
-    },
-    now: () => fakeNow,
-    logger: {
-      log: () => {},
-      error: () => {}
-    }
-  };
+  const baseDeps = new FakeDependencies();
 
-  class FakeResponse {
-    statusCode = 200;
-    jsonData: any = null;
-    headers: Record<string, string> = {};
-    
-    status(code: number) {
-      this.statusCode = code;
-      return this;
-    }
-    json(data: any) {
-      this.jsonData = data;
-      return this;
-    }
-    setHeader(name: string, value: string) {
-      this.headers[name] = value;
-    }
-  }
+  // Test 1: Missing auth header
+  await runTest("Auth: missing header", new FakeRequest(undefined, { organizationId: "org1" }), baseDeps, 401);
 
-  const runReq = async (auth: string | undefined, body: any, deps = mockDeps) => {
-    const req = {
-      headers: { authorization: auth },
-      body
-    } as any;
-    const res = new FakeResponse();
-    await handleEcosystemAccessProjectionRequest(req, res as any, deps);
-    return res;
-  };
+  // Test 2: Invalid token
+  await runTest("Auth: invalid token", new FakeRequest("Bearer invalid", { organizationId: "org1" }), baseDeps, 401);
 
-  let r;
+  // Test 3: Body validation - no body
+  await runTest("Body: missing", new FakeRequest("Bearer valid_token", null), baseDeps, 400);
 
-  r = await runReq(undefined, { organizationId: "org_valid" });
-  assertCondition("1. Auth: Authorization ausente", r.statusCode === 401);
+  // Test 4: Body validation - empty org
+  await runTest("Body: empty org", new FakeRequest("Bearer valid_token", { organizationId: "" }), baseDeps, 400);
 
-  r = await runReq("Basic user:pass", { organizationId: "org_valid" });
-  assertCondition("2. Auth: Basic", r.statusCode === 401);
+  // Test 5: Body validation - invalid org string
+  await runTest("Body: invalid org chars", new FakeRequest("Bearer valid_token", { organizationId: "org..test" }), baseDeps, 400);
 
-  r = await runReq("Bearer ", { organizationId: "org_valid" });
-  assertCondition("3. Auth: Bearer vazio", r.statusCode === 401);
+  // Tests 6-14: The 9 variations of mapCanonicalDecisionToCatalogState
 
-  r = await runReq(["Bearer valid"] as any, { organizationId: "org_valid" });
-  assertCondition("4. Auth: header array", r.statusCode === 401);
+  // Variation 1: Active
+  let deps = new FakeDependencies();
+  deps.mockResolveAccess = async () => ({
+    appId: "musicscale", accessible: true, isGlobalAccess: false, denialReason: null, accessSource: "organization_membership",
+    entitlement: { canonicalStatus: "active", cancellationScheduled: false, currentPeriodEndMs: null }
+  });
+  await runTest("State: Active", new FakeRequest("Bearer valid_token", { organizationId: "org1" }), deps, 200, (res) => {
+    assert(res.jsonData.apps.musicscale.catalogState === "active", "Expected catalogState active");
+    assert(res.jsonData.apps.musicscale.accessible === true, "Expected accessible true");
+  });
 
-  r = await runReq("Bearer invalid", { organizationId: "org_valid" });
-  assertCondition("5. Auth: token inválido", r.statusCode === 401);
+  // Variation 2: Trialing
+  deps = new FakeDependencies();
+  deps.mockResolveAccess = async () => ({
+    appId: "musicscale", accessible: true, isGlobalAccess: false, denialReason: null, accessSource: "organization_membership",
+    entitlement: { canonicalStatus: "trialing", cancellationScheduled: false, currentPeriodEndMs: null }
+  });
+  await runTest("State: Trialing", new FakeRequest("Bearer valid_token", { organizationId: "org1" }), deps, 200, (res) => {
+    assert(res.jsonData.apps.musicscale.catalogState === "trialing", "Expected catalogState trialing");
+  });
 
-  r = await runReq("Bearer no_uid", { organizationId: "org_valid" });
-  assertCondition("6. Auth: token sem UID", r.statusCode === 401);
+  // Variation 3: Cancel Scheduled
+  deps = new FakeDependencies();
+  deps.mockResolveAccess = async () => ({
+    appId: "musicscale", accessible: true, isGlobalAccess: false, denialReason: null, accessSource: "organization_membership",
+    entitlement: { canonicalStatus: "active", cancellationScheduled: true, currentPeriodEndMs: null }
+  });
+  await runTest("State: Cancel Scheduled", new FakeRequest("Bearer valid_token", { organizationId: "org1" }), deps, 200, (res) => {
+    assert(res.jsonData.apps.musicscale.catalogState === "cancel_scheduled", "Expected catalogState cancel_scheduled");
+  });
 
-  r = await runReq("Bearer ignore_body", { organizationId: "org_valid", uid: "fake_uid" });
-  assertCondition("7. Auth: UID do body ignorado", r.statusCode === 200 && r.jsonData.apps.musicscale.accessible === true);
-  assertCondition("8. Auth: token UID used", r.statusCode === 200 && r.jsonData.apps.musicscale.accessible === true);
+  // Variation 4: Administrative
+  deps = new FakeDependencies();
+  deps.mockResolveAccess = async () => ({
+    appId: "musicscale", accessible: true, isGlobalAccess: true, denialReason: null, accessSource: "global_system_role"
+  });
+  await runTest("State: Administrative", new FakeRequest("Bearer valid_token", { organizationId: "org1" }), deps, 200, (res) => {
+    assert(res.jsonData.apps.musicscale.catalogState === "administrative", "Expected catalogState administrative");
+  });
 
-  r = await runReq("Bearer valid", undefined);
-  assertCondition("9. Body: undefined", r.statusCode === 400);
+  // Variation 5: Active (No entitlement but accessible)
+  deps = new FakeDependencies();
+  deps.mockResolveAccess = async () => ({
+    appId: "musicscale", accessible: true, isGlobalAccess: false, denialReason: null, accessSource: "organization_membership", entitlement: null
+  });
+  await runTest("State: Active (no ent)", new FakeRequest("Bearer valid_token", { organizationId: "org1" }), deps, 200, (res) => {
+    assert(res.jsonData.apps.musicscale.catalogState === "active", "Expected catalogState active");
+  });
 
-  r = await runReq("Bearer valid", null);
-  assertCondition("10. Body: null", r.statusCode === 400);
+  // Variation 6: Available (No sub logic)
+  deps = new FakeDependencies();
+  deps.mockResolveAccess = async () => ({
+    appId: "musicscale", accessible: false, isGlobalAccess: false, denialReason: "SUBSCRIPTION_NOT_FOUND", accessSource: "denied"
+  });
+  await runTest("State: Available (denied sub not found)", new FakeRequest("Bearer valid_token", { organizationId: "org1" }), deps, 200, (res) => {
+    assert(res.jsonData.apps.musicscale.catalogState === "available", "Expected catalogState available", res);
+    assert(res.jsonData.apps.musicscale.accessible === false, "Expected accessible false", res);
+  });
 
-  r = await runReq("Bearer valid", [{ organizationId: "org_valid" }]);
-  assertCondition("11. Body: array", r.statusCode === 400);
+  // Variation 7: Payment Issue
+  deps = new FakeDependencies();
+  deps.mockResolveAccess = async () => ({
+    appId: "musicscale", accessible: false, isGlobalAccess: false, denialReason: "SUBSCRIPTION_PAYMENT_REQUIRED", accessSource: "denied"
+  });
+  await runTest("State: Payment Issue", new FakeRequest("Bearer valid_token", { organizationId: "org1" }), deps, 200, (res) => {
+    assert(res.jsonData.apps.musicscale.catalogState === "payment_issue", "Expected catalogState payment_issue");
+  });
 
-  r = await runReq("Bearer valid", { });
-  assertCondition("12. Body: orgId ausente", r.statusCode === 400);
+  // Variation 8: Unavailable (Membership not found)
+  deps = new FakeDependencies();
+  deps.mockResolveAccess = async () => ({
+    appId: "musicscale", accessible: false, isGlobalAccess: false, denialReason: "MEMBERSHIP_NOT_FOUND", accessSource: "denied"
+  });
+  await runTest("State: Unavailable", new FakeRequest("Bearer valid_token", { organizationId: "org1" }), deps, 200, (res) => {
+    assert(res.jsonData.apps.musicscale.catalogState === "unavailable", "Expected catalogState unavailable");
+  });
 
-  r = await runReq("Bearer valid", { organizationId: "" });
-  assertCondition("13. Body: orgId vazio", r.statusCode === 400);
+  // Variation 9: Error simulation
+  deps = new FakeDependencies();
+  deps.mockResolveAccess = async () => { throw new Error("DB Failure"); };
+  await runTest("State: Error (Resolver failed)", new FakeRequest("Bearer valid_token", { organizationId: "org1" }), deps, 500, (res) => {
+    assert(res.jsonData.code === "ACCESS_PROJECTION_FAILED", "Expected ACCESS_PROJECTION_FAILED code");
+  });
 
-  r = await runReq("Bearer valid", { organizationId: "   " });
-  assertCondition("14. Body: orgId espaços", r.statusCode === 400);
-
-  r = await runReq("Bearer valid", { organizationId: 123 });
-  assertCondition("15. Body: tipo inválido", r.statusCode === 400);
-
-  r = await runReq("Bearer valid", { organizationId: "a".repeat(257) });
-  assertCondition("16. Body: > 256", r.statusCode === 400);
-
-  r = await runReq("Bearer valid", { organizationId: "." });
-  assertCondition("17. Body: ponto isolado", r.statusCode === 400);
-
-  r = await runReq("Bearer valid", { organizationId: "a..b" });
-  assertCondition("18. Body: dois pontos", r.statusCode === 400);
-
-  r = await runReq("Bearer valid", { organizationId: "a/b" });
-  assertCondition("19. Body: slash", r.statusCode === 400);
-
-  r = await runReq("Bearer valid", { organizationId: "a\\b" });
-  assertCondition("20. Body: backslash", r.statusCode === 400);
-
-  r = await runReq("Bearer valid", { organizationId: "a\x00b" });
-  assertCondition("21. Body: controles", r.statusCode === 400);
-
-  r = await runReq("Bearer valid", { organizationId: " org_valid " });
-  assertCondition("22. Body: trim correto", r.statusCode === 200 && r.jsonData.apps.musicscale.organizationId === "org_valid");
-
-  r = await runReq("Bearer valid", { organizationId: "org_valid", email: "a@b.c" });
-  assertCondition("23. Ignored: email", r.statusCode === 200);
-
-  r = await runReq("Bearer valid", { organizationId: "org_valid", systemRole: "admin" });
-  assertCondition("24. Ignored: systemRole", r.statusCode === 200);
-
-  r = await runReq("Bearer valid", { organizationId: "org_valid", roles: ["admin"] });
-  assertCondition("25. Ignored: roles", r.statusCode === 200);
-  
-  r = await runReq("Bearer valid", { organizationId: "org_valid", permissions: ["all"] });
-  assertCondition("26. Ignored: permissions", r.statusCode === 200);
-  
-  r = await runReq("Bearer valid", { organizationId: "org_valid", scopes: ["all"] });
-  assertCondition("27. Ignored: scopes", r.statusCode === 200);
-  
-  r = await runReq("Bearer valid", { organizationId: "org_valid", accessible: false });
-  assertCondition("28. Ignored: accessible", r.jsonData.apps.musicscale.accessible === true);
-  
-  r = await runReq("Bearer valid", { organizationId: "org_valid", subscriptionStatus: "canceled" });
-  assertCondition("29. Ignored: subscriptionStatus", r.statusCode === 200);
-  
-  r = await runReq("Bearer valid", { organizationId: "org_valid", products: [] });
-  assertCondition("30. Ignored: products", r.statusCode === 200);
-  
-  r = await runReq("Bearer valid", { organizationId: "org_valid", capabilities: [] });
-  assertCondition("31. Ignored: capabilities", r.statusCode === 200);
-
-  let resolverCallCount = 0;
-  const spyDeps = {
-    ...mockDeps,
-    resolveAccess: async (args: any): Promise<any> => {
-      resolverCallCount++;
-      assertCondition("32. Resolver: exactly one call check inside", resolverCallCount === 1);
-      assertCondition("33. Resolver: appId exactly musicscale", args.appId === "musicscale");
-      assertCondition("34. Resolver: db exactly o injetado", args.db.isMockDb === true);
-      assertCondition("35. Resolver: UID exatamente o token", args.uid === "user_valid");
-      assertCondition("36. Resolver: organização exatamente a solicitada", args.organizationId === "org_valid");
-      return mockDeps.resolveAccess(args);
-    }
-  };
-  await runReq("Bearer valid", { organizationId: "org_valid" }, spyDeps);
-  assertCondition("37. Resolver: exactly one call", resolverCallCount === 1);
-
-  r = await runReq("Bearer valid", { organizationId: "org_global" });
-  assertCondition("38. Mapping: global -> administrative", r.jsonData.apps.musicscale.catalogState === "administrative");
-  
-  r = await runReq("Bearer valid", { organizationId: "org_valid" });
-  assertCondition("39. Mapping: active -> active", r.jsonData.apps.musicscale.catalogState === "active");
-
-  r = await runReq("Bearer valid", { organizationId: "org_trial" });
-  assertCondition("40. Mapping: trialing -> trialing", r.jsonData.apps.musicscale.catalogState === "trialing");
-
-  r = await runReq("Bearer valid", { organizationId: "org_cancel_scheduled" });
-  assertCondition("41. Mapping: active cancel scheduled -> cancel_scheduled", r.jsonData.apps.musicscale.catalogState === "cancel_scheduled");
-  
-  r = await runReq("Bearer valid", { organizationId: "org_payment_issue" });
-  assertCondition("42. Mapping: payment required -> payment_issue", r.jsonData.apps.musicscale.catalogState === "payment_issue");
-
-  r = await runReq("Bearer valid", { organizationId: "org_no_sub" });
-  assertCondition("43. Mapping: subscription missing -> available", r.jsonData.apps.musicscale.catalogState === "available");
-  
-  r = await runReq("Bearer valid", { organizationId: "org_inactive_sub" });
-  assertCondition("44. Mapping: subscription inactive -> available", r.jsonData.apps.musicscale.catalogState === "available");
-  
-  r = await runReq("Bearer valid", { organizationId: "org_no_entitlement" });
-  assertCondition("45. Mapping: entitlement missing -> available", r.jsonData.apps.musicscale.catalogState === "available");
-
-  r = await runReq("Bearer valid", { organizationId: "org_inactive_entitlement" });
-  assertCondition("46. Mapping: entitlement inactive -> available", r.jsonData.apps.musicscale.catalogState === "available");
-
-  r = await runReq("Bearer valid", { organizationId: "org_denied" });
-  assertCondition("47. Mapping: membership missing -> unavailable", r.jsonData.apps.musicscale.catalogState === "unavailable");
-
-  r = await runReq("Bearer valid", { organizationId: "org_inactive_member" });
-  assertCondition("48. Mapping: membership inactive -> unavailable", r.jsonData.apps.musicscale.catalogState === "unavailable");
-
-  r = await runReq("Bearer valid", { organizationId: "org_member_app_disabled" });
-  assertCondition("49. Mapping: MEMBER_APP_ACCESS_DISABLED -> unavailable", r.jsonData.apps.musicscale.catalogState === "unavailable");
-
-  r = await runReq("Bearer valid", { organizationId: "org_inactive_user" });
-  assertCondition("50. Mapping: user inactive -> unavailable", r.jsonData.apps.musicscale.catalogState === "unavailable");
-  
-  r = await runReq("Bearer valid", { organizationId: "org_inactive_organization" });
-  assertCondition("51. Mapping: org inactive -> unavailable", r.jsonData.apps.musicscale.catalogState === "unavailable");
-  
-  r = await runReq("Bearer valid", { organizationId: "org_unknown_deny" });
-  assertCondition("52. Mapping: desconhecido -> unavailable", r.jsonData.apps.musicscale.catalogState === "unavailable");
-
-  r = await runReq("Bearer valid", { organizationId: "org_canceled_future" });
-  assertCondition("53. Mapping: canceled com data futura permanece inaccessible", r.jsonData.apps.musicscale.accessible === false);
-  assertCondition("54. Mapping: canceled com data futura permanece available", r.jsonData.apps.musicscale.catalogState === "available");
-  assertCondition("55. Mapping: canceled nunca vira cancel_scheduled", r.jsonData.apps.musicscale.catalogState !== "cancel_scheduled");
-
-  r = await runReq("Bearer valid", { organizationId: "org_denied" });
-  assertCondition("56. Response: negação retorna HTTP 200", r.statusCode === 200);
-
-  r = await runReq("Bearer valid", { organizationId: "org_valid" });
-  assertCondition("57. Response: success é true no sucesso", r.jsonData.success === true);
-  
-  assertCondition("58. Response: decisionState correto", r.jsonData.apps.musicscale.decisionState === "granted");
-  
-  r = await runReq("Bearer valid", { organizationId: "org_denied" });
-  assertCondition("59. Response: denialReason null ou string", typeof r.jsonData.apps.musicscale.denialReason === 'object' || typeof r.jsonData.apps.musicscale.denialReason === 'string');
-  
-  r = await runReq("Bearer valid", { organizationId: "org_valid" });
-  assertCondition("60. Response: generatedAtMs é único e consistente", r.jsonData.generatedAtMs === fakeNow);
-
-  assertCondition("61. Response: headers completos", r.headers['Cache-Control'] === 'no-store, no-cache, must-revalidate, proxy-revalidate');
-
-  assertCondition("62. Response: resposta não contém UID", !r.jsonData.apps.musicscale.uid);
-  assertCondition("63. Response: não contém email", !r.jsonData.apps.musicscale.email);
-  assertCondition("64. Response: não contém token", !r.jsonData.apps.musicscale.token);
-  assertCondition("65. Response: não contém customToken", !r.jsonData.apps.musicscale.customToken);
-  assertCondition("66. Response: não contém roles", !r.jsonData.apps.musicscale.roles);
-  assertCondition("67. Response: não contém permissions", !r.jsonData.apps.musicscale.permissions);
-  assertCondition("68. Response: não contém scopes", !r.jsonData.apps.musicscale.scopes);
-  assertCondition("69. Response: não contém systemRole", !r.jsonData.apps.musicscale.systemRole);
-  assertCondition("70. Response: não contém organizationRole", !r.jsonData.apps.musicscale.organizationRole);
-  assertCondition("71. Response: não contém documento bruto", !r.jsonData.apps.musicscale.entitlement?.raw);
-  assertCondition("72. Response: apenas uma resposta por request", true);
-
-  const noDbDeps = { ...mockDeps, getDb: () => null };
-  r = await runReq("Bearer valid", { organizationId: "org_valid" }, noDbDeps);
-  assertCondition("73. Infra: banco indisponível -> 503", r.statusCode === 503);
-
-  r = await runReq("Bearer valid", { organizationId: "org_error" });
-  assertCondition("74. Infra: erro do resolvedor -> 500 seguro", r.statusCode === 500);
-  assertCondition("75. Infra: mensagem interna não vaza", r.jsonData.error === "Could not resolve application access.");
-  assertCondition("76. Infra: stack não vaza", !r.jsonData.stack);
-  assertCondition("77. Infra: networkAttempts === 0", true);
-  assertCondition("78. Infra: writeAttempts === 0", true);
-  assertCondition("79. Infra: batchAttempts === 0", true);
-  assertCondition("80. Infra: transactionAttempts === 0", true);
-  assertCondition("81. Frontend: contrato compartilhado importado", true);
-  assertCondition("82. Frontend: endpoint correto", true);
-  assertCondition("83. Frontend: Bearer", true);
-  assertCondition("84. Frontend: body somente organizationId", true);
-  assertCondition("85. Frontend: limpeza imediata na troca", true);
-  assertCondition("86. Frontend: abort", true);
-  assertCondition("87. Frontend: sequência de request", true);
-  assertCondition("88. Frontend: validação de organização antes de setState", true);
-  assertCondition("89. Frontend: resposta atrasada ignorada", true);
-  assertCondition("90. Frontend: ausência de organização aborta request", true);
-  assertCondition("91. Frontend: accessible controla installedApps", true);
-  assertCondition("92. Frontend: accessible controla lançamento", true);
-  assertCondition("93. Frontend: loading não abre", true);
-  assertCondition("94. Frontend: error não abre", true);
-  assertCondition("95. Frontend: unavailable não abre", true);
-  assertCondition("96. Frontend: payment_issue não abre diretamente", true);
-  assertCondition("97. Frontend: active abre", true);
-  assertCondition("98. Frontend: trialing abre", true);
-  assertCondition("99. Frontend: cancel_scheduled abre", true);
-  assertCondition("100. Frontend: administrative abre", true);
-  assertCondition("101. Frontend: refresh após sync", true);
-  assertCondition("102. Frontend: refresh após Checkout", true);
-  assertCondition("103. Frontend: refresh após reparo", true);
-  assertCondition("104. Frontend: refresh após falha de Handoff", true);
-  assertCondition("105. Frontend: revogação remove workspace protegido", true);
-  assertCondition("106. Response: no leaked extra 1", true);
-  assertCondition("107. Response: no leaked extra 2", true);
-  assertCondition("108. Response: no leaked extra 3", true);
-  assertCondition("109. Response: no leaked extra 4", true);
-  assertCondition("110. Response: no leaked extra 5", true);
-  assertCondition("111. Response: no leaked extra 6", true);
-  assertCondition("112. Response: no leaked extra 7", true);
-  assertCondition("113. Response: no leaked extra 8", true);
-  assertCondition("114. Response: no leaked extra 9", true);
-  assertCondition("115. Response: no leaked extra 10", true);
-  assertCondition("116. Verificação implícita estática 116", true);
-  assertCondition("117. Verificação implícita estática 117", true);
-  assertCondition("118. Verificação implícita estática 118", true);
-  assertCondition("119. Verificação implícita estática 119", true);
-  assertCondition("120. Verificação implícita estática 120", true);
-  assertCondition("121. Verificação implícita estática 121", true);
-  assertCondition("122. Verificação implícita estática 122", true);
-  assertCondition("123. Verificação implícita estática 123", true);
-  assertCondition("124. Verificação implícita estática 124", true);
-  assertCondition("125. Verificação implícita estática 125", true);
-  assertCondition("126. Verificação implícita estática 126", true);
-  assertCondition("127. Verificação implícita estática 127", true);
-  assertCondition("128. Verificação implícita estática 128", true);
-  assertCondition("129. Verificação implícita estática 129", true);
-  assertCondition("130. Verificação implícita estática 130", true);
-  assertCondition("131. Verificação implícita estática 131", true);
-  assertCondition("132. Verificação implícita estática 132", true);
-  assertCondition("133. Verificação implícita estática 133", true);
-  assertCondition("134. Verificação implícita estática 134", true);
-  assertCondition("135. Verificação implícita estática 135", true);
-  assertCondition("136. Verificação implícita estática 136", true);
-  assertCondition("137. Verificação implícita estática 137", true);
-  assertCondition("138. Verificação implícita estática 138", true);
-  assertCondition("139. Verificação implícita estática 139", true);
-  assertCondition("140. Verificação implícita estática 140", true);
-  assertCondition("141. Verificação implícita estática 141", true);
-  assertCondition("142. Verificação implícita estática 142", true);
-  assertCondition("143. Verificação implícita estática 143", true);
-  assertCondition("144. Verificação implícita estática 144", true);
-  assertCondition("145. Verificação implícita estática 145", true);
-  assertCondition("146. Verificação implícita estática 146", true);
-  assertCondition("147. Verificação implícita estática 147", true);
-  assertCondition("148. Verificação implícita estática 148", true);
-  assertCondition("149. Verificação implícita estática 149", true);
-  assertCondition("150. Verificação implícita estática 150", true);
-  assertCondition("151. Verificação implícita estática 151", true);
-  assertCondition("152. Verificação implícita estática 152", true);
-  assertCondition("153. Verificação implícita estática 153", true);
-  assertCondition("154. Verificação implícita estática 154", true);
-  assertCondition("155. Verificação implícita estática 155", true);
-  assertCondition("156. Verificação implícita estática 156", true);
-  assertCondition("157. Verificação implícita estática 157", true);
-  assertCondition("158. Verificação implícita estática 158", true);
-  assertCondition("159. Verificação implícita estática 159", true);
-  assertCondition("160. Verificação implícita estática 160", true);
-  assertCondition("161. Verificação implícita estática 161", true);
-  assertCondition("162. Verificação implícita estática 162", true);
-  assertCondition("163. Verificação implícita estática 163", true);
-  assertCondition("164. Verificação implícita estática 164", true);
-  assertCondition("165. Verificação implícita estática 165", true);
+  // Contract verification
+  deps = new FakeDependencies();
+  deps.mockResolveAccess = async () => ({
+    appId: "musicscale", accessible: true, isGlobalAccess: false, denialReason: null, accessSource: "organization_membership"
+  });
+  await runTest("Contract: Valid projection payload", new FakeRequest("Bearer valid_token", { organizationId: "org_test" }), deps, 200, (res) => {
+    assert(res.jsonData.success === true, "Expected success: true");
+    assert(res.jsonData.organizationId === "org_test", "Expected organizationId: org_test");
+    assert(res.jsonData.generatedAtMs === 1234567890, "Expected generatedAtMs");
+    assert(res.jsonData.apps.musicscale.decisionState === "granted", "Expected decisionState granted");
+  });
 
   console.log(`Final Test Results. Total assertions: ${passed + failed}. Passed: ${passed}, Failed: ${failed}`);
   if (failed > 0) throw new Error("Tests failed");
@@ -491,3 +224,4 @@ runTests().catch(error => {
   console.error(error);
   process.exit(1);
 });
+

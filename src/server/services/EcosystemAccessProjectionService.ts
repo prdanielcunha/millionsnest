@@ -98,6 +98,8 @@ export async function handleEcosystemAccessProjectionRequest(
       accessDecision.entitlement?.cancellationScheduled
     );
 
+    const generatedAtMs = deps.now();
+
     const projection: MusicScaleAccessProjection = {
       appId: 'musicscale',
       organizationId,
@@ -105,7 +107,7 @@ export async function handleEcosystemAccessProjectionRequest(
       isGlobalAccess: accessDecision.isGlobalAccess,
       accessSource: accessDecision.accessSource,
       decisionState: accessDecision.accessible ? 'granted' : 'denied',
-      denialReason: accessDecision.denialReason,
+      denialReason: accessDecision.denialReason || null,
       catalogState,
       entitlement: accessDecision.entitlement ? {
         canonicalStatus: accessDecision.entitlement.canonicalStatus,
@@ -127,13 +129,13 @@ export async function handleEcosystemAccessProjectionRequest(
       accessSource: projection.accessSource,
       denialReason: projection.denialReason,
       catalogState: projection.catalogState,
-      timestamp: deps.now()
+      timestamp: generatedAtMs
     });
 
     return res.status(200).json({
       success: true,
       organizationId,
-      generatedAtMs: deps.now(),
+      generatedAtMs,
       apps: {
         musicscale: projection
       }
@@ -143,7 +145,8 @@ export async function handleEcosystemAccessProjectionRequest(
       appId: 'musicscale',
       organizationId: logOrgId,
       maskedUid: logUid ? `${logUid.substring(0, 3)}...` : '...',
-      error: 'Could not resolve application access.'
+      timestamp: deps.now(),
+      code: 'ACCESS_PROJECTION_FAILED'
     });
     return res.status(500).json({
       success: false,

@@ -42,6 +42,7 @@ interface EcosystemWorkspaceHomeProps {
   onNavigateToOrganizationSettings: () => void;
   activeSection: 'overview' | 'resources' | 'getting-started';
   onSelectMusicScaleSection: (section: 'overview' | 'resources' | 'getting-started') => void;
+  onRetryMusicScaleAccess: () => void;
 }
 
 export function EcosystemWorkspaceHome({
@@ -64,7 +65,8 @@ export function EcosystemWorkspaceHome({
   onNavigateToBilling,
   onNavigateToOrganizationSettings,
   activeSection,
-  onSelectMusicScaleSection
+  onSelectMusicScaleSection,
+  onRetryMusicScaleAccess
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
   const { openHub } = useSupportHub();
@@ -134,19 +136,31 @@ export function EcosystemWorkspaceHome({
     type MusicScaleDisplayStatus =
       | 'available'
       | 'trialing'
+      | 'active'
+      | 'cancel_scheduled'
       | 'payment_issue'
       | 'loading'
+      | 'error'
+      | 'administrative'
       | 'unavailable';
 
     const musicScaleDisplayStatus: MusicScaleDisplayStatus = isLoading
       ? 'loading'
-      : hasPaymentIssue
-        ? 'payment_issue'
-        : musicScaleAccess?.catalogState === 'trialing'
-          ? 'trialing'
-          : isReadyToOpen
-            ? 'available'
-            : 'unavailable';
+      : isError
+        ? 'error'
+        : hasPaymentIssue
+          ? 'payment_issue'
+          : musicScaleAccess?.catalogState === 'trialing'
+            ? 'trialing'
+            : musicScaleAccess?.catalogState === 'cancel_scheduled'
+              ? 'cancel_scheduled'
+              : musicScaleAccess?.catalogState === 'administrative'
+                ? 'administrative'
+                : musicScaleAccess?.catalogState === 'active'
+                  ? 'active'
+                  : isReadyToOpen
+                    ? 'available'
+                    : 'unavailable';
 
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-12">
@@ -176,9 +190,12 @@ export function EcosystemWorkspaceHome({
                       <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-8 h-8 object-contain" />
                     </div>
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      musicScaleDisplayStatus === 'available' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                      musicScaleDisplayStatus === 'available' || musicScaleDisplayStatus === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
                       musicScaleDisplayStatus === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
                       musicScaleDisplayStatus === 'payment_issue' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                      musicScaleDisplayStatus === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                      musicScaleDisplayStatus === 'cancel_scheduled' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                      musicScaleDisplayStatus === 'administrative' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
                       musicScaleDisplayStatus === 'loading' ? 'bg-white/10 text-white border border-white/20' :
                       'bg-white/10 text-[#A0A7B5]'
                     }`}>
@@ -203,17 +220,18 @@ export function EcosystemWorkspaceHome({
                     type="button"
                     onClick={() => {
                       if (hasPaymentIssue) onNavigateToBilling();
+                      else if (isError) onRetryMusicScaleAccess();
                       else onLaunchApp(musicScaleApp);
                     }}
-                    disabled={isLoading || (!isReadyToOpen && !hasPaymentIssue)}
+                    disabled={isLoading || (!isReadyToOpen && !hasPaymentIssue && !isError)}
                     className={`flex-1 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 text-sm ${
-                      hasPaymentIssue ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
+                      hasPaymentIssue || isError ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
                       isReadyToOpen ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20' :
                       'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
                     }`}
                   >
-                    {isLoading ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : (hasPaymentIssue ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
-                    {hasPaymentIssue ? t('workspace.resolve_payment', 'Regularizar pagamento') : t('workspace.open_app', `Abrir ${musicScaleApp.name}`, { appName: musicScaleApp.name })}
+                    {isLoading ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : ((hasPaymentIssue || isError) ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
+                    {isError ? 'Tentar Novamente' : hasPaymentIssue ? t('workspace.resolve_payment', 'Regularizar pagamento') : t('workspace.open_app', `Abrir ${musicScaleApp.name}`, { appName: musicScaleApp.name })}
                   </button>
 
                   <button
@@ -393,19 +411,31 @@ export function EcosystemWorkspaceHome({
     type MusicScaleDisplayStatus =
       | 'available'
       | 'trialing'
+      | 'active'
+      | 'cancel_scheduled'
       | 'payment_issue'
       | 'loading'
+      | 'error'
+      | 'administrative'
       | 'unavailable';
 
     const musicScaleDisplayStatus: MusicScaleDisplayStatus = isLoading
       ? 'loading'
-      : hasPaymentIssue
-        ? 'payment_issue'
-        : musicScaleAccess?.catalogState === 'trialing'
-          ? 'trialing'
-          : isReadyToOpen
-            ? 'available'
-            : 'unavailable';
+      : isError
+        ? 'error'
+        : hasPaymentIssue
+          ? 'payment_issue'
+          : musicScaleAccess?.catalogState === 'trialing'
+            ? 'trialing'
+            : musicScaleAccess?.catalogState === 'cancel_scheduled'
+              ? 'cancel_scheduled'
+              : musicScaleAccess?.catalogState === 'administrative'
+                ? 'administrative'
+                : musicScaleAccess?.catalogState === 'active'
+                  ? 'active'
+                  : isReadyToOpen
+                    ? 'available'
+                    : 'unavailable';
 
     const orgActive = !!organization;
     const msActive = isReadyToOpen;
@@ -420,9 +450,12 @@ export function EcosystemWorkspaceHome({
               <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-8 h-8" />
               <h2 className="text-xl font-bold text-white tracking-tight">MusicScale</h2>
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${ 
-                musicScaleDisplayStatus === 'available' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 
+                musicScaleDisplayStatus === 'available' || musicScaleDisplayStatus === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 
                 musicScaleDisplayStatus === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 
                 musicScaleDisplayStatus === 'payment_issue' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 
+                musicScaleDisplayStatus === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                musicScaleDisplayStatus === 'cancel_scheduled' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                musicScaleDisplayStatus === 'administrative' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
                 'bg-white/10 text-[#A0A7B5]'
               }`}> 
                 {t(`musicscale.status.${musicScaleDisplayStatus}`, t('musicscale.status.unavailable'))}
@@ -441,29 +474,39 @@ export function EcosystemWorkspaceHome({
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <button
-                type="button"
-                id="btn-sidebar-open-musicscale"
-                onClick={() => {
-                  if (isReadyToOpen && musicScaleApp) {
-                    onLaunchApp(musicScaleApp);
-                  }
-                }}
-                disabled={!isReadyToOpen}
-                className={`px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 ${
-                  isReadyToOpen
-                    ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20'
-                    : 'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
-                }`}
-              >
-                {isLoading ? (
-                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                ) : hasPaymentIssue ? (
-                  t('workspace.payment_pending', 'Pagamento pendente')
-                ) : (
-                  t('workspace.open_app', 'Abrir MusicScale', { appName: 'MusicScale' })
-                )}
-              </button>
+              {isError ? (
+                <button
+                  type="button"
+                  onClick={onRetryMusicScaleAccess}
+                  className="px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20"
+                >
+                  Tentar Novamente
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  id="btn-sidebar-open-musicscale"
+                  onClick={() => {
+                    if (isReadyToOpen && musicScaleApp) {
+                      onLaunchApp(musicScaleApp);
+                    }
+                  }}
+                  disabled={!isReadyToOpen}
+                  className={`px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 ${
+                    isReadyToOpen
+                      ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20'
+                      : 'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
+                  }`}
+                >
+                  {isLoading ? (
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : hasPaymentIssue ? (
+                    t('workspace.payment_pending', 'Pagamento pendente')
+                  ) : (
+                    t('workspace.open_app', 'Abrir MusicScale', { appName: 'MusicScale' })
+                  )}
+                </button>
+              )}
               <button type="button" onClick={() => onSelectMusicScaleSection('getting-started')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">{t('workspace.getting_started', 'Primeiros passos')}</button>
               <button type="button" onClick={() => onSelectMusicScaleSection('resources')} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold rounded-xl transition-all min-h-[44px]">{t('workspace.know_resources', 'Conhecer recursos')}</button>
             </div>
