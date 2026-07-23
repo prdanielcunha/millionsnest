@@ -145,7 +145,12 @@ export function EcosystemWorkspaceHome({
     const musicScaleDisplayStatus: MusicScaleDisplayStatus =
       (musicScaleAccess?.catalogState as MusicScaleDisplayStatus) ?? 'unavailable';
       
-    const isReadyToOpen = musicScaleDisplayStatus !== 'loading' && musicScaleDisplayStatus !== 'unavailable';
+    const isReadyToOpen = [
+      'active',
+      'trialing',
+      'cancel_scheduled',
+      'administrative'
+    ].includes(musicScaleDisplayStatus);
 
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-12">
@@ -407,7 +412,12 @@ export function EcosystemWorkspaceHome({
       (musicScaleAccess?.catalogState as MusicScaleDisplayStatus) ?? 'unavailable';
 
     const orgActive = !!organization;
-        const isReadyToOpen = musicScaleDisplayStatus !== 'loading' && musicScaleDisplayStatus !== 'unavailable';
+        const isReadyToOpen = [
+      'active',
+      'trialing',
+      'cancel_scheduled',
+      'administrative'
+    ].includes(musicScaleDisplayStatus);
     const msActive = musicScaleAccess?.accessible === true || musicScaleAccess?.catalogState === 'trialing';
     const teamStarted = members.length > 1 || pendingInvites.length > 0;
 
