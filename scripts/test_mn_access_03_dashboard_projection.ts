@@ -343,7 +343,7 @@ async function runTests() {
     
     
     // Dedicated Success Case
-    
+    const dedicatedSuccessLogs: any[] = [];
     const dedicatedSuccessDeps = {
       verifyIdToken: async () => ({ uid: "user123" } as any),
       getDb: () => fakeDb,
@@ -352,19 +352,46 @@ async function runTests() {
         isGlobalAccess: false,
         accessSource: 'org',
         denialReason: null,
-        entitlement: { status: 'active' }
+        entitlement: { canonicalStatus: 'active', cancellationScheduled: false }
       }),
-      logger: { log: (msg:any, data:any) => { logs.push({level: 'log', msg, data}) }, info: (msg:any, data:any) => { logs.push({level: 'info', msg, data}) }, error: (msg:any, err:any) => { logs.push({level: 'error', msg, err}) }, warn: () => {} },
+      logger: {
+        log: (msg: any, data: any) => {
+          dedicatedSuccessLogs.push({
+            level: 'log',
+            msg,
+            data
+          });
+        },
+        info: () => {},
+        error: () => {},
+        warn: () => {}
+      },
       now: () => FIXED_NOW
     };
     const dedicatedSuccessRes = new FakeResponse();
     const dedicatedSuccessReq = new FakeRequest("Bearer token1", { organizationId: "org1" });
     await handleEcosystemAccessProjectionRequest(dedicatedSuccessReq as any, dedicatedSuccessRes as any, dedicatedSuccessDeps as any);
     
-    const dedicatedSuccessLog = logs.find(l => l.level === 'log' && l.msg === '[ACCESS_PROJECTION]');
-    assertionCount++; assert.ok(dedicatedSuccessLog !== undefined, "Dedicated success log missing");
+    const dedicatedSuccessLog = dedicatedSuccessLogs.find(
+      l => l.level === 'log' && l.msg === '[ACCESS_PROJECTION]'
+    );
+    assertionCount++;
+    assert.ok(dedicatedSuccessLog !== undefined, "Dedicated success log missing");
     
-    check(dedicatedSuccessRes._body.generatedAtMs, dedicatedSuccessLog.data.timestamp, 'generatedAtMs must equal success log timestamp');
+    check(
+      dedicatedSuccessLogs.filter(l => l.level === 'log' && l.msg === '[ACCESS_PROJECTION]').length,
+      1,
+      'Dedicated case must emit exactly one success log'
+    );
+    
+    check(
+      dedicatedSuccessRes._body.generatedAtMs,
+      dedicatedSuccessLog.data.timestamp,
+      'generatedAtMs must equal dedicated success log timestamp'
+    );
+    
+    check(dedicatedSuccessLog.data.organizationId, 'org1');
+    check(dedicatedSuccessLog.data.maskedUid, 'use...');
     
     assertionCount++;
     assert.deepStrictEqual(
@@ -447,7 +474,8 @@ async function runTests() {
     check(inlineArrayCount, 0);
     
     assertionCount++; assert.ok(!homeSrc.includes("disabled={!isReadyToOpen}"));
-    assertionCount++; assert.ok(!fs.existsSync('dummy.sh'), "dummy.sh should not exist");
+    assertionCount++; assert.ok(!fs.existsSync('dummy.sh'));
+    assertionCount++; assert.ok(!fs.existsSync('sha_check.js'));
 
     const navSrc = fs.readFileSync('src/components/Navbar.tsx', 'utf-8');
     assertionCount++; assert.ok(navSrc.includes("if (app.id === 'musicscale') return false;"));
