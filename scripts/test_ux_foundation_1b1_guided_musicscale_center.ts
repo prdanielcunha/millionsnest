@@ -100,7 +100,14 @@ assertCondition("52. MusicScale utiliza onOpenMusicScale", centerSrc.includes('o
 assertCondition("53. Existe exatamente uma ação visual Abrir MusicScale", (homeSrc.match(/Abrir MusicScale/g) || []).length === 1);
 assertCondition("54. A ação está no hero", homeSrc.indexOf('Abrir MusicScale') < homeSrc.indexOf('overviewContent'));
 assertCondition("55. Chama onLaunchApp", homeSrc.includes('onLaunchApp(musicScaleApp)'));
-assertCondition("56. Respeita isReadyToOpen", homeSrc.includes('disabled={!isReadyToOpen}'));
+assertCondition("56. Respeita isReadyToOpen e isPrimaryActionDisabled", 
+  homeSrc.includes("isReadyToOpen = [\n      'active',\n      'trialing',\n      'cancel_scheduled',\n      'administrative'\n    ].includes(musicScaleDisplayStatus)") &&
+  homeSrc.includes("isPrimaryActionDisabled = [\n      'loading',\n      'unavailable'\n    ].includes(musicScaleDisplayStatus)") &&
+  (homeSrc.match(/disabled=\{isPrimaryActionDisabled\}/g) || []).length === 2 &&
+  !homeSrc.includes("disabled={!isReadyToOpen}") &&
+  homeSrc.includes("if (musicScaleDisplayStatus === 'error') onRetryMusicScaleAccess();") &&
+  homeSrc.includes("else if (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling();")
+);
 assertCondition("57. Primeiros passos existe no hero", homeSrc.substring(0, homeSrc.indexOf('overviewContent')).includes('getting-started'));
 assertCondition("58. Primeiros passos chama getting-started", homeSrc.includes("onSelectMusicScaleSection('getting-started')"));
 assertCondition("59. Conhecer recursos existe no hero", homeSrc.substring(0, homeSrc.indexOf('overviewContent')).includes('resources'));

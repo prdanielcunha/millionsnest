@@ -151,6 +151,10 @@ export function EcosystemWorkspaceHome({
       'cancel_scheduled',
       'administrative'
     ].includes(musicScaleDisplayStatus);
+    const isPrimaryActionDisabled = [
+      'loading',
+      'unavailable'
+    ].includes(musicScaleDisplayStatus);
 
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-12">
@@ -213,7 +217,7 @@ export function EcosystemWorkspaceHome({
                       else if (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling();
                       else if (['active', 'trialing', 'cancel_scheduled', 'administrative'].includes(musicScaleDisplayStatus)) onLaunchApp(musicScaleApp);
                     }}
-                    disabled={!isReadyToOpen}
+                    disabled={isPrimaryActionDisabled}
                     className={`flex-1 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 text-sm ${
                       (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'error') ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
                       (musicScaleDisplayStatus === 'loading' || musicScaleDisplayStatus === 'unavailable') ? 'bg-white/5 text-[#A0A7B5] cursor-not-allowed' :
@@ -221,7 +225,7 @@ export function EcosystemWorkspaceHome({
                     }`}
                   >
                     {musicScaleDisplayStatus === 'loading' ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : ((musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'error') ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
-                    {musicScaleDisplayStatus === 'error' ? 'Tentar Novamente' : musicScaleDisplayStatus === 'payment_issue' ? t('workspace.resolve_payment', 'Regularizar pagamento') : musicScaleDisplayStatus === 'available' ? t('workspace.view_plans', 'Ver planos') : musicScaleDisplayStatus === 'loading' ? t('workspace.loading', 'Carregando') : musicScaleDisplayStatus === 'unavailable' ? t('workspace.unavailable', 'Indisponível') : t('workspace.open_app', `Abrir ${musicScaleApp.name}`, { appName: musicScaleApp.name })}
+                    {musicScaleDisplayStatus === 'error' ? 'Tentar novamente' : musicScaleDisplayStatus === 'payment_issue' ? t('workspace.resolve_payment', 'Regularizar pagamento') : musicScaleDisplayStatus === 'available' ? t('workspace.view_plans', 'Ver planos') : musicScaleDisplayStatus === 'loading' ? t('workspace.loading', 'Carregando') : musicScaleDisplayStatus === 'unavailable' ? t('workspace.unavailable', 'Indisponível') : t('workspace.open_app', `Abrir ${musicScaleApp.name}`, { appName: musicScaleApp.name })}
                   </button>
 
                   <button
@@ -418,6 +422,10 @@ export function EcosystemWorkspaceHome({
       'cancel_scheduled',
       'administrative'
     ].includes(musicScaleDisplayStatus);
+    const isPrimaryActionDisabled = [
+      'loading',
+      'unavailable'
+    ].includes(musicScaleDisplayStatus);
     const msActive = musicScaleAccess?.accessible === true || musicScaleAccess?.catalogState === 'trialing';
     const teamStarted = members.length > 1 || pendingInvites.length > 0;
 
@@ -462,7 +470,7 @@ export function EcosystemWorkspaceHome({
                   else if (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling();
                   else if (['active', 'trialing', 'cancel_scheduled', 'administrative'].includes(musicScaleDisplayStatus) && musicScaleApp) onLaunchApp(musicScaleApp);
                 }}
-                disabled={!isReadyToOpen}
+                disabled={isPrimaryActionDisabled}
                 className={`px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 ${
                   (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'error') ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
                   (musicScaleDisplayStatus === 'loading' || musicScaleDisplayStatus === 'unavailable') ? 'bg-white/5 text-[#A0A7B5] cursor-not-allowed' :
@@ -472,7 +480,7 @@ export function EcosystemWorkspaceHome({
                 {musicScaleDisplayStatus === 'loading' ? (
                   <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                 ) : musicScaleDisplayStatus === 'error' ? (
-                  'Tentar Novamente'
+                  'Tentar novamente'
                 ) : musicScaleDisplayStatus === 'payment_issue' ? (
                   t('workspace.resolve_payment', 'Regularizar pagamento')
                 ) : musicScaleDisplayStatus === 'available' ? (

@@ -19,6 +19,7 @@ let httpsRequestAttempts = 0;
 let writeAttempts = 0;
 let batchAttempts = 0;
 let transactionAttempts = 0;
+let maximumResponseCount = 0;
 
 // Intercept network calls
 const originalFetch = globalThis.fetch;
@@ -153,7 +154,7 @@ async function runTests() {
         error: () => {},
         warn: () => {}
       },
-      now: () => Date.now()
+      now: () => 1784806335579
     };
 
     // FakeRequest test
@@ -198,14 +199,7 @@ async function runTests() {
     check(resolverArgs[0].organizationId, "orgX");
     check(resolverArgs[0].appId, "musicscale");
     
-    // Test dynamic cases for handler
-    const dynamicCases = [
-      // accessible, isGlobal, status -> mapped canonical state
-      { granted: true, source: "global", status: "active", expectedAccessible: true, expectedCatalog: "active" },
-      { granted: true, source: "global", status: "administrative", expectedAccessible: true, expectedCatalog: "administrative" },
-      { granted: true, source: "org", status: "trialing", expectedAccessible: true, expectedCatalog: "trialing" },
-      { granted: true, source: "org", status: "active", denialReason: "cancel_scheduled", expectedAccessible: true, expectedCatalog: "cancel_scheduled" }, 
-    ];
+
 
     const generateCaseDeps = (granted: boolean, source: string, reason: string | null, entStatus?: string, cancelSched?: boolean) => {
       return {
@@ -219,7 +213,7 @@ async function runTests() {
           entitlement: entStatus ? { canonicalStatus: entStatus, cancellationScheduled: !!cancelSched } : null
         }),
         logger: { log: (msg:any, data:any) => { logs.push({level: 'log', msg, data}) }, info: (msg:any, data:any) => { logs.push({level: 'info', msg, data}) }, error: (msg:any, err:any) => { logs.push({level: 'error', msg, err}) }, warn: () => {} },
-        now: () => Date.now()
+        now: () => 1784806335579
       };
     };
 
@@ -243,7 +237,6 @@ async function runTests() {
       { granted: false, source: "denied", reason: "CANCELED", expectedAccessible: false, expectedCatalog: "unavailable" },
     ];
 
-    let maximumResponseCount = 0;
 
     for (const ct of caseTests) {
       const res = new FakeResponse();
@@ -285,7 +278,7 @@ async function runTests() {
           };
         },
         logger: { log: () => {}, info: () => {}, error: () => {}, warn: () => {} },
-        now: () => Date.now()
+        now: () => 1784806335579
       };
       
       await handleEcosystemAccessProjectionRequest(req as any, res as any, depsWithCapture as any);
@@ -300,7 +293,7 @@ async function runTests() {
     // Invalid body tests
     const invalidBodies = [
       undefined, null, [], {}, { organizationId: "" }, { organizationId: "   " },
-      { organizationId: 123 }, { organizationId: "a".repeat(257) }, { organizationId: "." },
+      { organizationId: 123 }, { organizationId: "a".repeat(257) }, { organizationId: "." }, { organizationId: ".." },
       { organizationId: "/" }, { organizationId: "\\" }, { organizationId: "\x00" }
     ];
 
@@ -319,7 +312,7 @@ async function runTests() {
       getDb: () => fakeDb,
       resolveAccess: async () => { throw new Error("Internal DB Error"); },
       logger: { log: (msg:any, data:any) => { logs.push({level: 'log', msg, data}) }, info: (msg:any, data:any) => { logs.push({level: 'info', msg, data}) }, error: (msg:any, err:any) => { logs.push({level: 'error', msg, err}) }, warn: () => {} },
-      now: () => Date.now()
+      now: () => 1784806335579
     };
     const resErr = new FakeResponse();
     const reqErr = new FakeRequest("Bearer token1", { organizationId: "org1" });
@@ -337,18 +330,33 @@ async function runTests() {
       getDb: () => null,
       resolveAccess: async () => ({}),
       logger: { log: (msg:any, data:any) => { logs.push({level: 'log', msg, data}) }, info: (msg:any, data:any) => { logs.push({level: 'info', msg, data}) }, error: (msg:any, err:any) => { logs.push({level: 'error', msg, err}) }, warn: () => {} },
-      now: () => Date.now()
+      now: () => 1784806335579
     };
     const resNoDb = new FakeResponse();
     const reqNoDb = new FakeRequest("Bearer token1", { organizationId: "org1" });
     await handleEcosystemAccessProjectionRequest(reqNoDb as any, resNoDb as any, noDbDeps as any);
     check(resNoDb._status, 503);
+    check(resNoDb._body.code, 'SERVICE_UNAVAILABLE');
+    check(resNoDb.totalResponseCount, 1);
+    verifyNoSensitiveData(resNoDb._body);
     
     // Check logs for resolveAccess throwing
     const errLog = logs.find(l => l.level === 'error' && l.msg === '[ACCESS_PROJECTION_FATAL_ERROR]');
     assertionCount++; assert.ok(errLog !== undefined, "Error log missing");
     if (errLog) {
-      assertionCount++; assert.ok(errLog.err !== undefined);
+      const errObj = errLog.err;
+      check(errObj.appId, "musicscale");
+      check(errObj.organizationId, "org1");
+      check(errObj.maskedUid, "use...");
+      check(errObj.timestamp, 1784806335579);
+      check(errObj.code, "ACCESS_PROJECTION_FAILED");
+      
+      assertionCount++; assert.ok(errObj.message === undefined, "Should not contain message");
+      assertionCount++; assert.ok(errObj.stack === undefined, "Should not contain stack");
+      assertionCount++; assert.ok(errObj.error === undefined, "Should not contain error");
+      assertionCount++; assert.ok(errObj.uid === undefined, "Should not contain uid");
+      assertionCount++; assert.ok(errObj.token === undefined, "Should not contain token");
+      assertionCount++; assert.ok(errObj.email === undefined, "Should not contain email");
     }
     
     // Check logs for success
@@ -357,7 +365,7 @@ async function runTests() {
     if (successLog) {
       check(successLog.data.organizationId, "org1");
       check(successLog.data.maskedUid, "use...");
-      check(typeof successLog.data.timestamp, "number"); // Date.now is mocked to a specific value in deps? actually deps.now() is used.
+      check(successLog.data.timestamp, 1784806335579); // Date.now is mocked to a specific value in deps? actually deps.now() is used.
     }
 
     // Assert final counters
@@ -383,13 +391,21 @@ async function runTests() {
     assertionCount++; assert.ok(dashboardSrc.includes("billing.subscription.upgraded"));
 
     const homeSrc = fs.readFileSync('src/components/dashboard/EcosystemWorkspaceHome.tsx', 'utf-8');
-    assertionCount++; assert.ok(homeSrc.includes("musicScaleAccess?.catalogState as MusicScaleDisplayStatus"));
-    assertionCount++; assert.ok(!homeSrc.includes("Satisfy old test UX-FOUNDATION-1b1"));
+    assertionCount++; assert.ok(homeSrc.includes("isReadyToOpen = [\n      'active',\n      'trialing',\n      'cancel_scheduled',\n      'administrative'\n    ].includes(musicScaleDisplayStatus);"));
+    assertionCount++; assert.ok(homeSrc.includes("isPrimaryActionDisabled = [\n      'loading',\n      'unavailable'\n    ].includes(musicScaleDisplayStatus);"));
+    
+    const disabledCount = (homeSrc.match(/disabled=\{isPrimaryActionDisabled\}/g) || []).length;
+    check(disabledCount, 2);
+    assertionCount++; assert.ok(!homeSrc.includes("disabled={!isReadyToOpen}"));
+    
     assertionCount++; assert.ok(homeSrc.includes("musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling()"));
-    assertionCount++; assert.ok(homeSrc.includes("musicScaleDisplayStatus === 'error') onRetryMusicScaleAccess()"));
+    assertionCount++; assert.ok(homeSrc.includes("if (musicScaleDisplayStatus === 'error') onRetryMusicScaleAccess()"));
+    
     assertionCount++; assert.ok(!homeSrc.includes("unavailable') onLaunchApp"));
     assertionCount++; assert.ok(!homeSrc.includes("loading') onLaunchApp"));
-    assertionCount++; assert.ok(homeSrc.includes("['active', 'trialing', 'cancel_scheduled', 'administrative'].includes(musicScaleDisplayStatus)"));
+    assertionCount++; assert.ok(!homeSrc.includes("available') onLaunchApp"));
+    assertionCount++; assert.ok(!homeSrc.includes("payment_issue') onLaunchApp"));
+    assertionCount++; assert.ok(!homeSrc.includes("error') onLaunchApp"));
 
     const navSrc = fs.readFileSync('src/components/Navbar.tsx', 'utf-8');
     assertionCount++; assert.ok(navSrc.includes("if (app.id === 'musicscale') return false;"));
@@ -414,6 +430,7 @@ runTests().then(() => {
   console.log("writeAttempts", writeAttempts);
   console.log("batchAttempts", batchAttempts);
   console.log("transactionAttempts", transactionAttempts);
+  console.log("maximumResponseCount", maximumResponseCount);
   }).catch(e => {
   console.error("Test failed", e);
   process.exit(1);
