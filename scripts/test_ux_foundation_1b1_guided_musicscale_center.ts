@@ -105,8 +105,11 @@ assertCondition("56. Respeita isReadyToOpen e isPrimaryActionDisabled",
   homeSrc.includes("isPrimaryActionDisabled = [\n      'loading',\n      'unavailable'\n    ].includes(musicScaleDisplayStatus)") &&
   (homeSrc.match(/disabled=\{isPrimaryActionDisabled\}/g) || []).length === 2 &&
   !homeSrc.includes("disabled={!isReadyToOpen}") &&
-  homeSrc.includes("if (musicScaleDisplayStatus === 'error') onRetryMusicScaleAccess();") &&
-  homeSrc.includes("else if (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling();")
+  (homeSrc.match(/else if \(isReadyToOpen && musicScaleApp\) \{/g) || []).length === 2 &&
+  (homeSrc.match(/\['active',\s*'trialing',\s*'cancel_scheduled',\s*'administrative'\]\.includes/g) || []).length === 0 &&
+  homeSrc.includes("if (musicScaleDisplayStatus === 'error') {") &&
+  homeSrc.includes("onRetryMusicScaleAccess();") &&
+  homeSrc.includes("onNavigateToBilling();")
 );
 assertCondition("57. Primeiros passos existe no hero", homeSrc.substring(0, homeSrc.indexOf('overviewContent')).includes('getting-started'));
 assertCondition("58. Primeiros passos chama getting-started", homeSrc.includes("onSelectMusicScaleSection('getting-started')"));

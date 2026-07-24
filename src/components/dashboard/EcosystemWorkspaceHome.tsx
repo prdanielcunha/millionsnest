@@ -213,9 +213,16 @@ export function EcosystemWorkspaceHome({
                   <button
                     type="button"
                     onClick={() => {
-                      if (musicScaleDisplayStatus === 'error') onRetryMusicScaleAccess();
-                      else if (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling();
-                      else if (['active', 'trialing', 'cancel_scheduled', 'administrative'].includes(musicScaleDisplayStatus)) onLaunchApp(musicScaleApp);
+                      if (musicScaleDisplayStatus === 'error') {
+                        onRetryMusicScaleAccess();
+                      } else if (
+                        musicScaleDisplayStatus === 'payment_issue' ||
+                        musicScaleDisplayStatus === 'available'
+                      ) {
+                        onNavigateToBilling();
+                      } else if (isReadyToOpen && musicScaleApp) {
+                        onLaunchApp(musicScaleApp);
+                      }
                     }}
                     disabled={isPrimaryActionDisabled}
                     className={`flex-1 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 text-sm ${
@@ -466,9 +473,16 @@ export function EcosystemWorkspaceHome({
                 type="button"
                 id="btn-sidebar-open-musicscale"
                 onClick={() => {
-                  if (musicScaleDisplayStatus === 'error') onRetryMusicScaleAccess();
-                  else if (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling();
-                  else if (['active', 'trialing', 'cancel_scheduled', 'administrative'].includes(musicScaleDisplayStatus) && musicScaleApp) onLaunchApp(musicScaleApp);
+                  if (musicScaleDisplayStatus === 'error') {
+                    onRetryMusicScaleAccess();
+                  } else if (
+                    musicScaleDisplayStatus === 'payment_issue' ||
+                    musicScaleDisplayStatus === 'available'
+                  ) {
+                    onNavigateToBilling();
+                  } else if (isReadyToOpen && musicScaleApp) {
+                    onLaunchApp(musicScaleApp);
+                  }
                 }}
                 disabled={isPrimaryActionDisabled}
                 className={`px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 ${

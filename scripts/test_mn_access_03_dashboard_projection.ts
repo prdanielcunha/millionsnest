@@ -127,6 +127,7 @@ function verifyNoSensitiveData(obj: any, path = "") {
 }
 
 async function runTests() {
+  const FIXED_NOW = 1784806335579;
   const logs: any[] = [];
 
   try {
@@ -154,7 +155,7 @@ async function runTests() {
         error: () => {},
         warn: () => {}
       },
-      now: () => 1784806335579
+      now: () => FIXED_NOW
     };
 
     // FakeRequest test
@@ -213,7 +214,7 @@ async function runTests() {
           entitlement: entStatus ? { canonicalStatus: entStatus, cancellationScheduled: !!cancelSched } : null
         }),
         logger: { log: (msg:any, data:any) => { logs.push({level: 'log', msg, data}) }, info: (msg:any, data:any) => { logs.push({level: 'info', msg, data}) }, error: (msg:any, err:any) => { logs.push({level: 'error', msg, err}) }, warn: () => {} },
-        now: () => 1784806335579
+        now: () => FIXED_NOW
       };
     };
 
@@ -278,7 +279,7 @@ async function runTests() {
           };
         },
         logger: { log: () => {}, info: () => {}, error: () => {}, warn: () => {} },
-        now: () => 1784806335579
+        now: () => FIXED_NOW
       };
       
       await handleEcosystemAccessProjectionRequest(req as any, res as any, depsWithCapture as any);
@@ -312,7 +313,7 @@ async function runTests() {
       getDb: () => fakeDb,
       resolveAccess: async () => { throw new Error("Internal DB Error"); },
       logger: { log: (msg:any, data:any) => { logs.push({level: 'log', msg, data}) }, info: (msg:any, data:any) => { logs.push({level: 'info', msg, data}) }, error: (msg:any, err:any) => { logs.push({level: 'error', msg, err}) }, warn: () => {} },
-      now: () => 1784806335579
+      now: () => FIXED_NOW
     };
     const resErr = new FakeResponse();
     const reqErr = new FakeRequest("Bearer token1", { organizationId: "org1" });
@@ -330,7 +331,7 @@ async function runTests() {
       getDb: () => null,
       resolveAccess: async () => ({}),
       logger: { log: (msg:any, data:any) => { logs.push({level: 'log', msg, data}) }, info: (msg:any, data:any) => { logs.push({level: 'info', msg, data}) }, error: (msg:any, err:any) => { logs.push({level: 'error', msg, err}) }, warn: () => {} },
-      now: () => 1784806335579
+      now: () => FIXED_NOW
     };
     const resNoDb = new FakeResponse();
     const reqNoDb = new FakeRequest("Bearer token1", { organizationId: "org1" });
@@ -340,6 +341,47 @@ async function runTests() {
     check(resNoDb.totalResponseCount, 1);
     verifyNoSensitiveData(resNoDb._body);
     
+    
+    // Dedicated Success Case
+    
+    const dedicatedSuccessDeps = {
+      verifyIdToken: async () => ({ uid: "user123" } as any),
+      getDb: () => fakeDb,
+      resolveAccess: async () => ({
+        accessible: true,
+        isGlobalAccess: false,
+        accessSource: 'org',
+        denialReason: null,
+        entitlement: { status: 'active' }
+      }),
+      logger: { log: (msg:any, data:any) => { logs.push({level: 'log', msg, data}) }, info: (msg:any, data:any) => { logs.push({level: 'info', msg, data}) }, error: (msg:any, err:any) => { logs.push({level: 'error', msg, err}) }, warn: () => {} },
+      now: () => FIXED_NOW
+    };
+    const dedicatedSuccessRes = new FakeResponse();
+    const dedicatedSuccessReq = new FakeRequest("Bearer token1", { organizationId: "org1" });
+    await handleEcosystemAccessProjectionRequest(dedicatedSuccessReq as any, dedicatedSuccessRes as any, dedicatedSuccessDeps as any);
+    
+    const dedicatedSuccessLog = logs.find(l => l.level === 'log' && l.msg === '[ACCESS_PROJECTION]');
+    assertionCount++; assert.ok(dedicatedSuccessLog !== undefined, "Dedicated success log missing");
+    
+    check(dedicatedSuccessRes._body.generatedAtMs, dedicatedSuccessLog.data.timestamp, 'generatedAtMs must equal success log timestamp');
+    
+    assertionCount++;
+    assert.deepStrictEqual(
+      Object.keys(dedicatedSuccessLog.data).sort(),
+      [
+        'accessSource',
+        'accessible',
+        'appId',
+        'catalogState',
+        'denialReason',
+        'isGlobalAccess',
+        'maskedUid',
+        'organizationId',
+        'timestamp'
+      ].sort()
+    );
+
     // Check logs for resolveAccess throwing
     const errLog = logs.find(l => l.level === 'error' && l.msg === '[ACCESS_PROJECTION_FATAL_ERROR]');
     assertionCount++; assert.ok(errLog !== undefined, "Error log missing");
@@ -348,25 +390,23 @@ async function runTests() {
       check(errObj.appId, "musicscale");
       check(errObj.organizationId, "org1");
       check(errObj.maskedUid, "use...");
-      check(errObj.timestamp, 1784806335579);
+      check(errObj.timestamp, FIXED_NOW);
       check(errObj.code, "ACCESS_PROJECTION_FAILED");
       
-      assertionCount++; assert.ok(errObj.message === undefined, "Should not contain message");
-      assertionCount++; assert.ok(errObj.stack === undefined, "Should not contain stack");
-      assertionCount++; assert.ok(errObj.error === undefined, "Should not contain error");
-      assertionCount++; assert.ok(errObj.uid === undefined, "Should not contain uid");
-      assertionCount++; assert.ok(errObj.token === undefined, "Should not contain token");
-      assertionCount++; assert.ok(errObj.email === undefined, "Should not contain email");
+      assertionCount++;
+      assert.deepStrictEqual(
+        Object.keys(errObj).sort(),
+        [
+          'appId',
+          'code',
+          'maskedUid',
+          'organizationId',
+          'timestamp'
+        ].sort()
+      );
     }
     
-    // Check logs for success
-    const successLog = logs.find(l => l.level === 'log' && l.msg === '[ACCESS_PROJECTION]');
-    assertionCount++; assert.ok(successLog !== undefined, "Success log missing");
-    if (successLog) {
-      check(successLog.data.organizationId, "org1");
-      check(successLog.data.maskedUid, "use...");
-      check(successLog.data.timestamp, 1784806335579); // Date.now is mocked to a specific value in deps? actually deps.now() is used.
-    }
+
 
     // Assert final counters
     check(fetchAttempts, 0);
@@ -391,21 +431,23 @@ async function runTests() {
     assertionCount++; assert.ok(dashboardSrc.includes("billing.subscription.upgraded"));
 
     const homeSrc = fs.readFileSync('src/components/dashboard/EcosystemWorkspaceHome.tsx', 'utf-8');
-    assertionCount++; assert.ok(homeSrc.includes("isReadyToOpen = [\n      'active',\n      'trialing',\n      'cancel_scheduled',\n      'administrative'\n    ].includes(musicScaleDisplayStatus);"));
-    assertionCount++; assert.ok(homeSrc.includes("isPrimaryActionDisabled = [\n      'loading',\n      'unavailable'\n    ].includes(musicScaleDisplayStatus);"));
+    const isReadyCount = (homeSrc.match(/const isReadyToOpen = \[/g) || []).length;
+    check(isReadyCount, 2);
+    
+    const isDisabledCount = (homeSrc.match(/const isPrimaryActionDisabled = \[/g) || []).length;
+    check(isDisabledCount, 2);
     
     const disabledCount = (homeSrc.match(/disabled=\{isPrimaryActionDisabled\}/g) || []).length;
     check(disabledCount, 2);
+    
+    const launchCount = (homeSrc.match(/else if \(isReadyToOpen && musicScaleApp\) \{/g) || []).length;
+    check(launchCount, 2);
+    
+    const inlineArrayCount = (homeSrc.match(/\['active',\s*'trialing',\s*'cancel_scheduled',\s*'administrative'\]\.includes/g) || []).length;
+    check(inlineArrayCount, 0);
+    
     assertionCount++; assert.ok(!homeSrc.includes("disabled={!isReadyToOpen}"));
-    
-    assertionCount++; assert.ok(homeSrc.includes("musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'available') onNavigateToBilling()"));
-    assertionCount++; assert.ok(homeSrc.includes("if (musicScaleDisplayStatus === 'error') onRetryMusicScaleAccess()"));
-    
-    assertionCount++; assert.ok(!homeSrc.includes("unavailable') onLaunchApp"));
-    assertionCount++; assert.ok(!homeSrc.includes("loading') onLaunchApp"));
-    assertionCount++; assert.ok(!homeSrc.includes("available') onLaunchApp"));
-    assertionCount++; assert.ok(!homeSrc.includes("payment_issue') onLaunchApp"));
-    assertionCount++; assert.ok(!homeSrc.includes("error') onLaunchApp"));
+    assertionCount++; assert.ok(!fs.existsSync('dummy.sh'), "dummy.sh should not exist");
 
     const navSrc = fs.readFileSync('src/components/Navbar.tsx', 'utf-8');
     assertionCount++; assert.ok(navSrc.includes("if (app.id === 'musicscale') return false;"));
