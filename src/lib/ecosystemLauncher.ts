@@ -6,6 +6,10 @@ export interface EcosystemLauncherDependencies {
   now: () => number;
   readSupportSession: () => string | null;
   markPerformance: (name: string) => void;
+  loadApps: () => Promise<Array<{
+    id: string;
+    url?: string;
+  }>>;
 }
 
 export async function openEcosystemModule(
@@ -28,20 +32,11 @@ export async function openEcosystemModule(
   const expectedUid = user.uid.trim();
   const expectedOrganizationId = organization.id.trim();
 
-  let ECOSYSTEM_APPS: any[] = [];
-  try {
-    const mod = await import('./apps.js');
-    ECOSYSTEM_APPS = mod.ECOSYSTEM_APPS || [];
-  } catch (e) {
-    ECOSYSTEM_APPS = [{ id: 'musicscale', url: 'https://musicscale.millionsnest.com/start' }];
-  }
-  const app = ECOSYSTEM_APPS.find(a => a.id === moduleKey);
-  if (!app) {
-     console.error('[EcosystemLaunch] App not found', { moduleKey });
-     throw new Error("Aplicativo não encontrado no catálogo.");
-  }
-
   const deps: EcosystemLauncherDependencies = {
+    loadApps: injectedDependencies?.loadApps || (async () => {
+      const module = await import('./apps.js');
+      return module.ECOSYSTEM_APPS;
+    }),
     getIdToken: injectedDependencies?.getIdToken || (async () => {
       const { auth } = await import('../lib/firebase.js');
       if (!auth || !auth.currentUser) throw new Error("Usuário não autenticado");
@@ -59,6 +54,19 @@ export async function openEcosystemModule(
     })
   };
 
+  let apps;
+  try {
+    apps = await deps.loadApps();
+  } catch (e) {
+    throw new Error("Não foi possível carregar o catálogo de aplicativos.");
+  }
+
+  const app = (apps || []).find(a => a.id === moduleKey);
+  if (!app || typeof app.url !== 'string' || app.url.trim() === '') {
+     console.error('[EcosystemLaunch] App not found or invalid URL', { moduleKey });
+     throw new Error("Aplicativo não encontrado no catálogo.");
+  }
+
   let isSupportMode = false;
   try {
      const supportStr = deps.readSupportSession();
@@ -70,8 +78,8 @@ export async function openEcosystemModule(
      }
   } catch (e) {}
 
-  deps.markPerformance('handoff_started');
   const idToken = await deps.getIdToken();
+  deps.markPerformance('handoff_started');
 
   let handoff: any = null;
   const maxRequests = 2;
@@ -147,8 +155,6 @@ export async function openEcosystemModule(
     throw new Error('A resposta de acesso ao MusicScale é inválida. Tente novamente.');
   }
 
-  deps.markPerformance('handoff_completed');
-
   const context = {
       appId: handoff.appId,
       orgId: handoff.orgId,
@@ -160,8 +166,9 @@ export async function openEcosystemModule(
   };
   
   const encodedContext = btoa(JSON.stringify(context));
-  const url = new URL(app.url);
-  url.searchParams.set('ecosystem_ctx', encodedContext);
+  const targetUrl = new URL(app.url);
+  targetUrl.searchParams.set('ecosystem_ctx', encodedContext);
   
-  deps.assign(url.toString());
+  deps.markPerformance('handoff_completed');
+  deps.assign(targetUrl.toString());
 }
