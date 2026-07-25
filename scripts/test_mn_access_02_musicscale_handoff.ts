@@ -174,6 +174,11 @@ class MockDependencies {
   public customTokenError: Error | null = null;
 
   public db: MockFirestore | null = null;
+  public logger?: {
+    info?: (...args: any[]) => void;
+    warn?: (...args: any[]) => void;
+    error?: (...args: any[]) => void;
+  };
   public clockValue = 1700000000000;
 
   async verifyIdToken(token: string) {
@@ -1019,12 +1024,23 @@ async function testHarness() {
       assert(res403.headers['cache-control'] === 'no-store', 'Cache-Control no-store em 403');
       
       // 5. Cache-Control no-store em 500
+      const db500 = new MockFirestore();
+      setupStandardUserAndOrg(db500, 'u1', 'org1');
+      db500.setMockData('users/u1', null);
+      db500.documentReads = 0;
       const deps500 = new MockDependencies();
-      deps500.db = dbGroup;
+      // Break the db to throw during resolver
+      deps500.db = {
+         collection: () => ({ doc: () => ({ get: () => { throw new Error('DB DOWN'); } }) })
+      } as any;
       deps500.tokenVerifyResult = { uid: 'u1' };
-      deps500.resolveAccessThrow = true; 
       const res500 = await runReq({ headers: { authorization: 'Bearer t1' }, body: { appId: 'musicscale', orgId: 'org1' }}, deps500);
+      assert(res500.statusCode === 500, '500 statusCode real');
       assert(res500.headers['cache-control'] === 'no-store', 'Cache-Control no-store em 500');
+      assert(res500.headers['pragma'] === 'no-cache', 'Pragma no-cache em 500');
+      assert(res500.headers['expires'] === '0', 'Expires 0 em 500');
+      assert(res500.body.retryable === true, 'retryable true em 500');
+      assert(res500.respondedCount === 1, 'respondedCount === 1');
 
       // 6. Cache-Control no-store em 503
       const deps503 = new MockDependencies();
@@ -1125,13 +1141,19 @@ async function testHarness() {
       assert(res18.body.retryable === false, 'ENTITLEMENT_INACTIVE retryable false');
 
       // 19. APP_ACCESS_DISABLED retryable false
-      // To get APP_ACCESS_DISABLED, we need ecosystem level disable. We can just test USER_INACTIVE or ORGANIZATION_INACTIVE as a proxy.
       const db19 = new MockFirestore();
       setupStandardUserAndOrg(db19, 'u1', 'org1', 'user', 'active', 'active');
-      db19.setMockData('users/u1', { status: 'disabled', systemRole: 'user' });
+      db19.setMockData('organizations/org1/members/u1', {
+         uid: 'u1', role: 'member', status: 'active',
+         appAccess: { musicscale: { enabled: false } }
+      });
       const deps19 = new MockDependencies(); deps19.db = db19; deps19.tokenVerifyResult = { uid: 'u1' };
       const res19 = await runReq({ headers: { authorization: 'Bearer t1' }, body: { appId: 'musicscale', orgId: 'org1' }}, deps19);
-      assert(res19.body.retryable === false, 'APP_ACCESS_DISABLED/USER_INACTIVE retryable false');
+      assert(res19.statusCode === 403, 'status 403');
+      assert(res19.body.reason === 'MEMBER_APP_ACCESS_DISABLED', 'reason === MEMBER_APP_ACCESS_DISABLED');
+      assert(res19.body.retryable === false, 'retryable === false');
+      assert(deps19.createCustomTokenCalls === 0, 'createCustomTokenCalls === 0');
+      assert(res19.respondedCount === 1, 'respondedCount === 1');
 
       // 20. SUPPORT_MODE_FORBIDDEN retryable false
       const db20 = new MockFirestore();
