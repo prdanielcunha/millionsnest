@@ -38,42 +38,53 @@ export async function handleMusicScaleHandoffRequest(
   res: HandoffResponseLike,
   dependencies: MusicScaleHandoffDependencies
 ): Promise<unknown> {
+  // Always set no-cache headers for all responses
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   // 1. Verify Authorization Header
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return res.status(401).json({
       error: 'Unauthorized: Missing authorization header.',
-      code: 'UNAUTHORIZED'
+      code: 'UNAUTHORIZED',
+      retryable: false
     });
   }
   if (Array.isArray(authHeader)) {
     return res.status(401).json({
       error: 'Unauthorized: Duplicate authorization headers.',
-      code: 'UNAUTHORIZED'
+      code: 'UNAUTHORIZED',
+      retryable: false
     });
   }
   if (typeof authHeader !== 'string') {
     return res.status(401).json({
       error: 'Unauthorized: Invalid authorization header.',
-      code: 'UNAUTHORIZED'
+      code: 'UNAUTHORIZED',
+      retryable: false
     });
   }
+
   const parts = authHeader.trim().split(/\s+/);
   if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer' || !parts[1]) {
     return res.status(401).json({
       error: 'Unauthorized: Invalid bearer format.',
-      code: 'UNAUTHORIZED'
+      code: 'UNAUTHORIZED',
+      retryable: false
     });
   }
-  const token = parts[1];
 
+  const token = parts[1];
   let decoded: { uid?: string | null } | null = null;
   try {
     decoded = await dependencies.verifyIdToken(token);
   } catch (err) {
     return res.status(401).json({
       error: 'Unauthorized: Invalid ID token.',
-      code: 'UNAUTHORIZED'
+      code: 'UNAUTHORIZED',
+      retryable: false
     });
   }
 
@@ -81,7 +92,8 @@ export async function handleMusicScaleHandoffRequest(
   if (!uid || typeof uid !== 'string' || uid.trim() === '') {
     return res.status(401).json({
       error: 'Unauthorized: Invalid ID token payload.',
-      code: 'UNAUTHORIZED'
+      code: 'UNAUTHORIZED',
+      retryable: false
     });
   }
 
@@ -89,7 +101,8 @@ export async function handleMusicScaleHandoffRequest(
   if (!req.body || typeof req.body !== 'object') {
     return res.status(400).json({
       error: 'Invalid request: body must be an object.',
-      code: 'INVALID_REQUEST'
+      code: 'INVALID_REQUEST',
+      retryable: false
     });
   }
 
@@ -98,21 +111,22 @@ export async function handleMusicScaleHandoffRequest(
   if (appId !== 'musicscale') {
     return res.status(400).json({
       error: 'Invalid request: appId must be "musicscale".',
-      code: 'INVALID_REQUEST'
+      code: 'INVALID_REQUEST',
+      retryable: false
     });
   }
-
   if (orgId === undefined || orgId === null) {
     return res.status(400).json({
       error: 'Invalid request: orgId is required.',
-      code: 'INVALID_REQUEST'
+      code: 'INVALID_REQUEST',
+      retryable: false
     });
   }
-
   if (typeof orgId !== 'string') {
     return res.status(400).json({
       error: 'Invalid request: orgId must be a string.',
-      code: 'INVALID_REQUEST'
+      code: 'INVALID_REQUEST',
+      retryable: false
     });
   }
 
@@ -120,28 +134,29 @@ export async function handleMusicScaleHandoffRequest(
   if (cleanOrgId === '') {
     return res.status(400).json({
       error: 'Invalid request: orgId cannot be empty.',
-      code: 'INVALID_REQUEST'
+      code: 'INVALID_REQUEST',
+      retryable: false
     });
   }
-
   if (cleanOrgId.length > 256) {
     return res.status(400).json({
       error: 'Invalid request: orgId exceeds 256 characters.',
-      code: 'INVALID_REQUEST'
+      code: 'INVALID_REQUEST',
+      retryable: false
     });
   }
-
   if (cleanOrgId === '.' || cleanOrgId === '..') {
     return res.status(400).json({
       error: 'Invalid request: orgId cannot be "." or "..".',
-      code: 'INVALID_REQUEST'
+      code: 'INVALID_REQUEST',
+      retryable: false
     });
   }
-
   if (cleanOrgId.includes('/') || cleanOrgId.includes('\\')) {
     return res.status(400).json({
       error: 'Invalid request: orgId cannot contain slashes or backslashes.',
-      code: 'INVALID_REQUEST'
+      code: 'INVALID_REQUEST',
+      retryable: false
     });
   }
 
@@ -149,14 +164,16 @@ export async function handleMusicScaleHandoffRequest(
   if (hasControlChars) {
     return res.status(400).json({
       error: 'Invalid request: orgId cannot contain control characters.',
-      code: 'INVALID_REQUEST'
+      code: 'INVALID_REQUEST',
+      retryable: false
     });
   }
 
   if (supportMode !== undefined && supportMode !== null && typeof supportMode !== 'boolean') {
     return res.status(400).json({
       error: 'Invalid request: supportMode must be a boolean.',
-      code: 'INVALID_REQUEST'
+      code: 'INVALID_REQUEST',
+      retryable: false
     });
   }
   const supportModeRequested = !!supportMode;
@@ -182,7 +199,13 @@ export async function handleMusicScaleHandoffRequest(
     });
   } catch (err: any) {
     if (dependencies.logger && typeof dependencies.logger.error === 'function') {
-      dependencies.logger.error('[HANDOFF_RESOLVER_ERROR]', err);
+      dependencies.logger.error('[HANDOFF_RESOLVER_ERROR]', {
+        appId: 'musicscale',
+        organizationId: cleanOrgId,
+        maskedUid: maskUid(uid),
+        code: 'HANDOFF_RESOLVER_FAILED',
+        timestamp: dependencies.now()
+      });
     }
     return res.status(500).json({
       error: 'Internal server error.',
@@ -195,6 +218,12 @@ export async function handleMusicScaleHandoffRequest(
   if (!access || access.accessible !== true) {
     let errorMsg = 'Forbidden: Access denied to this organization.';
     const reason = access?.denialReason;
+    
+    let isRetryable = false;
+    if (reason === 'SUBSCRIPTION_NOT_FOUND' || reason === 'ENTITLEMENT_NOT_CONFIGURED') {
+      isRetryable = true;
+    }
+
     if (reason) {
       if ([
         'SUBSCRIPTION_NOT_FOUND',
@@ -227,7 +256,8 @@ export async function handleMusicScaleHandoffRequest(
     return res.status(403).json({
       error: errorMsg,
       code: 'ECOSYSTEM_ACCESS_DENIED',
-      reason: reason || 'UNKNOWN_REASON'
+      reason: reason || 'UNKNOWN_REASON',
+      retryable: isRetryable
     });
   }
 
@@ -250,10 +280,10 @@ export async function handleMusicScaleHandoffRequest(
     return res.status(403).json({
       error: 'Forbidden: Access denied to this organization.',
       code: 'SUPPORT_MODE_FORBIDDEN',
-      reason: 'SUPPORT_MODE_FORBIDDEN'
+      reason: 'SUPPORT_MODE_FORBIDDEN',
+      retryable: false
     });
   }
-
   const verifiedSupportMode = supportModeRequested && access.isGlobalAccess;
 
   // 7. Create Custom Token
@@ -266,7 +296,13 @@ export async function handleMusicScaleHandoffRequest(
     });
   } catch (err: any) {
     if (dependencies.logger && typeof dependencies.logger.error === 'function') {
-      dependencies.logger.error('[HANDOFF_TOKEN_ERROR]', err);
+      dependencies.logger.error('[HANDOFF_TOKEN_ERROR]', {
+        appId: 'musicscale',
+        organizationId: cleanOrgId,
+        maskedUid: maskUid(uid),
+        code: 'HANDOFF_TOKEN_FAILED',
+        timestamp: dependencies.now()
+      });
     }
     return res.status(500).json({
       error: 'Internal server error.',
@@ -291,13 +327,13 @@ export async function handleMusicScaleHandoffRequest(
   });
 
   // 9. Send Success Response
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('Pragma', 'no-cache');
-
   return res.status(200).json({
+    appId: 'musicscale',
+    protocolVersion: '1.0.0',
     customToken,
     orgId: cleanOrgId,
     uid,
-    expiresAt: dependencies.now() + 300000
+    expiresAt: dependencies.now() + 300000,
+    supportMode: verifiedSupportMode
   });
 }

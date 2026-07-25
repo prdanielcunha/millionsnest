@@ -1,17 +1,25 @@
-import { auth } from '../lib/firebase.js';
 import { ECOSYSTEM_APPS } from './apps.js';
-import { resolveUserRoleDisplay } from './roleResolver.js';
-import { isGlobalPrivilegedUser } from './permissionService.js';
+
+export interface EcosystemLauncherDependencies {
+  getIdToken: () => Promise<string>;
+  fetchFn: typeof fetch;
+  sleep: (milliseconds: number) => Promise<void>;
+  assign: (url: string) => void;
+  now: () => number;
+  readSupportSession: () => string | null;
+  markPerformance: (name: string) => void;
+}
 
 export async function openEcosystemModule(
   moduleKey: string,
   user: any,
   profile: any,
   organization: any,
-  currentUserData: any
+  currentUserData: any,
+  injectedDependencies?: Partial<EcosystemLauncherDependencies>
 ) {
-  if (!user || !organization || !profile) {
-    console.error('[EcosystemLaunch] Missing required data', { hasUser: !!user, hasOrg: !!organization, hasProfile: !!profile });
+  if (!user || !organization) {
+    console.error('[EcosystemLaunch] Missing required data');
     throw new Error("Sessão inválida ou dados incompletos. Tente recarregar a página.");
   }
 
@@ -21,14 +29,27 @@ export async function openEcosystemModule(
      throw new Error("Aplicativo não encontrado no catálogo.");
   }
 
-  console.debug('[EcosystemLaunch] Starting module handoff launch', { moduleKey, uid: user.uid, orgId: organization.id });
-  
-  let attempts = 0;
-  const maxAttempts = 1;
-  const retryDelayMs = 1000;
+  const deps: EcosystemLauncherDependencies = {
+    getIdToken: injectedDependencies?.getIdToken || (async () => {
+      const { auth } = await import('../lib/firebase.js');
+      if (!auth || !auth.currentUser) throw new Error("Usuário não autenticado");
+      return await auth.currentUser.getIdToken();
+    }),
+    fetchFn: injectedDependencies?.fetchFn || globalThis.fetch.bind(globalThis),
+    sleep: injectedDependencies?.sleep || ((ms) => new Promise(resolve => setTimeout(resolve, ms))),
+    assign: injectedDependencies?.assign || ((url) => window.location.assign(url)),
+    now: injectedDependencies?.now || (() => Date.now()),
+    readSupportSession: injectedDependencies?.readSupportSession || (() => {
+      try { return localStorage.getItem('mn_support_session'); } catch (e) { return null; }
+    }),
+    markPerformance: injectedDependencies?.markPerformance || ((name) => {
+      window.performance?.mark?.(name);
+    })
+  };
+
   let isSupportMode = false;
   try {
-     const supportStr = localStorage.getItem('mn_support_session');
+     const supportStr = deps.readSupportSession();
      if (supportStr) {
         const supportObj = JSON.parse(supportStr);
         if (supportObj?.active && supportObj?.targetOrganizationId === organization.id) {
@@ -37,15 +58,18 @@ export async function openEcosystemModule(
      }
   } catch (e) {}
 
-  const attemptHandoff = async (): Promise<any> => {
-    window.performance?.mark?.('handoff_started');
-    const idToken = await auth.currentUser!.getIdToken();
+  let handoff: any = null;
+  const maxRequests = 2;
+
+  for (let attempt = 1; attempt <= maxRequests; attempt++) {
+    deps.markPerformance('handoff_started');
+    const idToken = await deps.getIdToken();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
-
+    
     let response;
     try {
-      response = await fetch('/api/ecosystem/create-handoff', {
+      response = await deps.fetchFn('/api/ecosystem/create-handoff', {
           method: 'POST',
           headers: {
               'Content-Type': 'application/json',
@@ -55,79 +79,74 @@ export async function openEcosystemModule(
           signal: controller.signal
       });
     } catch (err: any) {
+      clearTimeout(timeoutId);
       if (err.name === 'AbortError') {
         throw new Error('Tempo limite esgotado. Verifique sua conexão e tente novamente.');
       }
-      throw err;
-    } finally {
-      clearTimeout(timeoutId);
+      throw new Error('Não foi possível preparar o acesso ao MusicScale.');
     }
-    
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-        const errorData = await response.json();
-        
-        if (response.status === 403 && errorData.error?.includes('Subscription missing')) {
-            if (attempts < maxAttempts) {
-                attempts++;
-                console.warn(`[EcosystemLaunch] Not ready yet, retrying in ${retryDelayMs}ms... (Attempt ${attempts}/${maxAttempts})`);
-                await new Promise(resolve => setTimeout(resolve, retryDelayMs));
-                
-                return attemptHandoff();
-            }
-            throw new Error('Não encontramos uma assinatura ativa para esta organização. Se você acabou de assinar, estamos finalizando a ativação. Tente novamente em alguns segundos.');
+      let errorData: any = {};
+      try {
+        errorData = await response.json();
+      } catch (e) {}
+
+      if (errorData.retryable === true && attempt < maxRequests && [403, 500, 503].includes(response.status)) {
+        await deps.sleep(1000);
+        continue;
+      }
+
+      if (response.status === 401) {
+        throw new Error('Sua sessão expirou. Entre novamente e tente abrir o MusicScale.');
+      } else if (response.status === 403) {
+        if (errorData.reason === 'SUBSCRIPTION_PAYMENT_REQUIRED') {
+          throw new Error('Existe uma pendência no pagamento desta organização.');
+        } else {
+          throw new Error('Não encontramos um acesso ativo ao MusicScale para esta organização.');
         }
-        
-        throw new Error(errorData.error || 'Falha ao obter contexto de handoff');
+      } else if (response.status === 500 || response.status === 503) {
+        throw new Error('O MusicScale está temporariamente indisponível. Tente novamente em instantes.');
+      } else {
+        throw new Error('Não foi possível preparar o acesso ao MusicScale.');
+      }
     }
-    
-    window.performance?.mark?.('handoff_completed');
-    return response.json();
-  };
 
-  try {
-     const handoff = await attemptHandoff();
-     
-     const roleDisplay = resolveUserRoleDisplay({
-       userProfile: profile,
-       organizationMember: currentUserData
-     });
-
-     const context = {
-         appId: moduleKey,
-         orgId: handoff.orgId,
-         userId: handoff.uid,
-         customToken: handoff.customToken,
-         expiresAt: handoff.expiresAt,
-         user: {
-           uid: user.uid,
-           email: user.email,
-           displayName: user.displayName,
-           systemRole: profile.systemRole || 'user',
-           roleDisplay
-         },
-         organization: {
-           id: organization.id,
-           name: organization.name,
-           organizationRole: roleDisplay.organizationRole,
-           subscriptionPlan: organization.subscriptionPlan || organization.plan || 'none',
-           subscriptionStatus: organization.subscriptionStatus || organization.status || 'none'
-         },
-         capabilities: {
-           isGlobalPrivilegedUser: isGlobalPrivilegedUser(profile),
-           canBypassBilling: isGlobalPrivilegedUser(profile),
-           canUseAllFeatures: isGlobalPrivilegedUser(profile)
-         },
-         supportMode: isSupportMode,
-         protocolVersion: '1.0.0'
-     };
-     
-     const encodedContext = btoa(JSON.stringify(context));
-     const url = new URL(app.url);
-     url.searchParams.set('ecosystem_ctx', encodedContext);
-     
-     window.location.assign(url.toString());
-  } catch (e: any) {
-    console.error('[EcosystemLaunch] Failed to launch', e);
-    throw new Error(`Não foi possível iniciar o ${app.name} agora: ${e.message || 'Erro desconhecido'}`);
+    try {
+      handoff = await response.json();
+    } catch(e) {
+      throw new Error('A resposta de acesso ao MusicScale é inválida. Tente novamente.');
+    }
+    deps.markPerformance('handoff_completed');
+    break;
   }
+
+  if (!handoff || typeof handoff !== 'object' || 
+      handoff.appId !== 'musicscale' || 
+      handoff.protocolVersion !== '1.0.0' || 
+      handoff.orgId !== organization.id || 
+      handoff.uid !== user.uid || 
+      !handoff.customToken || typeof handoff.customToken !== 'string' || handoff.customToken.trim() === '' || handoff.customToken.length > 16384 ||
+      typeof handoff.expiresAt !== 'number' || !Number.isFinite(handoff.expiresAt) || 
+      handoff.expiresAt <= deps.now() || handoff.expiresAt > deps.now() + 600000 ||
+      typeof handoff.supportMode !== 'boolean') {
+    throw new Error('A resposta de acesso ao MusicScale é inválida. Tente novamente.');
+  }
+
+  const context = {
+      appId: handoff.appId,
+      orgId: handoff.orgId,
+      userId: handoff.uid,
+      customToken: handoff.customToken,
+      expiresAt: handoff.expiresAt,
+      supportMode: handoff.supportMode,
+      protocolVersion: handoff.protocolVersion
+  };
+  
+  const encodedContext = btoa(JSON.stringify(context));
+  const url = new URL(app.url);
+  url.searchParams.set('ecosystem_ctx', encodedContext);
+  
+  deps.assign(url.toString());
 }
