@@ -1,6 +1,6 @@
 import React from 'react';
-import { Music, Calendar, Users, QrCode, Wallet, LayoutGrid } from 'lucide-react';
-import { EcosystemApp } from '../../lib/apps.js';
+import { Music, Calendar, Users, QrCode, Wallet, ShieldCheck, CreditCard, LayoutGrid } from 'lucide-react';
+import type { EcosystemApp } from '../../lib/apps.js';
 
 interface EcosystemAppIconProps {
   app: EcosystemApp;
@@ -27,7 +27,10 @@ export function EcosystemAppIcon({ app, iconClassName = '', assetClassName = '' 
     app.icon === 'Users' ? Users :
     app.icon === 'QrCode' ? QrCode :
     app.icon === 'Wallet' ? Wallet :
+    app.icon === 'ShieldCheck' ? ShieldCheck :
+    app.icon === 'CreditCard' ? CreditCard :
     LayoutGrid;
 
   return <IconComponent className={iconClassName} />;
 }
+

@@ -112,14 +112,14 @@ export function EcosystemWorkspaceHome({
                     : 'bg-transparent border-transparent text-[#A0A7B5] hover:bg-white/5'
                 }`}
               >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#2B85EB] text-white shadow-md' : 'bg-white/5'}`}>
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#2B85EB] text-white shadow-md' : 'bg-white/5'}`}>
                    {app.id === 'musicscale' ? (
                      <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-5 h-5 object-contain" />
                    ) : (
                      <EcosystemAppIcon
                        app={app}
                        iconClassName="w-4 h-4"
-                       assetClassName="w-6 h-6"
+                       assetClassName="w-8 h-8"
                      />
                    )}
                 </div>
@@ -666,11 +666,11 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-2xl">
         <div className="bg-[#050505] border border-white/5 rounded-2xl p-8">
-           <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mb-6">
+           <div className="w-16 h-16 rounded-xl bg-white/5 flex items-center justify-center mb-6">
              <EcosystemAppIcon
                app={app}
                iconClassName="w-6 h-6 text-[#A0A7B5]"
-               assetClassName="w-10 h-10"
+               assetClassName="w-12 h-12"
              />
            </div>
            <h2 className="text-2xl font-bold text-white mb-2">{app.name}</h2>
