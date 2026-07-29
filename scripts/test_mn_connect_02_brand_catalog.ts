@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { ECOSYSTEM_APPS, getAvailableApps, getInstalledApps, EcosystemApp } from '../src/lib/apps.js';
 import { openEcosystemModule, EcosystemLauncherDependencies } from '../src/lib/ecosystemLauncher.js';
 import { EcosystemAppIcon } from '../src/components/apps/EcosystemAppIcon.js';
-import { ShieldCheck, CreditCard, LayoutGrid, Music } from 'lucide-react';
+import { ShieldCheck, CreditCard, LayoutGrid } from 'lucide-react';
 import type { User } from 'firebase/auth';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -84,6 +84,35 @@ async function runAll() {
     assert(!connectApp.landingRoute || connectApp.landingRoute.trim() === '', 'landingRoute is empty or undefined');
     
     assert(connectApp.url !== '#', 'url cannot be #');
+
+    // Comprovar ausência de contratos de acesso no Connect (enabledApps, appAccess, entitlement, entitlements, requiredEntitlement)
+    assert(!('enabledApps' in connectApp), 'Connect must not have enabledApps property');
+    assert(!('appAccess' in connectApp), 'Connect must not have appAccess property');
+    assert(!('entitlement' in connectApp), 'Connect must not have entitlement property');
+    assert(!('entitlements' in connectApp), 'Connect must not have entitlements property');
+    assert(!('requiredEntitlement' in connectApp), 'Connect must not have requiredEntitlement property');
+    
+    assert(!Object.prototype.hasOwnProperty.call(connectApp, 'enabledApps'), 'Connect must not possess enabledApps');
+    assert(!Object.prototype.hasOwnProperty.call(connectApp, 'appAccess'), 'Connect must not possess appAccess');
+    assert(!Object.prototype.hasOwnProperty.call(connectApp, 'entitlement'), 'Connect must not possess entitlement');
+    assert(!Object.prototype.hasOwnProperty.call(connectApp, 'entitlements'), 'Connect must not possess entitlements');
+    assert(!Object.prototype.hasOwnProperty.call(connectApp, 'requiredEntitlement'), 'Connect must not possess requiredEntitlement');
+
+    // Fortalecer a validação de destinos
+    const forbiddenDestinations = ['#', 'javascript:', 'localhost', '127.0.0.1', 'example.com', 'placeholder'];
+    const fieldsToTest = ['url', 'operationalUrl', 'internalRoute', 'landingRoute'] as const;
+    
+    for (const field of fieldsToTest) {
+      const val = connectApp[field];
+      assert(!val || val.trim() === '', `Field ${field} must be empty or undefined, got: ${val}`);
+      
+      if (val) {
+        const valLower = val.toLowerCase();
+        for (const pattern of forbiddenDestinations) {
+          assert(!valLower.includes(pattern), `Field ${field} contains forbidden pattern: ${pattern}`);
+        }
+      }
+    }
   });
 
   // B. ORDEM E INSTALAÇÃO
@@ -112,10 +141,20 @@ async function runAll() {
     const masterBuf = fs.readFileSync(masterPath);
     const publicBuf = fs.readFileSync(publicPath);
     
+    // Prova de igualdade byte a byte
     assert(Buffer.compare(masterBuf, publicBuf) === 0, 'arquivos de SVG são idênticos byte a byte');
     
-    const sha256 = crypto.createHash('sha256').update(publicBuf).digest('hex');
-    assert(sha256 === '2834f7fcf586a6f3465034df31cba32eb09bdf7dbedfad78f4d39048c062446c', `SHA-256 está correto: ${sha256}`);
+    // Cálculo independente dos dois hashes
+    const EXPECTED_SHA256 = '2834f7fcf586a6f3465034df31cba32eb09bdf7dbedfad78f4d39048c062446c';
+    const masterSha256 = crypto.createHash('sha256').update(masterBuf).digest('hex');
+    const publicSha256 = crypto.createHash('sha256').update(publicBuf).digest('hex');
+    
+    console.log(`  - Master SVG SHA-256: ${masterSha256}`);
+    console.log(`  - Public SVG SHA-256: ${publicSha256}`);
+    
+    assert(masterSha256 === EXPECTED_SHA256, `master SVG hash matches expected SHA-256`);
+    assert(publicSha256 === EXPECTED_SHA256, `public SVG hash matches expected SHA-256`);
+    assert(masterSha256 === publicSha256, `calculated hashes are identical`);
     
     const svgStr = publicBuf.toString('utf-8');
     assert(svgStr.startsWith('<svg'), 'inicia com a tag <svg');
@@ -254,15 +293,48 @@ async function runAll() {
     assert(workspaceStr.includes('w-16 h-16'), 'Workspace grande usa contêiner w-16 h-16');
     assert(workspaceStr.includes('assetClassName="w-12 h-12"'), 'Workspace grande usa asset w-12 h-12');
     
-    // MusicScale preserva seu asset
+    // MusicScale preserva seu asset legítimo
     assert(navbarStr.includes('/LogoIconMusicScale-1.png'), 'Navbar preserva logo png do MusicScale');
     assert(dashboardStr.includes('/LogoIconMusicScale-1.png'), 'Dashboard preserva logo png do MusicScale');
     assert(workspaceStr.includes('/LogoIconMusicScale-1.png'), 'Workspace preserva logo png do MusicScale');
     
-    // Sem wordmark horizontal ou PNG do Connect nos consumidores
-    assert(!navbarStr.includes('connect') || !navbarStr.includes('.png'), 'Navbar não possui PNG do Connect');
-    assert(!dashboardStr.includes('connect') || !dashboardStr.includes('.png'), 'Dashboard não possui PNG do Connect');
-    assert(!workspaceStr.includes('connect') || !workspaceStr.includes('.png'), 'Workspace não possui PNG do Connect');
+    // Nova Validação Robusta de PNG do Connect (Substitui checagem frágil)
+    const verifyConsumerAssets = (source: string, fileLabel: string) => {
+      const lowercase = source.toLowerCase();
+      
+      // Look for any string that contains 'connect' and ends with '.png' as a path/filename
+      const connectPngPattern = /[\w\-\.\/]*connect[\w\-\.\/]*\.png/gi;
+      const matches = lowercase.match(connectPngPattern);
+      assert(!matches || matches.length === 0, `${fileLabel} has forbidden Connect PNG references: ${matches ? matches.join(', ') : ''}`);
+      
+      // Explicit independent checks for forbidden PNG patterns
+      assert(!lowercase.includes('connect-mark-color.png'), `${fileLabel} has forbidden connect-mark-color.png`);
+      assert(!lowercase.includes('connect-mark-white.png'), `${fileLabel} has forbidden connect-mark-white.png`);
+      assert(!lowercase.includes('connect-mark.png'), `${fileLabel} has forbidden connect-mark.png`);
+      assert(!lowercase.includes('connect-logo-color.png'), `${fileLabel} has forbidden connect-logo-color.png`);
+      assert(!lowercase.includes('connect-logo.png'), `${fileLabel} has forbidden connect-logo.png`);
+      
+      // Explicit independent checks for forbidden Brand paths pointing to any PNG
+      const brandConnectPngPattern = /\/brand\/connect\/[^\s'">]*\.png/gi;
+      const brandMatches = lowercase.match(brandConnectPngPattern);
+      assert(!brandMatches || brandMatches.length === 0, `${fileLabel} has forbidden /brand/connect/ PNG: ${brandMatches ? brandMatches.join(', ') : ''}`);
+      
+      // Proibição Explícita de Wordmarks
+      assert(!lowercase.includes('connect-logo-horizontal'), `${fileLabel} contains connect-logo-horizontal`);
+      assert(!lowercase.includes('connect-logo-stacked'), `${fileLabel} contains connect-logo-stacked`);
+      assert(!lowercase.includes('connect-wordmark'), `${fileLabel} contains connect-wordmark`);
+      assert(!lowercase.includes('connect-logo-horiz'), `${fileLabel} contains connect-logo-horiz`);
+      assert(!lowercase.includes('connect_logo_horizontal'), `${fileLabel} contains connect_logo_horizontal`);
+      assert(!lowercase.includes('connect_logo_stacked'), `${fileLabel} contains connect_logo_stacked`);
+      assert(!lowercase.includes('connect_wordmark'), `${fileLabel} contains connect_wordmark`);
+      
+      // Confirm template PNG for MusicScale remains allowed and present
+      assert(source.includes('/LogoIconMusicScale-1.png'), `${fileLabel} must preserve the legitimate MusicScale PNG asset`);
+    };
+    
+    verifyConsumerAssets(navbarStr, 'Navbar.tsx');
+    verifyConsumerAssets(dashboardStr, 'Dashboard.tsx');
+    verifyConsumerAssets(workspaceStr, 'EcosystemWorkspaceHome.tsx');
   });
 
   // F. CONNECT NÃO EXECUTÁVEL
