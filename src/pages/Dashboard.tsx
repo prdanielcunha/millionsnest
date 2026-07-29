@@ -33,6 +33,7 @@ import { InviteModal } from "../components/InviteModal.js";
 import { UnifiedTimeline } from "../components/UnifiedTimeline.js";
 import { ECOSYSTEM_APPS, EcosystemApp } from "../lib/apps.js";
 import { ecosystemPlatform } from "../sdk/ecosystem.js";
+import { EcosystemAppIcon } from "../components/apps/EcosystemAppIcon.js";
 import { SupportHubProvider } from "../components/support/SupportHubContext.js";
 import { SupportHub } from "../components/support/SupportHub.js";
 import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js";
@@ -1660,13 +1661,6 @@ export function Dashboard() {
                                             app.category === 'beta' ? 'Em Breve' : 'Disponível';
                         }
 
-                        // Map internal icon string to lucide icons
-                        const Icon = app.icon === 'Music' ? Music : 
-                                     app.icon === 'Users' ? Users : 
-                                     app.icon === 'ShieldCheck' ? ShieldCheck : 
-                                     app.icon === 'CreditCard' ? CreditCard : 
-                                     app.icon === 'Wallet' ? Wallet : LayoutGrid;
-
                         return (
                           <div key={app.id} className="bg-[#050505] rounded-3xl p-5 border border-white/10 shadow-lg flex flex-col transition-all hover:border-white/20 relative overflow-hidden group">
                             {isInstalled && <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-0" />}
@@ -1675,7 +1669,11 @@ export function Dashboard() {
                                 {app.id === 'musicscale' ? (
                                   <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
                                 ) : (
-                                  <Icon className="w-5 h-5" />
+                                  <EcosystemAppIcon
+                                    app={app}
+                                    iconClassName="w-5 h-5"
+                                    assetClassName="w-10 h-10"
+                                  />
                                 )}
                               </div>
                               <span className={`px-2 py-1 text-[9px] font-bold rounded-md border uppercase tracking-widest shadow-sm ${

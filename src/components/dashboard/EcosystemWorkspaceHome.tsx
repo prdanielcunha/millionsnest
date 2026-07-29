@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemApp } from '../../lib/apps.js';
+import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
   AlertCircle, CircleHelp, CreditCard, Rocket, BookOpen, UserPlus, ChevronRight
@@ -112,7 +113,15 @@ export function EcosystemWorkspaceHome({
                 }`}
               >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#2B85EB] text-white shadow-md' : 'bg-white/5'}`}>
-                   {app.id === 'musicscale' ? <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-5 h-5 object-contain" /> : <LayoutGrid className="w-4 h-4" />}
+                   {app.id === 'musicscale' ? (
+                     <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-5 h-5 object-contain" />
+                   ) : (
+                     <EcosystemAppIcon
+                       app={app}
+                       iconClassName="w-4 h-4"
+                       assetClassName="w-6 h-6"
+                     />
+                   )}
                 </div>
                 <div className="text-left pr-2">
                   <p className="text-sm font-semibold">{app.name}</p>
@@ -658,7 +667,11 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-2xl">
         <div className="bg-[#050505] border border-white/5 rounded-2xl p-8">
            <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mb-6">
-             <LayoutGrid className="w-6 h-6 text-[#A0A7B5]" />
+             <EcosystemAppIcon
+               app={app}
+               iconClassName="w-6 h-6 text-[#A0A7B5]"
+               assetClassName="w-10 h-10"
+             />
            </div>
            <h2 className="text-2xl font-bold text-white mb-2">{app.name}</h2>
            <p className="text-[#A0A7B5] mb-8">{app.description}</p>

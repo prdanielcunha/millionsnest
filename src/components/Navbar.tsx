@@ -10,6 +10,7 @@ import { cn } from '../lib/utils.js';
 import { useTranslation } from 'react-i18next';
 import { ECOSYSTEM_APPS, type EcosystemApp } from '../lib/apps.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
+import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
 
 export function Navbar() {
   const { user, profile, logout } = useAuth();
@@ -152,25 +153,22 @@ export function Navbar() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     {myApps.map(app => {
-                      const Icon = app.icon === 'Music' ? Music :
-                                   app.icon === 'Users' ? Users :
-                                   app.icon === 'ShieldCheck' ? ShieldCheck :
-                                   app.icon === 'CreditCard' ? CreditCard :
-                                   app.icon === 'Wallet' ? Wallet :
-                                   app.icon === 'Calendar' ? Calendar :
-                                   app.icon === 'QrCode' ? QrCode : LayoutGrid;
-                      
                       return (
                         <div key={`active-${app.id}`} className="group relative flex flex-col p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all">
                           <div className="flex items-start gap-4">
                             <button
                               onClick={() => app.isInstalled ? handleLaunch(app) : null}
                               className={`flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-[10px] transition-all shadow-inner ${app.isInstalled ? 'bg-gradient-to-br from-[#2B85EB]/20 to-[#2B85EB]/5 text-[#2B85EB] border border-[#2B85EB]/20 cursor-pointer group-hover:scale-105' : 'bg-white/5 text-[#A0A7B5] cursor-default'}`}
+                              aria-label={app.name}
                             >
                               {app.id === 'musicscale' ? (
                                 <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
                               ) : (
-                                <Icon className="w-6 h-6" />
+                                <EcosystemAppIcon
+                                  app={app}
+                                  iconClassName="w-6 h-6"
+                                  assetClassName="w-10 h-10"
+                                />
                               )}
                             </button>
                             <div className="flex flex-col flex-1 min-w-0 pt-0.5">
@@ -213,21 +211,17 @@ export function Navbar() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     {discoverApps.map(app => {
-                      const Icon = app.icon === 'Music' ? Music :
-                                   app.icon === 'Users' ? Users :
-                                   app.icon === 'ShieldCheck' ? ShieldCheck :
-                                   app.icon === 'CreditCard' ? CreditCard :
-                                   app.icon === 'Wallet' ? Wallet :
-                                   app.icon === 'Calendar' ? Calendar :
-                                   app.icon === 'QrCode' ? QrCode : LayoutGrid;
-                      
                       return (
                         <div key={`soon-${app.id}`} className="flex items-start gap-4 p-3 rounded-xl bg-white/[0.02] border border-white/[0.02] opacity-70 hover:opacity-100 transition-opacity">
                           <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-[10px] bg-white/5 text-[#A0A7B5] border border-white/5">
                             {app.id === 'musicscale' ? (
                               <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-6 h-6 object-contain opacity-50 grayscale" />
                             ) : (
-                              <Icon className="w-5 h-5" />
+                              <EcosystemAppIcon
+                                app={app}
+                                iconClassName="w-5 h-5"
+                                assetClassName="w-10 h-10"
+                              />
                             )}
                           </div>
                           <div className="flex flex-col flex-1 min-w-0 pt-0.5">

@@ -4,6 +4,7 @@ export interface EcosystemApp {
   description: string;
   shortDescription?: string;
   icon: string; // lucide class or identifier
+  iconAsset?: string;
   url?: string;
   operationalUrl?: string;
   internalRoute?: string;
@@ -41,6 +42,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     description: 'MillionsNest Connect',
     shortDescription: 'MillionsNest Connect',
     icon: 'LayoutGrid',
+    iconAsset: '/brand/connect/v2/connect-mark-color.svg',
     status: 'coming_soon',
     primaryAction: 'disabled',
     badgeLabelKey: 'footer_soon',
