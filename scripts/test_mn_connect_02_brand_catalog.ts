@@ -104,14 +104,14 @@ async function runAll() {
     
     for (const field of fieldsToTest) {
       const val = connectApp[field];
-      assert(!val || val.trim() === '', `Field ${field} must be empty or undefined, got: ${val}`);
+      const valStr = typeof val === 'string' ? val : (val === null || val === undefined ? '' : String(val));
+      const valLower = valStr.toLowerCase();
       
-      if (val) {
-        const valLower = val.toLowerCase();
-        for (const pattern of forbiddenDestinations) {
-          assert(!valLower.includes(pattern), `Field ${field} contains forbidden pattern: ${pattern}`);
-        }
+      for (const pattern of forbiddenDestinations) {
+        assert(!valLower.includes(pattern), `Field ${field} contains forbidden pattern: ${pattern}`);
       }
+      
+      assert(valStr.trim() === '', `Field ${field} must be empty or undefined, got: ${val}`);
     }
   });
 
