@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext.js';
 import { Building2, Users, LayoutGrid, Check, Server, Shield, Sparkles, MapPin, ChevronRight, User, X, Loader2, Link } from 'lucide-react';
-import { NestFinanceLogo } from '../components/brand/NestFinanceLogo.js';
+import { EcosystemAppIcon } from '../components/apps/EcosystemAppIcon.js';
+import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
 import { ECOSYSTEM_APPS } from '../lib/apps.js';
 import { addDoc, collection } from 'firebase/firestore';
 import { db } from '../lib/firebase.js';
@@ -139,7 +140,7 @@ export function OrganizationPublicPage() {
   if (error === 'NotFound' || !org) {
     return (
       <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-6 text-center">
-        <NestFinanceLogo layout="symbol" className="h-12 w-12 mb-8 opacity-50 grayscale" />
+        <MillionsNestLogo className="h-10 w-auto mb-8 opacity-50" />
         <div className="w-20 h-20 bg-white/5 rounded-2xl flex items-center justify-center mb-6 border border-white/10">
           <Building2 className="w-8 h-8 text-[#A0A7B5]" />
         </div>
@@ -178,7 +179,7 @@ export function OrganizationPublicPage() {
       <nav className="border-b border-white/5 bg-[#050505]/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <button onClick={() => navigate('/')} className="hover:opacity-80 transition-opacity">
-            <NestFinanceLogo layout="horizontal" compact surface="dark" className="h-7 w-auto" />
+            <MillionsNestLogo className="h-7 w-auto" />
           </button>
           
           <div className="flex items-center gap-4">

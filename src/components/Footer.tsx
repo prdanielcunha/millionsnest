@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { NestFinanceLogo } from './brand/NestFinanceLogo.js';
+import { MillionsNestLogo } from "./MillionsNestLogo.js";
 import { getAvailableApps } from '../lib/apps.js';
 import { createPublicSalesWhatsAppLink, resolvePublicContactLocale } from '../services/publicContactClient.js';
 import { Loader2 } from 'lucide-react';
@@ -56,8 +56,9 @@ export function Footer() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-12 mb-16">
           <div className="sm:col-span-2 md:col-span-1 lg:col-span-2">
-            <Link to="/" className="flex mb-6">
-              <NestFinanceLogo layout="horizontal" tagline={true} surface="dark" loading="lazy" decoding="async" className="h-10 md:h-[52px] w-[190px] md:w-[230px] opacity-90 hover:opacity-100 transition-opacity" />
+            <Link to="/" className="flex items-center gap-3 mb-6">
+              <MillionsNestLogo loading="lazy" decoding="async" className="h-8 md:h-10 w-auto opacity-90 hover:opacity-100 transition-opacity" />
+              <span className="font-semibold text-lg tracking-tight text-[#F5F7FA]">MillionsNest</span>
             </Link>
             <p className="text-sm font-normal text-[#A0A7B5] max-w-sm leading-relaxed">
               {t('footer_tag')}
