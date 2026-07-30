@@ -1,9 +1,12 @@
+
 import { resolveEcosystemAppAccess, DENIAL_REASONS } from '../src/server/services/EcosystemAccessResolver.js';
 import { canAccessNestFinanceDevelopment } from '../src/lib/permissionService.js';
 
 let passed = 0;
 let failed = 0;
 let assertions = 0;
+let networkAttempts = 0;
+let writeAttempts = 0;
 
 function assert(condition: boolean, message: string) {
   assertions++;
@@ -43,67 +46,209 @@ class MockFirestore {
       doc: (id: string) => ({ get: async () => new MockDoc(id, this.collections[path][id]) })
     };
   }
+
+  // Intercept writes
+  async runTransaction() { writeAttempts++; return null; }
+  batch() { return { commit: async () => { writeAttempts++; }, set: () => {}, update: () => {}, delete: () => {} }; }
 }
 
 async function runTests() {
   console.log('--- TEST MN NESTFINANCE DEV GATE ---');
 
-  // Test canAccessNestFinanceDevelopment
-  assert(canAccessNestFinanceDevelopment('ceo'), 'ceo permitido');
-  assert(canAccessNestFinanceDevelopment('global_admin'), 'global_admin permitido');
-  assert(canAccessNestFinanceDevelopment('ecosystem_owner'), 'ecosystem_owner permitido');
-  assert(!canAccessNestFinanceDevelopment('founder'), 'founder negado');
-  assert(!canAccessNestFinanceDevelopment('admin'), 'admin negado');
-  assert(!canAccessNestFinanceDevelopment('ecosystem_support'), 'ecosystem_support negado');
-  assert(!canAccessNestFinanceDevelopment(null), 'null negado');
+  // Intercept network
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { networkAttempts++; return new Response(); };
 
-  const db = new MockFirestore() as any;
+  try {
+    // 1-3. canAccessNestFinanceDevelopment logic
+    assert(canAccessNestFinanceDevelopment('ceo'), 'ceo permitido na function');
+    assert(canAccessNestFinanceDevelopment('global_admin'), 'global_admin permitido na function');
+    assert(canAccessNestFinanceDevelopment('ecosystem_owner'), 'ecosystem_owner permitido na function');
+    assert(!canAccessNestFinanceDevelopment('founder'), 'founder negado na function');
+    assert(!canAccessNestFinanceDevelopment('admin'), 'admin negado na function');
+    assert(!canAccessNestFinanceDevelopment('ecosystem_support'), 'ecosystem_support negado na function');
+    assert(!canAccessNestFinanceDevelopment(null as any), 'null negado na function');
+    assert(!canAccessNestFinanceDevelopment(undefined as any), 'undefined negado na function');
+    assert(!canAccessNestFinanceDevelopment(''), 'string vazia negada na function');
 
-  // Setup basic active org
-  db.collections.organizations['org1'] = { status: 'active', enabledApps: ['nestfinance'] };
-  
-  // Test ceo access
-  db.collections.users['u_ceo'] = { status: 'active', systemRole: 'ceo' };
-  db.collections.organizations['org1'] = { status: 'active', enabledApps: ['nestfinance'] };
-  let result = await resolveEcosystemAppAccess({ uid: 'u_ceo', organizationId: 'org1', appId: 'nestfinance', db });
-  assert(result.accessible === true && result.decisionState === 'granted', 'ceo allowed in resolver');
+    const runCase = async (uid: string | null, orgId: string | null, setupDb: (db: any) => void) => {
+      const db = new MockFirestore() as any;
+      setupDb(db);
+      return await resolveEcosystemAppAccess({ uid, organizationId: orgId, appId: 'nestfinance', db });
+    };
 
-  // Test founder access
-  db.collections.users['u_founder'] = { status: 'active', systemRole: 'founder' };
-  result = await resolveEcosystemAppAccess({ uid: 'u_founder', organizationId: 'org1', appId: 'nestfinance', db });
-  assert(result.accessible === false && result.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'founder denied in resolver');
+    // 1. ceo permitido
+    let res = await runCase('u1', 'o1', (db) => {
+      db.collections.users['u1'] = { status: 'active', systemRole: 'ceo' };
+      db.collections.organizations['o1'] = { status: 'active' };
+    });
+    assert(res.accessible === true && res.decisionState === 'granted', 'ceo permitido');
 
-  // Test member with owner org role and app enabled/entitled
-  db.collections.users['u_owner'] = { status: 'active', systemRole: null };
-  db.collections.organizations['org1'].entitlements = { nestfinance: { active: true } };
-  if (!db.collections.members) db.collections.members = {};
-  db.collections.members['org1'] = {
-    'u_owner': { status: 'active', role: 'owner', appAccess: { nestFinance: { enabled: true } } }
-  };
-  result = await resolveEcosystemAppAccess({ uid: 'u_owner', organizationId: 'org1', appId: 'nestfinance', db });
-  assert(result.accessible === false && result.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'org owner denied in resolver');
+    // 2. global_admin permitido
+    res = await runCase('u2', 'o2', (db) => {
+      db.collections.users['u2'] = { status: 'active', systemRole: 'global_admin' };
+      db.collections.organizations['o2'] = { status: 'active' };
+    });
+    assert(res.accessible === true && res.decisionState === 'granted', 'global_admin permitido');
 
-  // Test inactive user
-  db.collections.users['u_inactive_ceo'] = { status: 'inactive', systemRole: 'ceo' };
-  result = await resolveEcosystemAppAccess({ uid: 'u_inactive_ceo', organizationId: 'org1', appId: 'nestfinance', db });
-  assert(result.accessible === false && result.denialReason === DENIAL_REASONS.USER_INACTIVE, 'inactive user denied before dev gate');
+    // 3. ecosystem_owner permitido
+    res = await runCase('u3', 'o3', (db) => {
+      db.collections.users['u3'] = { status: 'active', systemRole: 'ecosystem_owner' };
+      db.collections.organizations['o3'] = { status: 'active' };
+    });
+    assert(res.accessible === true && res.decisionState === 'granted', 'ecosystem_owner permitido');
 
-  // Test missing org id
-  result = await resolveEcosystemAppAccess({ uid: 'u_ceo', organizationId: null, appId: 'nestfinance', db });
-  assert(result.accessible === false && result.denialReason === DENIAL_REASONS.ORGANIZATION_REQUIRED, 'organizationId required');
+    // 4. founder negado
+    res = await runCase('u4', 'o4', (db) => {
+      db.collections.users['u4'] = { status: 'active', systemRole: 'founder' };
+      db.collections.organizations['o4'] = { status: 'active' };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'founder negado');
 
-  // Test missing org
-  result = await resolveEcosystemAppAccess({ uid: 'u_ceo', organizationId: 'missing_org', appId: 'nestfinance', db });
-  assert(result.accessible === false && result.denialReason === DENIAL_REASONS.ORGANIZATION_NOT_FOUND, 'organization nonexistent denied');
+    // 5. admin legado negado
+    res = await runCase('u5', 'o5', (db) => {
+      db.collections.users['u5'] = { status: 'active', systemRole: 'admin' };
+      db.collections.organizations['o5'] = { status: 'active' };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'admin legado negado');
 
-  // Test inactive org
-  db.collections.organizations['org2'] = { status: 'inactive' };
-  result = await resolveEcosystemAppAccess({ uid: 'u_ceo', organizationId: 'org2', appId: 'nestfinance', db });
-  assert(result.accessible === false && result.denialReason === DENIAL_REASONS.ORGANIZATION_INACTIVE, 'organization inactive denied');
+    // 6. ecosystem_support negado
+    res = await runCase('u6', 'o6', (db) => {
+      db.collections.users['u6'] = { status: 'active', systemRole: 'ecosystem_support' };
+      db.collections.organizations['o6'] = { status: 'active' };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'ecosystem_support negado');
 
-  // Test MusicScale preserves behavior for founder
-  result = await resolveEcosystemAppAccess({ uid: 'u_founder', organizationId: 'org1', appId: 'musicscale', db });
-  assert(result.accessible === true && result.decisionState === 'granted', 'MusicScale preserves access for founder');
+    // 7. sem systemRole negado
+    res = await runCase('u7', 'o7', (db) => {
+      db.collections.users['u7'] = { status: 'active' };
+      db.collections.organizations['o7'] = { status: 'active' };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'sem systemRole negado');
+
+    // 8. owner org negado
+    res = await runCase('u8', 'o8', (db) => {
+      db.collections.users['u8'] = { status: 'active' };
+      db.collections.organizations['o8'] = { status: 'active' };
+      db.collections.members = { 'o8': { 'u8': { status: 'active', role: 'owner' } } };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'owner de org negado');
+
+    // 9. admin org negado
+    res = await runCase('u9', 'o9', (db) => {
+      db.collections.users['u9'] = { status: 'active' };
+      db.collections.organizations['o9'] = { status: 'active' };
+      db.collections.members = { 'o9': { 'u9': { status: 'active', role: 'admin' } } };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'admin de org negado');
+
+    // 10. membro comum negado
+    res = await runCase('u10', 'o10', (db) => {
+      db.collections.users['u10'] = { status: 'active' };
+      db.collections.organizations['o10'] = { status: 'active' };
+      db.collections.members = { 'o10': { 'u10': { status: 'active', role: 'member' } } };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'membro comum negado');
+
+    // 11. UID ausente negado
+    res = await runCase(null, 'o11', (db) => {});
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.UNAUTHENTICATED, 'UID ausente negado');
+
+    // 12. usuário inativo negado
+    res = await runCase('u12', 'o12', (db) => {
+      db.collections.users['u12'] = { status: 'inactive', systemRole: 'ceo' };
+      db.collections.organizations['o12'] = { status: 'active' };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.USER_INACTIVE, 'usuário inativo negado');
+
+    // 13. orgId ausente negado
+    res = await runCase('u13', null, (db) => {
+      db.collections.users['u13'] = { status: 'active', systemRole: 'ceo' };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.ORGANIZATION_REQUIRED, 'orgId ausente negado');
+
+    // 14. organização inexistente negada
+    res = await runCase('u14', 'o14', (db) => {
+      db.collections.users['u14'] = { status: 'active', systemRole: 'ceo' };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.ORGANIZATION_NOT_FOUND, 'organização inexistente negada');
+
+    // 15. organização inativa negada
+    res = await runCase('u15', 'o15', (db) => {
+      db.collections.users['u15'] = { status: 'active', systemRole: 'ceo' };
+      db.collections.organizations['o15'] = { status: 'inactive' };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.ORGANIZATION_INACTIVE, 'organização inativa negada');
+
+    // 16. enabledApps isolado
+    res = await runCase('u16', 'o16', (db) => {
+      db.collections.users['u16'] = { status: 'active' };
+      db.collections.organizations['o16'] = { status: 'active', enabledApps: ['nestfinance'] };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'enabledApps isoladamente não libera');
+
+    // 17. entitlement ativo isolado
+    res = await runCase('u17', 'o17', (db) => {
+      db.collections.users['u17'] = { status: 'active' };
+      db.collections.organizations['o17'] = { status: 'active', entitlements: { nestfinance: { active: true } } };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'entitlement ativo isoladamente não libera');
+
+    // 18. appAccess enabled isolado
+    res = await runCase('u18', 'o18', (db) => {
+      db.collections.users['u18'] = { status: 'active' };
+      db.collections.organizations['o18'] = { status: 'active' };
+      db.collections.members = { 'o18': { 'u18': { status: 'active', appAccess: { nestFinance: { enabled: true } } } } };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'appAccess enabled isoladamente não libera');
+
+    // 19. enabledApps + entitlement ativos
+    res = await runCase('u19', 'o19', (db) => {
+      db.collections.users['u19'] = { status: 'active' };
+      db.collections.organizations['o19'] = { status: 'active', enabledApps: ['nestfinance'], entitlements: { nestfinance: { active: true } } };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'enabledApps + entitlement ativos não liberam');
+
+    // 20. enabledApps + appAccess
+    res = await runCase('u20', 'o20', (db) => {
+      db.collections.users['u20'] = { status: 'active' };
+      db.collections.organizations['o20'] = { status: 'active', enabledApps: ['nestfinance'] };
+      db.collections.members = { 'o20': { 'u20': { status: 'active', appAccess: { nestFinance: { enabled: true } } } } };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'enabledApps + appAccess não liberam');
+
+    // 21. entitlement + appAccess
+    res = await runCase('u21', 'o21', (db) => {
+      db.collections.users['u21'] = { status: 'active' };
+      db.collections.organizations['o21'] = { status: 'active', entitlements: { nestfinance: { active: true } } };
+      db.collections.members = { 'o21': { 'u21': { status: 'active', appAccess: { nestFinance: { enabled: true } } } } };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'entitlement + appAccess não liberam');
+
+    // 22. enabledApps + entitlement + appAccess
+    res = await runCase('u22', 'o22', (db) => {
+      db.collections.users['u22'] = { status: 'active' };
+      db.collections.organizations['o22'] = { status: 'active', enabledApps: ['nestfinance'], entitlements: { nestfinance: { active: true } } };
+      db.collections.members = { 'o22': { 'u22': { status: 'active', appAccess: { nestFinance: { enabled: true } } } } };
+    });
+    assert(res.accessible === false && res.denialReason === DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED, 'enabledApps + entitlement + appAccess não liberam');
+
+    // 23. MusicScale preserva comportamento para founder
+    const dbMS = new MockFirestore() as any;
+    dbMS.collections.users['u23'] = { status: 'active', systemRole: 'founder' };
+    dbMS.collections.organizations['o23'] = { status: 'active' };
+    let resMS = await resolveEcosystemAppAccess({ uid: 'u23', organizationId: 'o23', appId: 'musicscale', db: dbMS });
+    assert(resMS.accessible === true && resMS.decisionState === 'granted', 'MusicScale preserva comportamento para founder');
+
+    // 24. nenhuma chamada de rede
+    assert(networkAttempts === 0, 'nenhuma chamada de rede ocorreu');
+
+    // 25. nenhuma escrita, batch ou transaction
+    assert(writeAttempts === 0, 'nenhuma escrita, batch ou transaction ocorreu');
+
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 
   console.log('--- SUMMARY ---');
   console.log(`Total: ${assertions}`);
@@ -111,7 +256,7 @@ async function runTests() {
   console.log(`Failed: ${failed}`);
   console.log(`Skipped: 0`);
   console.log(`Assertions: ${assertions}`);
-  
+
   if (failed > 0) {
     process.exit(1);
   }

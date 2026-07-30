@@ -269,10 +269,12 @@ export function Dashboard() {
   const [nestFinanceLaunching, setNestFinanceLaunching] = useState(false);
 
   const handleLaunchNestFinance = async () => {
-    if (!hasNestFinanceDevelopmentAccess) {
+    if (!canLaunchNestFinance) {
+      if (!nestFinanceLaunching) {
+        feedback.error('O acesso ao NestFinance não está disponível neste momento.');
+      }
       return;
     }
-    if (!user || !activeContextOrgId || nestFinanceLaunching) return;
 
     setNestFinanceLaunching(true);
     const toastId = feedback.loading("Preparando acesso...");
@@ -389,7 +391,12 @@ export function Dashboard() {
       || profile?.primaryOrganizationId 
       || profile?.organizationId;
     
-  const canLaunchNestFinance = hasNestFinanceDevelopmentAccess && nestFinanceLaunchEnabled && !nestFinanceLaunching;
+  const canLaunchNestFinance =
+    Boolean(user) &&
+    Boolean(activeContextOrgId) &&
+    hasNestFinanceDevelopmentAccess &&
+    nestFinanceLaunchEnabled &&
+    !nestFinanceLaunching;
 
   useEffect(() => {
     if (isGlobalAdmin && adminSelectedOrgId && user) {
@@ -1240,7 +1247,7 @@ export function Dashboard() {
   const msIsInstalled = musicScaleProjection?.accessible === true;
 
   const installedApps = ECOSYSTEM_APPS.filter(app => {
-    if (app.id === 'nestfinance' && !hasNestFinanceDevelopmentAccess) return false;
+    if (app.id === 'nestfinance') return false;
     if (app.id === 'musicscale') return msIsInstalled;
     return organization?.enabledApps?.includes(app.id);
   });
@@ -1633,12 +1640,19 @@ export function Dashboard() {
                         return true;
                       }).map(app => {
                         const isMusicScale = app.id === 'musicscale';
-                        const isInstalled = isMusicScale ? msIsInstalled : organization?.enabledApps?.includes(app.id);
+                        const isNestFinance = app.id === 'nestfinance';
+                        const isInstalled = isNestFinance
+                          ? false
+                          : isMusicScale
+                            ? msIsInstalled
+                            : organization?.enabledApps?.includes(app.id);
 
                         let cardStatusText = t('dashboard.apps.available', 'Disponível');
                         let isWarningState = false;
 
-                        if (isMusicScale) {
+                        if (isNestFinance) {
+                          cardStatusText = t('footer_soon', 'Em breve');
+                        } else if (isMusicScale) {
                            if (musicScaleProjectionError) {
                                cardStatusText = t('error', 'Erro');
                                isWarningState = true;
