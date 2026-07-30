@@ -16,6 +16,7 @@ import { resolveSubscriptionPurchaseEligibility } from './src/server/services/Su
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { handleEcosystemAccessProjectionRequest } from './src/server/services/EcosystemAccessProjectionService.js';
+import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
 import { 
@@ -4418,6 +4419,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       getDb: () => db || null,
       resolveAccess: resolveEcosystemAppAccess,
       now: () => Date.now(),
+      logger: console
+    });
+  });
+
+  app.get('/api/ecosystem/connect/session-context', async (req, res) => {
+    return handleConnectSessionContextRequest(req, res, {
+      verifyIdToken: (token) => admin.auth().verifyIdToken(token),
+      getDb: () => db || null,
       logger: console
     });
   });
