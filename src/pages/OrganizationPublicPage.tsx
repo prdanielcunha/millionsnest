@@ -281,11 +281,11 @@ export function OrganizationPublicPage() {
                        <motion.div key={app.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + (idx * 0.05) }} className="bg-[#0A0D14] border border-white/5 rounded-2xl p-5 hover:bg-[#0F1219] hover:border-white/10 transition-all flex flex-col justify-between h-full">
                          <div>
                             <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB] mb-4">
-                               <EcosystemAppIcon
-                              app={app}
-                              iconClassName="w-6 h-6"
-                              assetClassName="w-10 h-10"
-                            /> 
+                              <EcosystemAppIcon
+                                app={app}
+                                iconClassName="w-6 h-6"
+                                assetClassName="w-10 h-10"
+                              />
                             </div>
                             <h3 className="text-lg font-semibold text-white mb-2">{app.name}</h3>
                             <p className="text-sm text-[#A0A7B5] mb-6">{app.description}</p>
