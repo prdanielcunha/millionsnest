@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { CalendarDays, Users, QrCode, Music, MessageSquare, BarChart3, Bot } from "lucide-react";
+import { CalendarDays, Users, QrCode, Music, MessageSquare, Bot } from "lucide-react";
 import { useTranslation, Trans } from 'react-i18next';
 import { useNavigate } from "react-router-dom";
 
