@@ -364,7 +364,7 @@ async function runAll() {
   });
 
   // G. REGRESSÃO
-  await runTest('G. REGRESSÃO', () => {
+  await runTest('G. REGRESSÃO', async () => {
     const musicscale = ECOSYSTEM_APPS.find(a => a.id === 'musicscale')!;
     assert(musicscale.status === 'active', 'musicscale continua active');
     assert(musicscale.primaryAction === 'open', 'musicscale continua com primaryAction open');
@@ -372,7 +372,31 @@ async function runAll() {
     
     const nestfinance = ECOSYSTEM_APPS.find(a => a.id === 'nestfinance')!;
     assert(nestfinance.status === 'coming_soon', 'nestfinance continua coming_soon');
+    
     assert(nestfinance.primaryAction === 'disabled', 'nestfinance continua disabled');
+    assert(nestfinance.iconAsset === '/brand/nestfinance/nest-flow-signature/v1/symbols/nestfinance-symbol-vector-gradient-compact.svg', 'catálogo usa o asset compacto');
+    
+    // Check SVGs
+    const fsMod = await import('fs');
+    const path = await import('path');
+    const compactPath = path.resolve(process.cwd(), 'public' + nestfinance.iconAsset);
+    assert(fsMod.existsSync(compactPath), 'SVG compacto existe');
+    
+    const compactContent = fsMod.readFileSync(compactPath, 'utf8');
+    assert(compactContent.includes('viewBox="133 90 366 366"'), 'o viewBox é exatamente 133 90 366 366');
+    
+    const origPath = compactPath.replace('-compact.svg', '.svg');
+    assert(fsMod.existsSync(origPath), 'o SVG original continua existindo');
+    
+    const origContent = fsMod.readFileSync(origPath, 'utf8');
+    assert(origContent.includes('viewBox="0 0 512 512"'), 'SVG original intacto');
+    
+    assert(nestfinance.icon === 'Wallet', 'Wallet permanece fallback');
+    
+    const connectApp = ECOSYSTEM_APPS.find(a => a.id === 'connect')!;
+    assert(connectApp.status === 'coming_soon', 'Connect permanece intacto');
+    assert(connectApp.primaryAction === 'disabled', 'Connect action permanece disabled');
+
     
     // Testar se os identificadores ShieldCheck e CreditCard não caem silenciosamente em LayoutGrid
     const renderShield = EcosystemAppIcon({

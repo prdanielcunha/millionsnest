@@ -292,8 +292,14 @@ export function OrganizationPublicPage() {
                          </div>
                          
                          <div className="flex items-center justify-between mt-auto">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-[#A0A7B5]">Módulo Ativo</span>
-                            {user && isMember ? (
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-[#A0A7B5]">
+                              {app.id === 'nestfinance' ? 'Em breve' : 'Módulo Ativo'}
+                            </span>
+                            {app.id === 'nestfinance' ? (
+                               <button disabled className="text-sm font-medium text-white/50 cursor-not-allowed opacity-60">
+                                 Em breve
+                               </button>
+                            ) : user && isMember ? (
                                <button onClick={() => {
                                  if (app.id === 'musicscale') {
                                     import('../packages/events/index.js').then(({ eventBus }) => {

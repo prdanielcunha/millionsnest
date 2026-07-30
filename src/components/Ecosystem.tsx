@@ -19,7 +19,7 @@ export function Ecosystem() {
     {
       title: t('eco_finance_title', 'NestFinance'),
       icon: <img
-    src="/brand/nestfinance/nest-flow-signature/v1/symbols/nestfinance-symbol-vector-gradient.svg"
+    src="/brand/nestfinance/nest-flow-signature/v1/symbols/nestfinance-symbol-vector-gradient-compact.svg"
     alt=""
     aria-hidden="true"
     draggable={false}

@@ -20,7 +20,7 @@ import { feedback } from '../packages/ui/feedback.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from "../lib/musicScalePlans.js";
 import { canPurchasePlanAgain, isSubscriptionValid, normalizeDateToMs } from "../lib/subscriptionHelpers.js";
-import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
+import { isGlobalPrivilegedUser, canAccessNestFinanceDevelopment } from "../lib/permissionService.js";
 import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
 import { getInviteableOrganizationRolesForActor, getOrganizationRoleLabel } from "../lib/organizationRoles.js";
@@ -269,6 +269,9 @@ export function Dashboard() {
   const [nestFinanceLaunching, setNestFinanceLaunching] = useState(false);
 
   const handleLaunchNestFinance = async () => {
+    if (!hasNestFinanceDevelopmentAccess) {
+      return;
+    }
     if (!user || !activeContextOrgId || nestFinanceLaunching) return;
 
     setNestFinanceLaunching(true);
@@ -378,6 +381,7 @@ export function Dashboard() {
 
   const [adminSelectedOrgId, setAdminSelectedOrgId] = useState<string | null>(null);
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+  const hasNestFinanceDevelopmentAccess = canAccessNestFinanceDevelopment(profile?.systemRole);
   const activeContextOrgId = isGlobalAdmin && adminSelectedOrgId 
     ? adminSelectedOrgId 
     : canonicalContext?.activeOrganizationId 
@@ -385,7 +389,7 @@ export function Dashboard() {
       || profile?.primaryOrganizationId 
       || profile?.organizationId;
     
-  const canLaunchNestFinance = isGlobalAdmin && nestFinanceLaunchEnabled && !nestFinanceLaunching;
+  const canLaunchNestFinance = hasNestFinanceDevelopmentAccess && nestFinanceLaunchEnabled && !nestFinanceLaunching;
 
   useEffect(() => {
     if (isGlobalAdmin && adminSelectedOrgId && user) {
@@ -1236,7 +1240,7 @@ export function Dashboard() {
   const msIsInstalled = musicScaleProjection?.accessible === true;
 
   const installedApps = ECOSYSTEM_APPS.filter(app => {
-    if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
+    if (app.id === 'nestfinance' && !hasNestFinanceDevelopmentAccess) return false;
     if (app.id === 'musicscale') return msIsInstalled;
     return organization?.enabledApps?.includes(app.id);
   });
@@ -1625,7 +1629,7 @@ export function Dashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {ECOSYSTEM_APPS.filter(app => {
                         // Restrict NestFinance preview to global admins
-                        if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
+                        if (app.id === 'nestfinance' && !hasNestFinanceDevelopmentAccess) return false;
                         return true;
                       }).map(app => {
                         const isMusicScale = app.id === 'musicscale';
@@ -1657,7 +1661,7 @@ export function Dashboard() {
                            }
                         } else {
                            cardStatusText = isInstalled ? 'Instalado' : 
-                                            (app.id === 'nestfinance' && nestFinanceLaunchEnabled) ? 'Disponível' :
+                                            
                                             app.category === 'beta' ? 'Em Breve' : 'Disponível';
                         }
 
@@ -1679,7 +1683,7 @@ export function Dashboard() {
                               <span className={`px-2 py-1 text-[9px] font-bold rounded-md border uppercase tracking-widest shadow-sm ${
                                 isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 
                                 isWarningState ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                (app.id === 'nestfinance' && nestFinanceLaunchEnabled) ? 'bg-[#F5F7FA]/10 text-[#F5F7FA] border-[#F5F7FA]/20' :
+                                
                                 'bg-white/5 text-[#A0A7B5] border-white/10'
                               }`}>
                                 {cardStatusText}
@@ -1701,7 +1705,7 @@ export function Dashboard() {
                                     disabled={!canLaunchNestFinance}
                                     className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-wait"
                                   >
-                                    {nestFinanceLaunching ? 'Preparando acesso...' : 'Abrir NestFinance'} <ArrowRight className="w-3.5 h-3.5" />
+                                    {nestFinanceLaunching ? 'Preparando acesso...' : 'Acessar desenvolvimento'} <ArrowRight className="w-3.5 h-3.5" />
                                   </button>
                                 ) : (
                                   <button
