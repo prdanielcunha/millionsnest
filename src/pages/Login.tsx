@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { parseInvitationRedirectPath } from "../lib/InvitationRedirectPolicy.js";
 import { useTranslation } from "react-i18next";
-import { MillionsNestLogo } from "../components/MillionsNestLogo.js";
+import { NestFinanceLogo } from '../components/brand/NestFinanceLogo.js';
 
 export function Login() {
   const { user, profile, loading: authLoading } = useAuth();
@@ -125,7 +125,7 @@ export function Login() {
         <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none rounded-[2rem]" />
         
         <div className="flex justify-center mb-10">
-          <MillionsNestLogo className="h-12 w-auto opacity-100" />
+          <NestFinanceLogo layout="vertical" surface="dark" className="w-[160px] md:w-[200px] h-auto mx-auto opacity-100" />
         </div>
         
         <h2 className="text-2xl font-semibold text-[#F5F7FA] text-center tracking-tight mb-2">

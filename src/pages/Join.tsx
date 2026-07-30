@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.js';
 import { motion } from 'framer-motion';
 import { Loader2, CheckCircle2, XCircle, ArrowRight, RefreshCw } from 'lucide-react';
-import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
+import { NestFinanceLogo } from '../components/brand/NestFinanceLogo.js';
 import {
   InvitationJoinLanguage,
   normalizeInvitationJoinLanguage,
@@ -205,7 +205,7 @@ export function Join() {
         aria-busy={status === 'validating'}
       >
         <div className="flex justify-center mb-8">
-           <MillionsNestLogo className="h-10 w-auto" />
+           <NestFinanceLogo layout="vertical" surface="dark" className="w-[160px] md:w-[200px] h-auto mx-auto opacity-100" />
         </div>
 
         {status === 'validating' && (

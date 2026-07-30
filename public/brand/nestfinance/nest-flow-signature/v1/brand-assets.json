@@ -1,0 +1,107 @@
+{
+  "version": "v1",
+  "concept": "Nest Flow Signature",
+  "generatedFrom": "NestFinance_Nest_Flow_Signature_Kit_Completo_v1",
+  "assets": [
+    {
+      "asset": "nestfinance-logo-horizontal-transparent-dark-ui.svg",
+      "path": "/brand/nestfinance/nest-flow-signature/v1/logos/nestfinance-logo-horizontal-transparent-dark-ui.svg",
+      "width": "auto",
+      "height": "auto",
+      "format": "svg",
+      "transparent": true,
+      "intendedSurface": "dark",
+      "intendedUse": "header, auth, footer on dark background"
+    },
+    {
+      "asset": "nestfinance-logo-horizontal-transparent-light-ui.svg",
+      "path": "/brand/nestfinance/nest-flow-signature/v1/logos/nestfinance-logo-horizontal-transparent-light-ui.svg",
+      "width": "auto",
+      "height": "auto",
+      "format": "svg",
+      "transparent": true,
+      "intendedSurface": "light",
+      "intendedUse": "header, docs, light background areas"
+    },
+    {
+      "asset": "nestfinance-logo-horizontal-no-tagline-dark.svg",
+      "path": "/brand/nestfinance/nest-flow-signature/v1/logos/nestfinance-logo-horizontal-no-tagline-dark.svg",
+      "width": "auto",
+      "height": "auto",
+      "format": "svg",
+      "transparent": true,
+      "intendedSurface": "dark",
+      "intendedUse": "compact header, sidebar on dark background"
+    },
+    {
+      "asset": "nestfinance-logo-horizontal-no-tagline-light.svg",
+      "path": "/brand/nestfinance/nest-flow-signature/v1/logos/nestfinance-logo-horizontal-no-tagline-light.svg",
+      "width": "auto",
+      "height": "auto",
+      "format": "svg",
+      "transparent": true,
+      "intendedSurface": "light",
+      "intendedUse": "compact header, sidebar on light background"
+    },
+    {
+      "asset": "nestfinance-logo-vertical-dark.svg",
+      "path": "/brand/nestfinance/nest-flow-signature/v1/logos/nestfinance-logo-vertical-dark.svg",
+      "width": "auto",
+      "height": "auto",
+      "format": "svg",
+      "transparent": true,
+      "intendedSurface": "dark",
+      "intendedUse": "auth, splash, onboarding on dark background"
+    },
+    {
+      "asset": "nestfinance-logo-vertical-light.svg",
+      "path": "/brand/nestfinance/nest-flow-signature/v1/logos/nestfinance-logo-vertical-light.svg",
+      "width": "auto",
+      "height": "auto",
+      "format": "svg",
+      "transparent": true,
+      "intendedSurface": "light",
+      "intendedUse": "auth, splash, onboarding on light background"
+    },
+    {
+      "asset": "nestfinance-symbol-vector-gradient.svg",
+      "path": "/brand/nestfinance/nest-flow-signature/v1/symbols/nestfinance-symbol-vector-gradient.svg",
+      "width": "auto",
+      "height": "auto",
+      "format": "svg",
+      "transparent": true,
+      "intendedSurface": "any",
+      "intendedUse": "mobile header, loader, splash, avatar"
+    },
+    {
+      "asset": "favicon.svg",
+      "path": "/brand/nestfinance/nest-flow-signature/v1/icons/favicon.svg",
+      "width": "any",
+      "height": "any",
+      "format": "svg",
+      "transparent": true,
+      "intendedSurface": "any",
+      "intendedUse": "favicon"
+    },
+    {
+      "asset": "favicon.ico",
+      "path": "/brand/nestfinance/nest-flow-signature/v1/icons/favicon.ico",
+      "width": "32",
+      "height": "32",
+      "format": "ico",
+      "transparent": true,
+      "intendedSurface": "any",
+      "intendedUse": "fallback favicon"
+    },
+    {
+      "asset": "nestfinance-og-1200x630.jpg",
+      "path": "/brand/nestfinance/nest-flow-signature/v1/social/nestfinance-og-1200x630.jpg",
+      "width": "1200",
+      "height": "630",
+      "format": "jpg",
+      "transparent": false,
+      "intendedSurface": "any",
+      "intendedUse": "open graph, twitter card"
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useOrganization } from '../contexts/OrganizationContext.js';
-import { MillionsNestLogo } from './MillionsNestLogo.js';
+import { NestFinanceLogo } from './brand/NestFinanceLogo.js';
 import { LayoutDashboard, LogOut, Menu, X, Search, LayoutGrid, Music, Users, ShieldCheck, CreditCard, Wallet, Calendar, QrCode, LogIn } from 'lucide-react';
 import { LanguageSwitcher } from './LanguageSwitcher.js';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -258,8 +258,10 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
-          <MillionsNestLogo className="h-10 md:h-12 w-auto transition-transform group-hover:scale-105" />
-          <span className="font-semibold text-lg tracking-tight text-[#F5F7FA] hidden sm:block">MillionsNest</span>
+          {/* Mobile Logo */}
+          <NestFinanceLogo layout="symbol" className="h-9 w-auto md:hidden transition-transform group-hover:scale-105" />
+          {/* Desktop Logo */}
+          <NestFinanceLogo layout="horizontal" tagline={false} surface="dark" className="h-[52px] w-[196px] hidden md:block transition-transform group-hover:scale-105" />
         </Link>
 
         {/* Desktop Nav */}

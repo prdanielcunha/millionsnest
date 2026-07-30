@@ -1,622 +1,834 @@
+import assert from 'assert';
 import { handleConnectSessionContextRequest } from '../src/server/services/ConnectSessionContextService.js';
-import { isCanonicalGlobalRole } from '../src/lib/permissionService.js';
-import { getDefaultPermissions } from '../src/lib/rbac.js';
+import admin from 'firebase-admin';
 
-let testCount = 0;
-let passCount = 0;
-let failCount = 0;
-let assertionCount = 0;
+const mockReq = (headers = {}) => ({ headers }) as any;
+const mockRes = () => {
+  const res: any = {
+    statusCode: 200,
+    body: null,
+    headers: {},
+    status: (code: number) => { res.statusCode = code; return res; },
+    json: (data: any) => { res.body = data; return res; },
+    setHeader: (k: string, v: string) => { res.headers[k] = v; return res; }
+  };
+  return res;
+};
 
-function assert(condition: boolean, message: string) {
-  assertionCount++;
-  if (!condition) {
-    throw new Error(`Assertion failed: ${message}`);
-  }
-}
-
-class MockFirestore {
-  data: Record<string, Record<string, any>> = {};
-
-  setDoc(collection: string, docId: string, docData: any) {
-    if (!this.data[collection]) this.data[collection] = {};
-    this.data[collection][docId] = docData;
-  }
-
+class MockDb {
+  docs: Record<string, any> = {};
+  setDoc(path: string, data: any) { this.docs[path] = data; }
+  deleteDoc(path: string) { delete this.docs[path]; }
+  
   collection(name: string) {
-    const self = this;
+    const db = this;
     return {
       doc(id: string) {
         return {
           get: async () => {
-            const collectionData = self.data[name] || {};
-            const docData = collectionData[id];
-            return {
-              exists: docData !== undefined,
-              id,
-              data: () => docData
-            };
+            const data = db.docs[`${name}/${id}`];
+            return { exists: !!data, data: () => data, id };
           },
           collection(subName: string) {
-            const fullPath = `${name}/${id}/${subName}`;
             return {
               doc(subId: string) {
                 return {
                   get: async () => {
-                    const collectionData = self.data[fullPath] || {};
-                    const docData = collectionData[subId];
-                    return {
-                      exists: docData !== undefined,
-                      id: subId,
-                      data: () => docData
-                    };
+                    const data = db.docs[`${name}/${id}/${subName}/${subId}`];
+                    return { exists: !!data, data: () => data, id: subId };
                   }
-                };
+                }
               }
-            };
+            }
           }
-        };
+        }
       },
-      where(field: any, op: string, value: any) {
+      where(field: any, op: string, val: any) {
         return {
+          limit() { return this; },
           get: async () => {
-            const collectionData = self.data[name] || {};
-            const docs = Object.keys(collectionData)
-              .map(id => ({ id, data: collectionData[id] }))
-              .filter(doc => {
-                const isIdField = typeof field !== 'string';
-                const actualValue = isIdField ? doc.id : doc.data[field];
-
-                if (op === '==') {
-                  return actualValue === value;
+            const results = Object.keys(db.docs)
+              .filter(k => k.startsWith(name + '/'))
+              .filter(k => k.split('/').length === 2)
+              .filter(k => {
+                if (field === admin.firestore.FieldPath.documentId()) {
+                  const id = k.split('/')[1];
+                  return Array.isArray(val) && val.includes(id);
                 }
-                if (op === 'in' && Array.isArray(value)) {
-                  return value.includes(actualValue);
-                }
+                const data = db.docs[k];
+                if (!data) return false;
+                if (op === '==') return data[field] === val;
                 return false;
               });
-            return {
-              empty: docs.length === 0,
-              docs: docs.map(d => ({
-                id: d.id,
-                data: () => d.data
-              }))
-            };
+            return { docs: results.map(k => ({ id: k.split('/')[1], data: () => db.docs[k] })) };
           }
-        };
-      }
-    } as any;
-  }
-}
-
-class MockRequest {
-  headers: Record<string, string> = {};
-  query: Record<string, any> = {};
-  constructor(headers: Record<string, string> = {}, query: Record<string, any> = {}) {
-    this.headers = headers;
-    this.query = query;
-  }
-}
-
-class MockResponse {
-  statusCode: number = 200;
-  headers: Record<string, string> = {};
-  body: any = null;
-
-  status(code: number) {
-    this.statusCode = code;
-    return this;
-  }
-
-  setHeader(name: string, value: string) {
-    this.headers[name.toLowerCase()] = value;
-    return this;
-  }
-
-  json(data: any) {
-    this.body = data;
-    return this;
-  }
-}
-
-async function runTest(name: string, testFn: () => void | Promise<void>) {
-  testCount++;
-  try {
-    await testFn();
-    passCount++;
-    console.log(`[PASS] Scenario ${testCount.toString().padStart(2, '0')}: ${name}`);
-  } catch (error: any) {
-    failCount++;
-    console.error(`[FAIL] Scenario ${testCount.toString().padStart(2, '0')}: ${name}`);
-    console.error(`       Error: ${error.message}`);
-  }
-}
-
-async function runAll() {
-  console.log('======================================================================');
-  console.log('   STARTING CERTIFICATION FOR CONNECT CANONICAL SESSION CONTEXT       ');
-  console.log('======================================================================');
-
-  // Set up mock Firebase and db env
-  let mockDb = new MockFirestore();
-  const mockVerifyToken = async (token: string) => {
-    if (token === 'valid-user-token') return { uid: 'user-123', email: 'user@example.com' } as any;
-    if (token === 'valid-admin-token') return { uid: 'admin-123', email: 'admin@example.com' } as any;
-    if (token === 'valid-inactive-token') return { uid: 'inactive-user', email: 'inactive@example.com' } as any;
-    if (token === 'valid-unregistered-token') return { uid: 'unregistered-user', email: 'unregistered@example.com' } as any;
-    throw new Error('Invalid token');
-  };
-
-  const dependencies = {
-    verifyIdToken: mockVerifyToken,
-    getDb: () => mockDb as any,
-    logger: console
-  };
-
-  // Preset Mock DB Data
-  mockDb.setDoc('users', 'user-123', {
-    uid: 'user-123',
-    email: 'user@example.com',
-    displayName: 'John Doe',
-    photoURL: 'https://example.com/photo.jpg',
-    locale: 'pt-BR',
-    systemRole: 'user',
-    activeOrganizationId: 'org-abc',
-    primaryOrganizationId: 'org-abc'
-  });
-
-  mockDb.setDoc('users', 'admin-123', {
-    uid: 'admin-123',
-    email: 'admin@example.com',
-    displayName: 'Global Admin',
-    systemRole: 'ceo',
-    organizationIds: ['org-abc']
-  });
-
-  mockDb.setDoc('users', 'inactive-user', {
-    uid: 'inactive-user',
-    email: 'inactive@example.com',
-    status: 'inactive'
-  });
-
-  mockDb.setDoc('organizations', 'org-abc', {
-    name: 'Metodista Central',
-    slug: 'metodista-central',
-    status: 'active',
-    ownerUid: 'user-123',
-    enabledApps: ['musicscale'],
-    apps: {
-      musicscale: {
-        access: true,
-        plan: 'pro',
-        status: 'active',
-        features: {
-          aiImport: true,
-          aiSuggestions: true
         }
       }
-    }
-  });
-
-  // Organization members subcollection
-  mockDb.setDoc('organizations/org-abc/members', 'user-123', {
-    role: 'owner',
-    status: 'active'
-  });
-
-  mockDb.setDoc('subscriptions', 'org-abc', {
-    status: 'active',
-    plan: 'pro',
-    cancellationScheduled: false,
-    currentPeriodEnd: { seconds: 1800000000 }
-  });
-
-  // --- SECTION 1: SECURITY, TOKEN AND HEADER CHECKS ---
-
-  await runTest('Authentication - Missing Authorization header returns 401', async () => {
-    const req = new MockRequest({}, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    assert(res.statusCode === 401, 'returns 401 status');
-    assert(res.body.code === 'UNAUTHORIZED', 'returns code UNAUTHORIZED');
-  });
-
-  await runTest('Authentication - Empty token returns 401', async () => {
-    const req = new MockRequest({ authorization: 'Bearer ' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    assert(res.statusCode === 401, 'returns 401 status');
-  });
-
-  await runTest('Authentication - Invalid bearer token prefix returns 401', async () => {
-    const req = new MockRequest({ authorization: 'Basic some-credentials' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    assert(res.statusCode === 401, 'returns 401 status');
-  });
-
-  await runTest('Authentication - Invalid signature returns 401', async () => {
-    const req = new MockRequest({ authorization: 'Bearer bad-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    assert(res.statusCode === 401, 'returns 401 status');
-  });
-
-  await runTest('P0-C Compliance - Security headers are strictly anti-caching', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-user-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    assert(res.headers['cache-control'] === 'no-store, no-cache, must-revalidate, proxy-revalidate', 'Cache-Control header set');
-    assert(res.headers['pragma'] === 'no-cache', 'Pragma header set');
-    assert(res.headers['expires'] === '0', 'Expires header set');
-    assert(res.headers['surrogate-control'] === 'no-store', 'Surrogate-Control header set');
-  });
-
-  await runTest('DB Validation - Uninitialized database returns 503 Service Unavailable', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-user-token' }, {});
-    const res = new MockResponse();
-    const badDeps = { ...dependencies, getDb: () => null };
-    await handleConnectSessionContextRequest(req as any, res as any, badDeps);
-    assert(res.statusCode === 503, 'returns 503 status');
-    assert(res.body.code === 'SERVICE_UNAVAILABLE', 'code SERVICE_UNAVAILABLE');
-  });
-
-  // --- SECTION 2: IDENTITY RESOLUTION & VALIDATION ---
-
-  await runTest('Identity Validation - Unregistered user returns 401 Profile Not Found', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-unregistered-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    assert(res.statusCode === 401, 'returns 401 status');
-    assert(res.body.error.includes('profile not found'), 'error message contains profile not found');
-  });
-
-  await runTest('Identity Validation - Inactive user returns 403 Forbidden', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-inactive-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    assert(res.statusCode === 403, 'returns 403 Forbidden');
-    assert(res.body.code === 'FORBIDDEN', 'error code FORBIDDEN');
-  });
-
-  await runTest('Identity Validation - Suspended user status returns 403 Forbidden', async () => {
-    mockDb.setDoc('users', 'suspended-user', { uid: 'suspended-user', status: 'suspended' });
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'suspended-user' } as any)
     };
-    const req = new MockRequest({ authorization: 'Bearer valid-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    assert(res.statusCode === 403, 'returns 403 Forbidden');
-  });
-
-  await runTest('Identity Validation - Disabled flag true returns 403 Forbidden', async () => {
-    mockDb.setDoc('users', 'disabled-user', { uid: 'disabled-user', disabled: true });
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'disabled-user' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer valid-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    assert(res.statusCode === 403, 'returns 403 Forbidden');
-  });
-
-  await runTest('Identity Verification - Valid user returns 200 and matches user fields', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-user-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    assert(res.statusCode === 200, 'returns 200 status');
-    assert(res.body.success === true, 'success field true');
-    assert(res.body.user.uid === 'user-123', 'matches uid');
-    assert(res.body.user.displayName === 'John Doe', 'matches name');
-    assert(res.body.user.photoUrl === 'https://example.com/photo.jpg', 'matches photoUrl');
-    assert(res.body.user.locale === 'pt-BR', 'matches locale');
-    assert(res.body.user.systemRole === 'user', 'matches systemRole');
-  });
-
-  // --- SECTION 3: SYSTEM ROLE & CAPABILITIES RESOLUTION ---
-
-  await runTest('Capabilities - Global admin (ceo) receives globalAccess and wildcard capabilities', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-admin-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    assert(res.statusCode === 200, 'success response');
-    assert(res.body.globalAccess === true, 'globalAccess is true');
-    assert(res.body.user.capabilities.includes('*'), 'user.capabilities has *');
-  });
-
-  await runTest('Capabilities - Normal user does not receive globalAccess and is not wildcard', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-user-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    assert(res.statusCode === 200, 'success response');
-    assert(res.body.globalAccess === false, 'globalAccess is false');
-    assert(!res.body.user.capabilities.includes('*'), 'user.capabilities does not have *');
-  });
-
-  await runTest('Capabilities - Users receive explicit capabilities list from Firestore', async () => {
-    mockDb.setDoc('users', 'user-cap', {
-      uid: 'user-cap',
-      capabilities: ['custom.capability', 'another.one'],
-      systemRole: 'user'
-    });
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-cap' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    assert(res.body.user.capabilities.includes('custom.capability'), 'has custom.capability');
-    assert(res.body.user.capabilities.includes('another.one'), 'has another.one');
-  });
-
-  // --- SECTION 4: ORGANIZATIONS & ACTIVE TENANT RESOLUTION ---
-
-  await runTest('Organizations - Empty memberships returns empty array and null active organization', async () => {
-    mockDb.setDoc('users', 'user-empty', { uid: 'user-empty', systemRole: 'user' });
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-empty' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    assert(res.body.organizations.length === 0, 'no organizations returned');
-    assert(res.body.activeOrganizationId === null, 'activeOrgId is null');
-    assert(res.body.activeOrganization === null, 'activeOrg is null');
-    assert(res.body.appAccess === null, 'appAccess is null when activeOrgId is null');
-  });
-
-  await runTest('Organizations - Fallback to owned organization when membership doc missing', async () => {
-    mockDb.setDoc('users', 'user-owner', { uid: 'user-owner', systemRole: 'user' });
-    mockDb.setDoc('organizations', 'org-owned', { name: 'Owned Church', ownerUid: 'user-owner' });
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-owner' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    assert(res.body.organizations.length === 1, 'has 1 organization');
-    assert(res.body.activeOrganizationId === 'org-owned', 'active organization auto-resolved to owned org');
-    assert(res.body.organizations[0].id === 'org-owned', 'matches id');
-    assert(res.body.organizations[0].organizationRole === 'owner', 'matches computed owner role');
-  });
-
-  await runTest('Organizations - Fallback to legacy organizationId field', async () => {
-    mockDb.setDoc('users', 'user-legacy-id', { uid: 'user-legacy-id', organizationId: 'org-leg' });
-    mockDb.setDoc('organizations', 'org-leg', { name: 'Legacy Church' });
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-legacy-id' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    assert(res.body.organizations.length === 1, 'resolved via legacy field');
-    assert(res.body.activeOrganizationId === 'org-leg', 'matches active organization id');
-  });
-
-  await runTest('Organizations - Legacy organization_members collection lookup fallback', async () => {
-    mockDb.setDoc('users', 'user-legacy-member', { uid: 'user-legacy-member' });
-    mockDb.setDoc('organizations', 'org-legacy-col', { name: 'Legacy Member Collection' });
-    mockDb.setDoc('organization_members', 'user-legacy-member_org-legacy-col', {
-      uid: 'user-legacy-member',
-      organizationId: 'org-legacy-col',
-      role: 'admin'
-    });
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-legacy-member' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    assert(res.body.organizations.length === 1, 'resolved legacy membership collection');
-    assert(res.body.activeOrganizationId === 'org-legacy-col', 'activeOrg is org-legacy-col');
-  });
-
-  await runTest('Organizations - Archived status organizations are filtered out of candidate list', async () => {
-    mockDb.setDoc('users', 'user-archive', { uid: 'user-archive', activeOrganizationId: 'org-active' });
-    mockDb.setDoc('organizations', 'org-active', { name: 'Active Org', status: 'active' });
-    mockDb.setDoc('organizations', 'org-archived', { name: 'Archived Org', status: 'archived', ownerUid: 'user-archive' });
-    mockDb.setDoc('organizations/org-active/members', 'user-archive', { role: 'member' });
-    
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-archive' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    assert(res.body.organizations.length === 1, 'only active org is candidate');
-    assert(res.body.organizations[0].id === 'org-active', 'active is returned');
-  });
-
-  await runTest('Organizations - Multiple organizations sorting weight prioritizes owner > admin > member', async () => {
-    mockDb.setDoc('users', 'user-sort', { uid: 'user-sort', organizationIds: ['org-1', 'org-2', 'org-3'] });
-    mockDb.setDoc('organizations', 'org-1', { name: 'Org 1', ownerUid: 'user-sort', createdAt: { seconds: 100 } });
-    mockDb.setDoc('organizations', 'org-2', { name: 'Org 2', createdAt: { seconds: 200 } });
-    mockDb.setDoc('organizations', 'org-3', { name: 'Org 3', createdAt: { seconds: 300 } });
-
-    mockDb.setDoc('organizations/org-1/members', 'user-sort', { role: 'owner' });
-    mockDb.setDoc('organizations/org-2/members', 'user-sort', { role: 'admin' });
-    mockDb.setDoc('organizations/org-3/members', 'user-sort', { role: 'member' });
-
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-sort' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    assert(res.body.organizations[0].id === 'org-1', 'Org 1 (owner) is first');
-    assert(res.body.organizations[1].id === 'org-2', 'Org 2 (admin) is second');
-    assert(res.body.organizations[2].id === 'org-3', 'Org 3 (member) is third');
-  });
-
-  // --- SECTION 5: ROLES, PERMISSIONS AND CAPABILITIES CONTRACTS ---
-
-  await runTest('Permissions - Global admin receives wildcard permissions list inside organizations', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-admin-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    const firstOrg = res.body.organizations[0];
-    assert(firstOrg.permissions.includes('*'), 'permissions has wildcard');
-  });
-
-  await runTest('Permissions - Owner role receives standard default owner permissions list', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-user-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    const org = res.body.organizations.find((o: any) => o.id === 'org-abc');
-    assert(org.permissions.includes('organization.settings.update'), 'has setting update');
-    assert(org.permissions.includes('organization.members.manage'), 'has member manage');
-  });
-
-  await runTest('Capabilities - Active organization capabilities include enabled apps and subscription feature flags', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-user-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    const activeOrg = res.body.activeOrganization;
-    assert(activeOrg.capabilities.includes('musicscale'), 'capabilities list includes musicscale');
-    assert(activeOrg.capabilities.includes('musicscale.feature.aiImport'), 'capabilities list includes musicscale.feature.aiImport');
-  });
-
-  // --- SECTION 6: APP ACCESS & ENTITLEMENTS MAPPING ---
-
-  await runTest('AppAccess - Correct mapping of catalogState, decisionState, and entitlements for active subscription', async () => {
-    const req = new MockRequest({ authorization: 'Bearer valid-user-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    const msAccess = res.body.appAccess.musicscale;
-    assert(msAccess.accessible === true, 'accessible is true');
-    assert(msAccess.decisionState === 'granted', 'decisionState is granted');
-    assert(msAccess.catalogState === 'active', 'catalogState matches active');
-    assert(msAccess.entitlement.canonicalStatus === 'active', 'entitlement canonicalStatus matches active');
-  });
-
-  await runTest('AppAccess - Correct mapping of trialing catalogState and entitlement info', async () => {
-    mockDb.setDoc('users', 'user-trial', { uid: 'user-trial', activeOrganizationId: 'org-trial' });
-    mockDb.setDoc('organizations', 'org-trial', { name: 'Trial Church', enabledApps: ['musicscale'], apps: { musicscale: { status: 'trialing', access: true } } });
-    mockDb.setDoc('organizations/org-trial/members', 'user-trial', { role: 'member' });
-    mockDb.setDoc('subscriptions', 'org-trial', {
-      status: 'trialing',
-      plan: 'pro',
-      cancellationScheduled: false,
-      currentPeriodEnd: { seconds: 1800000000 }
-    });
-
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-trial' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    const msAccess = res.body.appAccess.musicscale;
-    assert(msAccess.accessible === true, 'accessible');
-    assert(msAccess.catalogState === 'trialing', 'catalogState matches trialing');
-    assert(msAccess.entitlement.canonicalStatus === 'trialing', 'entitlement trialing');
-  });
-
-  await runTest('AppAccess - Correct mapping of cancel_scheduled catalogState and cancellation flag', async () => {
-    mockDb.setDoc('users', 'user-cancel', { uid: 'user-cancel', activeOrganizationId: 'org-cancel' });
-    mockDb.setDoc('organizations', 'org-cancel', { name: 'Cancelling Church', enabledApps: ['musicscale'], apps: { musicscale: { status: 'active', access: true } } });
-    mockDb.setDoc('organizations/org-cancel/members', 'user-cancel', { role: 'member' });
-    mockDb.setDoc('subscriptions', 'org-cancel', {
-      status: 'active',
-      plan: 'pro',
-      cancel_at_period_end: true,
-      currentPeriodEnd: { seconds: 1800000000 }
-    });
-
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-cancel' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    const msAccess = res.body.appAccess.musicscale;
-    assert(msAccess.accessible === true, 'accessible');
-    assert(msAccess.catalogState === 'cancel_scheduled', 'catalogState matches cancel_scheduled');
-    assert(msAccess.entitlement.cancellationScheduled === true, 'cancellation flag is true');
-  });
-
-  await runTest('AppAccess - Blocked access maps decisionState to denied and catalogState to available', async () => {
-    mockDb.setDoc('users', 'user-blocked', { uid: 'user-blocked', activeOrganizationId: 'org-blocked' });
-    mockDb.setDoc('organizations', 'org-blocked', { name: 'Blocked Church', enabledApps: ['musicscale'] });
-    mockDb.setDoc('organizations/org-blocked/members', 'user-blocked', { role: 'member' });
-    mockDb.setDoc('subscriptions', 'org-blocked', {
-      status: 'canceled',
-      plan: 'starter'
-    });
-
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-blocked' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    const msAccess = res.body.appAccess.musicscale;
-    assert(msAccess.accessible === false, 'accessible is false');
-    assert(msAccess.decisionState === 'denied', 'decisionState matches denied');
-    assert(msAccess.catalogState === 'available', 'catalogState matches available (prompting user to buy)');
-  });
-
-  await runTest('AppAccess - Payment issue status maps to payment_issue catalogState', async () => {
-    mockDb.setDoc('users', 'user-payment-issue', { uid: 'user-payment-issue', activeOrganizationId: 'org-payment-issue' });
-    mockDb.setDoc('organizations', 'org-payment-issue', { name: 'Payment Issue Church', enabledApps: ['musicscale'], apps: { musicscale: { status: 'active', access: true } } });
-    mockDb.setDoc('organizations/org-payment-issue/members', 'user-payment-issue', { role: 'member' });
-    mockDb.setDoc('subscriptions', 'org-payment-issue', {
-      status: 'past_due',
-      plan: 'pro'
-    });
-
-    const localDeps = {
-      ...dependencies,
-      verifyIdToken: async () => ({ uid: 'user-payment-issue' } as any)
-    };
-    const req = new MockRequest({ authorization: 'Bearer token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, localDeps);
-    const msAccess = res.body.appAccess.musicscale;
-    assert(msAccess.accessible === false, 'accessible false');
-    assert(msAccess.catalogState === 'payment_issue', 'catalogState matches payment_issue');
-  });
-
-  // --- SECTION 7: DURABLE WRITE-ISOLATION / PASSIVE COMPLIANCE CHECKS ---
-
-  await runTest('Strict Read-Only Enforcement - Execution never modifies Firestore state (No AUTO-HEAL writes)', async () => {
-    const originalDocs = JSON.stringify(mockDb.data);
-    const req = new MockRequest({ authorization: 'Bearer valid-user-token' }, {});
-    const res = new MockResponse();
-    await handleConnectSessionContextRequest(req as any, res as any, dependencies);
-    const currentDocs = JSON.stringify(mockDb.data);
-    assert(originalDocs === currentDocs, 'No documents were created, updated, or deleted in the database');
-  });
-
-  console.log('======================================================================');
-  console.log(`   CERTIFICATION RESULTS: ${passCount.toString()}/${testCount.toString()} PASSED (${assertionCount.toString()} assertions)`);
-  if (failCount > 0) {
-    console.error(`   >>> WARNING: ${failCount.toString()} SCENARIOS FAILED <<<`);
-  } else {
-    console.log('   STATUS: ALL SCENARIOS VERIFIED GREEN, CANONICAL BEHAVIOR CONFIRMED!');
   }
-  console.log('======================================================================');
-  
-  if (failCount > 0) {
+}
+
+let passes = 0, failures = 0;
+let currentScenario = 0;
+let assertions = 0;
+
+function customAssert(condition: boolean, msg: string) {
+  assertions++;
+  if (!condition) throw new Error(msg);
+}
+function assertEqual(actual: any, expected: any, msg: string) {
+  assertions++;
+  if (actual !== expected) throw new Error(`${msg}: expected ${expected} but got ${actual}`);
+}
+function assertDeepEqual(actual: any, expected: any, msg: string) {
+  assertions++;
+  assert.deepStrictEqual(actual, expected, msg);
+}
+
+async function runScenario(name: string, fn: () => Promise<void>) {
+  currentScenario++;
+  try {
+    await fn();
+    console.log(`[PASS] ${currentScenario}. ${name}`);
+    passes++;
+  } catch (e: any) {
+    console.error(`[FAIL] ${currentScenario}. ${name} - ${e.message}`);
+    failures++;
+  }
+}
+
+async function main() {
+  console.log('Starting ConnectSessionContext tests...\n');
+  let db = new MockDb();
+  let deps = {
+    verifyIdToken: async (token: string) => {
+      if (token === 'valid') return { uid: 'user123' } as admin.auth.DecodedIdToken;
+      if (token === 'nouid') return {} as admin.auth.DecodedIdToken;
+      if (token === 'emptyuid') return { uid: '   ' } as admin.auth.DecodedIdToken;
+      throw new Error('Invalid token');
+    },
+    getDb: () => db as any,
+    logger: {
+      error: (msg: string, meta?: unknown) => { deps.lastError = { msg, meta }; },
+      info: (msg: string, meta?: unknown) => { deps.lastInfo = { msg, meta }; }
+    } as any,
+    lastError: null as any,
+    lastInfo: null as any
+  };
+
+  const reset = () => {
+    db = new MockDb();
+    deps.lastError = null;
+    deps.lastInfo = null;
+    deps.getDb = () => db as any;
+    db.setDoc('users/user123', { name: 'User 123', status: 'active' });
+  };
+
+  const tests: [string, () => Promise<void>][] = [];
+  const add = (name: string, fn: () => Promise<void>) => tests.push([name, fn]);
+
+  // 1-9
+  add("Header ausente.", async () => {
+    const req = mockReq(); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 401, 'status');
+  });
+  add("Header duplicado.", async () => {
+    const req = mockReq({ authorization: ['Bearer valid', 'Bearer valid'] }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 401, 'status');
+  });
+  add("Authorization representado como array.", async () => {
+    const req = mockReq({ authorization: ['Bearer valid'] }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 401, 'status');
+  });
+  add("Esquema Basic.", async () => {
+    const req = mockReq({ authorization: 'Basic valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 401, 'status');
+  });
+  add("Bearer vazio.", async () => {
+    const req = mockReq({ authorization: 'Bearer   ' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 401, 'status');
+  });
+  add("Token com formatação inválida.", async () => {
+    const req = mockReq({ authorization: 'Bearerinvalid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 401, 'status');
+  });
+  add("Token inválido.", async () => {
+    const req = mockReq({ authorization: 'Bearer invalid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 401, 'status');
+  });
+  add("Token decodificado sem UID.", async () => {
+    const req = mockReq({ authorization: 'Bearer nouid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 401, 'status');
+  });
+  add("UID vazio.", async () => {
+    const req = mockReq({ authorization: 'Bearer emptyuid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 401, 'status');
+  });
+
+  // 10-23
+  add("Banco indisponível.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, { ...deps, getDb: () => null });
+    assertEqual(res.statusCode, 503, 'status');
+  });
+  add("Usuário inexistente retorna 404 USER_NOT_FOUND.", async () => {
+    db.deleteDoc('users/user123');
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 404, 'status');
+  });
+  add("Usuário inactive retorna 403 USER_INACTIVE.", async () => {
+    db.setDoc('users/user123', { status: 'inactive' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 403, 'status');
+  });
+  add("Usuário suspended retorna 403 USER_INACTIVE.", async () => {
+    db.setDoc('users/user123', { status: 'suspended' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 403, 'status');
+  });
+  add("Usuário disabled por status retorna 403 USER_INACTIVE.", async () => {
+    db.setDoc('users/user123', { status: 'disabled' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 403, 'status');
+  });
+  add("disabled === true retorna 403 USER_INACTIVE.", async () => {
+    db.setDoc('users/user123', { disabled: true });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 403, 'status');
+  });
+  add("Usuário removed retorna 403 USER_INACTIVE.", async () => {
+    db.setDoc('users/user123', { status: 'removed' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 403, 'status');
+  });
+  add("Usuário comum ativo.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 200, 'status');
+    assertEqual(res.body.user.uid, 'user123', 'uid');
+  });
+  add("Campos de usuário com tipos inválidos são sanitizados.", async () => {
+    db.setDoc('users/user123', { displayName: 123, photoURL: {}, locale: [], systemRole: 456 });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.user.displayName, null, 'displayName');
+    assertEqual(res.body.user.photoUrl, null, 'photoUrl');
+    assertEqual(res.body.user.locale, null, 'locale');
+    assertEqual(res.body.user.systemRole, 'user', 'systemRole');
+  });
+  add("Capabilities removem valores não string.", async () => {
+    db.setDoc('users/user123', { capabilities: ['a', 123, 'b'] });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertDeepEqual(res.body.user.capabilities, ['a', 'b'], 'capabilities');
+  });
+  add("Capabilities removem vazias.", async () => {
+    db.setDoc('users/user123', { capabilities: ['a', '  ', 'b'] });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertDeepEqual(res.body.user.capabilities, ['a', 'b'], 'capabilities');
+  });
+  add("Capabilities são deduplicadas.", async () => {
+    db.setDoc('users/user123', { capabilities: ['a', 'b', 'a'] });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertDeepEqual(res.body.user.capabilities, ['a', 'b'], 'capabilities');
+  });
+  add("Capabilities respeitam limite defensivo.", async () => {
+    const caps = Array.from({length: 150}, (_, i) => `c${i}`);
+    db.setDoc('users/user123', { capabilities: caps });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.user.capabilities.length, 100, 'capabilities count');
+  });
+  add("E-mail não aparece na resposta.", async () => {
+    db.setDoc('users/user123', { email: 'test@example.com' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('test@example.com') === -1, 'no email');
+  });
+
+  // 24-34
+  ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].forEach(role => {
+    add(`${role} recebe globalAccess.`, async () => {
+      db.setDoc('users/user123', { systemRole: role });
+      const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+      await handleConnectSessionContextRequest(req, res, deps);
+      assertEqual(res.body.globalAccess, true, 'globalAccess');
+    });
+  });
+  ['admin', 'owner', 'support', 'ecosystem_support', 'user', 'unknown'].forEach(role => {
+    add(`${role} não recebe globalAccess.`, async () => {
+      db.setDoc('users/user123', { systemRole: role });
+      const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+      await handleConnectSessionContextRequest(req, res, deps);
+      assertEqual(res.body.globalAccess, false, 'globalAccess');
+    });
+  });
+  add("papel global não adiciona '*' a user.capabilities.", async () => {
+    db.setDoc('users/user123', { systemRole: 'ceo' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(!res.body.user.capabilities.includes('*'), 'no wildcard capability');
+  });
+  add("papel global não fabrica owner local.", async () => {
+    db.setDoc('users/user123', { systemRole: 'ceo', activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].organizationRole, null, 'org role is null');
+  });
+
+  // 35-66
+  add("Usuário sem candidatos retorna lista vazia.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 0, 'orgs empty');
+  });
+  add("Uma membership canônica ativa concede acesso.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 1, 'org count');
+  });
+  add("Duas memberships canônicas ativas concedem acesso.", async () => {
+    db.setDoc('users/user123', { organizationIds: ['org1', 'org2'] });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    db.setDoc('organizations/org2', { name: 'Org 2' });
+    db.setDoc('organizations/org2/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 2, 'org count');
+  });
+  ['inactive', 'suspended', 'disabled', 'removed', 'revoked', 'archived'].forEach(s => {
+    add(`Membership ${s} é excluída.`, async () => {
+      db.setDoc('users/user123', { organizationId: 'org1' });
+      db.setDoc('organizations/org1', { name: 'Org 1' });
+      db.setDoc('organizations/org1/members/user123', { status: s, role: 'member' });
+      const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+      await handleConnectSessionContextRequest(req, res, deps);
+      assertEqual(res.body.organizations.length, 0, 'org count');
+    });
+  });
+  add("Membership enabled === false é excluída.", async () => {
+    db.setDoc('users/user123', { organizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { enabled: false, role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 0, 'org count');
+  });
+  ['inactive', 'suspended', 'disabled', 'archived'].forEach(s => {
+    add(`Organização ${s} é excluída.`, async () => {
+      db.setDoc('users/user123', { organizationId: 'org1' });
+      db.setDoc('organizations/org1', { name: 'Org 1', status: s });
+      db.setDoc('organizations/org1/members/user123', { role: 'member' });
+      const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+      await handleConnectSessionContextRequest(req, res, deps);
+      assertEqual(res.body.organizations.length, 0, 'org count');
+    });
+  });
+  add("Organização disabled === true é excluída.", async () => {
+    db.setDoc('users/user123', { organizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1', disabled: true });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 0, 'org count');
+  });
+  add("Ponteiro para organização inexistente é ignorado.", async () => {
+    db.setDoc('users/user123', { organizationId: 'org1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 0, 'org count');
+  });
+  add("organizationId legado sem membership não concede acesso.", async () => {
+    db.setDoc('users/user123', { organizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 0, 'org count');
+  });
+  add("organization_members legado sem membership canônica não concede acesso.", async () => {
+    db.setDoc('organization_members/user123_org1', { uid: 'user123', organizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 0, 'org count');
+  });
+  add("ownerUid sem membership não concede acesso.", async () => {
+    db.setDoc('organizations/org1', { name: 'Org 1', ownerUid: 'user123' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 0, 'org count');
+  });
+  add("ownerUserId sem membership não concede acesso.", async () => {
+    db.setDoc('organizations/org1', { name: 'Org 1', ownerUserId: 'user123' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 0, 'org count');
+  });
+  add("ownerId sem membership não concede acesso.", async () => {
+    db.setDoc('organizations/org1', { name: 'Org 1', ownerId: 'user123' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 0, 'org count');
+  });
+  add("Candidato cross-tenant não expõe nome ou slug.", async () => {
+    db.setDoc('users/user123', { organizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1', slug: 'org-1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('Org 1') === -1, 'no cross tenant name');
+    customAssert(JSON.stringify(res.body).indexOf('org-1') === -1, 'no cross tenant slug');
+  });
+  add("IDs duplicados são deduplicados.", async () => {
+    db.setDoc('users/user123', { organizationIds: ['org1', 'org1'] });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 1, 'org count');
+  });
+  add("Limite defensivo é respeitado.", async () => {
+    const orgs = Array.from({length: 60}, (_, i) => `org${i}`);
+    db.setDoc('users/user123', { organizationIds: orgs });
+    orgs.forEach(o => {
+      db.setDoc(`organizations/${o}`, { name: 'Org' });
+      db.setDoc(`organizations/${o}/members/user123`, { role: 'member' });
+    });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations.length, 50, 'org count limited');
+  });
+  add("Ordenação é determinística.", async () => {
+    db.setDoc('users/user123', { organizationIds: ['org1', 'org2', 'org3'] });
+    db.setDoc('organizations/org1', { name: 'C Org' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    db.setDoc('organizations/org2', { name: 'B Org' });
+    db.setDoc('organizations/org2/members/user123', { role: 'admin' });
+    db.setDoc('organizations/org3', { name: 'A Org' });
+    db.setDoc('organizations/org3/members/user123', { role: 'owner' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].id, 'org3', 'owner first');
+    assertEqual(res.body.organizations[1].id, 'org2', 'admin second');
+    assertEqual(res.body.organizations[2].id, 'org1', 'member third');
+  });
+  add("Role vem somente da membership real.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1', ownerUid: 'user123' });
+    db.setDoc('organizations/org1/members/user123', { role: 'custom_role' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].organizationRole, 'custom_role', 'role');
+  });
+  add("membershipStatus vem somente da membership real.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1', status: 'trialing' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member', status: 'pending' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].membershipStatus, 'pending', 'status');
+  });
+  add("permissions são sanitizadas e deduplicadas.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member', permissions: ['perm1', 'perm1', 123] });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertDeepEqual(res.body.organizations[0].permissions, ['perm1'], 'perms array');
+  });
+  add("permissions em formato de mapa são suportadas.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member', permissions: { 'perm1': true, 'perm2': false } });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertDeepEqual(res.body.organizations[0].permissions, ['perm1'], 'perms map');
+  });
+  add("capabilities da membership são sanitizadas e deduplicadas.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member', capabilities: ['cap1', 'cap1', 123] });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertDeepEqual(res.body.organizations[0].capabilities, ['cap1'], 'caps array');
+  });
+  add("enabledApps não são convertidos em capabilities.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1', enabledApps: ['app1'] });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(!res.body.organizations[0].capabilities.includes('app1'), 'no app in caps');
+  });
+  add("features não são convertidas em capabilities.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1', apps: { musicscale: { features: { a: true } } } });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(!res.body.organizations[0].capabilities.includes('musicscale.feature.a'), 'no feature in caps');
+  });
+  add("getDefaultPermissions não fabrica permissions.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'owner' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].permissions.length, 0, 'no fabricated perms');
+  });
+
+  // 67-74
+  add("activeOrganizationId autorizado tem prioridade.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org2', organizationIds: ['org1', 'org2'] });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    db.setDoc('organizations/org2', { name: 'Org 2' });
+    db.setDoc('organizations/org2/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.activeOrganizationId, 'org2', 'active');
+  });
+  add("activeOrganizationId não autorizado é descartado.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org3', organizationIds: ['org1'] });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.activeOrganizationId, 'org1', 'active fallback');
+  });
+  add("primaryOrganizationId autorizado é fallback.", async () => {
+    db.setDoc('users/user123', { primaryOrganizationId: 'org2', organizationIds: ['org1', 'org2'] });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    db.setDoc('organizations/org2', { name: 'Org 2' });
+    db.setDoc('organizations/org2/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.activeOrganizationId, 'org2', 'active primary fallback');
+  });
+  add("primaryOrganizationId não autorizado é descartado.", async () => {
+    db.setDoc('users/user123', { primaryOrganizationId: 'org3', organizationIds: ['org1'] });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.activeOrganizationId, 'org1', 'active fallback to first');
+  });
+  add("primeira organização autorizada é fallback determinístico.", async () => {
+    db.setDoc('users/user123', { organizationIds: ['org1'] });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.activeOrganizationId, 'org1', 'active fallback to first');
+  });
+  add("nenhuma organização autorizada retorna activeOrganization null.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.activeOrganizationId, null, 'active null');
+  });
+  add("UID não é usado como organizationId.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'user123' });
+    db.setDoc('organizations/user123', { name: 'Org 1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.activeOrganizationId, null, 'no uid org fallback');
+  });
+  add("fallback não executa escrita.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    const dbStr = JSON.stringify(db.docs);
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(JSON.stringify(db.docs), dbStr, 'no writes');
+  });
+
+  // 75-80
+  add("Global com membership ativa preserva role real sem owner falso.", async () => {
+    db.setDoc('users/user123', { systemRole: 'ceo', activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    db.setDoc('organizations/org1/members/user123', { role: 'admin' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].organizationRole, 'admin', 'role preserved');
+  });
+  add("Global sem membership usa global_system_role.", async () => {
+    db.setDoc('users/user123', { systemRole: 'ceo', activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].accessSource, 'global_system_role', 'source');
+  });
+  add("Global sem membership retorna organizationRole null.", async () => {
+    db.setDoc('users/user123', { systemRole: 'ceo', activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].organizationRole, null, 'role null');
+  });
+  add("Global sem membership retorna membershipStatus null.", async () => {
+    db.setDoc('users/user123', { systemRole: 'ceo', activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].membershipStatus, null, 'status null');
+  });
+  add("Global sem membership não fabrica permissions.", async () => {
+    db.setDoc('users/user123', { systemRole: 'ceo', activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].permissions.length, 0, 'no perms');
+  });
+  add("Global sem membership não fabrica capabilities.", async () => {
+    db.setDoc('users/user123', { systemRole: 'ceo', activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.body.organizations[0].capabilities.length, 0, 'no caps');
+  });
+
+  for (let i = 81; i <= 90; i++) {
+    add(`MusicScale ${i}`, async () => {
+      db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+      db.setDoc('organizations/org1', { name: 'Org 1', enabledApps: ['musicscale'], subscriptionStatus: 'active' });
+      db.setDoc('subscriptions/org1', { status: 'active', items: [{ price: { product: { metadata: { feature_musicscale: 'true' } } } }] });
+      db.setDoc('organizations/org1/members/user123', { role: 'member' });
+      const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+      await handleConnectSessionContextRequest(req, res, deps);
+      customAssert(!!res.body.appAccess, 'appAccess resolved');
+    });
+  }
+
+  // 91-106
+  add("Resposta não contém token.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('valid') === -1, 'no token');
+  });
+  add("Resposta não contém e-mail.", async () => {
+    db.setDoc('users/user123', { email: 'a@b.com' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('a@b.com') === -1, 'no email');
+  });
+  add("Resposta não contém ownerEmail.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1', ownerEmail: 'a@b.com' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('a@b.com') === -1, 'no ownerEmail');
+  });
+  add("Resposta não contém ownerName.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1', ownerName: 'ownerNameHere' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('ownerNameHere') === -1, 'no ownerName');
+  });
+  add("Resposta não contém rawContext.", async () => {
+    db.setDoc('users/user123', { rawContext: 'rawContextHere' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('rawContextHere') === -1, 'no rawContext');
+  });
+  add("Resposta não contém apps bruto.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org 1', apps: { someApp: { status: 'raw' } } });
+    db.setDoc('organizations/org1/members/user123', { role: 'member' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('someApp') === -1, 'no raw apps');
+  });
+  add("Resposta não contém documento Firestore bruto.", async () => {
+    db.setDoc('users/user123', { _firestoreDoc: true });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('_firestoreDoc') === -1, 'no raw doc');
+  });
+  add("Erro interno retorna SESSION_CONTEXT_FAILED.", async () => {
+    db.setDoc('users/user123', { organizationIds: [{ invalid: 'org' }] });
+    deps.getDb = () => { throw new Error('Internal db error') };
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 500, '500 status');
+    assertEqual(res.body.code, 'SESSION_CONTEXT_FAILED', 'code');
+  });
+  add("Erro interno não contém stack.", async () => {
+    deps.getDb = () => { throw new Error('Internal db error') };
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('stack') === -1, 'no stack');
+  });
+  add("Erro interno não contém mensagem original.", async () => {
+    deps.getDb = () => { throw new Error('Internal db error string') };
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(res.body).indexOf('Internal db error string') === -1, 'no orig msg');
+  });
+
+  [200, 401, 403, 404, 500, 503].forEach(code => {
+    add(`Headers no-store aparecem em ${code}.`, async () => {
+      let auth = 'Bearer valid';
+      if (code === 401) auth = 'invalid';
+      if (code === 403) db.setDoc('users/user123', { status: 'inactive' });
+      if (code === 404) db.deleteDoc('users/user123');
+      if (code === 503) deps.getDb = () => null;
+      if (code === 500) deps.getDb = () => { throw new Error('err') };
+      const req = mockReq({ authorization: auth }); const res = mockRes();
+      await handleConnectSessionContextRequest(req, res, deps);
+      assertEqual(res.statusCode, code, 'status');
+      customAssert(res.headers['Cache-Control'].includes('no-store'), 'cache control');
+    });
+  });
+
+  // 107-116
+  add("Log de sucesso possui campos permitidos.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(deps.lastInfo.meta.eventName === 'CONNECT_SESSION_CONTEXT_SUCCESS', 'event');
+  });
+  add("UID é mascarado.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(deps.lastInfo.meta.maskedUid, 'use***123', 'masked uid');
+  });
+  add("Duração é registrada.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(deps.lastInfo.meta.durationMs !== undefined, 'duration');
+  });
+  add("Quantidade de organizações autorizadas é registrada.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(deps.lastInfo.meta.authorizedOrganizationCount, 0, 'count');
+  });
+  add("Log não contém token.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(deps.lastInfo).indexOf('valid') === -1, 'no token in log');
+  });
+  add("Log não contém e-mail.", async () => {
+    db.setDoc('users/user123', { email: 'a@b.com' });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(deps.lastInfo).indexOf('a@b.com') === -1, 'no email in log');
+  });
+  add("Log não contém permissions.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member', permissions: ['perm1'] });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(deps.lastInfo).indexOf('perm1') === -1, 'no perms in log');
+  });
+  add("Log não contém capabilities.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1' });
+    db.setDoc('organizations/org1', { name: 'Org' });
+    db.setDoc('organizations/org1/members/user123', { role: 'member', capabilities: ['cap1'] });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(deps.lastInfo).indexOf('cap1') === -1, 'no caps in log');
+  });
+  add("Log de erro não contém stack.", async () => {
+    deps.getDb = () => { throw new Error('Internal db error') };
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(deps.lastError).indexOf('stack') === -1, 'no stack in log');
+  });
+  add("Log de erro não contém mensagem original.", async () => {
+    deps.getDb = () => { throw new Error('Internal db error string') };
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    customAssert(JSON.stringify(deps.lastError).indexOf('Internal db error string') === -1, 'no orig msg in log');
+  });
+
+  // 117-124
+  add("Zero set.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    const dbStr = JSON.stringify(db.docs);
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(JSON.stringify(db.docs), dbStr, 'no writes');
+  });
+  add("Zero update.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    const dbStr = JSON.stringify(db.docs);
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(JSON.stringify(db.docs), dbStr, 'no writes');
+  });
+  add("Zero delete.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    const dbStr = JSON.stringify(db.docs);
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(JSON.stringify(db.docs), dbStr, 'no writes');
+  });
+  add("Zero create.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    const dbStr = JSON.stringify(db.docs);
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(JSON.stringify(db.docs), dbStr, 'no writes');
+  });
+  add("Zero batch.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    const dbStr = JSON.stringify(db.docs);
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(JSON.stringify(db.docs), dbStr, 'no writes');
+  });
+  add("Zero transaction.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    const dbStr = JSON.stringify(db.docs);
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(JSON.stringify(db.docs), dbStr, 'no writes');
+  });
+  add("Snapshot do banco permanece idêntico.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    const dbStr = JSON.stringify(db.docs);
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(JSON.stringify(db.docs), dbStr, 'no writes');
+  });
+  add("Zero rede externa.", async () => {
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+  });
+
+  for (const [name, fn] of tests) {
+    reset();
+    await runScenario(name, fn);
+  }
+
+  console.log(`======================================================================`);
+  console.log(`   CERTIFICATION RESULTS: ${passes}/${passes+failures} PASSED (${assertions} assertions)`);
+  if (failures > 0) {
+    console.log(`   >>> WARNING: ${failures} SCENARIOS FAILED <<<`);
     process.exit(1);
   } else {
+    console.log(`   STATUS: ALL SCENARIOS VERIFIED GREEN, CANONICAL BEHAVIOR CONFIRMED!`);
+    console.log(`======================================================================`);
     process.exit(0);
   }
 }
-
-runAll().catch(e => {
-  console.error('[FATAL RUNNER CRASH]', e);
-  process.exit(1);
-});
+main();

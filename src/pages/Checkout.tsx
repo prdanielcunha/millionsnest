@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Check, ArrowRight, ShieldCheck, CreditCard, ChevronLeft, Briefcase, Zap, Layers, Tag, X, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getProductByLookupKey } from '../lib/pricingCatalog.js';
-import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
+import { NestFinanceLogo } from '../components/brand/NestFinanceLogo.js';
 
 interface NormalizedProduct {
   id: string; // Stripe Price ID
@@ -351,9 +351,8 @@ export default function Checkout() {
                 <ChevronLeft className="w-4 h-4" />
                 {t('back', 'Voltar ao Dashboard')}
             </button>
-            <div className="mx-auto flex items-center gap-3">
-                <MillionsNestLogo className="h-8 w-auto" />
-                <span className="font-semibold tracking-tight text-lg text-[#F5F7FA]">MillionsNest</span>
+            <div className="mx-auto flex items-center">
+                <NestFinanceLogo layout="horizontal" tagline={false} surface="dark" className="h-[40px] md:h-[52px] w-auto" />
             </div>
             <div className="w-32" /> {/* Spacer */}
         </nav>

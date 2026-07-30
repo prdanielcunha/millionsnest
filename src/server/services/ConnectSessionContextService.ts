@@ -1,255 +1,85 @@
 import admin from 'firebase-admin';
 import express from 'express';
 import { isCanonicalGlobalRole } from '../../lib/permissionService.js';
-import { getDefaultPermissions } from '../../lib/rbac.js';
 import { resolveEcosystemAppAccess } from './EcosystemAccessResolver.js';
 import { mapCanonicalDecisionToCatalogState } from '../../lib/ecosystemAccessProjection.js';
-import { ConnectSessionContextResponse, ConnectSessionOrganization, ConnectSessionAppAccess } from '../../lib/connectSessionContext.js';
+import {
+  ConnectSessionContextResponse,
+  ConnectSessionOrganization,
+  ConnectSessionAppAccess,
+  ConnectSessionUser
+} from '../../lib/connectSessionContext.js';
 
 export interface ConnectSessionContextDependencies {
   verifyIdToken: (token: string) => Promise<admin.auth.DecodedIdToken>;
   getDb: () => admin.firestore.Firestore | null;
-  logger: any;
+  logger: {
+    error: (msg: string, meta?: unknown) => void;
+    info: (msg: string, meta?: unknown) => void;
+  };
 }
 
-/**
- * Completely passive, read-only version of the organization context resolution.
- * Calculates inconsistencies and needsRepair status but NEVER writes to Firestore.
- */
-export async function resolveUserOrganizationContextReadOnly(uid: string, db: admin.firestore.Firestore) {
-  if (!uid) {
-    return {
-      activeOrganizationId: null,
-      primaryOrganizationId: null,
-      organizations: [],
-      ownedOrganizations: [],
-      memberships: [],
-      hasOrganization: false,
-      needsRepair: false,
-      inconsistencies: []
-    };
+const MAX_CANDIDATE_ORGANIZATIONS = 50;
+
+function sanitizeString(val: unknown): string | null {
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
+  return null;
+}
 
-  const userDoc = await db.collection('users').doc(uid).get();
-  const userData = userDoc.exists ? userDoc.data() : null;
-
-  // 1. Fetch organizations where uid is marked as owner/creator
-  const ownedQuery1 = await db.collection('organizations').where('ownerUserId', '==', uid).get();
-  const ownedQuery2 = await db.collection('organizations').where('ownerUid', '==', uid).get();
-  const ownedQuery3 = await db.collection('organizations').where('ownerId', '==', uid).get();
-
-  const potentialOrgIds = new Set<string>();
-
-  if (userData) {
-    if (userData.activeOrganizationId) potentialOrgIds.add(userData.activeOrganizationId);
-    if (userData.primaryOrganizationId) potentialOrgIds.add(userData.primaryOrganizationId);
-    if (userData.organizationId) potentialOrgIds.add(userData.organizationId);
-
-    if (Array.isArray(userData.organizations)) {
-      userData.organizations.forEach((id: any) => { if (typeof id === 'string') potentialOrgIds.add(id); });
+function sanitizeStringArray(val: unknown): string[] {
+  const result = new Set<string>();
+  if (Array.isArray(val)) {
+    for (const item of val) {
+      const sanitized = sanitizeString(item);
+      if (sanitized) result.add(sanitized);
     }
-    if (Array.isArray(userData.organizationIds)) {
-      userData.organizationIds.forEach((id: any) => { if (typeof id === 'string') potentialOrgIds.add(id); });
-    }
-    if (Array.isArray(userData.memberships)) {
-      userData.memberships.forEach((m: any) => {
-        if (typeof m === 'string') potentialOrgIds.add(m);
-        else if (m && typeof m === 'object' && typeof m.organizationId === 'string') potentialOrgIds.add(m.organizationId);
-      });
-    }
-  }
-
-  // Include any legacy organization_members links the user has
-  try {
-    const legacyMembersSnap = await db.collection('organization_members').where('uid', '==', uid).get();
-    legacyMembersSnap.docs.forEach(doc => {
-      const oId = doc.data()?.organizationId;
-      if (oId && typeof oId === 'string') potentialOrgIds.add(oId);
-    });
-  } catch (legErr) {
-    // Silent ignore
-  }
-
-  ownedQuery1.docs.forEach(doc => potentialOrgIds.add(doc.id));
-  ownedQuery2.docs.forEach(doc => potentialOrgIds.add(doc.id));
-  ownedQuery3.docs.forEach(doc => potentialOrgIds.add(doc.id));
-
-  const organizationsMap: { [id: string]: any } = {};
-  const membershipsMap: { [id: string]: any } = {};
-
-  const orgIdsList = Array.from(potentialOrgIds);
-  if (orgIdsList.length > 0) {
-    const orgChunks = [];
-    for (let i = 0; i < orgIdsList.length; i += 10) {
-      orgChunks.push(orgIdsList.slice(i, i + 10));
-    }
-
-    for (const chunk of orgChunks) {
-      const qs = await db.collection('organizations').where(admin.firestore.FieldPath.documentId(), 'in', chunk).get();
-      qs.docs.forEach(doc => {
-        organizationsMap[doc.id] = { id: doc.id, ...doc.data() };
-      });
-    }
-  }
-
-  // Standalone membership lookup
-  if (Object.keys(organizationsMap).length > 0) {
-    const lookupPromises = Object.keys(organizationsMap).map(async (orgId) => {
-      try {
-        const mDoc = await db.collection('organizations').doc(orgId).collection('members').doc(uid).get();
-        if (mDoc.exists) {
-          membershipsMap[orgId] = { id: uid, ...mDoc.data() };
-        }
-      } catch (mErr) {
-        // Silent ignore
-      }
-    });
-    await Promise.all(lookupPromises);
-  }
-
-  const finalOrganizations: any[] = [];
-  const ownedOrganizations: any[] = [];
-  let inconsistencies: string[] = [];
-  let needsRepair = false;
-
-  for (const orgId of Object.keys(organizationsMap)) {
-    const org = organizationsMap[orgId];
-    if (!membershipsMap[orgId]) {
-      const isOwner = org.ownerUserId === uid || org.ownerUid === uid || org.ownerId === uid;
-      if (isOwner) {
-        needsRepair = true;
-        inconsistencies.push(`Usuário é dono da organização ${org.name || 'Sem nome'} (${orgId}) mas não possui documento de membro.`);
+  } else if (val && typeof val === 'object') {
+    for (const [k, v] of Object.entries(val)) {
+      if (v === true) {
+        const sanitized = sanitizeString(k);
+        if (sanitized) result.add(sanitized);
+      } else if (typeof v === 'string') {
+        const sanitized = sanitizeString(v);
+        if (sanitized) result.add(sanitized);
       }
     }
   }
+  return Array.from(result);
+}
 
-  for (const orgId of Object.keys(organizationsMap)) {
-    const org = organizationsMap[orgId];
-    const membership = membershipsMap[orgId];
-    const isOwner = org.ownerUserId === uid || org.ownerUid === uid || org.ownerId === uid || membership?.role === 'owner' || membership?.organizationRole === 'owner';
+function isExcludedStatus(status: unknown): boolean {
+  const s = sanitizeString(status)?.toLowerCase();
+  if (!s) return false;
+  return ['inactive', 'suspended', 'disabled', 'removed', 'revoked', 'archived'].includes(s);
+}
 
-    const orgItem = {
-      id: orgId,
-      name: org.name || 'Sem nome',
-      slug: org.slug || null,
-      ownerUserId: org.ownerUserId || org.ownerUid || org.ownerId || null,
-      ownerEmail: org.ownerEmail || null,
-      ownerName: org.ownerName || null,
-      subscriptionPlan: org.subscriptionPlan || org.plan || 'starter',
-      subscriptionStatus: org.subscriptionStatus || org.status || 'inactive',
-      createdAt: org.createdAt,
-      updatedAt: org.updatedAt,
-      apps: org.apps,
-      userRole: membership?.role || membership?.organizationRole || (isOwner ? 'owner' : null),
-      status: org.status || 'active',
-      membership: membership || null,
-      enabledApps: org.enabledApps || []
-    };
-
-    finalOrganizations.push(orgItem);
-    if (isOwner) {
-      ownedOrganizations.push(orgItem);
-    }
-  }
-
-  const activeOrgsList = finalOrganizations.filter(o => o.status !== 'archived');
-
-  finalOrganizations.sort((a, b) => {
-    const roleWeight = (r: string | null) => r === 'owner' ? 3 : r === 'admin' ? 2 : r === 'member' ? 1 : 0;
-    const diff = roleWeight(b.userRole) - roleWeight(a.userRole);
-    if (diff !== 0) return diff;
-    const tA = a.createdAt?.seconds || 0;
-    const tB = b.createdAt?.seconds || 0;
-    return tB - tA;
-  });
-
-  let activeOrganizationId: string | null = null;
-  let primaryOrganizationId: string | null = null;
-
-  let uidUsedAsOrganizationIdSuspected = false;
-  if (organizationsMap[uid] && organizationsMap[uid].status !== 'archived' && !organizationsMap[uid].archived) {
-    uidUsedAsOrganizationIdSuspected = true;
-    inconsistencies.push('SUSPEITA: Organização com ID igual ao UID do usuário identificada.');
-  }
-
-  if (userData) {
-    if (userData.activeOrganizationId && organizationsMap[userData.activeOrganizationId] && organizationsMap[userData.activeOrganizationId].status !== 'archived') {
-      activeOrganizationId = userData.activeOrganizationId;
-    }
-    
-    if (userData.primaryOrganizationId && organizationsMap[userData.primaryOrganizationId] && organizationsMap[userData.primaryOrganizationId].status !== 'archived') {
-      primaryOrganizationId = userData.primaryOrganizationId;
-    }
-
-    if (!activeOrganizationId && primaryOrganizationId) {
-      activeOrganizationId = primaryOrganizationId;
-    }
-
-    if (!activeOrganizationId && !primaryOrganizationId && userData.organizationId && organizationsMap[userData.organizationId] && organizationsMap[userData.organizationId].status !== 'archived') {
-      activeOrganizationId = userData.organizationId;
-      primaryOrganizationId = userData.organizationId;
-      needsRepair = true;
-      inconsistencies.push('Usando organizationId legado como fallback.');
-    }
-  }
-
-  if (activeOrgsList.length > 0) {
-    if (!primaryOrganizationId) {
-      const ownerOrg = activeOrgsList.find(o => o.userRole === 'owner');
-      const memberOrg = activeOrgsList.find(o => o.membership != null);
-      
-      primaryOrganizationId = (ownerOrg || memberOrg || activeOrgsList[0]).id;
-      activeOrganizationId = primaryOrganizationId;
-      needsRepair = true;
-      if (!uidUsedAsOrganizationIdSuspected) {
-        inconsistencies.push('Vínculo primário canonical ausente. Fallback provisório assumido base nas organizações ativas.');
-      }
-    }
-  } else {
-    primaryOrganizationId = null;
-    activeOrganizationId = null;
-  }
-
-  if (userData) {
-    if (activeOrganizationId && userData.organizationId !== activeOrganizationId) {
-      needsRepair = true;
-      inconsistencies.push('userData.organizationId legado está desalinhado.');
-    }
-    if (activeOrganizationId && !userData.activeOrganizationId) {
-      needsRepair = true;
-    }
-    if (primaryOrganizationId && !userData.primaryOrganizationId) {
-      needsRepair = true;
-    }
-  }
-
-  const hasOrganization = activeOrganizationId !== null;
-
-  // Fully PASSIVE simulate single org repair
-  if (finalOrganizations.length === 1 && !uidUsedAsOrganizationIdSuspected && hasOrganization) {
-    const fixedOrgId = finalOrganizations[0].id;
-    if (needsRepair && userData) {
-      primaryOrganizationId = fixedOrgId;
-      activeOrganizationId = fixedOrgId;
-      
-      // Filter out simulated repairs
-      inconsistencies = inconsistencies.filter(i => !i.includes('primário canonical ausente') && !i.includes('desalinhado'));
-      needsRepair = inconsistencies.length > 0;
-    }
-  }
-
-  return {
-    uid,
-    activeOrganizationId,
-    primaryOrganizationId,
-    organizations: activeOrgsList,
-    ownedOrganizations: ownedOrganizations.filter((o: any) => o.status !== 'archived' && o.archived !== true),
-    memberships: Object.values(membershipsMap),
-    hasOrganization,
-    needsRepair,
-    inconsistencies,
-    uidUsedAsOrganizationIdSuspected
+function getCandidateIdsFromUser(userData: admin.firestore.DocumentData): string[] {
+  const ids = new Set<string>();
+  
+  const addId = (id: unknown) => {
+    const s = sanitizeString(id);
+    if (s) ids.add(s);
   };
+
+  addId(userData.activeOrganizationId);
+  addId(userData.primaryOrganizationId);
+  addId(userData.organizationId);
+  
+  if (Array.isArray(userData.organizationIds)) {
+    userData.organizationIds.forEach(addId);
+  }
+  if (Array.isArray(userData.memberships)) {
+    userData.memberships.forEach((m: unknown) => {
+      if (typeof m === 'string') addId(m);
+      else if (m && typeof m === 'object' && m !== null) {
+        addId((m as Record<string, unknown>).organizationId);
+      }
+    });
+  }
+  return Array.from(ids);
 }
 
 export async function handleConnectSessionContextRequest(
@@ -257,7 +87,12 @@ export async function handleConnectSessionContextRequest(
   res: express.Response,
   deps: ConnectSessionContextDependencies
 ) {
-  // P0-C Security: Strict anti-caching headers
+  const startTimeMs = Date.now();
+  let authorizedOrganizationCount = 0;
+  let activeOrganizationIdResolved: string | null = null;
+  let maskedUid = 'unknown';
+  let hasGlobalRole = false;
+
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -265,11 +100,16 @@ export async function handleConnectSessionContextRequest(
 
   try {
     const authHeader = req.headers.authorization;
-    if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ') || authHeader.trim() === 'Bearer') {
+    if (
+      !authHeader || 
+      typeof authHeader !== 'string' || 
+      !authHeader.trim().toLowerCase().startsWith('bearer ') ||
+      authHeader.trim().toLowerCase() === 'bearer'
+    ) {
       return res.status(401).json({ success: false, code: 'UNAUTHORIZED', error: 'Authentication required.' });
     }
 
-    const token = authHeader.split('Bearer ')[1].trim();
+    const token = authHeader.substring(7).trim();
     if (!token) {
       return res.status(401).json({ success: false, code: 'UNAUTHORIZED', error: 'Authentication required.' });
     }
@@ -281,117 +121,178 @@ export async function handleConnectSessionContextRequest(
       return res.status(401).json({ success: false, code: 'UNAUTHORIZED', error: 'Authentication required.' });
     }
 
-    if (!decoded.uid) {
+    const uid = sanitizeString(decoded.uid);
+    if (!uid) {
       return res.status(401).json({ success: false, code: 'UNAUTHORIZED', error: 'Authentication required.' });
     }
+    maskedUid = uid.substring(0, 3) + '***' + uid.substring(uid.length - 3);
 
-    const uid = decoded.uid;
     const db = deps.getDb();
     if (!db) {
       return res.status(503).json({ success: false, code: 'SERVICE_UNAVAILABLE', error: 'Database service unavailable.' });
     }
 
-    // Step 1: Identity Resolution
     const userRef = db.collection('users').doc(uid);
     const userDoc = await userRef.get();
-
     if (!userDoc.exists) {
-      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', error: 'User profile not found.' });
+      return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', error: 'User profile not found.' });
     }
 
-    const userData = userDoc.data() || {};
-    
-    // Status validation
-    if (
-      userData.status === 'inactive' ||
-      userData.status === 'suspended' ||
-      userData.status === 'disabled' ||
-      userData.disabled === true
-    ) {
-      return res.status(403).json({ success: false, code: 'FORBIDDEN', error: 'User account is inactive.' });
+    const userData = userDoc.data();
+    if (!userData) {
+      return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', error: 'User profile empty.' });
     }
 
-    const systemRole = userData.systemRole || 'user';
-    const hasGlobalRole = isCanonicalGlobalRole(systemRole);
-
-    // Step 2: Build ConnectSessionUser representation
-    const userCapabilities: string[] = [];
-    if (userData.capabilities && Array.isArray(userData.capabilities)) {
-      userCapabilities.push(...userData.capabilities);
-    }
-    if (hasGlobalRole) {
-      userCapabilities.push('*');
+    if (isExcludedStatus(userData.status) || userData.disabled === true) {
+      return res.status(403).json({ success: false, code: 'USER_INACTIVE', error: 'User account is inactive.' });
     }
 
-    const sessionUser = {
+    const systemRole = sanitizeString(userData.systemRole) || 'user';
+    hasGlobalRole = isCanonicalGlobalRole(systemRole);
+
+    const sessionUser: ConnectSessionUser = {
       uid,
-      displayName: userData.displayName || null,
-      photoUrl: userData.photoURL || userData.photoUrl || null,
-      locale: userData.locale || null,
+      displayName: sanitizeString(userData.displayName) || sanitizeString(userData.name),
+      photoUrl: sanitizeString(userData.photoURL) || sanitizeString(userData.photoUrl) || sanitizeString(userData.avatarUrl),
+      locale: sanitizeString(userData.locale) || sanitizeString(userData.language),
       systemRole,
-      capabilities: userCapabilities
+      capabilities: sanitizeStringArray(userData.capabilities).slice(0, 100)
     };
 
-    // Step 3: Candidate Organizations Discovery (Using entirely read-only resolver)
-    const context = await resolveUserOrganizationContextReadOnly(uid, db);
+    const potentialOrgIds = new Set<string>();
+    getCandidateIdsFromUser(userData).forEach(id => potentialOrgIds.add(id));
 
-    const candidates: ConnectSessionOrganization[] = context.organizations.map(org => {
-      const isOwner = org.ownerUserId === uid || org.ownerUid === uid || org.ownerId === uid || org.userRole === 'owner';
-      const roleInOrg = org.userRole || 'member';
+    try {
+      const legacyMembersSnap = await db.collection('organization_members').where('uid', '==', uid).limit(MAX_CANDIDATE_ORGANIZATIONS).get();
+      legacyMembersSnap.docs.forEach(doc => {
+        const oId = sanitizeString(doc.data().organizationId);
+        if (oId) potentialOrgIds.add(oId);
+      });
+    } catch (e) {
+      throw new Error('Failed to query organization_members');
+    }
 
-      let permissionsList: string[] = [];
-      if (hasGlobalRole) {
-        permissionsList = ['*'];
-      } else if (org.membership?.permissions) {
-        const perms = org.membership.permissions;
-        permissionsList = Object.keys(perms).filter(k => perms[k] === true);
-      } else if (org.userRole) {
-        const perms = getDefaultPermissions(org.userRole);
-        permissionsList = Object.keys(perms).filter(k => perms[k] === true);
+    try {
+      const q1 = await db.collection('organizations').where('ownerUserId', '==', uid).limit(MAX_CANDIDATE_ORGANIZATIONS).get();
+      q1.docs.forEach(doc => potentialOrgIds.add(doc.id));
+      
+      const q2 = await db.collection('organizations').where('ownerUid', '==', uid).limit(MAX_CANDIDATE_ORGANIZATIONS).get();
+      q2.docs.forEach(doc => potentialOrgIds.add(doc.id));
+      
+      const q3 = await db.collection('organizations').where('ownerId', '==', uid).limit(MAX_CANDIDATE_ORGANIZATIONS).get();
+      q3.docs.forEach(doc => potentialOrgIds.add(doc.id));
+    } catch (e) {
+      throw new Error('Failed to query owned organizations');
+    }
+
+    const candidateIds = Array.from(potentialOrgIds).slice(0, MAX_CANDIDATE_ORGANIZATIONS);
+    const authorizedOrganizations: ConnectSessionOrganization[] = [];
+
+    if (candidateIds.length > 0) {
+      const orgChunks: string[][] = [];
+      for (let i = 0; i < candidateIds.length; i += 10) {
+        orgChunks.push(candidateIds.slice(i, i + 10));
       }
 
-      const orgCapabilities: string[] = [];
-      if (org.enabledApps && Array.isArray(org.enabledApps)) {
-        orgCapabilities.push(...org.enabledApps);
+      const orgsData = new Map<string, admin.firestore.DocumentData>();
+      for (const chunk of orgChunks) {
+        try {
+          const qs = await db.collection('organizations').where(admin.firestore.FieldPath.documentId(), 'in', chunk).get();
+          qs.docs.forEach(doc => orgsData.set(doc.id, doc.data()));
+        } catch (e) {
+          throw new Error('Failed to fetch organizations');
+        }
       }
-      if (org.apps?.musicscale?.access === true) {
-        orgCapabilities.push('musicscale');
-      }
-      if (org.apps?.musicscale?.features) {
-        const features = org.apps.musicscale.features;
-        Object.keys(features).forEach(k => {
-          if (features[k] === true) {
-            orgCapabilities.push(`musicscale.feature.${k}`);
+
+      for (const orgId of candidateIds) {
+        const orgData = orgsData.get(orgId);
+        if (!orgData) continue;
+
+        if (isExcludedStatus(orgData.status) || orgData.disabled === true || orgData.archived === true) {
+          continue;
+        }
+
+        let membershipData: admin.firestore.DocumentData | null = null;
+        try {
+          const mDoc = await db.collection('organizations').doc(orgId).collection('members').doc(uid).get();
+          if (mDoc.exists) {
+            membershipData = mDoc.data() || null;
           }
+        } catch (e) {
+          throw new Error('Failed to fetch membership');
+        }
+
+        if (hasGlobalRole && !membershipData) {
+          authorizedOrganizations.push({
+            id: orgId,
+            name: sanitizeString(orgData.name) || orgId,
+            slug: sanitizeString(orgData.slug),
+            status: sanitizeString(orgData.status) || 'active',
+            accessSource: 'global_system_role',
+            organizationRole: null,
+            membershipStatus: null,
+            permissions: [],
+            capabilities: []
+          });
+          continue;
+        }
+
+        if (!membershipData) continue;
+        if (isExcludedStatus(membershipData.status) || membershipData.enabled === false) continue;
+
+        authorizedOrganizations.push({
+          id: orgId,
+          name: sanitizeString(orgData.name) || orgId,
+          slug: sanitizeString(orgData.slug),
+          status: sanitizeString(orgData.status) || 'active',
+          accessSource: 'organization_membership',
+          organizationRole: sanitizeString(membershipData.role) || sanitizeString(membershipData.organizationRole),
+          membershipStatus: sanitizeString(membershipData.status) || 'active',
+          permissions: sanitizeStringArray(membershipData.permissions).slice(0, 100),
+          capabilities: sanitizeStringArray(membershipData.capabilities).slice(0, 100)
         });
       }
+    }
 
-      return {
-        id: org.id,
-        name: org.name,
-        slug: org.slug || null,
-        status: org.status || 'active',
-        accessSource: (hasGlobalRole ? "global_system_role" : "organization_membership") as any,
-        organizationRole: roleInOrg,
-        membershipStatus: org.membership?.status || 'active',
-        permissions: permissionsList,
-        capabilities: orgCapabilities
+    authorizedOrganizations.sort((a, b) => {
+      if (a.accessSource === 'organization_membership' && b.accessSource !== 'organization_membership') return -1;
+      if (a.accessSource !== 'organization_membership' && b.accessSource === 'organization_membership') return 1;
+      
+      const roleWeight = (role: string | null) => {
+        if (role === 'owner') return 3;
+        if (role === 'admin') return 2;
+        if (role === 'member') return 1;
+        return 0;
       };
+      const weightA = roleWeight(a.organizationRole);
+      const weightB = roleWeight(b.organizationRole);
+      if (weightA !== weightB) return weightB - weightA;
+
+      return a.name.localeCompare(b.name);
     });
 
-    // Step 4: Active Organization Resolution
-    const activeOrganizationId = context.activeOrganizationId;
-    const activeOrganization = activeOrganizationId
-      ? candidates.find(c => c.id === activeOrganizationId) || null
+    authorizedOrganizationCount = authorizedOrganizations.length;
+
+    const requestedActiveId = sanitizeString(userData.activeOrganizationId);
+    const requestedPrimaryId = sanitizeString(userData.primaryOrganizationId);
+
+    if (requestedActiveId && authorizedOrganizations.some(o => o.id === requestedActiveId)) {
+      activeOrganizationIdResolved = requestedActiveId;
+    } else if (requestedPrimaryId && authorizedOrganizations.some(o => o.id === requestedPrimaryId)) {
+      activeOrganizationIdResolved = requestedPrimaryId;
+    } else if (authorizedOrganizations.length > 0) {
+      activeOrganizationIdResolved = authorizedOrganizations[0].id;
+    }
+
+    const activeOrganization = activeOrganizationIdResolved
+      ? authorizedOrganizations.find(o => o.id === activeOrganizationIdResolved) || null
       : null;
 
-    // Step 5: Application Access (MusicScale)
     let appAccessResponse: { musicscale: ConnectSessionAppAccess } | null = null;
-
-    if (activeOrganizationId) {
+    if (activeOrganizationIdResolved) {
       const appAccessResult = await resolveEcosystemAppAccess({
         uid,
-        organizationId: activeOrganizationId,
+        organizationId: activeOrganizationIdResolved,
         appId: 'musicscale',
         db
       });
@@ -407,7 +308,7 @@ export async function handleConnectSessionContextRequest(
       appAccessResponse = {
         musicscale: {
           appId: 'musicscale',
-          organizationId: activeOrganizationId,
+          organizationId: activeOrganizationIdResolved,
           accessible: appAccessResult.accessible,
           isGlobalAccess: appAccessResult.isGlobalAccess,
           accessSource: appAccessResult.accessSource,
@@ -430,21 +331,42 @@ export async function handleConnectSessionContextRequest(
       generatedAtMs: Date.now(),
       user: sessionUser,
       globalAccess: hasGlobalRole,
-      activeOrganizationId,
+      activeOrganizationId: activeOrganizationIdResolved,
       activeOrganization,
-      organizations: candidates,
+      organizations: authorizedOrganizations,
       appAccess: appAccessResponse
     };
 
-    return res.status(200).json(payload);
-  } catch (err: any) {
-    deps.logger.error('[CONNECT_SESSION_CONTEXT_FATAL]', {
-      error: err.message,
-      stack: err.stack
+    deps.logger.info('ConnectSessionContext success', {
+      eventName: 'CONNECT_SESSION_CONTEXT_SUCCESS',
+      protocolVersion: '1.0.0',
+      maskedUid,
+      authorizedOrganizationCount,
+      activeOrganizationId: activeOrganizationIdResolved,
+      globalAccess: hasGlobalRole,
+      result: 'success',
+      errorCode: null,
+      durationMs: Date.now() - startTimeMs
     });
+
+    return res.status(200).json(payload);
+
+  } catch (err: unknown) {
+    deps.logger.error('ConnectSessionContext failed', {
+      eventName: 'CONNECT_SESSION_CONTEXT_FAILED',
+      protocolVersion: '1.0.0',
+      maskedUid,
+      authorizedOrganizationCount,
+      activeOrganizationId: activeOrganizationIdResolved,
+      globalAccess: hasGlobalRole,
+      result: 'error',
+      errorCode: 'SESSION_CONTEXT_FAILED',
+      durationMs: Date.now() - startTimeMs
+    });
+
     return res.status(500).json({
       success: false,
-      code: 'INTERNAL_SERVER_ERROR',
+      code: 'SESSION_CONTEXT_FAILED',
       error: 'An internal server error occurred while resolving the session context.'
     });
   }
