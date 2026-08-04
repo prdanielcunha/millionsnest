@@ -24,7 +24,7 @@ interface NormalizedProduct {
   metadata: Record<string, string>;
 }
 
-export default function Checkout() {
+export function Checkout() {
   const { user, profile, canonicalContext, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation(['checkout']);
@@ -618,6 +618,15 @@ export default function Checkout() {
                     <div>
                         <h3 className="text-xl font-medium tracking-tight text-white mb-6">{t('summary_title', 'Resumo da Assinatura')}</h3>
                         
+                        <div className="mb-6 p-3.5 rounded-xl bg-white/[0.03] border border-white/10">
+                           <div className="text-[#2B85EB] text-[11px] font-bold uppercase tracking-wider mb-1">
+                              {t('subscription_scope_summary_title', 'Assinatura por organização')}
+                           </div>
+                           <p className="text-xs text-[#A0A7B5] font-normal leading-relaxed">
+                              {t('subscription_scope_summary_desc', 'Plano contratado para toda a sua organização/igreja. Os integrantes convidados não pagam assinaturas individuais.')}
+                           </p>
+                        </div>
+
                         <div className="space-y-4 mb-6">
                             {selectedPlanItem && (
                                 <div className="flex justify-between items-baseline">

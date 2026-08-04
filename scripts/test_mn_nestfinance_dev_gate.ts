@@ -1,12 +1,25 @@
 
 import { resolveEcosystemAppAccess, DENIAL_REASONS } from '../src/server/services/EcosystemAccessResolver.js';
 import { canAccessNestFinanceDevelopment } from '../src/lib/permissionService.js';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const http = require('node:http');
+const https = require('node:https');
 
 let passed = 0;
 let failed = 0;
 let assertions = 0;
-let networkAttempts = 0;
-let writeAttempts = 0;
+
+let fetchAttempts = 0;
+let httpRequestAttempts = 0;
+let httpsRequestAttempts = 0;
+
+let directWriteAttempts = 0;
+let batchCreationAttempts = 0;
+let batchMutationAttempts = 0;
+let batchCommitAttempts = 0;
+let transactionAttempts = 0;
 
 function assert(condition: boolean, message: string) {
   assertions++;
@@ -37,19 +50,41 @@ class MockFirestore {
       if (!this.collections.members) this.collections.members = {};
       if (!this.collections.members[orgId]) this.collections.members[orgId] = {};
       return {
-        doc: (id: string) => ({ get: async () => new MockDoc(id, this.collections.members[orgId][id]) })
+        doc: (id: string) => ({
+          get: async () => new MockDoc(id, this.collections.members[orgId][id]),
+          set: async () => { directWriteAttempts++; },
+          update: async () => { directWriteAttempts++; },
+          delete: async () => { directWriteAttempts++; }
+        })
       };
     }
 
     if (!this.collections[path]) this.collections[path] = {};
     return {
-      doc: (id: string) => ({ get: async () => new MockDoc(id, this.collections[path][id]) })
+      doc: (id: string) => ({
+        get: async () => new MockDoc(id, this.collections[path][id]),
+        set: async () => { directWriteAttempts++; },
+        update: async () => { directWriteAttempts++; },
+        delete: async () => { directWriteAttempts++; }
+      })
     };
   }
 
   // Intercept writes
-  async runTransaction() { writeAttempts++; return null; }
-  batch() { return { commit: async () => { writeAttempts++; }, set: () => {}, update: () => {}, delete: () => {} }; }
+  async runTransaction(updateFunction: any) {
+    transactionAttempts++;
+    return null;
+  }
+
+  batch() {
+    batchCreationAttempts++;
+    return {
+      commit: async () => { batchCommitAttempts++; },
+      set: () => { batchMutationAttempts++; },
+      update: () => { batchMutationAttempts++; },
+      delete: () => { batchMutationAttempts++; }
+    };
+  }
 }
 
 async function runTests() {
@@ -57,7 +92,23 @@ async function runTests() {
 
   // Intercept network
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => { networkAttempts++; return new Response(); };
+  const originalHttpRequest = http.request;
+  const originalHttpsRequest = https.request;
+
+  globalThis.fetch = async () => {
+    fetchAttempts++;
+    throw new Error('Network call blocked by interceptor (fetch)');
+  };
+
+  http.request = (...args: any[]) => {
+    httpRequestAttempts++;
+    throw new Error('Network call blocked by interceptor (http)');
+  };
+
+  https.request = (...args: any[]) => {
+    httpsRequestAttempts++;
+    throw new Error('Network call blocked by interceptor (https)');
+  };
 
   try {
     // 1-3. canAccessNestFinanceDevelopment logic
@@ -241,13 +292,25 @@ async function runTests() {
     assert(resMS.accessible === true && resMS.decisionState === 'granted', 'MusicScale preserva comportamento para founder');
 
     // 24. nenhuma chamada de rede
-    assert(networkAttempts === 0, 'nenhuma chamada de rede ocorreu');
+    const networkAttempts = fetchAttempts + httpRequestAttempts + httpsRequestAttempts;
+    assert(fetchAttempts === 0, 'nenhuma chamada de rede ocorreu (fetch)');
+    assert(httpRequestAttempts === 0, 'nenhuma chamada de rede ocorreu (http)');
+    assert(httpsRequestAttempts === 0, 'nenhuma chamada de rede ocorreu (https)');
+    assert(networkAttempts === 0, 'nenhuma chamada de rede ocorreu no total');
 
     // 25. nenhuma escrita, batch ou transaction
-    assert(writeAttempts === 0, 'nenhuma escrita, batch ou transaction ocorreu');
+    const totalWriteAttempts = directWriteAttempts + batchCreationAttempts + batchMutationAttempts + batchCommitAttempts + transactionAttempts;
+    assert(directWriteAttempts === 0, 'nenhuma escrita direta ocorreu');
+    assert(batchCreationAttempts === 0, 'nenhuma criacao de batch ocorreu');
+    assert(batchMutationAttempts === 0, 'nenhuma operacao de batch ocorreu');
+    assert(batchCommitAttempts === 0, 'nenhum commit de batch ocorreu');
+    assert(transactionAttempts === 0, 'nenhuma transaction ocorreu');
+    assert(totalWriteAttempts === 0, 'nenhuma escrita, batch ou transaction ocorreu no total');
 
   } finally {
     globalThis.fetch = originalFetch;
+    http.request = originalHttpRequest;
+    https.request = originalHttpsRequest;
   }
 
   console.log('--- SUMMARY ---');
@@ -256,8 +319,23 @@ async function runTests() {
   console.log(`Failed: ${failed}`);
   console.log(`Skipped: 0`);
   console.log(`Assertions: ${assertions}`);
+  console.log(`fetchAttempts: ${fetchAttempts}`);
+  console.log(`httpRequestAttempts: ${httpRequestAttempts}`);
+  console.log(`httpsRequestAttempts: ${httpsRequestAttempts}`);
 
-  if (failed > 0) {
+  const networkAttempts = fetchAttempts + httpRequestAttempts + httpsRequestAttempts;
+  console.log(`networkAttempts: ${networkAttempts}`);
+
+  console.log(`directWriteAttempts: ${directWriteAttempts}`);
+  console.log(`batchCreationAttempts: ${batchCreationAttempts}`);
+  console.log(`batchMutationAttempts: ${batchMutationAttempts}`);
+  console.log(`batchCommitAttempts: ${batchCommitAttempts}`);
+  console.log(`transactionAttempts: ${transactionAttempts}`);
+
+  const totalWriteAttempts = directWriteAttempts + batchCreationAttempts + batchMutationAttempts + batchCommitAttempts + transactionAttempts;
+  console.log(`totalWriteAttempts: ${totalWriteAttempts}`);
+
+  if (failed > 0 || networkAttempts > 0 || totalWriteAttempts > 0) {
     process.exit(1);
   }
 }

@@ -27,9 +27,9 @@ const Cancellation = lazy(() => import('./pages/Cancellation.js').then(module =>
 const Login = lazy(() => import('./pages/Login.js').then(module => ({ default: module.Login })));
 const Join = lazy(() => import('./pages/Join.js').then(module => ({ default: module.Join })));
 const Dashboard = lazy(() => import('./pages/Dashboard.js').then(module => ({ default: module.Dashboard })));
-const Checkout = lazy(() => import('./pages/Checkout.js'));
-const BillingSuccess = lazy(() => import('./pages/BillingSuccess.js'));
-const AdminDebug = lazy(() => import('./pages/AdminDebug.js'));
+const Checkout = lazy(() => import('./pages/Checkout.js').then(module => ({ default: module.Checkout })));
+const BillingSuccess = lazy(() => import('./pages/BillingSuccess.js').then(module => ({ default: module.BillingSuccess })));
+const AdminDebug = lazy(() => import('./pages/AdminDebug.js').then(module => ({ default: module.AdminDebug })));
 const EcosystemAdmin = lazy(() => import('./pages/EcosystemAdmin.js').then(module => ({ default: module.EcosystemAdmin })));
 const EcosystemDataConsole = lazy(() => import('./pages/EcosystemDataConsole.js').then(module => ({ default: module.EcosystemDataConsole })));
 const OrganizationPublicPage = lazy(() => import('./pages/OrganizationPublicPage.js').then(module => ({ default: module.OrganizationPublicPage })));

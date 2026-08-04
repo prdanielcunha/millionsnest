@@ -4,7 +4,7 @@ import { doc, getDoc, collection, query, where, getDocs } from "firebase/firesto
 import { db } from "../lib/firebase.js";
 import { Navbar } from "../components/Navbar.js";
 
-export default function AdminDebug() {
+export function AdminDebug() {
   const { user, profile } = useAuth();
   const [debugData, setDebugData] = useState<any>(null);
   const [loading, setLoading] = useState(true);

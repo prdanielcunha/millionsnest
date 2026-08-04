@@ -21,6 +21,10 @@ export function SalesChat() {
     {
       q: t('faq_q3'),
       a: t('faq_a3')
+    },
+    {
+      q: t('faq_q5'),
+      a: t('faq_a5')
     }
   ];
 
