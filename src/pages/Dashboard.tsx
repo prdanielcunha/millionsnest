@@ -269,10 +269,14 @@ export function Dashboard() {
   const [nestFinanceLaunching, setNestFinanceLaunching] = useState(false);
 
   const handleLaunchNestFinance = async () => {
-    if (!hasNestFinanceDevelopmentAccess) {
+    if (!canLaunchNestFinance) {
+      if (!nestFinanceLaunching) {
+        feedback.error(
+          'O acesso ao NestFinance não está disponível neste momento.'
+        );
+      }
       return;
     }
-    if (!user || !activeContextOrgId || nestFinanceLaunching) return;
 
     setNestFinanceLaunching(true);
     const toastId = feedback.loading("Preparando acesso...");
@@ -388,8 +392,13 @@ export function Dashboard() {
       || profile?.activeOrganizationId 
       || profile?.primaryOrganizationId 
       || profile?.organizationId;
-    
-  const canLaunchNestFinance = hasNestFinanceDevelopmentAccess && nestFinanceLaunchEnabled && !nestFinanceLaunching;
+
+  const canLaunchNestFinance =
+    Boolean(user) &&
+    Boolean(activeContextOrgId) &&
+    hasNestFinanceDevelopmentAccess &&
+    nestFinanceLaunchEnabled &&
+    !nestFinanceLaunching;
 
   useEffect(() => {
     if (isGlobalAdmin && adminSelectedOrgId && user) {
@@ -1240,7 +1249,7 @@ export function Dashboard() {
   const msIsInstalled = musicScaleProjection?.accessible === true;
 
   const installedApps = ECOSYSTEM_APPS.filter(app => {
-    if (app.id === 'nestfinance' && !hasNestFinanceDevelopmentAccess) return false;
+    if (app.id === 'nestfinance') return false;
     if (app.id === 'musicscale') return msIsInstalled;
     return organization?.enabledApps?.includes(app.id);
   });
@@ -1627,13 +1636,10 @@ export function Dashboard() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {ECOSYSTEM_APPS.filter(app => {
-                        // Restrict NestFinance preview to global admins
-                        if (app.id === 'nestfinance' && !hasNestFinanceDevelopmentAccess) return false;
-                        return true;
-                      }).map(app => {
+                      {ECOSYSTEM_APPS.map(app => {
                         const isMusicScale = app.id === 'musicscale';
-                        const isInstalled = isMusicScale ? msIsInstalled : organization?.enabledApps?.includes(app.id);
+                        const isNestFinance = app.id === 'nestfinance';
+                        const isInstalled = isNestFinance ? false : isMusicScale ? msIsInstalled : organization?.enabledApps?.includes(app.id);
 
                         let cardStatusText = t('dashboard.apps.available', 'Disponível');
                         let isWarningState = false;
@@ -1659,6 +1665,8 @@ export function Dashboard() {
                                   default: cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
                                }
                            }
+                        } else if (isNestFinance) {
+                           cardStatusText = 'Em breve';
                         } else {
                            cardStatusText = isInstalled ? 'Instalado' : 
                                             
@@ -1699,22 +1707,12 @@ export function Dashboard() {
                             
                             <div className="relative z-10 flex items-center gap-3">
                               {app.id === 'nestfinance' ? (
-                                nestFinanceLaunchEnabled ? (
-                                  <button
-                                    onClick={handleLaunchNestFinance}
-                                    disabled={!canLaunchNestFinance}
-                                    className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-wait"
-                                  >
-                                    {nestFinanceLaunching ? 'Preparando acesso...' : 'Acessar desenvolvimento'} <ArrowRight className="w-3.5 h-3.5" />
-                                  </button>
-                                ) : (
-                                  <button
-                                    disabled
-                                    className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed border border-white/5"
-                                  >
-                                    Em preparação
-                                  </button>
-                                )
+                                <button
+                                  disabled
+                                  className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed border border-white/5"
+                                >
+                                  Em breve
+                                </button>
                               ) : isMusicScale ? (
                                 musicScaleProjectionError ? (
                                   <button
