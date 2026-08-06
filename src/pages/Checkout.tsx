@@ -24,7 +24,7 @@ interface NormalizedProduct {
   metadata: Record<string, string>;
 }
 
-export function Checkout() {
+export default function Checkout() {
   const { user, profile, canonicalContext, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation(['checkout']);
