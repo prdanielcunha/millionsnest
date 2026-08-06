@@ -77,7 +77,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [memberRole, setMemberRole] = useState<MemberRole | null>(cachedContext?.memberRole || null);
   const [musicScalePlan, setMusicScalePlan] = useState<MusicScalePlan>(cachedContext?.musicScalePlan || 'starter');
   const [musicScaleEntitlements, setMusicScaleEntitlements] = useState<any>(cachedContext?.musicScaleEntitlements || MUSIC_SCALE_PLANS.starter);
-  const [subscriptionData, setSubscriptionData] = useState<any>(null);
+  const [subscriptionData, setSubscriptionData] = useState<any>(cachedContext?.subscription ?? null);
   const [loadingOrg, setLoadingOrg] = useState(!cachedContext);
 
   useEffect(() => {
@@ -86,6 +86,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       setMemberRole(null);
       setMusicScalePlan('starter');
       setMusicScaleEntitlements(MUSIC_SCALE_PLANS.starter);
+      setSubscriptionData(null);
       setLoadingOrg(true);
     };
 
@@ -107,6 +108,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
           setMemberRole(null);
           setMusicScalePlan('starter');
           setMusicScaleEntitlements(MUSIC_SCALE_PLANS.starter);
+          setSubscriptionData(null);
           setLoadingOrg(false);
           localStorage.removeItem('mn_org_context');
         }
@@ -116,7 +118,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       let orgId = profile.activeOrganizationId || profile.primaryOrganizationId || profile.organizationId;
       
       // Support Mode Logic
-      if (profile.systemRole === 'ceo' || profile.systemRole === 'admin') {
+      if (isGlobalPrivilegedUser(profile)) {
          try {
            const supportSessionStr = localStorage.getItem('mn_support_session');
            if (supportSessionStr) {
@@ -134,18 +136,31 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
       try {
         const orgRef = doc(db, "organizations", orgId);
-        const orgSnap = await withTimeout(getDoc(orgRef), 8000, "Firestore timeout loading org");
+        const orgPromise = withTimeout(getDoc(orgRef), 8000, "Firestore timeout loading org");
+
+        // Fetch user's role in this organization
+        // We look at /organizations/{orgId}/members/{uid}
+        const memberRef = doc(db, `organizations/${orgId}/members`, user.uid);
+        const memberPromise = withTimeout(getDoc(memberRef), 8000, "Firestore timeout loading member");
+
+        // Fetch subscription details if any for the prioritized gate chain resolution
+        const subRef = doc(db, "subscriptions", orgId);
+        const subscriptionPromise = withTimeout(getDoc(subRef), 8000, "Firestore timeout loading sub").catch((error) => {
+          console.warn("Silent recovery: subscriptions not loaded or lacked permission", error);
+          return null;
+        });
+
+        const [orgSnap, memberSnap, subSnap] = await Promise.all([
+          orgPromise,
+          memberPromise,
+          subscriptionPromise
+        ]);
 
         let currentOrg = null;
         if (orgSnap.exists()) {
           currentOrg = { id: orgSnap.id, ...orgSnap.data() } as Organization;
         }
 
-        // Fetch user's role in this organization
-        // We look at /organizations/{orgId}/members/{uid}
-        const memberRef = doc(db, `organizations/${orgId}/members`, user.uid);
-        const memberSnap = await withTimeout(getDoc(memberRef), 8000, "Firestore timeout loading member");
-        
         let roleData = null;
         if (memberSnap.exists()) {
           roleData = memberSnap.data() as MemberRole;
@@ -158,16 +173,9 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // Fetch subscription details if any for the prioritized gate chain resolution
         let currentSub = null;
-        try {
-          const subRef = doc(db, "subscriptions", orgId);
-          const subSnap = await withTimeout(getDoc(subRef), 8000, "Firestore timeout loading sub");
-          if (subSnap.exists()) {
-            currentSub = subSnap.data();
-          }
-        } catch (e) {
-          console.warn("Silent recovery: subscriptions not loaded or lacked permission", e);
+        if (subSnap?.exists()) {
+          currentSub = subSnap.data();
         }
 
         const resolvedPlan = resolveMusicScalePlan({
@@ -181,11 +189,13 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
           setMemberRole(roleData);
           setMusicScalePlan(resolvedPlan);
           setMusicScaleEntitlements(resolvedEntitlements);
+          setSubscriptionData(currentSub);
           localStorage.setItem('mn_org_context', JSON.stringify({
             organization: currentOrg,
             memberRole: roleData,
             musicScalePlan: resolvedPlan,
-            musicScaleEntitlements: resolvedEntitlements
+            musicScaleEntitlements: resolvedEntitlements,
+            subscription: currentSub
           }));
         }
       } catch (error) {
