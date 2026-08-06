@@ -87,6 +87,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       setMusicScalePlan('starter');
       setMusicScaleEntitlements(MUSIC_SCALE_PLANS.starter);
       setSubscriptionData(null);
+      localStorage.removeItem('mn_org_context');
       setLoadingOrg(true);
     };
 

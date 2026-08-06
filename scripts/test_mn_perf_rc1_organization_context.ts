@@ -33,9 +33,19 @@ function runTests() {
   assert(content.includes('const orgPromise = withTimeout(getDoc(orgRef), 8000, "Firestore timeout loading org")'), "5. organização usa withTimeout");
   assert(content.includes('const memberPromise = withTimeout(getDoc(memberRef), 8000, "Firestore timeout loading member")'), "6. membership usa withTimeout");
   assert(content.includes('const subscriptionPromise = withTimeout(getDoc(subRef), 8000, "Firestore timeout loading sub")'), "7. assinatura usa withTimeout");
-  assert(content.includes('8000'), "8. timeout da organização continua 8000");
-  assert(content.includes('8000'), "9. timeout da membership continua 8000");
-  assert(content.includes('8000'), "10. timeout da assinatura continua 8000");
+  
+  assert(
+    content.includes('const orgPromise = withTimeout(getDoc(orgRef), 8000'), 
+    "8. timeout da organização continua 8000"
+  );
+  assert(
+    content.includes('const memberPromise = withTimeout(getDoc(memberRef), 8000'), 
+    "9. timeout da membership continua 8000"
+  );
+  assert(
+    content.includes('const subscriptionPromise = withTimeout(getDoc(subRef), 8000'), 
+    "10. timeout da assinatura continua 8000"
+  );
   
   assert(
     content.includes('await Promise.all([\n          orgPromise,\n          memberPromise,\n          subscriptionPromise\n        ])') || 
@@ -53,7 +63,7 @@ function runTests() {
   const legacyInsidePromiseAll = content.substring(promiseAllIndex, promiseAllIndex + 150).includes('legacyMemberRef');
   assert(!legacyInsidePromiseAll, "14. membership legada não faz parte do Promise.all");
   
-  assert(content.includes('currentSub = subSnap.data()'), "15. currentSub usa subSnap");
+  assert(content.includes('currentSub = subSnap.data()') || content.includes('currentSub = subSnap.data();'), "15. currentSub usa subSnap");
   assert(content.includes('setSubscriptionData(currentSub)'), "16. setSubscriptionData(currentSub) existe");
   
   const setSubNullCount = (content.match(/setSubscriptionData\(null\)/g) || []).length;
@@ -78,8 +88,57 @@ function runTests() {
   assert(!content.includes('getIdToken(true)'), "34. nenhum getIdToken(true) foi adicionado");
   assert(!content.includes('fetch('), "35. nenhum fetch foi adicionado");
   
-  // No external files written (handled implicitly as we don't do it)
-  assert(true, "36. nenhum arquivo externo é escrito pelo teste"); // Just a placeholder for #36 as it's a test of the test itself
+  // Test 36: test tenant switch block check
+  const tenantSwitchStart = content.indexOf('const handleTenantSwitch');
+  const tenantListenerStart = content.indexOf("window.addEventListener('mn_tenant_switched'", tenantSwitchStart);
+  let tenantSwitchBlock = '';
+  if (tenantSwitchStart >= 0 && tenantListenerStart > tenantSwitchStart) {
+    tenantSwitchBlock = content.slice(tenantSwitchStart, tenantListenerStart);
+  }
+  
+  assert(
+    tenantSwitchStart >= 0 &&
+    tenantListenerStart > tenantSwitchStart &&
+    tenantSwitchBlock.includes("localStorage.removeItem('mn_org_context')"),
+    '36. cache mn_org_context é removido no tenant switch'
+  );
+
+  // No external files written check
+  const testSourcePath = path.join(process.cwd(), 'scripts/test_mn_perf_rc1_organization_context.ts');
+  const testSource = fs.readFileSync(testSourcePath, 'utf8');
+
+  const forbiddenWriteApis = [
+    ['write', 'File', 'Sync'].join(''),
+    ['write', 'File'].join(''),
+    ['append', 'File', 'Sync'].join(''),
+    ['append', 'File'].join(''),
+    ['create', 'Write', 'Stream'].join('')
+  ];
+
+  assert(
+    forbiddenWriteApis.every(api => !testSource.includes(`fs.${api}(`)),
+    '37. nenhum arquivo externo é escrito pelo teste'
+  );
+
+  // Dynamically create regex for the unconditional asserts so they don't trigger the test
+  const assertTrueStr = ['assert', '(', 'true'].join('');
+  const booleanTrueStr = ['Boolean', '(', 'true', ')'].join('');
+  const orTrueStr = ['|', '|', ' true'].join('');
+  const andTrueStr = ['&', '&', ' true'].join('');
+
+  // We have to ignore the very line where we check this in the testSource
+  // To keep it simple, we split the source into lines and filter out lines matching 'testSource.includes'
+  const lines = testSource.split('\n');
+  
+  const hasAssertTrue = lines.some(line => line.includes(assertTrueStr) && !line.includes('assertTrueStr'));
+  const hasBooleanTrue = lines.some(line => line.includes(booleanTrueStr) && !line.includes('booleanTrueStr'));
+  const hasOrTrue = lines.some(line => line.includes(orTrueStr) && !line.includes('orTrueStr'));
+  const hasAndTrue = lines.some(line => line.includes(andTrueStr) && !line.includes('andTrueStr'));
+
+  assert(!hasAssertTrue, `38. não existe ${assertTrueStr}`);
+  assert(!hasBooleanTrue, `39. não existe ${booleanTrueStr}`);
+  assert(!hasOrTrue, `40. não existe ${orTrueStr}`);
+  assert(!hasAndTrue, `41. não existe ${andTrueStr}`);
 
   console.log(`\nTests completed: ${passed} passed, ${failed} failed.`);
   
