@@ -128,6 +128,7 @@ export default {
     subscription_scope_desc: "The church, ministry, or team purchases a single plan and invites members up to the chosen limit. No one pays an individual subscription.",
     pricing_organization_scope_badge: "A single subscription per organization",
     pricing_organization_scope_desc: "Your church, ministry, or group pays one plan fee. All included members access the platform with no extra individual cost.",
+    pricing_organization_scope_label: "Price per organization, not per person.",
     guarantee_tag: "ZERO RISK",
     guarantee_title: "7 days free to <br/> <1>test with complete safety.</1>",
     guarantee_desc: "We believe so much in the impact of our tools that we offer total peace of mind. If MusicScale doesn't raise your ministry's organization level, you can cancel at any time with a single click.",

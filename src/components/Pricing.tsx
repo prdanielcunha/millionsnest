@@ -111,11 +111,25 @@ export function Pricing() {
             <Trans i18nKey="landing:pricing_desc" components={{ 1: <br />, 2: <span className="text-[#2B85EB] font-medium" /> }} />
           </motion.p>
           
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mt-8 mb-4 p-4 rounded-2xl bg-[#0B0F19] border border-[#2B85EB]/30 max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left shadow-lg"
+          >
+            <div className="px-3 py-1 rounded-full bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-[11px] font-bold uppercase tracking-wider shrink-0">
+              {t('pricing_organization_scope_badge', 'Uma única assinatura por organização')}
+            </div>
+            <p className="text-xs text-[#A0A7B5] leading-relaxed">
+              {t('pricing_organization_scope_desc', 'Sua igreja, ministério ou grupo paga um único valor do plano. Todos os integrantes incluídos usam a plataforma sem custo adicional individual.')}
+            </p>
+          </motion.div>
+
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="flex items-center justify-center mt-10"
+            className="flex items-center justify-center mt-4"
           >
             <div className="bg-[#0B0F19] p-1.5 rounded-xl border border-white/10 flex relative shadow-[0_0_20px_rgba(0,0,0,0.5)]">
               <button 
@@ -139,20 +153,6 @@ export function Pricing() {
               />
             </div>
           </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="mt-8 p-4 rounded-2xl bg-[#0B0F19] border border-[#2B85EB]/30 max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left shadow-lg"
-          >
-            <div className="px-3 py-1 rounded-full bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-[11px] font-bold uppercase tracking-wider shrink-0">
-              {t('pricing_organization_scope_badge', 'Uma única assinatura por organização')}
-            </div>
-            <p className="text-xs text-[#A0A7B5] leading-relaxed">
-              {t('pricing_organization_scope_desc', 'Sua igreja, ministério ou grupo paga um único valor do plano. Todos os integrantes incluídos usam a plataforma sem custo adicional individual.')}
-            </p>
-          </motion.div>
         </div>
 
         <div className="grid md:grid-cols-3 gap-6 max-w-7xl mx-auto relative mb-32">
@@ -175,6 +175,13 @@ export function Pricing() {
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
+            
+            <p className="mt-1 text-[11px] text-[#A0A7B5]">
+              {t(
+                'pricing_organization_scope_label',
+                'Valor por organização, não por pessoa.'
+              )}
+            </p>
             
             <div className="mt-2 mb-6">
                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB]/10 text-[#2B85EB] rounded-md border border-[#2B85EB]/20">
@@ -238,6 +245,13 @@ export function Pricing() {
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
+            
+            <p className="mt-1 text-[11px] text-[#A0A7B5]">
+              {t(
+                'pricing_organization_scope_label',
+                'Valor por organização, não por pessoa.'
+              )}
+            </p>
             
             <div className="mt-2 mb-6">
                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB]/10 text-[#2B85EB] rounded-md border border-[#2B85EB]/20">
@@ -308,6 +322,13 @@ export function Pricing() {
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
+            
+            <p className="mt-1 text-[11px] text-[#A0A7B5] relative z-10">
+              {t(
+                'pricing_organization_scope_label',
+                'Valor por organização, não por pessoa.'
+              )}
+            </p>
 
             <div className="mt-2 mb-6 relative z-10">
                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB] text-white rounded-md shadow-[0_0_15px_rgba(43,133,235,0.4)]">

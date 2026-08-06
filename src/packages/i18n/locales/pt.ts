@@ -144,6 +144,7 @@ export default {
     subscription_scope_desc: "A igreja, ministério ou equipe contrata um único plano e convida os integrantes incluídos no limite escolhido. Ninguém precisa pagar uma assinatura individual.",
     pricing_organization_scope_badge: "Uma única assinatura por organização",
     pricing_organization_scope_desc: "Sua igreja, ministério ou grupo paga um único valor do plano. Todos os integrantes incluídos usam a plataforma sem custo adicional individual.",
+    pricing_organization_scope_label: "Valor por organização, não por pessoa.",
     guarantee_tag: "RISCO ZERO",
     guarantee_title: "7 dias grátis para <br/> <1>testar com total segurança.</1>",
     guarantee_desc: "Acreditamos tanto no impacto das nossas ferramentas que oferecemos tranquilidade total. Se o MusicScale não elevar o nível de organização do seu ministério, você pode cancelar a qualquer momento com apenas um clique.",
