@@ -163,6 +163,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    let canonicalContextController: AbortController | null = null;
+    
     if (!auth) {
       console.warn("Firebase Auth not initialized. Missing API Key.");
       if (active) setLoading(false);
@@ -171,6 +173,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!active) return;
+      canonicalContextController?.abort();
+      canonicalContextController = null;
       setUser(currentUser);
       
       if (currentUser) {
@@ -187,7 +191,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             try {
               const idToken = await currentUser.getIdToken();
+              canonicalContextController?.abort();
               const controller = new AbortController();
+              canonicalContextController = controller;
               const timeoutId = window.setTimeout(() => {
                 controller.abort();
               }, 6000);
@@ -200,16 +206,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 
                 if (res.ok) {
                   const canonicalCtx = await res.json();
+                  
+                  const isCanonicalContextValid =
+                    canonicalCtx !== null &&
+                    typeof canonicalCtx === 'object' &&
+                    !Array.isArray(canonicalCtx) &&
+                    (
+                      canonicalCtx.activeOrganizationId === undefined ||
+                      canonicalCtx.activeOrganizationId === null ||
+                      typeof canonicalCtx.activeOrganizationId === 'string'
+                    ) &&
+                    (
+                      canonicalCtx.primaryOrganizationId === undefined ||
+                      canonicalCtx.primaryOrganizationId === null ||
+                      typeof canonicalCtx.primaryOrganizationId === 'string'
+                    );
+
                   if (!active) return;
-                  setCanonicalContext(canonicalCtx);
-                  if (canonicalCtx.activeOrganizationId && canonicalCtx.activeOrganizationId !== userData.activeOrganizationId) {
-                    userData.activeOrganizationId = canonicalCtx.activeOrganizationId;
-                  }
-                  if (canonicalCtx.primaryOrganizationId && canonicalCtx.primaryOrganizationId !== userData.primaryOrganizationId) {
-                    userData.primaryOrganizationId = canonicalCtx.primaryOrganizationId;
-                  }
-                  if (canonicalCtx.activeOrganizationId) {
-                    userData.organizationId = canonicalCtx.activeOrganizationId;
+                  
+                  if (isCanonicalContextValid) {
+                    setCanonicalContext(canonicalCtx);
+                    if (canonicalCtx.activeOrganizationId && canonicalCtx.activeOrganizationId !== userData.activeOrganizationId) {
+                      userData.activeOrganizationId = canonicalCtx.activeOrganizationId;
+                    }
+                    if (canonicalCtx.primaryOrganizationId && canonicalCtx.primaryOrganizationId !== userData.primaryOrganizationId) {
+                      userData.primaryOrganizationId = canonicalCtx.primaryOrganizationId;
+                    }
+                    if (canonicalCtx.activeOrganizationId) {
+                      userData.organizationId = canonicalCtx.activeOrganizationId;
+                    }
+                  } else {
+                    if (active) setCanonicalContext(null);
+                    console.warn('Resposta inválida da API de contexto canônico.');
                   }
                 } else {
                   if (active) setCanonicalContext(null);
@@ -217,6 +245,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
               } finally {
                 window.clearTimeout(timeoutId);
+                if (canonicalContextController === controller) {
+                  canonicalContextController = null;
+                }
               }
             } catch (ctxErr) {
               if (active) setCanonicalContext(null);
@@ -308,6 +339,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       active = false;
+      canonicalContextController?.abort();
+      canonicalContextController = null;
       unsubscribe();
     };
   }, []);

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 function runTests() {
-  console.log("Starting AuthContext performance tests (MN-PERF-RC-2-AUTH-CONTEXT-TIMEOUT)...");
+  console.log("Starting AuthContext performance tests (MN-PERF-RC-2.1-AUTH-ABORT-VALIDATION)...");
   let passed = 0;
   let failed = 0;
 
@@ -89,7 +89,6 @@ function runTests() {
   
   const fetchContextCount = (content.match(/\/api\/user\/organization-context/g) || []).length;
   // 31
-  // The original file had 2 occurrences (one in switchOrganization, one in useEffect). We just need to verify we didn't add more.
   assert(fetchContextCount === 2, "31. apenas um fetch do contexto canônico ocorre por processamento (total de 2 ocorrências no arquivo mantido)");
   
   // 32
@@ -97,9 +96,84 @@ function runTests() {
   // 33
   assert(!content.includes('systemRole: "admin"') && !content.includes("systemRole: 'admin'"), "33. nenhum papel global foi adicionado");
 
+  // Dynamically create regex for the unconditional asserts so they don't trigger the test
+  const assertTrueStr = ['assert', '(', 'true'].join('');
+  const booleanTrueStr = ['Boolean', '(', 'true', ')'].join('');
+  const orTrueStr = ['|', '|', ' true'].join('');
+  const andTrueStr = ['&', '&', ' true'].join('');
+
+  // 36
+  const useEffectBlock = content.substring(content.indexOf('useEffect(() => {'), content.indexOf('return unsubscribe;') !== -1 ? content.indexOf('return unsubscribe;') : content.indexOf('  }, []);'));
+  assert(useEffectBlock.includes('let canonicalContextController'), "36. canonicalContextController é declarado no escopo do useEffect");
+
+  // 37
+  const fetchBlock = content.substring(content.indexOf('const controller = new AbortController()') - 100, content.indexOf('const controller = new AbortController()'));
+  assert(fetchBlock.includes('canonicalContextController?.abort()'), "37. o controller anterior é abortado antes de nova requisição");
+
+  // 38
+  const authStateBlock = content.substring(content.indexOf('onAuthStateChanged(auth, async (currentUser) => {'), content.indexOf('setUser(currentUser)'));
+  assert(authStateBlock.includes('canonicalContextController?.abort()'), "38. o callback de onAuthStateChanged aborta requisição anterior");
+
+  // 39
+  const cleanupBlock = content.substring(content.indexOf('return () => {'), content.indexOf('  }, []);'));
+  assert(cleanupBlock.includes('canonicalContextController?.abort()'), "39. o cleanup aborta canonicalContextController");
+
+  // 40
+  assert(cleanupBlock.includes('canonicalContextController = null'), "40. o cleanup define canonicalContextController como null");
+
+  // 41
+  const finallyBlock = content.substring(content.indexOf('finally {'), content.indexOf('} catch (ctxErr)'));
+  assert(finallyBlock.includes('clearTimeout'), "41. o finally preserva clearTimeout");
+
+  // 42
+  assert(finallyBlock.includes('canonicalContextController === controller') && finallyBlock.includes('canonicalContextController = null'), "42. o finally limpa o controller somente quando corresponde ao controller atual");
+
+  // 43
+  assert(content.includes('typeof canonicalCtx === \'object\'') || content.includes('typeof canonicalCtx === "object"'), "43. canonicalCtx é validado como objeto");
+
+  // 44
+  assert(content.includes('canonicalCtx !== null'), "44. canonicalCtx null é rejeitado");
+
+  // 45
+  assert(content.includes('!Array.isArray(canonicalCtx)'), "45. arrays são rejeitados com Array.isArray");
+
+  // 46
+  assert(content.includes('canonicalCtx.activeOrganizationId === undefined') && content.includes('canonicalCtx.activeOrganizationId === null') && content.includes('typeof canonicalCtx.activeOrganizationId === \'string\''), "46. activeOrganizationId aceita somente undefined, null ou string");
+
+  // 47
+  assert(content.includes('canonicalCtx.primaryOrganizationId === undefined') && content.includes('canonicalCtx.primaryOrganizationId === null') && content.includes('typeof canonicalCtx.primaryOrganizationId === \'string\''), "47. primaryOrganizationId aceita somente undefined, null ou string");
+
+  // 48
+  const validationIfBlock = content.substring(content.indexOf('if (isCanonicalContextValid) {'), content.indexOf('} else {', content.indexOf('if (isCanonicalContextValid) {')) + 200);
+  assert(validationIfBlock.includes('setCanonicalContext(null)'), "48. resposta inválida define canonicalContext como null");
+
+  // 49
+  assert(!validationIfBlock.includes('userData =') && !validationIfBlock.substring(validationIfBlock.indexOf('else {')).includes('userData'), "49. resposta inválida não atualiza userData");
+
+  // 50
+  assert(validationIfBlock.includes('setCanonicalContext(canonicalCtx)'), "50. resposta validada pode atualizar canonicalContext");
+
+  // 51
+  const warnBlock = validationIfBlock.substring(validationIfBlock.indexOf('else {'));
+  assert(warnBlock.includes('console.warn') && !warnBlock.includes('canonicalCtx'), "51. nenhum conteúdo da resposta inválida é enviado ao console");
+
+  // 52
+  assert(!content.includes('retry') && !content.includes('attempts'), "52. nenhum retry foi adicionado");
+
+  // 53
+  assert(!content.includes('setInterval('), "53. nenhum setInterval foi adicionado");
+
   // No external files written check
   const testSourcePath = path.join(process.cwd(), 'scripts/test_mn_perf_rc2_auth_context.ts');
   const testSource = fs.readFileSync(testSourcePath, 'utf8');
+
+  const lines = testSource.split('\n');
+  const hasAssertTrue = lines.some(line => line.includes(assertTrueStr) && !line.includes('assertTrueStr'));
+  const hasBooleanTrue = lines.some(line => line.includes(booleanTrueStr) && !line.includes('booleanTrueStr'));
+  const hasOrTrue = lines.some(line => line.includes(orTrueStr) && !line.includes('orTrueStr'));
+  const hasAndTrue = lines.some(line => line.includes(andTrueStr) && !line.includes('andTrueStr'));
+
+  assert(!hasAssertTrue && !hasBooleanTrue && !hasOrTrue && !hasAndTrue, `54. nenhum assert incondicional existe`);
 
   const forbiddenWriteApis = [
     ['write', 'File', 'Sync'].join(''),
@@ -111,24 +185,9 @@ function runTests() {
 
   assert(
     forbiddenWriteApis.every(api => !testSource.includes(`fs.${api}(`)),
-    '34. nenhum arquivo é escrito pelo teste'
+    '55. nenhum arquivo é escrito pelo teste'
   );
 
-  // Dynamically create regex for the unconditional asserts so they don't trigger the test
-  const assertTrueStr = ['assert', '(', 'true'].join('');
-  const booleanTrueStr = ['Boolean', '(', 'true', ')'].join('');
-  const orTrueStr = ['|', '|', ' true'].join('');
-  const andTrueStr = ['&', '&', ' true'].join('');
-
-  // We have to ignore the very line where we check this in the testSource
-  const lines = testSource.split('\n');
-  
-  const hasAssertTrue = lines.some(line => line.includes(assertTrueStr) && !line.includes('assertTrueStr'));
-  const hasBooleanTrue = lines.some(line => line.includes(booleanTrueStr) && !line.includes('booleanTrueStr'));
-  const hasOrTrue = lines.some(line => line.includes(orTrueStr) && !line.includes('orTrueStr'));
-  const hasAndTrue = lines.some(line => line.includes(andTrueStr) && !line.includes('andTrueStr'));
-
-  assert(!hasAssertTrue && !hasBooleanTrue && !hasOrTrue && !hasAndTrue, `35. não existe assert incondicional`);
 
   console.log(`\nTests completed: ${passed} passed, ${failed} failed.`);
   
