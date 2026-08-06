@@ -65,6 +65,21 @@ const getVisualState = (sub: any) => {
   return status; // fallback
 };
 
+const withDashboardTimeout = <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(
+        () => reject(new Error(message)),
+        timeoutMs
+      );
+    })
+  ]);
+
 export function Dashboard() {
   const { t } = useTranslation(['dashboard', 'common']);
   const { user, profile, loading, logout, switchOrganization, canonicalContext } = useAuth();
@@ -500,132 +515,221 @@ export function Dashboard() {
   const loadOrganizationData = async (orgId: string, requestId: number) => {
     if (!user || !orgId) return;
     try {
-      const subRef = doc(db, "subscriptions", orgId);
-      const subSnap = await getDoc(subRef);
+      const subscriptionPromise = withDashboardTimeout(
+        getDoc(doc(db, 'subscriptions', orgId)),
+        8000,
+        'Dashboard timeout loading subscription'
+      );
 
-      if (requestId !== requestSequenceRef.current || orgId !== currentActiveOrgIdRef.current) return;
+      const organizationPromise = withDashboardTimeout(
+        getDoc(doc(db, 'organizations', orgId)),
+        8000,
+        'Dashboard timeout loading organization'
+      );
 
-      let currentSubData = null;
-      if (subSnap.exists()) {
-         currentSubData = subSnap.data();
-         setSubscription(currentSubData as any);
+      const membersPromise = withDashboardTimeout(
+        getDocs(collection(db, `organizations/${orgId}/members`)),
+        8000,
+        'Dashboard timeout loading memberships'
+      );
+
+      const invitesPromise = withDashboardTimeout(
+        getDocs(
+          query(
+            collection(db, `organizations/${orgId}/invites`),
+            where('status', '==', 'pending')
+          )
+        ),
+        6000,
+        'Dashboard timeout loading invitations'
+      );
+
+      const joinRequestsPromise = withDashboardTimeout(
+        getDocs(
+          query(
+            collection(db, `organizations/${orgId}/join_requests`),
+            where('status', '==', 'pending')
+          )
+        ),
+        6000,
+        'Dashboard timeout loading join requests'
+      );
+
+      const auditLogsPromise = withDashboardTimeout(
+        getDocs(
+          query(
+            collection(db, `organizations/${orgId}/audit_logs`),
+            limit(5)
+          )
+        ),
+        6000,
+        'Dashboard timeout loading audit logs'
+      );
+
+      const [
+        subscriptionResult,
+        organizationResult,
+        membersResult
+      ] = await Promise.allSettled([
+        subscriptionPromise,
+        organizationPromise,
+        membersPromise
+      ]);
+
+      if (
+        requestId !== requestSequenceRef.current ||
+        orgId !== currentActiveOrgIdRef.current
+      ) {
+        return;
+      }
+
+      if (subscriptionResult.status === 'fulfilled' && subscriptionResult.value.exists()) {
+        setSubscription(subscriptionResult.value.data() as any);
       } else {
-         setSubscription(null);
+        setSubscription(null);
       }
 
       let currentOrgData: any = null;
-      let currentMembers: any[] = [];
-      const orgRef = doc(db, "organizations", orgId);
-      const orgSnap = await getDoc(orgRef);
-      
-      if (orgSnap.exists()) {
-          currentOrgData = { id: orgSnap.id, ...orgSnap.data() };
-          try {
-            const membersRef = collection(db, `organizations/${orgId}/members`);
-            const membersSnap = await getDocs(membersRef);
-            const memsPromises = membersSnap.docs.map(async (d): Promise<any> => {
-               let data = d.data();
-               let userData = {};
-               try {
-                 let userSnap = await getDoc(doc(db, "users", data.uid || d.id));
-                 if (userSnap.exists()) userData = userSnap.data();
-               } catch (userErr: any) {}
-               return { id: d.id, ...userData, ...data };
-            });
-            currentMembers = await Promise.all(memsPromises);
-          } catch (memErr) {
-            if (isGlobalAdmin) {
-              const token = await user.getIdToken();
-              const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
+      let baseMembers: any[] = [];
+
+      if (organizationResult.status === 'fulfilled' && organizationResult.value.exists()) {
+        currentOrgData = { id: organizationResult.value.id, ...organizationResult.value.data() };
+        
+        if (membersResult.status === 'fulfilled') {
+          baseMembers = membersResult.value.docs.map(d => ({ id: d.id, uid: d.id, ...d.data() }));
+        } else {
+          // fallback global admin for members
+          if (isGlobalAdmin) {
+            try {
+              const token = await withDashboardTimeout(user.getIdToken(), 6000, "Dashboard timeout getting token");
+              const memRes = await withDashboardTimeout(fetch(`/api/admin/organizations/${orgId}/members`, {
                 headers: { 'Authorization': `Bearer ${token}` }
-              });
+              }), 6000, "Dashboard timeout fetching admin members");
               if (memRes.ok) {
                 const { members: adminMembers } = await memRes.json();
-                currentMembers = adminMembers;
+                baseMembers = adminMembers;
+              }
+            } catch (err) {}
+          }
+        }
+      } else if (isGlobalAdmin) {
+        try {
+          const token = await withDashboardTimeout(user.getIdToken(), 6000, "Dashboard timeout getting token");
+          const res = await withDashboardTimeout(fetch(`/api/admin/organizations`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }), 6000, "Dashboard timeout fetching admin orgs");
+          if (res.ok) {
+            const { organizations: adminOrgs } = await res.json();
+            const found = adminOrgs.find((o: any) => o.id === orgId);
+            if (found) {
+              currentOrgData = found;
+              const memRes = await withDashboardTimeout(fetch(`/api/admin/organizations/${orgId}/members`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              }), 6000, "Dashboard timeout fetching admin members");
+              if (memRes.ok) {
+                const { members: adminMembers } = await memRes.json();
+                baseMembers = adminMembers;
               }
             }
           }
-      } else if (isGlobalAdmin) {
-           const token = await user.getIdToken();
-           const res = await fetch(`/api/admin/organizations`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-           });
-           if (res.ok) {
-             const { organizations: adminOrgs } = await res.json();
-             const found = adminOrgs.find((o: any) => o.id === orgId);
-             if (found) {
-               currentOrgData = found;
-               const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
-                  headers: { 'Authorization': `Bearer ${token}` }
-               });
-               if (memRes.ok) {
-                  const { members: adminMembers } = await memRes.json();
-                  currentMembers = adminMembers;
-               }
-             }
-           }
+        } catch(err) {}
       }
 
       if (requestId !== requestSequenceRef.current || orgId !== currentActiveOrgIdRef.current) return;
-      if (currentOrgData) setOrganization(currentOrgData);
 
-      if (currentMembers.length > 0) {
-        let currentUserMem = currentMembers.find(m => m.id === user.uid);
+      if (currentOrgData) {
+        setOrganization(currentOrgData);
+      } else {
+        setOrganization(null);
+      }
+
+      if (currentOrgData) {
+        let currentUserMem = baseMembers.find(m => m.id === user.uid || m.uid === user.uid);
         const isOwnerUid = currentOrgData?.ownerUid === user.uid;
         if (currentUserMem && isOwnerUid && currentUserMem.role !== 'owner') {
             currentUserMem.role = 'owner';
             setDoc(doc(db, `organizations/${orgId}/members`, user.uid), { role: 'owner', organizationRole: 'owner' }, { merge: true }).catch(console.error);
         } else if (!currentUserMem && isOwnerUid) {
-            const currentUserSnap = await getDoc(doc(db, "users", user.uid));
-            const currentUserProfile = currentUserSnap.exists() ? currentUserSnap.data() : {};
-            currentMembers.push({
-              id: user.uid, uid: user.uid, role: 'owner', ...currentUserProfile
+            baseMembers.push({
+              id: user.uid, uid: user.uid, role: 'owner', organizationRole: 'owner', displayName: profile?.displayName || '', email: user.email || '', photoURL: profile?.photoURL || ''
             });
             setDoc(doc(db, `organizations/${orgId}/members`, user.uid), {
               uid: user.uid, role: 'owner', organizationRole: 'owner', addedAt: new Date()
             }, { merge: true }).catch(console.error);
         }
-        setMembers(currentMembers);
+        setMembers(baseMembers);
       } else {
         setMembers([]);
       }
 
-      try {
-        const invitesRef = collection(db, `organizations/${orgId}/invites`);
-        const invitesQ = query(invitesRef, where('status', '==', 'pending'));
-        const invitesSnap = await getDocs(invitesQ);
-        setPendingInvites(invitesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) {}
+      if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
+        setLoadingSub(false);
+        window.performance?.mark?.('dashboard_interactive');
+      }
 
-      try {
-        const joinReqRef = collection(db, `organizations/${orgId}/join_requests`);
-        const joinReqQ = query(joinReqRef, where('status', '==', 'pending'));
-        const joinReqSnap = await getDocs(joinReqQ);
-        setJoinRequests(joinReqSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) {}
-
-      try {
-        const auditRef = collection(db, `organizations/${orgId}/audit_logs`);
-        const auditQ = query(auditRef, limit(5));
-        const auditSnap = await getDocs(auditQ);
-        const audits = auditSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        audits.sort((a: any, b: any) => {
-          const tA = a.timestamp?.seconds || 0;
-          const tB = b.timestamp?.seconds || 0;
-          return tB - tA;
+      if (baseMembers.length > 0) {
+        const enrichedPromises = baseMembers.map(async (m) => {
+          const uid = m.uid || m.id;
+          try {
+            const userSnap = await withDashboardTimeout(getDoc(doc(db, "users", uid)), 6000, "Dashboard timeout loading user profile");
+            if (userSnap.exists()) {
+              return { id: uid, ...userSnap.data(), ...m };
+            }
+          } catch(err) {}
+          return m;
         });
-        setAuditLogs(audits);
-      } catch(err) {}
+
+        Promise.allSettled(enrichedPromises).then(results => {
+          if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
+            const enrichedMembers = results.map((r, i) => r.status === 'fulfilled' ? r.value : baseMembers[i]);
+            setMembers(enrichedMembers);
+          }
+        });
+      }
+
+      const [
+        invitesResult,
+        joinRequestsResult,
+        auditLogsResult
+      ] = await Promise.allSettled([
+        invitesPromise,
+        joinRequestsPromise,
+        auditLogsPromise
+      ]);
+
+      if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
+        if (invitesResult.status === 'fulfilled') {
+          setPendingInvites(invitesResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
+        } else {
+          setPendingInvites([]);
+          console.warn("Failed to load invites");
+        }
+
+        if (joinRequestsResult.status === 'fulfilled') {
+          setJoinRequests(joinRequestsResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
+        } else {
+          setJoinRequests([]);
+          console.warn("Failed to load join requests");
+        }
+
+        if (auditLogsResult.status === 'fulfilled') {
+          const audits = auditLogsResult.value.docs.map(d => ({ id: d.id, ...d.data() }));
+          audits.sort((a: any, b: any) => {
+            const tA = a.timestamp?.seconds || 0;
+            const tB = b.timestamp?.seconds || 0;
+            return tB - tA;
+          });
+          setAuditLogs(audits);
+        } else {
+          setAuditLogs([]);
+          console.warn("Failed to load audit logs");
+        }
+      }
 
     } catch (error) {
       if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
         setSubscription(null);
         setOrganization(null);
-      }
-    } finally {
-      if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
-        setLoadingSub(false);
-        window.performance?.mark?.('dashboard_interactive');
       }
     }
   };
@@ -657,8 +761,10 @@ export function Dashboard() {
          console.error("[Dashboard] Background sync failed.");
      }
 
-     await loadOrganizationData(orgId, requestId);
-     await refreshMusicScaleAccessProjection(orgId);
+     await Promise.allSettled([
+       loadOrganizationData(orgId, requestId),
+       refreshMusicScaleAccessProjection(orgId)
+     ]);
   };
   useEffect(() => {
     if (organization?.name) {
