@@ -163,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    let authEventSequence = 0;
     let canonicalContextController: AbortController | null = null;
     
     if (!auth) {
@@ -173,8 +174,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!active) return;
+      
+      const eventSequence = ++authEventSequence;
+
+      const isCurrentAuthEvent = () =>
+        active &&
+        eventSequence === authEventSequence;
+
       canonicalContextController?.abort();
       canonicalContextController = null;
+
+      if (!isCurrentAuthEvent()) return;
+
       setUser(currentUser);
       
       if (currentUser) {
@@ -183,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         try {
           const userSnap = await withTimeout(getDoc(userRef), 8000, "Firestore timeout loading user");
-          if (!active) return;
+          if (!isCurrentAuthEvent()) return;
           
           if (userSnap.exists()) {
             const userData = userSnap.data() as UserProfile;
@@ -191,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             try {
               const idToken = await currentUser.getIdToken();
+              if (!isCurrentAuthEvent()) return;
               canonicalContextController?.abort();
               const controller = new AbortController();
               canonicalContextController = controller;
@@ -203,9 +215,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   headers: { 'Authorization': `Bearer ${idToken}` },
                   signal: controller.signal
                 });
+                if (!isCurrentAuthEvent()) return;
                 
                 if (res.ok) {
                   const canonicalCtx = await res.json();
+                  if (!isCurrentAuthEvent()) return;
                   
                   const isCanonicalContextValid =
                     canonicalCtx !== null &&
@@ -222,7 +236,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                       typeof canonicalCtx.primaryOrganizationId === 'string'
                     );
 
-                  if (!active) return;
                   
                   if (isCanonicalContextValid) {
                     setCanonicalContext(canonicalCtx);
@@ -236,11 +249,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                       userData.organizationId = canonicalCtx.activeOrganizationId;
                     }
                   } else {
-                    if (active) setCanonicalContext(null);
+                    if (isCurrentAuthEvent()) setCanonicalContext(null);
                     console.warn('Resposta inválida da API de contexto canônico.');
                   }
                 } else {
-                  if (active) setCanonicalContext(null);
+                  if (isCurrentAuthEvent()) setCanonicalContext(null);
                   console.warn('API de contexto canônico respondeu com erro:', res.status);
                 }
               } finally {
@@ -250,11 +263,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
               }
             } catch (ctxErr) {
-              if (active) setCanonicalContext(null);
+              if (isCurrentAuthEvent()) setCanonicalContext(null);
               console.warn('Falha ao buscar contexto canônico no AuthContext (timeout ou rede):', ctxErr);
             }
 
-            if (!active) return;
+            if (!isCurrentAuthEvent()) return;
 
             // Automatic promotion by email and localStorage invites removed per security audit P0-A
             setDoc(userRef, sanitizeForFirestore(mergeData), { merge: true }).catch(err => {
@@ -267,7 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             // Fire and forget analytics
             Promise.resolve().then(() => {
-              if (active) {
+              if (isCurrentAuthEvent()) {
                 analytics.track('login', {
                   userId: currentUser.uid,
                   organizationId: updatedProfile.activeOrganizationId || updatedProfile.organizationId
@@ -282,27 +295,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (parsedRedirect.valid) {
                 // Let Login/App handle the redirect to /join
                 // Do not bootstrap automatically. Just set loading false and return.
-                if (active) setProfile(null); // Or minimal profile if needed, but null forces them to stay in the flow
+                if (isCurrentAuthEvent()) setProfile(null); // Or minimal profile if needed, but null forces them to stay in the flow
             } else {
                 if (inviteRedirect !== null) {
                     sessionStorage.removeItem('mn_invite_redirect');
                 }
                 try {
                    const idToken = await currentUser.getIdToken(true);
+                   if (!isCurrentAuthEvent()) return;
                    const bootRes = await fetch('/api/v1/onboarding/bootstrap', {
                       method: 'POST',
                       headers: { 'Authorization': `Bearer ${idToken}` }
                    });
+                   if (!isCurrentAuthEvent()) return;
                    if (bootRes.ok) {
                       // Re-fetch user profile
                       const newUserSnap = await getDoc(userRef);
-                      if (newUserSnap.exists() && active) {
+                      if (!isCurrentAuthEvent()) return;
+                      if (newUserSnap.exists()) {
                          const newProfileData = newUserSnap.data() as UserProfile;
                          setProfile(newProfileData);
                          localStorage.setItem('mn_user_profile', JSON.stringify(newProfileData));
                          
                          Promise.resolve().then(() => {
-                           if (active) {
+                           if (isCurrentAuthEvent()) {
                              analytics.track('signup', {
                                userId: currentUser.uid,
                                organizationId: newProfileData.activeOrganizationId
@@ -312,6 +328,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                       }
                    }
                 } catch (bootErr) {
+                   if (!isCurrentAuthEvent()) return;
                    console.warn("Erro no bootstrap do usuário:", bootErr);
                 }
             }
@@ -321,17 +338,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem('invite_role');
           }
         } catch (error) {
+          if (!isCurrentAuthEvent()) return;
           console.warn("Erro ao carregar ou criar perfil do usuário:", error);
         }
       } else {
-        if (active) {
+        if (isCurrentAuthEvent()) {
           setProfile(null);
           localStorage.removeItem('mn_user_profile');
           localStorage.removeItem('mn_org_context');
         }
       }
       
-      if (active) {
+      if (isCurrentAuthEvent()) {
         setLoading(false);
         window.performance?.mark?.('auth_restored');
       }
@@ -339,6 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       active = false;
+      authEventSequence += 1;
       canonicalContextController?.abort();
       canonicalContextController = null;
       unsubscribe();

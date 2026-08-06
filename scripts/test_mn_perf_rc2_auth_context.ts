@@ -185,9 +185,99 @@ function runTests() {
 
   assert(
     forbiddenWriteApis.every(api => !testSource.includes(`fs.${api}(`)),
-    '55. nenhum arquivo é escrito pelo teste'
+    '55. nenhum arquivo é escrito pelo teste (anterior)'
   );
 
+  // 56
+  assert(useEffectBlock.includes('let authEventSequence = 0'), "56. authEventSequence existe no escopo do useEffect");
+
+  // 57
+  assert(authStateBlock.includes('const eventSequence = ++authEventSequence') || authStateBlock.includes('const eventSequence = authEventSequence + 1') || authStateBlock.includes('authEventSequence += 1'), "57. eventSequence incrementa authEventSequence");
+
+  // 58
+  const isCurrentFnBlock = authStateBlock.substring(authStateBlock.indexOf('isCurrentAuthEvent'));
+  assert(isCurrentFnBlock.includes('active'), "58. isCurrentAuthEvent verifica active");
+
+  // 59
+  assert(isCurrentFnBlock.includes('eventSequence === authEventSequence'), "59. isCurrentAuthEvent compara eventSequence com authEventSequence");
+
+  // 60
+  const afterGetDoc = content.substring(content.indexOf('const userSnap = await withTimeout(getDoc(userRef)'), content.indexOf('if (userSnap.exists())'));
+  assert(afterGetDoc.includes('if (!isCurrentAuthEvent()) return'), "60. existe verificação após getDoc(userRef)");
+
+  // 61
+  const afterIdToken = content.substring(content.indexOf('const idToken = await currentUser.getIdToken();'), content.indexOf('const controller = new AbortController();'));
+  assert(afterIdToken.includes('if (!isCurrentAuthEvent()) return'), "61. existe verificação imediatamente após getIdToken normal");
+
+  // 62
+  assert(afterIdToken.indexOf('if (!isCurrentAuthEvent()) return') < afterIdToken.indexOf('canonicalContextController?.abort()'), "62. essa verificação aparece antes do abort usado para criar nova requisição");
+
+  // 63
+  const afterFetchCtx = content.substring(content.indexOf('const res = await fetch(\'/api/user/organization-context\''), content.indexOf('if (res.ok) {'));
+  assert(afterFetchCtx.includes('if (!isCurrentAuthEvent()) return'), "63. existe verificação após fetch do contexto canônico");
+
+  // 64
+  const afterResJson = content.substring(content.indexOf('const canonicalCtx = await res.json();'), content.indexOf('const isCanonicalContextValid'));
+  assert(afterResJson.includes('if (!isCurrentAuthEvent()) return'), "64. existe verificação após res.json()");
+
+  // 65
+  const catchCtxBlock = content.substring(content.indexOf('} catch (ctxErr) {'), content.indexOf('if (!isCurrentAuthEvent()) return;', content.indexOf('} catch (ctxErr) {')));
+  assert(catchCtxBlock.includes('if (isCurrentAuthEvent()) setCanonicalContext(null)'), "65. catch do contexto verifica isCurrentAuthEvent antes de setCanonicalContext(null)");
+
+  // 66
+  assert(!content.includes('if (active) setProfile') && content.includes('if (isCurrentAuthEvent()) setProfile'), "66. perfil só é atualizado pelo evento atual");
+
+  // 67
+  assert(content.includes("if (isCurrentAuthEvent()) {\n          setProfile(null);\n          localStorage.removeItem('mn_user_profile');"), "67. localStorage só é atualizado pelo evento atual");
+
+  // 68
+  const analyticsBlocks = authStateBlock.split('analytics.track(').slice(1);
+  const analyticsProtected = analyticsBlocks.every(block => {
+      // Check if it's wrapped in `isCurrentAuthEvent()`
+      const prev = authStateBlock.substring(0, authStateBlock.lastIndexOf(block));
+      return prev.includes('if (isCurrentAuthEvent()) {');
+  });
+  assert(analyticsProtected, "68. analytics só é executado pelo evento atual");
+
+  // 69
+  const afterIdTokenTrue = content.substring(content.indexOf('getIdToken(true)'), content.indexOf('fetch(\'/api/v1/onboarding/bootstrap\''));
+  assert(afterIdTokenTrue.includes('if (!isCurrentAuthEvent()) return'), "69. bootstrap valida o evento depois de getIdToken(true)");
+
+  // 70
+  const afterBootFetch = content.substring(content.indexOf('fetch(\'/api/v1/onboarding/bootstrap\''), content.indexOf('if (bootRes.ok)'));
+  assert(afterBootFetch.includes('if (!isCurrentAuthEvent()) return'), "70. bootstrap valida o evento depois do fetch");
+
+  // 71
+  const afterNewUserDoc = content.substring(content.indexOf('const newUserSnap = await getDoc(userRef);', content.indexOf('bootRes.ok')), content.indexOf('if (newUserSnap.exists())'));
+  assert(afterNewUserDoc.includes('if (!isCurrentAuthEvent()) return'), "71. novo perfil valida o evento depois de getDoc");
+
+  // 72
+  const loadingBlock = content.substring(content.lastIndexOf('setLoading(false)') - 50, content.lastIndexOf('setLoading(false)'));
+  assert(loadingBlock.includes('if (isCurrentAuthEvent())'), "72. loading usa isCurrentAuthEvent");
+
+  // 73
+  assert(!loadingBlock.includes('if (active)'), "73. evento antigo não executa setLoading(false)");
+
+  // 74
+  assert(cleanupBlock.includes('authEventSequence += 1'), "74. cleanup incrementa authEventSequence");
+
+  // 75
+  assert(cleanupBlock.includes('canonicalContextController?.abort()'), "75. cleanup continua abortando controller");
+
+  // 76
+  assert(!content.includes('retry') && !content.includes('attempts'), "76. nenhum retry foi adicionado");
+
+  // 77
+  assert(!content.includes('setInterval('), "77. nenhum setInterval foi adicionado");
+
+  // 78
+  assert(!hasAssertTrue && !hasBooleanTrue && !hasOrTrue && !hasAndTrue, `78. nenhum assert incondicional existe`);
+
+  // 79
+  assert(
+    forbiddenWriteApis.every(api => !testSource.includes(`fs.${api}(`)),
+    '79. nenhum arquivo é escrito pelo teste'
+  );
 
   console.log(`\nTests completed: ${passed} passed, ${failed} failed.`);
   
