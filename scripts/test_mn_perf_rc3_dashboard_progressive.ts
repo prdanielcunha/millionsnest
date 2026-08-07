@@ -120,6 +120,9 @@ function runTests() {
   const afterSecAllSettled = content.substring(secAllSettledPos);
   const secConditionPos = afterSecAllSettled.indexOf('requestId === requestSequenceRef.current');
 
+  const secAllSettledBlock = content.substring(content.indexOf('const secondaryResultsPromise ='), content.indexOf(']', content.indexOf('const secondaryResultsPromise =')));
+  assert(secAllSettledBlock.includes('Promise.allSettled') && secAllSettledBlock.includes('invitesPromise') && secAllSettledBlock.includes('joinRequestsPromise') && secAllSettledBlock.includes('auditLogsPromise'), '32. secundários usam Promise.allSettled');
+
   assert(afterSecAllSettled.indexOf('setPendingInvites') > secConditionPos, '33. invites fulfilled atualizam pendingInvites');
   assert(afterSecAllSettled.indexOf('setJoinRequests') > secConditionPos, '34. join fulfilled atualiza joinRequests');
   assert(afterSecAllSettled.indexOf('setAuditLogs') > secConditionPos, '35. audit fulfilled atualiza auditLogs');
@@ -285,14 +288,38 @@ function runTests() {
   assert(arrayIsArrayMatches >= 3, '70. respostas administrativas validam Array.isArray');
   assert(globalAdminBlock.includes('? adminMembersPayload.members') && globalAdminBlock.includes(': []'), '71. nenhuma resposta administrativa inválida é aplicada');
 
-  const hasAssertTrue = false;
-  const hasBooleanTrue = false;
-  const hasOrTrue = false;
-  const hasAndTrue = false;
-  assert(!hasAssertTrue && !hasBooleanTrue && !hasOrTrue && !hasAndTrue, '72. nenhuma asserção é vacuamente verdadeira');
+  assert(
+    unconditionalPatterns.every(
+      pattern =>
+        !inspectedTestLines.some(
+          line => line.includes(pattern)
+        )
+    ),
+    '72. nenhuma asserção é vacuamente verdadeira'
+  );
   
-  const hasEmptyArrayEvery = testContent.includes('[].every(') && !testContent.includes('//');
-  assert(!hasEmptyArrayEvery, '73. o teste não usa array vazio com every');
+  const emptyArrayEveryPattern = [
+    '[',
+    ']',
+    '.',
+    'every',
+    '('
+  ].join('');
+
+  const emptyArrayEveryLines = testContent
+    .split('\n')
+    .filter(
+      line =>
+        !line.includes('emptyArrayEveryPattern') &&
+        !line.includes("['['")
+    );
+
+  assert(
+    !emptyArrayEveryLines.some(
+      line => line.includes(emptyArrayEveryPattern)
+    ),
+    '73. o teste não usa array vazio com every'
+  );
   
   assert(
     forbiddenWriteApis.every(api => !testContent.includes(`fs.${api}(`)),
@@ -306,6 +333,28 @@ function runTests() {
       token => !loadOrgDataBlock.includes(token)
     ),
     '76. não existe retry automático'
+  );
+
+  const forcedFalseNames = [
+    ['has', 'Assert', 'True'].join(''),
+    ['has', 'Boolean', 'True'].join(''),
+    ['has', 'Or', 'True'].join(''),
+    ['has', 'And', 'True'].join('')
+  ];
+
+  const forcedFalsePattern = '= false';
+
+  assert(
+    !testContent
+      .split('\n')
+      .some(
+        line =>
+          forcedFalseNames.some(
+            name => line.includes(name)
+          ) &&
+          line.includes(forcedFalsePattern)
+      ),
+    '77. nenhum detector de assert é forçado manualmente para false'
   );
 
   console.log(`\nTests completed: ${passed} passed, ${failed} failed.`);
