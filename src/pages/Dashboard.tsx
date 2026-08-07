@@ -514,6 +514,7 @@ export function Dashboard() {
 
   const loadOrganizationData = async (orgId: string, requestId: number) => {
     if (!user || !orgId) return;
+    let coreReleased = false;
     try {
       const subscriptionPromise = withDashboardTimeout(
         getDoc(doc(db, 'subscriptions', orgId)),
@@ -566,6 +567,12 @@ export function Dashboard() {
         'Dashboard timeout loading audit logs'
       );
 
+      const secondaryResultsPromise = Promise.allSettled([
+        invitesPromise,
+        joinRequestsPromise,
+        auditLogsPromise
+      ]);
+
       const [
         subscriptionResult,
         organizationResult,
@@ -606,7 +613,16 @@ export function Dashboard() {
                 headers: { 'Authorization': `Bearer ${token}` }
               }), 6000, "Dashboard timeout fetching admin members");
               if (memRes.ok) {
-                const { members: adminMembers } = await memRes.json();
+                const adminMembersPayload = await withDashboardTimeout(
+                  memRes.json(),
+                  6000,
+                  'Dashboard timeout parsing admin members'
+                );
+                const adminMembers = Array.isArray(
+                  adminMembersPayload?.members
+                )
+                  ? adminMembersPayload.members
+                  : [];
                 baseMembers = adminMembers;
               }
             } catch (err) {}
@@ -619,7 +635,16 @@ export function Dashboard() {
             headers: { 'Authorization': `Bearer ${token}` }
           }), 6000, "Dashboard timeout fetching admin orgs");
           if (res.ok) {
-            const { organizations: adminOrgs } = await res.json();
+            const adminOrganizationsPayload = await withDashboardTimeout(
+              res.json(),
+              6000,
+              'Dashboard timeout parsing admin organizations'
+            );
+            const adminOrgs = Array.isArray(
+              adminOrganizationsPayload?.organizations
+            )
+              ? adminOrganizationsPayload.organizations
+              : [];
             const found = adminOrgs.find((o: any) => o.id === orgId);
             if (found) {
               currentOrgData = found;
@@ -627,7 +652,16 @@ export function Dashboard() {
                 headers: { 'Authorization': `Bearer ${token}` }
               }), 6000, "Dashboard timeout fetching admin members");
               if (memRes.ok) {
-                const { members: adminMembers } = await memRes.json();
+                const adminMembersPayload = await withDashboardTimeout(
+                  memRes.json(),
+                  6000,
+                  'Dashboard timeout parsing admin members'
+                );
+                const adminMembers = Array.isArray(
+                  adminMembersPayload?.members
+                )
+                  ? adminMembersPayload.members
+                  : [];
                 baseMembers = adminMembers;
               }
             }
@@ -663,6 +697,7 @@ export function Dashboard() {
       }
 
       if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
+        coreReleased = true;
         setLoadingSub(false);
         window.performance?.mark?.('dashboard_interactive');
       }
@@ -691,11 +726,7 @@ export function Dashboard() {
         invitesResult,
         joinRequestsResult,
         auditLogsResult
-      ] = await Promise.allSettled([
-        invitesPromise,
-        joinRequestsPromise,
-        auditLogsPromise
-      ]);
+      ] = await secondaryResultsPromise;
 
       if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
         if (invitesResult.status === 'fulfilled') {
@@ -727,9 +758,23 @@ export function Dashboard() {
       }
 
     } catch (error) {
-      if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
+      if (
+        requestId === requestSequenceRef.current &&
+        orgId === currentActiveOrgIdRef.current
+      ) {
         setSubscription(null);
         setOrganization(null);
+        setMembers([]);
+
+        if (!coreReleased) {
+          coreReleased = true;
+          setLoadingSub(false);
+          window.performance?.mark?.('dashboard_interactive');
+        }
+
+        console.warn(
+          '[Dashboard] Falha ao carregar o núcleo organizacional.'
+        );
       }
     }
   };
