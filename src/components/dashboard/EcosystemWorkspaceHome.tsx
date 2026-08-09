@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemApp } from '../../lib/apps.js';
+import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
   AlertCircle, CircleHelp, CreditCard, Rocket, BookOpen, UserPlus, ChevronRight
@@ -18,8 +19,19 @@ interface EcosystemWorkspaceHomeProps {
   pendingInvites: any[];
   currentUserPerms: Record<string, boolean>;
   isGlobalAdmin: boolean;
-  msIsInstalled: boolean;
-  msCatalogState: string;
+  musicScaleAccess: {
+    accessible: boolean;
+    catalogState:
+      | 'available'
+      | 'trialing'
+      | 'active'
+      | 'cancel_scheduled'
+      | 'payment_issue'
+      | 'administrative'
+      | 'unavailable'
+      | 'loading'
+      | 'error';
+  } | null;
   musicScaleApp?: EcosystemApp;
   occupiedSlots: number;
   maxUsersLimit: number;
@@ -31,6 +43,7 @@ interface EcosystemWorkspaceHomeProps {
   onNavigateToOrganizationSettings: () => void;
   activeSection: 'overview' | 'resources' | 'getting-started';
   onSelectMusicScaleSection: (section: 'overview' | 'resources' | 'getting-started') => void;
+  onRetryMusicScaleAccess: () => void;
 }
 
 export function EcosystemWorkspaceHome({
@@ -42,8 +55,7 @@ export function EcosystemWorkspaceHome({
   pendingInvites,
   currentUserPerms,
   isGlobalAdmin,
-  msIsInstalled,
-  msCatalogState,
+  musicScaleAccess,
   musicScaleApp,
   occupiedSlots,
   maxUsersLimit,
@@ -54,7 +66,8 @@ export function EcosystemWorkspaceHome({
   onNavigateToBilling,
   onNavigateToOrganizationSettings,
   activeSection,
-  onSelectMusicScaleSection
+  onSelectMusicScaleSection,
+  onRetryMusicScaleAccess
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
   const { openHub } = useSupportHub();
@@ -99,8 +112,16 @@ export function EcosystemWorkspaceHome({
                     : 'bg-transparent border-transparent text-[#A0A7B5] hover:bg-white/5'
                 }`}
               >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#2B85EB] text-white shadow-md' : 'bg-white/5'}`}>
-                   {app.id === 'musicscale' ? <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-5 h-5 object-contain" /> : <LayoutGrid className="w-4 h-4" />}
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#2B85EB] text-white shadow-md' : 'bg-white/5'}`}>
+                   {app.id === 'musicscale' ? (
+                     <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-5 h-5 object-contain" />
+                   ) : (
+                     <EcosystemAppIcon
+                       app={app}
+                       iconClassName="w-4 h-4"
+                       assetClassName="w-8 h-8"
+                     />
+                   )}
                 </div>
                 <div className="text-left pr-2">
                   <p className="text-sm font-semibold">{app.name}</p>
@@ -114,28 +135,35 @@ export function EcosystemWorkspaceHome({
   };
 
   const renderHomeWorkspace = () => {
-    const musicScaleApp = installedApps.find(app => app.id === 'musicscale');
-    const isLoading = msCatalogState === "loading";
-    const hasPaymentIssue = msCatalogState === "payment_issue";
-    const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
-    const progressPercent = maxUsersLimit > 0 ? Math.min(100, (occupiedSlots / maxUsersLimit) * 100) : 0;
+    const isLoading = musicScaleAccess?.catalogState === "loading";
+    const isError = musicScaleAccess?.catalogState === "error";
+    const hasPaymentIssue = musicScaleAccess?.catalogState === "payment_issue";
+        const progressPercent = maxUsersLimit > 0 ? Math.min(100, (occupiedSlots / maxUsersLimit) * 100) : 0;
 
     type MusicScaleDisplayStatus =
       | 'available'
       | 'trialing'
+      | 'active'
+      | 'cancel_scheduled'
       | 'payment_issue'
       | 'loading'
+      | 'error'
+      | 'administrative'
       | 'unavailable';
 
-    const musicScaleDisplayStatus: MusicScaleDisplayStatus = isLoading
-      ? 'loading'
-      : hasPaymentIssue
-        ? 'payment_issue'
-        : msCatalogState === 'trialing'
-          ? 'trialing'
-          : isReadyToOpen
-            ? 'available'
-            : 'unavailable';
+    const musicScaleDisplayStatus: MusicScaleDisplayStatus =
+      (musicScaleAccess?.catalogState as MusicScaleDisplayStatus) ?? 'unavailable';
+      
+    const isReadyToOpen = [
+      'active',
+      'trialing',
+      'cancel_scheduled',
+      'administrative'
+    ].includes(musicScaleDisplayStatus);
+    const isPrimaryActionDisabled = [
+      'loading',
+      'unavailable'
+    ].includes(musicScaleDisplayStatus);
 
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-12">
@@ -165,9 +193,12 @@ export function EcosystemWorkspaceHome({
                       <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-8 h-8 object-contain" />
                     </div>
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      musicScaleDisplayStatus === 'available' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                      musicScaleDisplayStatus === 'available' || musicScaleDisplayStatus === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
                       musicScaleDisplayStatus === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
                       musicScaleDisplayStatus === 'payment_issue' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                      musicScaleDisplayStatus === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                      musicScaleDisplayStatus === 'cancel_scheduled' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                      musicScaleDisplayStatus === 'administrative' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
                       musicScaleDisplayStatus === 'loading' ? 'bg-white/10 text-white border border-white/20' :
                       'bg-white/10 text-[#A0A7B5]'
                     }`}>
@@ -191,18 +222,26 @@ export function EcosystemWorkspaceHome({
                   <button
                     type="button"
                     onClick={() => {
-                      if (hasPaymentIssue) onNavigateToBilling();
-                      else onLaunchApp(musicScaleApp);
+                      if (musicScaleDisplayStatus === 'error') {
+                        onRetryMusicScaleAccess();
+                      } else if (
+                        musicScaleDisplayStatus === 'payment_issue' ||
+                        musicScaleDisplayStatus === 'available'
+                      ) {
+                        onNavigateToBilling();
+                      } else if (isReadyToOpen && musicScaleApp) {
+                        onLaunchApp(musicScaleApp);
+                      }
                     }}
-                    disabled={isLoading || (!isReadyToOpen && !hasPaymentIssue)}
+                    disabled={isPrimaryActionDisabled}
                     className={`flex-1 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 text-sm ${
-                      hasPaymentIssue ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
-                      isReadyToOpen ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20' :
-                      'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
+                      (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'error') ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
+                      (musicScaleDisplayStatus === 'loading' || musicScaleDisplayStatus === 'unavailable') ? 'bg-white/5 text-[#A0A7B5] cursor-not-allowed' :
+                      'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20'
                     }`}
                   >
-                    {isLoading ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : (hasPaymentIssue ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
-                    {hasPaymentIssue ? t('workspace.resolve_payment', 'Regularizar pagamento') : t('workspace.open_app', `Abrir ${musicScaleApp.name}`, { appName: musicScaleApp.name })}
+                    {musicScaleDisplayStatus === 'loading' ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : ((musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'error') ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
+                    {musicScaleDisplayStatus === 'error' ? 'Tentar novamente' : musicScaleDisplayStatus === 'payment_issue' ? t('workspace.resolve_payment', 'Regularizar pagamento') : musicScaleDisplayStatus === 'available' ? t('workspace.view_plans', 'Ver planos') : musicScaleDisplayStatus === 'loading' ? t('workspace.loading', 'Carregando') : musicScaleDisplayStatus === 'unavailable' ? t('workspace.unavailable', 'Indisponível') : t('workspace.open_app', `Abrir ${musicScaleApp.name}`, { appName: musicScaleApp.name })}
                   </button>
 
                   <button
@@ -362,30 +401,48 @@ export function EcosystemWorkspaceHome({
   };
 
     const renderMusicScaleWorkspace = () => {
-    const isLoading = msCatalogState === "loading";
-    const hasPaymentIssue = msCatalogState === "payment_issue";
+    const isLoading = musicScaleAccess?.catalogState === "loading";
     
-    const isReadyToOpen = msIsInstalled && !isLoading && !hasPaymentIssue;
+    if (isLoading) {
+      return (
+        <div className="w-full h-64 border border-white/5 bg-white/5 rounded-3xl p-6 md:p-10 flex flex-col items-center justify-center gap-4 animate-pulse">
+          <div className="w-8 h-8 rounded-full bg-white/10" />
+          <div className="w-32 h-4 rounded bg-white/10" />
+          <div className="w-48 h-3 rounded bg-white/5" />
+        </div>
+      );
+    }
+
+    const isError = musicScaleAccess?.catalogState === "error";
+    const hasPaymentIssue = musicScaleAccess?.catalogState === "payment_issue";
     
+        
     type MusicScaleDisplayStatus =
       | 'available'
       | 'trialing'
+      | 'active'
+      | 'cancel_scheduled'
       | 'payment_issue'
       | 'loading'
+      | 'error'
+      | 'administrative'
       | 'unavailable';
 
-    const musicScaleDisplayStatus: MusicScaleDisplayStatus = isLoading
-      ? 'loading'
-      : hasPaymentIssue
-        ? 'payment_issue'
-        : msCatalogState === 'trialing'
-          ? 'trialing'
-          : isReadyToOpen
-            ? 'available'
-            : 'unavailable';
+    const musicScaleDisplayStatus: MusicScaleDisplayStatus =
+      (musicScaleAccess?.catalogState as MusicScaleDisplayStatus) ?? 'unavailable';
 
     const orgActive = !!organization;
-    const msActive = msIsInstalled;
+        const isReadyToOpen = [
+      'active',
+      'trialing',
+      'cancel_scheduled',
+      'administrative'
+    ].includes(musicScaleDisplayStatus);
+    const isPrimaryActionDisabled = [
+      'loading',
+      'unavailable'
+    ].includes(musicScaleDisplayStatus);
+    const msActive = musicScaleAccess?.accessible === true || musicScaleAccess?.catalogState === 'trialing';
     const teamStarted = members.length > 1 || pendingInvites.length > 0;
 
     const heroContent = (
@@ -397,9 +454,12 @@ export function EcosystemWorkspaceHome({
               <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-8 h-8" />
               <h2 className="text-xl font-bold text-white tracking-tight">MusicScale</h2>
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${ 
-                musicScaleDisplayStatus === 'available' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 
+                musicScaleDisplayStatus === 'available' || musicScaleDisplayStatus === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 
                 musicScaleDisplayStatus === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 
                 musicScaleDisplayStatus === 'payment_issue' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 
+                musicScaleDisplayStatus === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                musicScaleDisplayStatus === 'cancel_scheduled' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                musicScaleDisplayStatus === 'administrative' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
                 'bg-white/10 text-[#A0A7B5]'
               }`}> 
                 {t(`musicscale.status.${musicScaleDisplayStatus}`, t('musicscale.status.unavailable'))}
@@ -422,21 +482,32 @@ export function EcosystemWorkspaceHome({
                 type="button"
                 id="btn-sidebar-open-musicscale"
                 onClick={() => {
-                  if (isReadyToOpen && musicScaleApp) {
+                  if (musicScaleDisplayStatus === 'error') {
+                    onRetryMusicScaleAccess();
+                  } else if (
+                    musicScaleDisplayStatus === 'payment_issue' ||
+                    musicScaleDisplayStatus === 'available'
+                  ) {
+                    onNavigateToBilling();
+                  } else if (isReadyToOpen && musicScaleApp) {
                     onLaunchApp(musicScaleApp);
                   }
                 }}
-                disabled={!isReadyToOpen}
+                disabled={isPrimaryActionDisabled}
                 className={`px-6 py-3 font-semibold rounded-xl transition-all min-h-[44px] flex items-center justify-center gap-2 ${
-                  isReadyToOpen
-                    ? 'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20'
-                    : 'bg-white/5 text-[#A0A7B5] cursor-not-allowed'
+                  (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'error') ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
+                  (musicScaleDisplayStatus === 'loading' || musicScaleDisplayStatus === 'unavailable') ? 'bg-white/5 text-[#A0A7B5] cursor-not-allowed' :
+                  'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20'
                 }`}
               >
-                {isLoading ? (
+                {musicScaleDisplayStatus === 'loading' ? (
                   <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                ) : hasPaymentIssue ? (
-                  t('workspace.payment_pending', 'Pagamento pendente')
+                ) : musicScaleDisplayStatus === 'error' ? (
+                  'Tentar novamente'
+                ) : musicScaleDisplayStatus === 'payment_issue' ? (
+                  t('workspace.resolve_payment', 'Regularizar pagamento')
+                ) : musicScaleDisplayStatus === 'available' ? (
+                  t('workspace.view_plans', 'Ver planos')
                 ) : (
                   t('workspace.open_app', 'Abrir MusicScale', { appName: 'MusicScale' })
                 )}
@@ -595,8 +666,12 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-2xl">
         <div className="bg-[#050505] border border-white/5 rounded-2xl p-8">
-           <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mb-6">
-             <LayoutGrid className="w-6 h-6 text-[#A0A7B5]" />
+           <div className="w-16 h-16 rounded-xl bg-white/5 flex items-center justify-center mb-6">
+             <EcosystemAppIcon
+               app={app}
+               iconClassName="w-6 h-6 text-[#A0A7B5]"
+               assetClassName="w-12 h-12"
+             />
            </div>
            <h2 className="text-2xl font-bold text-white mb-2">{app.name}</h2>
            <p className="text-[#A0A7B5] mb-8">{app.description}</p>

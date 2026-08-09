@@ -100,7 +100,17 @@ assertCondition("52. MusicScale utiliza onOpenMusicScale", centerSrc.includes('o
 assertCondition("53. Existe exatamente uma ação visual Abrir MusicScale", (homeSrc.match(/Abrir MusicScale/g) || []).length === 1);
 assertCondition("54. A ação está no hero", homeSrc.indexOf('Abrir MusicScale') < homeSrc.indexOf('overviewContent'));
 assertCondition("55. Chama onLaunchApp", homeSrc.includes('onLaunchApp(musicScaleApp)'));
-assertCondition("56. Respeita isReadyToOpen", homeSrc.includes('disabled={!isReadyToOpen}'));
+assertCondition("56. Respeita isReadyToOpen e isPrimaryActionDisabled", 
+  homeSrc.includes("isReadyToOpen = [\n      'active',\n      'trialing',\n      'cancel_scheduled',\n      'administrative'\n    ].includes(musicScaleDisplayStatus)") &&
+  homeSrc.includes("isPrimaryActionDisabled = [\n      'loading',\n      'unavailable'\n    ].includes(musicScaleDisplayStatus)") &&
+  (homeSrc.match(/disabled=\{isPrimaryActionDisabled\}/g) || []).length === 2 &&
+  !homeSrc.includes("disabled={!isReadyToOpen}") &&
+  (homeSrc.match(/else if \(isReadyToOpen && musicScaleApp\) \{/g) || []).length === 2 &&
+  (homeSrc.match(/\['active',\s*'trialing',\s*'cancel_scheduled',\s*'administrative'\]\.includes/g) || []).length === 0 &&
+  homeSrc.includes("if (musicScaleDisplayStatus === 'error') {") &&
+  homeSrc.includes("onRetryMusicScaleAccess();") &&
+  homeSrc.includes("onNavigateToBilling();")
+);
 assertCondition("57. Primeiros passos existe no hero", homeSrc.substring(0, homeSrc.indexOf('overviewContent')).includes('getting-started'));
 assertCondition("58. Primeiros passos chama getting-started", homeSrc.includes("onSelectMusicScaleSection('getting-started')"));
 assertCondition("59. Conhecer recursos existe no hero", homeSrc.substring(0, homeSrc.indexOf('overviewContent')).includes('resources'));
@@ -164,7 +174,7 @@ assertCondition("87. msCatalogState não é utilizado como fallback visível", !
 assertCondition("88. Existe MusicScaleDisplayStatus ou contrato equivalente", homeSrc.includes("MusicScaleDisplayStatus") || homeSrc.includes("musicScaleDisplayStatus"));
 assertCondition("89. isLoading resolve para loading", homeSrc.includes("isLoading") && homeSrc.includes("'loading'"));
 assertCondition("90. hasPaymentIssue resolve para payment_issue", homeSrc.includes("hasPaymentIssue") && homeSrc.includes("'payment_issue'"));
-assertCondition("91. trialing resolve para trialing", homeSrc.includes("msCatalogState === 'trialing'") && homeSrc.includes("'trialing'"));
+assertCondition("91. trialing resolve para trialing", homeSrc.includes("catalogState === 'trialing'") && homeSrc.includes("'trialing'"));
 assertCondition("92. isReadyToOpen resolve para available", homeSrc.includes("isReadyToOpen") && homeSrc.includes("'available'"));
 assertCondition("93. estado desconhecido sem acesso resolve para unavailable", homeSrc.includes("'unavailable'"));
 assertCondition("94. administrative com isReadyToOpen true resolve para available", homeSrc.includes("isReadyToOpen") && homeSrc.includes("'available'"));

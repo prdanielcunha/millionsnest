@@ -20,7 +20,7 @@ import { feedback } from '../packages/ui/feedback.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from "../lib/musicScalePlans.js";
 import { canPurchasePlanAgain, isSubscriptionValid, normalizeDateToMs } from "../lib/subscriptionHelpers.js";
-import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
+import { isGlobalPrivilegedUser, canAccessNestFinanceDevelopment } from "../lib/permissionService.js";
 import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
 import { getInviteableOrganizationRolesForActor, getOrganizationRoleLabel } from "../lib/organizationRoles.js";
@@ -33,8 +33,10 @@ import { InviteModal } from "../components/InviteModal.js";
 import { UnifiedTimeline } from "../components/UnifiedTimeline.js";
 import { ECOSYSTEM_APPS, EcosystemApp } from "../lib/apps.js";
 import { ecosystemPlatform } from "../sdk/ecosystem.js";
+import { EcosystemAppIcon } from "../components/apps/EcosystemAppIcon.js";
 import { SupportHubProvider } from "../components/support/SupportHubContext.js";
 import { SupportHub } from "../components/support/SupportHub.js";
+import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -45,15 +47,6 @@ const getVisualState = (sub: any) => {
   const status = sub.status || '';
   const cancelAtPeriodEnd = sub.cancelAtPeriodEnd === true;
   
-  let endMs = 0;
-  if (sub.currentPeriodEnd) {
-     endMs = sub.currentPeriodEnd._seconds ? sub.currentPeriodEnd._seconds * 1000 : 
-             (sub.currentPeriodEnd.seconds ? sub.currentPeriodEnd.seconds * 1000 : 
-             new Date(sub.currentPeriodEnd).getTime());
-  }
-
-  const hasAccess = Date.now() < endMs;
-
   if (status === 'trialing') {
      if (cancelAtPeriodEnd) return 'cancel_scheduled';
      return 'trialing';
@@ -63,7 +56,6 @@ const getVisualState = (sub: any) => {
      return 'active';
   }
   if (status === 'canceled') {
-     if (hasAccess) return 'canceled_with_access';
      return 'canceled_expired';
   }
   if (status === 'past_due' || status === 'unpaid' || status === 'incomplete') {
@@ -72,6 +64,21 @@ const getVisualState = (sub: any) => {
   
   return status; // fallback
 };
+
+const withDashboardTimeout = <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(
+        () => reject(new Error(message)),
+        timeoutMs
+      );
+    })
+  ]);
 
 export function Dashboard() {
   const { t } = useTranslation(['dashboard', 'common']);
@@ -122,6 +129,64 @@ export function Dashboard() {
   const [organization, setOrganization] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const [musicScaleProjection, setMusicScaleProjection] = useState<MusicScaleAccessProjection | null>(null);
+  const [musicScaleProjectionLoading, setMusicScaleProjectionLoading] = useState(false);
+  const [musicScaleProjectionError, setMusicScaleProjectionError] = useState<string | null>(null);
+  const musicScaleProjectionAbortControllerRef = useRef<AbortController | null>(null);
+  const musicScaleProjectionSeqRef = useRef<number>(0);
+  const musicScaleExpectedOrgRef = useRef<string | null>(null);
+
+  const refreshMusicScaleAccessProjection = async (orgId: string) => {
+    if (!user || !orgId) return;
+
+    if (musicScaleProjectionAbortControllerRef.current) {
+      musicScaleProjectionAbortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    musicScaleProjectionAbortControllerRef.current = abortController;
+    const reqSeq = ++musicScaleProjectionSeqRef.current;
+    musicScaleExpectedOrgRef.current = orgId;
+
+    setMusicScaleProjectionLoading(true);
+    setMusicScaleProjectionError(null);
+
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/ecosystem/access-projection', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store'
+        },
+        body: JSON.stringify({ organizationId: orgId }),
+        signal: abortController.signal
+      });
+
+      if (!res.ok) {
+        throw new Error('Falha ao obter projeção');
+      }
+
+      const data = await res.json();
+      
+      if (abortController.signal.aborted || reqSeq !== musicScaleProjectionSeqRef.current || musicScaleExpectedOrgRef.current !== orgId) return;
+      
+      if (data.success && data.organizationId === orgId && data.apps?.musicscale?.appId === 'musicscale' && data.apps.musicscale.organizationId === orgId) {
+        setMusicScaleProjection(data.apps.musicscale);
+      } else {
+        throw new Error('Projeção inválida');
+      }
+    } catch (e: any) {
+      if (abortController.signal.aborted || reqSeq !== musicScaleProjectionSeqRef.current || musicScaleExpectedOrgRef.current !== orgId) return;
+      setMusicScaleProjectionError(e.message || 'Erro');
+      setMusicScaleProjection(null);
+    } finally {
+      if (!abortController.signal.aborted && reqSeq === musicScaleProjectionSeqRef.current && musicScaleExpectedOrgRef.current === orgId) {
+        setMusicScaleProjectionLoading(false);
+      }
+    }
+  };
   
   // Organization Edit States
   const [isEditingOrg, setIsEditingOrg] = useState(false);
@@ -158,7 +223,18 @@ export function Dashboard() {
       return;
     }
     
-    if (!organization?.enabledApps?.includes(app.id) && app.id !== 'musicscale') {
+    if (app.id === 'musicscale') {
+      if (
+        !musicScaleProjection ||
+        musicScaleProjection.organizationId !== activeContextOrgId ||
+        !musicScaleProjection.accessible ||
+        musicScaleProjectionLoading ||
+        musicScaleProjectionError
+      ) {
+        feedback.error('Acesso indisponível ao MusicScale.');
+        return;
+      }
+    } else if (!organization?.enabledApps?.includes(app.id)) {
        feedback.error(`Módulo Indisponível: O aplicativo ${app.name} não está habilitado para a sua organização.`);
        return;
     }
@@ -166,7 +242,7 @@ export function Dashboard() {
     // Mostrando feedback enquanto processa o handoff
     const toastId = feedback.loading(`Verificando credenciais para o ${app.name}...`);
     try {
-      if (isGlobalAdmin && profile?.organizationRole !== 'owner') {
+      if (isGlobalAdmin && profile?.organizationRole !== 'owner' && app.id !== 'musicscale') {
          createAuditLog({
            actorUid: user!.uid,
            actorEmail: user!.email || '',
@@ -181,11 +257,16 @@ export function Dashboard() {
       feedback.dismiss(toastId);
     } catch (e: any) {
       feedback.dismiss(toastId);
-      if (!isGlobalAdmin) {
+      if (app.id === 'musicscale') {
+        if (activeContextOrgId) {
+          await refreshMusicScaleAccessProjection(activeContextOrgId);
+        }
+        feedback.error('Não foi possível iniciar o MusicScale neste momento. Tente novamente.');
+      } else if (isGlobalAdmin) {
+        feedback.error(`Erro ao abrir: ${e.message || 'Falha ao iniciar módulo.'}`);
+      } else {
         setSubscriptionBlockedApp(app);
         setSubscriptionBlockedReason(e.message || 'Assinatura inválida ou inativa.');
-      } else {
-        feedback.error(`Erro ao abrir: ${e.message || 'Falha ao iniciar módulo.'}`);
       }
     }
   };
@@ -203,7 +284,14 @@ export function Dashboard() {
   const [nestFinanceLaunching, setNestFinanceLaunching] = useState(false);
 
   const handleLaunchNestFinance = async () => {
-    if (!user || !activeContextOrgId || nestFinanceLaunching) return;
+    if (!canLaunchNestFinance) {
+      if (!nestFinanceLaunching) {
+        feedback.error(
+          'O acesso ao NestFinance não está disponível neste momento.'
+        );
+      }
+      return;
+    }
 
     setNestFinanceLaunching(true);
     const toastId = feedback.loading("Preparando acesso...");
@@ -312,14 +400,20 @@ export function Dashboard() {
 
   const [adminSelectedOrgId, setAdminSelectedOrgId] = useState<string | null>(null);
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+  const hasNestFinanceDevelopmentAccess = canAccessNestFinanceDevelopment(profile?.systemRole);
   const activeContextOrgId = isGlobalAdmin && adminSelectedOrgId 
     ? adminSelectedOrgId 
     : canonicalContext?.activeOrganizationId 
       || profile?.activeOrganizationId 
       || profile?.primaryOrganizationId 
       || profile?.organizationId;
-    
-  const canLaunchNestFinance = isGlobalAdmin && nestFinanceLaunchEnabled && !nestFinanceLaunching;
+
+  const canLaunchNestFinance =
+    Boolean(user) &&
+    Boolean(activeContextOrgId) &&
+    hasNestFinanceDevelopmentAccess &&
+    nestFinanceLaunchEnabled &&
+    !nestFinanceLaunching;
 
   useEffect(() => {
     if (isGlobalAdmin && adminSelectedOrgId && user) {
@@ -420,133 +514,267 @@ export function Dashboard() {
 
   const loadOrganizationData = async (orgId: string, requestId: number) => {
     if (!user || !orgId) return;
+    let coreReleased = false;
     try {
-      const subRef = doc(db, "subscriptions", orgId);
-      const subSnap = await getDoc(subRef);
+      const subscriptionPromise = withDashboardTimeout(
+        getDoc(doc(db, 'subscriptions', orgId)),
+        8000,
+        'Dashboard timeout loading subscription'
+      );
 
-      if (requestId !== requestSequenceRef.current || orgId !== currentActiveOrgIdRef.current) return;
+      const organizationPromise = withDashboardTimeout(
+        getDoc(doc(db, 'organizations', orgId)),
+        8000,
+        'Dashboard timeout loading organization'
+      );
 
-      let currentSubData = null;
-      if (subSnap.exists()) {
-         currentSubData = subSnap.data();
-         setSubscription(currentSubData as any);
+      const membersPromise = withDashboardTimeout(
+        getDocs(collection(db, `organizations/${orgId}/members`)),
+        8000,
+        'Dashboard timeout loading memberships'
+      );
+
+      const invitesPromise = withDashboardTimeout(
+        getDocs(
+          query(
+            collection(db, `organizations/${orgId}/invites`),
+            where('status', '==', 'pending')
+          )
+        ),
+        6000,
+        'Dashboard timeout loading invitations'
+      );
+
+      const joinRequestsPromise = withDashboardTimeout(
+        getDocs(
+          query(
+            collection(db, `organizations/${orgId}/join_requests`),
+            where('status', '==', 'pending')
+          )
+        ),
+        6000,
+        'Dashboard timeout loading join requests'
+      );
+
+      const auditLogsPromise = withDashboardTimeout(
+        getDocs(
+          query(
+            collection(db, `organizations/${orgId}/audit_logs`),
+            limit(5)
+          )
+        ),
+        6000,
+        'Dashboard timeout loading audit logs'
+      );
+
+      const secondaryResultsPromise = Promise.allSettled([
+        invitesPromise,
+        joinRequestsPromise,
+        auditLogsPromise
+      ]);
+
+      const [
+        subscriptionResult,
+        organizationResult,
+        membersResult
+      ] = await Promise.allSettled([
+        subscriptionPromise,
+        organizationPromise,
+        membersPromise
+      ]);
+
+      if (
+        requestId !== requestSequenceRef.current ||
+        orgId !== currentActiveOrgIdRef.current
+      ) {
+        return;
+      }
+
+      if (subscriptionResult.status === 'fulfilled' && subscriptionResult.value.exists()) {
+        setSubscription(subscriptionResult.value.data() as any);
       } else {
-         setSubscription(null);
+        setSubscription(null);
       }
 
       let currentOrgData: any = null;
-      let currentMembers: any[] = [];
-      const orgRef = doc(db, "organizations", orgId);
-      const orgSnap = await getDoc(orgRef);
-      
-      if (orgSnap.exists()) {
-          currentOrgData = { id: orgSnap.id, ...orgSnap.data() };
-          try {
-            const membersRef = collection(db, `organizations/${orgId}/members`);
-            const membersSnap = await getDocs(membersRef);
-            const memsPromises = membersSnap.docs.map(async (d): Promise<any> => {
-               let data = d.data();
-               let userData = {};
-               try {
-                 let userSnap = await getDoc(doc(db, "users", data.uid || d.id));
-                 if (userSnap.exists()) userData = userSnap.data();
-               } catch (userErr: any) {}
-               return { id: d.id, ...userData, ...data };
-            });
-            currentMembers = await Promise.all(memsPromises);
-          } catch (memErr) {
-            if (isGlobalAdmin) {
-              const token = await user.getIdToken();
-              const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
+      let baseMembers: any[] = [];
+
+      if (organizationResult.status === 'fulfilled' && organizationResult.value.exists()) {
+        currentOrgData = { id: organizationResult.value.id, ...organizationResult.value.data() };
+        
+        if (membersResult.status === 'fulfilled') {
+          baseMembers = membersResult.value.docs.map(d => ({ id: d.id, uid: d.id, ...d.data() }));
+        } else {
+          // fallback global admin for members
+          if (isGlobalAdmin) {
+            try {
+              const token = await withDashboardTimeout(user.getIdToken(), 6000, "Dashboard timeout getting token");
+              const memRes = await withDashboardTimeout(fetch(`/api/admin/organizations/${orgId}/members`, {
                 headers: { 'Authorization': `Bearer ${token}` }
-              });
+              }), 6000, "Dashboard timeout fetching admin members");
               if (memRes.ok) {
-                const { members: adminMembers } = await memRes.json();
-                currentMembers = adminMembers;
+                const adminMembersPayload = await withDashboardTimeout(
+                  memRes.json(),
+                  6000,
+                  'Dashboard timeout parsing admin members'
+                );
+                const adminMembers = Array.isArray(
+                  adminMembersPayload?.members
+                )
+                  ? adminMembersPayload.members
+                  : [];
+                baseMembers = adminMembers;
+              }
+            } catch (err) {}
+          }
+        }
+      } else if (isGlobalAdmin) {
+        try {
+          const token = await withDashboardTimeout(user.getIdToken(), 6000, "Dashboard timeout getting token");
+          const res = await withDashboardTimeout(fetch(`/api/admin/organizations`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }), 6000, "Dashboard timeout fetching admin orgs");
+          if (res.ok) {
+            const adminOrganizationsPayload = await withDashboardTimeout(
+              res.json(),
+              6000,
+              'Dashboard timeout parsing admin organizations'
+            );
+            const adminOrgs = Array.isArray(
+              adminOrganizationsPayload?.organizations
+            )
+              ? adminOrganizationsPayload.organizations
+              : [];
+            const found = adminOrgs.find((o: any) => o.id === orgId);
+            if (found) {
+              currentOrgData = found;
+              const memRes = await withDashboardTimeout(fetch(`/api/admin/organizations/${orgId}/members`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              }), 6000, "Dashboard timeout fetching admin members");
+              if (memRes.ok) {
+                const adminMembersPayload = await withDashboardTimeout(
+                  memRes.json(),
+                  6000,
+                  'Dashboard timeout parsing admin members'
+                );
+                const adminMembers = Array.isArray(
+                  adminMembersPayload?.members
+                )
+                  ? adminMembersPayload.members
+                  : [];
+                baseMembers = adminMembers;
               }
             }
           }
-      } else if (isGlobalAdmin) {
-           const token = await user.getIdToken();
-           const res = await fetch(`/api/admin/organizations`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-           });
-           if (res.ok) {
-             const { organizations: adminOrgs } = await res.json();
-             const found = adminOrgs.find((o: any) => o.id === orgId);
-             if (found) {
-               currentOrgData = found;
-               const memRes = await fetch(`/api/admin/organizations/${orgId}/members`, {
-                  headers: { 'Authorization': `Bearer ${token}` }
-               });
-               if (memRes.ok) {
-                  const { members: adminMembers } = await memRes.json();
-                  currentMembers = adminMembers;
-               }
-             }
-           }
+        } catch(err) {}
       }
 
       if (requestId !== requestSequenceRef.current || orgId !== currentActiveOrgIdRef.current) return;
-      if (currentOrgData) setOrganization(currentOrgData);
 
-      if (currentMembers.length > 0) {
-        let currentUserMem = currentMembers.find(m => m.id === user.uid);
+      if (currentOrgData) {
+        setOrganization(currentOrgData);
+      } else {
+        setOrganization(null);
+      }
+
+      if (currentOrgData) {
+        let currentUserMem = baseMembers.find(m => m.id === user.uid || m.uid === user.uid);
         const isOwnerUid = currentOrgData?.ownerUid === user.uid;
         if (currentUserMem && isOwnerUid && currentUserMem.role !== 'owner') {
             currentUserMem.role = 'owner';
             setDoc(doc(db, `organizations/${orgId}/members`, user.uid), { role: 'owner', organizationRole: 'owner' }, { merge: true }).catch(console.error);
         } else if (!currentUserMem && isOwnerUid) {
-            const currentUserSnap = await getDoc(doc(db, "users", user.uid));
-            const currentUserProfile = currentUserSnap.exists() ? currentUserSnap.data() : {};
-            currentMembers.push({
-              id: user.uid, uid: user.uid, role: 'owner', ...currentUserProfile
+            baseMembers.push({
+              id: user.uid, uid: user.uid, role: 'owner', organizationRole: 'owner', displayName: profile?.displayName || '', email: user.email || '', photoURL: profile?.photoURL || ''
             });
             setDoc(doc(db, `organizations/${orgId}/members`, user.uid), {
               uid: user.uid, role: 'owner', organizationRole: 'owner', addedAt: new Date()
             }, { merge: true }).catch(console.error);
         }
-        setMembers(currentMembers);
+        setMembers(baseMembers);
       } else {
         setMembers([]);
       }
 
-      try {
-        const invitesRef = collection(db, `organizations/${orgId}/invites`);
-        const invitesQ = query(invitesRef, where('status', '==', 'pending'));
-        const invitesSnap = await getDocs(invitesQ);
-        setPendingInvites(invitesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) {}
-
-      try {
-        const joinReqRef = collection(db, `organizations/${orgId}/join_requests`);
-        const joinReqQ = query(joinReqRef, where('status', '==', 'pending'));
-        const joinReqSnap = await getDocs(joinReqQ);
-        setJoinRequests(joinReqSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) {}
-
-      try {
-        const auditRef = collection(db, `organizations/${orgId}/audit_logs`);
-        const auditQ = query(auditRef, limit(5));
-        const auditSnap = await getDocs(auditQ);
-        const audits = auditSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        audits.sort((a: any, b: any) => {
-          const tA = a.timestamp?.seconds || 0;
-          const tB = b.timestamp?.seconds || 0;
-          return tB - tA;
-        });
-        setAuditLogs(audits);
-      } catch(err) {}
-
-    } catch (error) {
       if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
-        setSubscription(null);
-        setOrganization(null);
-      }
-    } finally {
-      if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
+        coreReleased = true;
         setLoadingSub(false);
         window.performance?.mark?.('dashboard_interactive');
+      }
+
+      if (baseMembers.length > 0) {
+        const enrichedPromises = baseMembers.map(async (m) => {
+          const uid = m.uid || m.id;
+          try {
+            const userSnap = await withDashboardTimeout(getDoc(doc(db, "users", uid)), 6000, "Dashboard timeout loading user profile");
+            if (userSnap.exists()) {
+              return { id: uid, ...userSnap.data(), ...m };
+            }
+          } catch(err) {}
+          return m;
+        });
+
+        Promise.allSettled(enrichedPromises).then(results => {
+          if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
+            const enrichedMembers = results.map((r, i) => r.status === 'fulfilled' ? r.value : baseMembers[i]);
+            setMembers(enrichedMembers);
+          }
+        });
+      }
+
+      const [
+        invitesResult,
+        joinRequestsResult,
+        auditLogsResult
+      ] = await secondaryResultsPromise;
+
+      if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
+        if (invitesResult.status === 'fulfilled') {
+          setPendingInvites(invitesResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
+        } else {
+          setPendingInvites([]);
+          console.warn("Failed to load invites");
+        }
+
+        if (joinRequestsResult.status === 'fulfilled') {
+          setJoinRequests(joinRequestsResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
+        } else {
+          setJoinRequests([]);
+          console.warn("Failed to load join requests");
+        }
+
+        if (auditLogsResult.status === 'fulfilled') {
+          const audits = auditLogsResult.value.docs.map(d => ({ id: d.id, ...d.data() }));
+          audits.sort((a: any, b: any) => {
+            const tA = a.timestamp?.seconds || 0;
+            const tB = b.timestamp?.seconds || 0;
+            return tB - tA;
+          });
+          setAuditLogs(audits);
+        } else {
+          setAuditLogs([]);
+          console.warn("Failed to load audit logs");
+        }
+      }
+
+    } catch (error) {
+      if (
+        requestId === requestSequenceRef.current &&
+        orgId === currentActiveOrgIdRef.current
+      ) {
+        setSubscription(null);
+        setOrganization(null);
+        setMembers([]);
+
+        if (!coreReleased) {
+          coreReleased = true;
+          setLoadingSub(false);
+          window.performance?.mark?.('dashboard_interactive');
+        }
+
+        console.warn(
+          '[Dashboard] Falha ao carregar o núcleo organizacional.'
+        );
       }
     }
   };
@@ -578,7 +806,10 @@ export function Dashboard() {
          console.error("[Dashboard] Background sync failed.");
      }
 
-     await loadOrganizationData(orgId, requestId);
+     await Promise.allSettled([
+       loadOrganizationData(orgId, requestId),
+       refreshMusicScaleAccessProjection(orgId)
+     ]);
   };
   useEffect(() => {
     if (organization?.name) {
@@ -1062,6 +1293,15 @@ export function Dashboard() {
       setPendingInvites([]);
       setJoinRequests([]);
       setAuditLogs([]);
+      
+      if (musicScaleProjectionAbortControllerRef.current) {
+        musicScaleProjectionAbortControllerRef.current.abort();
+      }
+      musicScaleProjectionSeqRef.current++;
+      musicScaleExpectedOrgRef.current = null;
+      setMusicScaleProjection(null);
+      setMusicScaleProjectionError(null);
+      setMusicScaleProjectionLoading(false);
       return;
     }
 
@@ -1072,10 +1312,13 @@ export function Dashboard() {
     setJoinRequests([]);
     setAuditLogs([]);
     setLoadingSub(true);
+    setMusicScaleProjection(null);
+    setMusicScaleProjectionError(null);
     
     const requestId = ++requestSequenceRef.current;
     currentActiveOrgIdRef.current = activeContextOrgId;
     loadOrganizationData(activeContextOrgId, requestId);
+    refreshMusicScaleAccessProjection(activeContextOrgId);
     // Subscribe to real-time organization updates for immediate database sync
     const orgId = activeContextOrgId;
     const orgRef = doc(db, "organizations", orgId);
@@ -1091,6 +1334,13 @@ export function Dashboard() {
 
     return () => {
       unsubscribeOrg();
+      if (musicScaleProjectionAbortControllerRef.current) {
+        musicScaleProjectionAbortControllerRef.current.abort();
+      }
+      musicScaleProjectionSeqRef.current++;
+      if (musicScaleExpectedOrgRef.current === activeContextOrgId) {
+        musicScaleExpectedOrgRef.current = null;
+      }
     };
   }, [user, activeContextOrgId]);
 
@@ -1147,63 +1397,10 @@ export function Dashboard() {
     return <Navigate to="/login" replace />;
   }
 
-  const isTrialing = subscription?.status === "trialing" || subscription?.status === "trial";
-  const isActive = subscription?.status === "active" || subscription?.status === "pro";
-  const isCanceled = subscription?.status === "canceled";
-
-  type MusicScaleCatalogState =
-    | "available"
-    | "trialing"
-    | "active"
-    | "cancel_scheduled"
-    | "payment_issue"
-    | "administrative"
-    | "loading";
-
-  const getMusicScaleCatalogState = (): MusicScaleCatalogState => {
-    if (loadingSub || loading) return "loading";
-    if (isGlobalAdmin) return "administrative";
-    
-    if (!subscription || !subscription.status) return "available";
-    
-    const status = subscription.status.toLowerCase();
-    
-    if (['past_due', 'unpaid', 'incomplete', 'paused'].includes(status)) {
-       return "payment_issue";
-    }
-    
-    if (status === 'canceled') {
-       if (subscription.currentPeriodEnd) {
-          const endMs = normalizeDateToMs(subscription.currentPeriodEnd);
-          if (Date.now() < endMs) {
-             return "cancel_scheduled";
-          }
-       }
-       return "available"; // Expired
-    }
-    
-    if (status === 'trialing' || status === 'trial') {
-       if (subscription.cancelAtPeriodEnd || subscription.cancel_at_period_end) {
-          return "cancel_scheduled";
-       }
-       return "trialing";
-    }
-    
-    if (status === 'active' || status === 'pro') {
-       if (subscription.cancelAtPeriodEnd || subscription.cancel_at_period_end) {
-          return "cancel_scheduled";
-       }
-       return "active";
-    }
-    
-    return "available";
-  };
-
-  const msCatalogState = getMusicScaleCatalogState();
-  const msIsInstalled = ["trialing", "active", "cancel_scheduled", "administrative"].includes(msCatalogState);
+  const msIsInstalled = musicScaleProjection?.accessible === true;
 
   const installedApps = ECOSYSTEM_APPS.filter(app => {
-    if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
+    if (app.id === 'nestfinance') return false;
     if (app.id === 'musicscale') return msIsInstalled;
     return organization?.enabledApps?.includes(app.id);
   });
@@ -1215,6 +1412,13 @@ export function Dashboard() {
   const selectedWorkspace = (() => {
     if (activeTab === "overview") {
       if (tab === "apps" && subTab) {
+         if (subTab === 'musicscale') {
+           if (musicScaleProjectionLoading) return 'musicscale'; // Let it render loading state
+           if (!msIsInstalled) {
+             // Se estivermos na URL /dashboard/apps/musicscale mas não temos acesso, voltamos para home
+             return "home";
+           }
+         }
          return installedApps.some(a => a.id === subTab) ? subTab : "home"; 
       } else if (tab === "overview") {
          return "home";
@@ -1462,8 +1666,10 @@ export function Dashboard() {
                 pendingInvites={pendingInvites}
                 currentUserPerms={currentUserPerms}
                 isGlobalAdmin={isGlobalAdmin}
-                msIsInstalled={msIsInstalled}
-                msCatalogState={msCatalogState}
+                musicScaleAccess={{
+                  accessible: musicScaleProjection?.accessible === true,
+                  catalogState: musicScaleProjectionError ? 'error' : musicScaleProjectionLoading ? 'loading' : musicScaleProjection?.catalogState || 'available'
+                }}
                 musicScaleApp={musicScaleApp}
                 occupiedSlots={occupiedSlots}
                 maxUsersLimit={maxUsersLimit}
@@ -1475,6 +1681,11 @@ export function Dashboard() {
                 onNavigateToOrganizationSettings={onNavigateToOrganizationSettings}
                 activeSection={activeSection as 'overview' | 'resources' | 'getting-started'}
                 onSelectMusicScaleSection={handleSelectMusicScaleSection}
+                onRetryMusicScaleAccess={() => {
+                  if (activeContextOrgId) {
+                    refreshMusicScaleAccessProjection(activeContextOrgId);
+                  }
+                }}
               />
 
               {selectedWorkspace === 'home' && (
@@ -1509,11 +1720,11 @@ export function Dashboard() {
                                <Link className="w-3.5 h-3.5" /> Site
                             </a>
                          )}
-                         {isTrialing ? (
+                         {getVisualState(subscription) === 'trialing' ? (
                            <span className="px-3 py-1 bg-[#F59E0B]/10 text-[#F59E0B] text-[10px] font-bold rounded-full border border-[#F59E0B]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
                              <Clock className="w-3.5 h-3.5" /> Trial Ativo
                            </span>
-                         ) : isActive ? (
+                         ) : getVisualState(subscription) === 'active' || getVisualState(subscription) === 'cancel_scheduled' ? (
                            <span className="px-3 py-1 bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold rounded-full border border-[#10B981]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
                              <ShieldCheck className="w-3.5 h-3.5" /> Ativo
                            </span>
@@ -1576,43 +1787,42 @@ export function Dashboard() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {ECOSYSTEM_APPS.filter(app => {
-                        // Restrict NestFinance preview to global admins
-                        if (app.id === 'nestfinance' && !isGlobalAdmin) return false;
-                        return true;
-                      }).map(app => {
+                      {ECOSYSTEM_APPS.map(app => {
                         const isMusicScale = app.id === 'musicscale';
-                        const isInstalled = isMusicScale ? msIsInstalled : organization?.enabledApps?.includes(app.id);
+                        const isNestFinance = app.id === 'nestfinance';
+                        const isInstalled = isNestFinance ? false : isMusicScale ? msIsInstalled : organization?.enabledApps?.includes(app.id);
 
                         let cardStatusText = t('dashboard.apps.available', 'Disponível');
                         let isWarningState = false;
 
                         if (isMusicScale) {
-                           switch (msCatalogState) {
-                              case 'loading': cardStatusText = t('loading', 'Carregando...'); break;
-                              case 'trialing': cardStatusText = t('dashboard.apps.trialing', 'Em teste'); break;
-                              case 'active': cardStatusText = t('dashboard.apps.active', 'Ativo'); break;
-                              case 'cancel_scheduled': cardStatusText = t('dashboard.apps.cancel_scheduled', 'Cancelamento agendado'); break;
-                              case 'payment_issue': 
-                                 cardStatusText = t('dashboard.apps.payment_issue', 'Pagamento pendente'); 
-                                 isWarningState = true;
-                                 break;
-                              case 'administrative': cardStatusText = t('dashboard.apps.administrative', 'Acesso administrativo'); break;
-                              case 'available': cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
-                              default: cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
+                           if (musicScaleProjectionError) {
+                               cardStatusText = t('error', 'Erro');
+                               isWarningState = true;
+                           } else if (musicScaleProjectionLoading) {
+                               cardStatusText = t('loading', 'Carregando...');
+                           } else {
+                               switch (musicScaleProjection?.catalogState) {
+                                  case 'trialing': cardStatusText = t('dashboard.apps.trialing', 'Em teste'); break;
+                                  case 'active': cardStatusText = t('dashboard.apps.active', 'Ativo'); break;
+                                  case 'cancel_scheduled': cardStatusText = t('dashboard.apps.cancel_scheduled', 'Cancelamento agendado'); break;
+                                  case 'payment_issue': 
+                                     cardStatusText = t('dashboard.apps.payment_issue', 'Pagamento pendente'); 
+                                     isWarningState = true;
+                                     break;
+                                  case 'administrative': cardStatusText = t('dashboard.apps.administrative', 'Acesso administrativo'); break;
+                                  case 'available': cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
+                                  case 'unavailable': cardStatusText = t('dashboard.apps.unavailable', 'Acesso indisponível'); break;
+                                  default: cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
+                               }
                            }
+                        } else if (isNestFinance) {
+                           cardStatusText = 'Em breve';
                         } else {
                            cardStatusText = isInstalled ? 'Instalado' : 
-                                            (app.id === 'nestfinance' && nestFinanceLaunchEnabled) ? 'Disponível' :
+                                            
                                             app.category === 'beta' ? 'Em Breve' : 'Disponível';
                         }
-
-                        // Map internal icon string to lucide icons
-                        const Icon = app.icon === 'Music' ? Music : 
-                                     app.icon === 'Users' ? Users : 
-                                     app.icon === 'ShieldCheck' ? ShieldCheck : 
-                                     app.icon === 'CreditCard' ? CreditCard : 
-                                     app.icon === 'Wallet' ? Wallet : LayoutGrid;
 
                         return (
                           <div key={app.id} className="bg-[#050505] rounded-3xl p-5 border border-white/10 shadow-lg flex flex-col transition-all hover:border-white/20 relative overflow-hidden group">
@@ -1622,13 +1832,17 @@ export function Dashboard() {
                                 {app.id === 'musicscale' ? (
                                   <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
                                 ) : (
-                                  <Icon className="w-5 h-5" />
+                                  <EcosystemAppIcon
+                                    app={app}
+                                    iconClassName="w-5 h-5"
+                                    assetClassName="w-10 h-10"
+                                  />
                                 )}
                               </div>
                               <span className={`px-2 py-1 text-[9px] font-bold rounded-md border uppercase tracking-widest shadow-sm ${
                                 isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 
                                 isWarningState ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                (app.id === 'nestfinance' && nestFinanceLaunchEnabled) ? 'bg-[#F5F7FA]/10 text-[#F5F7FA] border-[#F5F7FA]/20' :
+                                
                                 'bg-white/5 text-[#A0A7B5] border-white/10'
                               }`}>
                                 {cardStatusText}
@@ -1637,31 +1851,28 @@ export function Dashboard() {
                             <h4 className="text-lg font-semibold text-[#F5F7FA] mb-1">{app.name}</h4>
                             <p className="text-[#A0A7B5] text-xs leading-relaxed mb-6 flex-1">
                               {app.description}
-                              {isMusicScale && msCatalogState === 'cancel_scheduled' && formattedRenewal && (
+                              {isMusicScale && musicScaleProjection?.catalogState === 'cancel_scheduled' && formattedRenewal && (
                                 <span className="block mt-2 text-white/40">Acesso até {formattedRenewal}</span>
                               )}
                             </p>
                             
                             <div className="relative z-10 flex items-center gap-3">
                               {app.id === 'nestfinance' ? (
-                                nestFinanceLaunchEnabled ? (
-                                  <button
-                                    onClick={handleLaunchNestFinance}
-                                    disabled={!canLaunchNestFinance}
-                                    className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-wait"
-                                  >
-                                    {nestFinanceLaunching ? 'Preparando acesso...' : 'Abrir NestFinance'} <ArrowRight className="w-3.5 h-3.5" />
-                                  </button>
-                                ) : (
-                                  <button
-                                    disabled
-                                    className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed border border-white/5"
-                                  >
-                                    Em preparação
-                                  </button>
-                                )
+                                <button
+                                  disabled
+                                  className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed border border-white/5"
+                                >
+                                  Em breve
+                                </button>
                               ) : isMusicScale ? (
-                                msCatalogState === 'loading' ? (
+                                musicScaleProjectionError ? (
+                                  <button
+                                    onClick={() => refreshMusicScaleAccessProjection(activeContextOrgId!)}
+                                    className="flex-1 w-full py-2.5 bg-white/5 text-[#A0A7B5] border border-white/5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white/10 transition-all shadow-sm active:scale-95"
+                                  >
+                                    Tentar novamente
+                                  </button>
+                                ) : musicScaleProjectionLoading ? (
                                   <button
                                     disabled
                                     className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-wait border border-white/5"
@@ -1669,7 +1880,7 @@ export function Dashboard() {
                                     <div className="w-3.5 h-3.5 border border-[#A0A7B5]/30 border-t-[#A0A7B5] rounded-full animate-spin" />
                                     {t('loading', 'Carregando...')}
                                   </button>
-                                ) : msCatalogState === 'payment_issue' ? (
+                                ) : musicScaleProjection?.catalogState === 'payment_issue' ? (
                                   <button
                                     onClick={() => navigate('/dashboard/billing')}
                                     className="flex-1 w-full py-2.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-red-500/20 transition-all shadow-sm active:scale-95"

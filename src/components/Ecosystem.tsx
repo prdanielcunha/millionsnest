@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { CalendarDays, Users, QrCode, Music, MessageSquare, BarChart3, Bot } from "lucide-react";
+import { CalendarDays, Users, QrCode, Music, MessageSquare, Bot } from "lucide-react";
 import { useTranslation, Trans } from 'react-i18next';
 import { useNavigate } from "react-router-dom";
 
@@ -18,7 +18,13 @@ export function Ecosystem() {
     },
     {
       title: t('eco_finance_title', 'NestFinance'),
-      icon: <BarChart3 className="w-5 h-5" />,
+      icon: <img
+    src="/brand/nestfinance/nest-flow-signature/v1/symbols/nestfinance-symbol-vector-gradient-compact.svg"
+    alt=""
+    aria-hidden="true"
+    draggable={false}
+    className="w-8 h-8 object-contain"
+  />,
       desc: t('eco_finance_desc', 'Gestão financeira clara, transparente e integrada, pensada para ministérios grandes.'),
       features: [t('eco_finance_feat1', 'Relatórios Inteligentes'), t('eco_finance_feat2', 'Dízimos e Ofertas')],
       active: false

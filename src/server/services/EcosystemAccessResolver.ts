@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { isCanonicalGlobalRole } from '../../../src/lib/permissionService.js';
+import { isCanonicalGlobalRole, canAccessNestFinanceDevelopment } from '../../../src/lib/permissionService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -62,6 +62,7 @@ export const DENIAL_REASONS = {
   MEMBER_APP_ACCESS_DISABLED: 'MEMBER_APP_ACCESS_DISABLED',
   PERMISSION_DENIED: 'PERMISSION_DENIED',
   SCOPE_DENIED: 'SCOPE_DENIED',
+  NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED: 'NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED',
 } as const;
 
 export async function resolveEcosystemAppAccess(params: {
@@ -121,6 +122,19 @@ export async function resolveEcosystemAppAccess(params: {
   const orgData = orgDoc.data() || {};
   if (orgData.status === 'archived' || orgData.status === 'inactive' || orgData.status === 'suspended' || orgData.status === 'disabled' || orgData.disabled === true) {
      return { ...defaultDenied, systemRole, denialReason: DENIAL_REASONS.ORGANIZATION_INACTIVE };
+  }
+
+
+  if (
+    appId === 'nestfinance' &&
+    !canAccessNestFinanceDevelopment(systemRole)
+  ) {
+    return {
+      ...defaultDenied,
+      systemRole,
+      denialReason:
+        DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED
+    };
   }
 
   if (hasGlobalRole) {

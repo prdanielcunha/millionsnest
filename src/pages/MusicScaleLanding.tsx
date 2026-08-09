@@ -151,7 +151,7 @@ export function MusicScaleLanding() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="text-xl md:text-2xl text-[#A0A7B5] mb-12 max-w-3xl leading-relaxed font-light"
+              className="text-xl md:text-2xl text-[#A0A7B5] mb-8 max-w-3xl leading-relaxed font-light"
             >
               {t('musicscale:hero_subtitle', 'Escalas, repertório, confirmações, notificações e preparação do culto em uma experiência premium para ministérios de louvor.')}
             </motion.p>
@@ -193,6 +193,23 @@ export function MusicScaleLanding() {
                 <Play className="w-5 h-5" />
                 {t('musicscale:hero_cta_secondary', 'Ver app em ação')}
               </button>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              className="mt-10 px-5 py-3 rounded-2xl bg-gradient-to-r from-[#2B85EB]/10 via-[#2B85EB]/5 to-transparent border border-[#2B85EB]/30 max-w-2xl flex items-center gap-3.5 backdrop-blur-md"
+            >
+              <div className="w-2.5 h-2.5 rounded-full bg-[#2B85EB] animate-pulse flex-shrink-0" />
+              <div className="text-left">
+                <span className="text-xs font-bold text-white block uppercase tracking-wider mb-0.5">
+                  {t('musicscale:subscription_scope_badge', 'Uma assinatura para todo o grupo')}
+                </span>
+                <span className="text-xs text-[#A0A7B5] font-light block leading-relaxed">
+                  {t('musicscale:subscription_scope_desc', 'A igreja, ministério ou equipe contrata um único plano. Os integrantes não pagam individualmente.')}
+                </span>
+              </div>
             </motion.div>
 
             <motion.div 

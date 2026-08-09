@@ -162,13 +162,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let active = true;
+    let authEventSequence = 0;
+    let canonicalContextController: AbortController | null = null;
+    
     if (!auth) {
       console.warn("Firebase Auth not initialized. Missing API Key.");
-      setLoading(false);
+      if (active) setLoading(false);
       return;
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!active) return;
+      
+      const eventSequence = ++authEventSequence;
+
+      const isCurrentAuthEvent = () =>
+        active &&
+        eventSequence === authEventSequence;
+
+      canonicalContextController?.abort();
+      canonicalContextController = null;
+
+      if (!isCurrentAuthEvent()) return;
+
       setUser(currentUser);
       
       if (currentUser) {
@@ -177,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         try {
           const userSnap = await withTimeout(getDoc(userRef), 8000, "Firestore timeout loading user");
+          if (!isCurrentAuthEvent()) return;
           
           if (userSnap.exists()) {
             const userData = userSnap.data() as UserProfile;
@@ -184,29 +202,76 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             try {
               const idToken = await currentUser.getIdToken();
-              const res = await fetch('/api/user/organization-context', {
-                headers: { 'Authorization': `Bearer ${idToken}` }
-              });
-              if (res.ok) {
-                const canonicalCtx = await res.json();
-                setCanonicalContext(canonicalCtx);
-                if (canonicalCtx.activeOrganizationId && canonicalCtx.activeOrganizationId !== userData.activeOrganizationId) {
-                  userData.activeOrganizationId = canonicalCtx.activeOrganizationId;
+              if (!isCurrentAuthEvent()) return;
+              canonicalContextController?.abort();
+              const controller = new AbortController();
+              canonicalContextController = controller;
+              const timeoutId = window.setTimeout(() => {
+                controller.abort();
+              }, 6000);
+              
+              try {
+                const res = await fetch('/api/user/organization-context', {
+                  headers: { 'Authorization': `Bearer ${idToken}` },
+                  signal: controller.signal
+                });
+                if (!isCurrentAuthEvent()) return;
+                
+                if (res.ok) {
+                  const canonicalCtx = await res.json();
+                  if (!isCurrentAuthEvent()) return;
+                  
+                  const isCanonicalContextValid =
+                    canonicalCtx !== null &&
+                    typeof canonicalCtx === 'object' &&
+                    !Array.isArray(canonicalCtx) &&
+                    (
+                      canonicalCtx.activeOrganizationId === undefined ||
+                      canonicalCtx.activeOrganizationId === null ||
+                      typeof canonicalCtx.activeOrganizationId === 'string'
+                    ) &&
+                    (
+                      canonicalCtx.primaryOrganizationId === undefined ||
+                      canonicalCtx.primaryOrganizationId === null ||
+                      typeof canonicalCtx.primaryOrganizationId === 'string'
+                    );
+
+                  
+                  if (isCanonicalContextValid) {
+                    setCanonicalContext(canonicalCtx);
+                    if (canonicalCtx.activeOrganizationId && canonicalCtx.activeOrganizationId !== userData.activeOrganizationId) {
+                      userData.activeOrganizationId = canonicalCtx.activeOrganizationId;
+                    }
+                    if (canonicalCtx.primaryOrganizationId && canonicalCtx.primaryOrganizationId !== userData.primaryOrganizationId) {
+                      userData.primaryOrganizationId = canonicalCtx.primaryOrganizationId;
+                    }
+                    if (canonicalCtx.activeOrganizationId) {
+                      userData.organizationId = canonicalCtx.activeOrganizationId;
+                    }
+                  } else {
+                    if (isCurrentAuthEvent()) setCanonicalContext(null);
+                    console.warn('Resposta inválida da API de contexto canônico.');
+                  }
+                } else {
+                  if (isCurrentAuthEvent()) setCanonicalContext(null);
+                  console.warn('API de contexto canônico respondeu com erro:', res.status);
                 }
-                if (canonicalCtx.primaryOrganizationId && canonicalCtx.primaryOrganizationId !== userData.primaryOrganizationId) {
-                  userData.primaryOrganizationId = canonicalCtx.primaryOrganizationId;
-                }
-                if (canonicalCtx.activeOrganizationId) {
-                  userData.organizationId = canonicalCtx.activeOrganizationId;
+              } finally {
+                window.clearTimeout(timeoutId);
+                if (canonicalContextController === controller) {
+                  canonicalContextController = null;
                 }
               }
             } catch (ctxErr) {
-              console.error('Falha ao buscar contexto canônico no AuthContext:', ctxErr);
+              if (isCurrentAuthEvent()) setCanonicalContext(null);
+              console.warn('Falha ao buscar contexto canônico no AuthContext (timeout ou rede):', ctxErr);
             }
+
+            if (!isCurrentAuthEvent()) return;
 
             // Automatic promotion by email and localStorage invites removed per security audit P0-A
             setDoc(userRef, sanitizeForFirestore(mergeData), { merge: true }).catch(err => {
-               console.error("Falha silenciosa ao atualizar lastLoginAt:", err);
+               console.warn("Falha silenciosa ao atualizar lastLoginAt:", err);
             });
             
             const updatedProfile = { ...userData, lastLoginAt: new Date() };
@@ -215,10 +280,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             // Fire and forget analytics
             Promise.resolve().then(() => {
-              analytics.track('login', {
-                userId: currentUser.uid,
-                organizationId: updatedProfile.activeOrganizationId || updatedProfile.organizationId
-              });
+              if (isCurrentAuthEvent()) {
+                analytics.track('login', {
+                  userId: currentUser.uid,
+                  organizationId: updatedProfile.activeOrganizationId || updatedProfile.organizationId
+                });
+              }
             });
           } else {
             // New user without profile
@@ -228,35 +295,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (parsedRedirect.valid) {
                 // Let Login/App handle the redirect to /join
                 // Do not bootstrap automatically. Just set loading false and return.
-                setProfile(null); // Or minimal profile if needed, but null forces them to stay in the flow
+                if (isCurrentAuthEvent()) setProfile(null); // Or minimal profile if needed, but null forces them to stay in the flow
             } else {
                 if (inviteRedirect !== null) {
                     sessionStorage.removeItem('mn_invite_redirect');
                 }
                 try {
                    const idToken = await currentUser.getIdToken(true);
+                   if (!isCurrentAuthEvent()) return;
                    const bootRes = await fetch('/api/v1/onboarding/bootstrap', {
                       method: 'POST',
                       headers: { 'Authorization': `Bearer ${idToken}` }
                    });
+                   if (!isCurrentAuthEvent()) return;
                    if (bootRes.ok) {
                       // Re-fetch user profile
                       const newUserSnap = await getDoc(userRef);
+                      if (!isCurrentAuthEvent()) return;
                       if (newUserSnap.exists()) {
                          const newProfileData = newUserSnap.data() as UserProfile;
                          setProfile(newProfileData);
                          localStorage.setItem('mn_user_profile', JSON.stringify(newProfileData));
                          
                          Promise.resolve().then(() => {
-                           analytics.track('signup', {
-                             userId: currentUser.uid,
-                             organizationId: newProfileData.activeOrganizationId
-                           });
+                           if (isCurrentAuthEvent()) {
+                             analytics.track('signup', {
+                               userId: currentUser.uid,
+                               organizationId: newProfileData.activeOrganizationId
+                             });
+                           }
                          });
                       }
                    }
                 } catch (bootErr) {
-                   console.error("Erro no bootstrap do usuário:", bootErr);
+                   if (!isCurrentAuthEvent()) return;
+                   console.warn("Erro no bootstrap do usuário:", bootErr);
                 }
             }
             
@@ -265,19 +338,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem('invite_role');
           }
         } catch (error) {
-          console.error("Erro ao carregar ou criar perfil do usuário:", error);
+          if (!isCurrentAuthEvent()) return;
+          console.warn("Erro ao carregar ou criar perfil do usuário:", error);
         }
       } else {
-        setProfile(null);
-        localStorage.removeItem('mn_user_profile');
-        localStorage.removeItem('mn_org_context');
+        if (isCurrentAuthEvent()) {
+          setProfile(null);
+          localStorage.removeItem('mn_user_profile');
+          localStorage.removeItem('mn_org_context');
+        }
       }
       
-      setLoading(false);
-      window.performance?.mark?.('auth_restored');
+      if (isCurrentAuthEvent()) {
+        setLoading(false);
+        window.performance?.mark?.('auth_restored');
+      }
     });
 
-    return unsubscribe;
+    return () => {
+      active = false;
+      authEventSequence += 1;
+      canonicalContextController?.abort();
+      canonicalContextController = null;
+      unsubscribe();
+    };
   }, []);
 
   const logout = async () => {

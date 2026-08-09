@@ -583,21 +583,21 @@ async function runAllTests() {
   });
 
   // REGRESSÃO NESTFINANCE
-  await runTest('71. NestFinance continua negando quando não está habilitado', 'u1', 'org1', 'nestfinance', db => {
+  await runTest('71. Gate de desenvolvimento do NestFinance prevalece antes de enabledApps', 'u1', 'org1', 'nestfinance', db => {
     setupUserAndOrg(db);
     db.setMockData('organizations/org1', { status: 'active', enabledApps: ['musicscale'] });
   }, res => {
-    if (res.accessible || res.denialReason !== DENIAL_REASONS.APP_NOT_ENABLED) throw new Error('Expected APP_NOT_ENABLED');
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED || res.decisionState !== 'denied' || res.accessSource !== 'denied') throw new Error('Expected NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED');
   });
 
-  await runTest('72. NestFinance continua negando sem entitlement', 'u1', 'org1', 'nestfinance', db => {
+  await runTest('72. enabledApps não contorna gate de desenvolvimento do NestFinance', 'u1', 'org1', 'nestfinance', db => {
     setupUserAndOrg(db);
     db.setMockData('organizations/org1', { status: 'active', enabledApps: ['nestfinance'] });
   }, res => {
-    if (res.accessible || res.denialReason !== DENIAL_REASONS.ENTITLEMENT_NOT_CONFIGURED) throw new Error('Expected ENTITLEMENT_NOT_CONFIGURED');
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED || res.decisionState !== 'denied' || res.accessSource !== 'denied') throw new Error('Expected NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED');
   });
 
-  await runTest('73. NestFinance continua negando quando appAccess está desabilitado', 'u1', 'org1', 'nestfinance', db => {
+  await runTest('73. entitlement e appAccess não contornam gate de desenvolvimento', 'u1', 'org1', 'nestfinance', db => {
     setupUserAndOrg(db);
     db.setMockData('organizations/org1', { 
        status: 'active', 
@@ -609,10 +609,10 @@ async function runAllTests() {
        appAccess: { nestFinance: { enabled: false } }
     });
   }, res => {
-    if (res.accessible || res.denialReason !== DENIAL_REASONS.MEMBER_APP_ACCESS_DISABLED) throw new Error('Expected MEMBER_APP_ACCESS_DISABLED');
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED || res.decisionState !== 'denied' || res.accessSource !== 'denied') throw new Error('Expected NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED');
   });
 
-  await runTest('74. NestFinance continua concedendo com configuração válida', 'u1', 'org1', 'nestfinance', db => {
+  await runTest('74. configuração legada completa não contorna gate de desenvolvimento', 'u1', 'org1', 'nestfinance', db => {
     setupUserAndOrg(db);
     db.setMockData('organizations/org1', { 
        status: 'active', 
@@ -624,8 +624,8 @@ async function runAllTests() {
        appAccess: { nestFinance: { enabled: true, roles: ['manager'] } }
     });
   }, res => {
-    if (!res.accessible) throw new Error('Expected access');
-    if (!res.roles.includes('manager')) throw new Error('Expected manager role');
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED || res.decisionState !== 'denied' || res.accessSource !== 'denied') throw new Error('Expected NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED');
+    if (res.roles && res.roles.includes('manager')) throw new Error('Expected roles not to contain manager');
   });
 
   await runTest('75. Global role canônica continua concedendo acesso ao NestFinance', 'u1', 'org1', 'nestfinance', db => {

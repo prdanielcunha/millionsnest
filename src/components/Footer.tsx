@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MillionsNestLogo } from './MillionsNestLogo.js';
+import { MillionsNestLogo } from "./MillionsNestLogo.js";
 import { getAvailableApps } from '../lib/apps.js';
 import { createPublicSalesWhatsAppLink, resolvePublicContactLocale } from '../services/publicContactClient.js';
 import { Loader2 } from 'lucide-react';

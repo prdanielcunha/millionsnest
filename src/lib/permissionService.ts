@@ -1,6 +1,22 @@
 export const CANONICAL_GLOBAL_ROLES = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'];
 export const ECOSYSTEM_SUPPORT_ROLES = ['ecosystem_support'] as const;
 
+export const NESTFINANCE_DEVELOPMENT_SYSTEM_ROLES = [
+  'ceo',
+  'global_admin',
+  'ecosystem_owner'
+] as const;
+
+export function canAccessNestFinanceDevelopment(
+  systemRole: string | undefined | null
+): boolean {
+  if (!systemRole) return false;
+  return NESTFINANCE_DEVELOPMENT_SYSTEM_ROLES.includes(
+    systemRole as (typeof NESTFINANCE_DEVELOPMENT_SYSTEM_ROLES)[number]
+  );
+}
+
+
 export function isCanonicalGlobalRole(systemRole: string | undefined | null): boolean {
   if (!systemRole) return false;
   return CANONICAL_GLOBAL_ROLES.includes(systemRole);

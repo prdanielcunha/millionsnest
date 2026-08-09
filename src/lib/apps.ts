@@ -4,6 +4,7 @@ export interface EcosystemApp {
   description: string;
   shortDescription?: string;
   icon: string; // lucide class or identifier
+  iconAsset?: string;
   url?: string;
   operationalUrl?: string;
   internalRoute?: string;
@@ -24,8 +25,8 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     description: 'A excelência que seu ministério de louvor merece. Escalas, ensaios e repertório.',
     shortDescription: 'Excelência em louvor e escalas',
     icon: 'Music',
-    url: import.meta.env.VITE_MUSICSCALE_APP_URL || 'https://musicscale.millionsnest.com/start',
-    operationalUrl: import.meta.env.VITE_MUSICSCALE_APP_URL || 'https://musicscale.millionsnest.com/start',
+    url: ((typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_MUSICSCALE_APP_URL : undefined) || 'https://musicscale.millionsnest.com/start',
+    operationalUrl: ((typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_MUSICSCALE_APP_URL : undefined) || 'https://musicscale.millionsnest.com/start',
     landingRoute: '/musicscale',
     internalRoute: undefined,
     status: 'active',
@@ -36,15 +37,30 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     requiredPlan: 'free',
   },
   {
+    id: 'connect',
+    name: 'MillionsNest Connect',
+    description: 'MillionsNest Connect',
+    shortDescription: 'MillionsNest Connect',
+    icon: 'LayoutGrid',
+    iconAsset: '/brand/connect/v2/connect-mark-color.svg',
+    status: 'coming_soon',
+    primaryAction: 'disabled',
+    badgeLabelKey: 'footer_soon',
+    order: 2,
+    category: 'beta',
+    requiredPlan: 'free',
+  },
+  {
     id: 'nestfinance',
     name: 'NestFinance',
+    iconAsset: '/brand/nestfinance/nest-flow-signature/v1/symbols/nestfinance-symbol-vector-gradient-compact.svg',
     description: 'Gestão financeira, conciliação, relatórios e auditoria.',
     shortDescription: 'Gestão financeira transparente',
     icon: 'Wallet',
     status: 'coming_soon',
     primaryAction: 'disabled',
     badgeLabelKey: 'footer_soon',
-    order: 2,
+    order: 3,
     category: 'beta',
   },
   {
@@ -58,7 +74,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     status: 'coming_soon',
     primaryAction: 'disabled',
     badgeLabelKey: 'footer_soon',
-    order: 3,
+    order: 4,
     category: 'beta',
     requiredPlan: 'starter',
   },
@@ -73,7 +89,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     status: 'coming_soon',
     primaryAction: 'disabled',
     badgeLabelKey: 'footer_soon',
-    order: 4,
+    order: 5,
     category: 'beta',
     requiredPlan: 'starter',
   },
@@ -88,7 +104,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     status: 'coming_soon',
     primaryAction: 'disabled',
     badgeLabelKey: 'footer_soon',
-    order: 5,
+    order: 6,
     category: 'beta',
     requiredPlan: 'pro',
   }

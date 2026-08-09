@@ -11,6 +11,10 @@ export function SalesChat() {
   
   const commonQuestions = [
     {
+      q: t('faq_q5'),
+      a: t('faq_a5')
+    },
+    {
       q: t('faq_q1'),
       a: t('faq_a1')
     },

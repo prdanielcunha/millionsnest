@@ -21,6 +21,10 @@ export function FAQ() {
     {
       question: t('faq_q4'),
       answer: t('faq_a4')
+    },
+    {
+      question: t('faq_q5'),
+      answer: t('faq_a5')
     }
   ];
 

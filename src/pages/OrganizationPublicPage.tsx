@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext.js';
 import { Building2, Users, LayoutGrid, Check, Server, Shield, Sparkles, MapPin, ChevronRight, User, X, Loader2, Link } from 'lucide-react';
+import { EcosystemAppIcon } from '../components/apps/EcosystemAppIcon.js';
 import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
 import { ECOSYSTEM_APPS } from '../lib/apps.js';
 import { addDoc, collection } from 'firebase/firestore';
@@ -280,15 +281,25 @@ export function OrganizationPublicPage() {
                        <motion.div key={app.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + (idx * 0.05) }} className="bg-[#0A0D14] border border-white/5 rounded-2xl p-5 hover:bg-[#0F1219] hover:border-white/10 transition-all flex flex-col justify-between h-full">
                          <div>
                             <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB] mb-4">
-                               <LayoutGrid className="w-6 h-6" /> 
+                              <EcosystemAppIcon
+                                app={app}
+                                iconClassName="w-6 h-6"
+                                assetClassName="w-10 h-10"
+                              />
                             </div>
                             <h3 className="text-lg font-semibold text-white mb-2">{app.name}</h3>
                             <p className="text-sm text-[#A0A7B5] mb-6">{app.description}</p>
                          </div>
                          
                          <div className="flex items-center justify-between mt-auto">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-[#A0A7B5]">Módulo Ativo</span>
-                            {user && isMember ? (
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-[#A0A7B5]">
+                              {app.id === 'nestfinance' ? 'Em breve' : 'Módulo Ativo'}
+                            </span>
+                            {app.id === 'nestfinance' ? (
+                               <button disabled className="text-sm font-medium text-white/50 cursor-not-allowed opacity-60">
+                                 Em breve
+                               </button>
+                            ) : user && isMember ? (
                                <button onClick={() => {
                                  if (app.id === 'musicscale') {
                                     import('../packages/events/index.js').then(({ eventBus }) => {

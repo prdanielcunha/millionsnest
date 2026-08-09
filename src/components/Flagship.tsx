@@ -38,10 +38,19 @@ export function Flagship() {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="text-lg md:text-xl text-[#A0A7B5] font-normal leading-relaxed"
+              className="text-lg md:text-xl text-[#A0A7B5] font-normal leading-relaxed mb-4"
             >
               {t('flagship_desc')}
             </motion.p>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.03] border border-white/10 text-xs text-[#A0A7B5]"
+            >
+              <span className="font-semibold text-white">{t('subscription_scope_badge', 'Uma assinatura para todo o grupo')}:</span>
+              <span>{t('subscription_scope_desc', 'A igreja, ministério ou equipe contrata um único plano e convida os integrantes incluídos no limite escolhido. Ninguém precisa pagar uma assinatura individual.')}</span>
+            </motion.div>
           </div>
           
           <motion.div 

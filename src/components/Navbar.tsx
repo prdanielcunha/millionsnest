@@ -2,15 +2,15 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useOrganization } from '../contexts/OrganizationContext.js';
-import { MillionsNestLogo } from './MillionsNestLogo.js';
-import { LayoutDashboard, LogOut, Menu, X, Search, LayoutGrid, Music, Users, ShieldCheck, CreditCard, Wallet, Calendar, QrCode } from 'lucide-react';
+import { MillionsNestLogo } from "./MillionsNestLogo.js";
+import { LayoutDashboard, LogOut, Menu, X, Search, LayoutGrid, Music, Users, ShieldCheck, CreditCard, Wallet, Calendar, QrCode, LogIn } from 'lucide-react';
 import { LanguageSwitcher } from './LanguageSwitcher.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils.js';
 import { useTranslation } from 'react-i18next';
 import { ECOSYSTEM_APPS, type EcosystemApp } from '../lib/apps.js';
-import { isSubscriptionValid } from '../lib/subscriptionHelpers.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
+import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
 
 export function Navbar() {
   const { user, profile, logout } = useAuth();
@@ -53,6 +53,10 @@ export function Navbar() {
   const handleLaunch = async (app: EcosystemApp) => {
     setLauncherOpen(false);
     if (!profile || !organization) return;
+    if (app.id === 'musicscale') {
+      navigate('/dashboard/apps/musicscale');
+      return;
+    }
     try {
       await openEcosystemModule(app.id, user, profile, organization, currentUserPerms);
     } catch (e: any) {
@@ -64,15 +68,17 @@ export function Navbar() {
     const isGlobalAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(profile?.systemRole || 'user');
 
     const myApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = app.id === 'musicscale' ? (isSubscriptionValid(subscription) || isGlobalAdmin) : organization?.enabledApps?.includes(app.id);
+      if (app.id === 'musicscale') return false;
+      const isInstalled = organization?.enabledApps?.includes(app.id);
       return isInstalled || app.status === 'active';
     }).map(app => {
-      const isInstalled = app.id === 'musicscale' ? (isSubscriptionValid(subscription) || isGlobalAdmin) : organization?.enabledApps?.includes(app.id);
+      const isInstalled = organization?.enabledApps?.includes(app.id);
       return { ...app, isInstalled };
-    }).filter(app => app.isInstalled || app.id === 'musicscale'); // ensure we show installed or flagship
+    }).filter(app => app.isInstalled); // ensure we show installed or flagship
 
     const discoverApps = ECOSYSTEM_APPS.filter(app => {
-      const isInstalled = app.id === 'musicscale' ? (isSubscriptionValid(subscription) || isGlobalAdmin) : organization?.enabledApps?.includes(app.id);
+      if (app.id === 'musicscale') return false;
+      const isInstalled = organization?.enabledApps?.includes(app.id);
       return !isInstalled && app.status !== 'active';
     });
 
@@ -99,6 +105,45 @@ export function Navbar() {
             </div>
             
             <div className="p-3 overflow-y-auto max-h-[60vh] custom-scrollbar bg-[#0B0F19]/50">
+              {/* MusicScale Neutral Shortcut */}
+              <div className="mb-6">
+                <div className="px-3 py-2 text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest mb-2">
+                  Destaque
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <div className="group relative flex flex-col p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all">
+                    <div className="flex items-start gap-4">
+                      <button
+                        onClick={() => {
+                          setLauncherOpen(false);
+                          navigate('/dashboard/apps/musicscale');
+                        }}
+                        className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-[10px] transition-all shadow-inner bg-white/5 text-[#A0A7B5] cursor-pointer group-hover:scale-105 group-hover:border-white/10"
+                      >
+                        <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
+                      </button>
+                      <div className="flex flex-col flex-1 min-w-0 pt-0.5">
+                        <span className="text-sm font-semibold text-white truncate transition-colors">MusicScale</span>
+                        <span className="text-[11px] text-[#A0A7B5] line-clamp-2 mt-1 leading-relaxed">
+                          Software de organização e escalas para igrejas.
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center gap-2 pl-[4rem]">
+                      <button
+                        onClick={() => {
+                          setLauncherOpen(false);
+                          navigate('/dashboard/apps/musicscale');
+                        }}
+                        className="px-4 py-1.5 bg-white/10 text-white text-xs font-semibold rounded-lg hover:bg-white/20 transition-all shadow-md active:scale-95"
+                      >
+                        Ver acesso no painel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* My Apps Section */}
               {myApps.length > 0 && (
                 <div className="mb-6">
@@ -108,25 +153,22 @@ export function Navbar() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     {myApps.map(app => {
-                      const Icon = app.icon === 'Music' ? Music :
-                                   app.icon === 'Users' ? Users :
-                                   app.icon === 'ShieldCheck' ? ShieldCheck :
-                                   app.icon === 'CreditCard' ? CreditCard :
-                                   app.icon === 'Wallet' ? Wallet :
-                                   app.icon === 'Calendar' ? Calendar :
-                                   app.icon === 'QrCode' ? QrCode : LayoutGrid;
-                      
                       return (
                         <div key={`active-${app.id}`} className="group relative flex flex-col p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all">
                           <div className="flex items-start gap-4">
                             <button
                               onClick={() => app.isInstalled ? handleLaunch(app) : null}
                               className={`flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-[10px] transition-all shadow-inner ${app.isInstalled ? 'bg-gradient-to-br from-[#2B85EB]/20 to-[#2B85EB]/5 text-[#2B85EB] border border-[#2B85EB]/20 cursor-pointer group-hover:scale-105' : 'bg-white/5 text-[#A0A7B5] cursor-default'}`}
+                              aria-label={app.name}
                             >
                               {app.id === 'musicscale' ? (
                                 <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
                               ) : (
-                                <Icon className="w-6 h-6" />
+                                <EcosystemAppIcon
+                                  app={app}
+                                  iconClassName="w-6 h-6"
+                                  assetClassName="w-10 h-10"
+                                />
                               )}
                             </button>
                             <div className="flex flex-col flex-1 min-w-0 pt-0.5">
@@ -169,21 +211,17 @@ export function Navbar() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     {discoverApps.map(app => {
-                      const Icon = app.icon === 'Music' ? Music :
-                                   app.icon === 'Users' ? Users :
-                                   app.icon === 'ShieldCheck' ? ShieldCheck :
-                                   app.icon === 'CreditCard' ? CreditCard :
-                                   app.icon === 'Wallet' ? Wallet :
-                                   app.icon === 'Calendar' ? Calendar :
-                                   app.icon === 'QrCode' ? QrCode : LayoutGrid;
-                      
                       return (
                         <div key={`soon-${app.id}`} className="flex items-start gap-4 p-3 rounded-xl bg-white/[0.02] border border-white/[0.02] opacity-70 hover:opacity-100 transition-opacity">
                           <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-[10px] bg-white/5 text-[#A0A7B5] border border-white/5">
                             {app.id === 'musicscale' ? (
                               <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-6 h-6 object-contain opacity-50 grayscale" />
                             ) : (
-                              <Icon className="w-5 h-5" />
+                              <EcosystemAppIcon
+                                app={app}
+                                iconClassName="w-5 h-5"
+                                assetClassName="w-10 h-10"
+                              />
                             )}
                           </div>
                           <div className="flex flex-col flex-1 min-w-0 pt-0.5">
@@ -221,7 +259,7 @@ export function Navbar() {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
           <MillionsNestLogo className="h-10 md:h-12 w-auto transition-transform group-hover:scale-105" />
-          <span className="font-semibold text-lg tracking-tight text-[#F5F7FA]">MillionsNest</span>
+          <span className="font-semibold text-lg tracking-tight text-[#F5F7FA] hidden sm:block">MillionsNest</span>
         </Link>
 
         {/* Desktop Nav */}
@@ -287,7 +325,10 @@ export function Navbar() {
             </div>
           ) : (
             <>
-              <Link to="/login" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:login', 'Entrar')}</Link>
+              <Link id="nav-login-desktop" to="/login" aria-label={t('common:login', 'Entrar')} className="text-sm font-semibold text-white px-5 py-2 rounded-lg bg-[#2B85EB]/10 border border-[#2B85EB]/30 hover:bg-[#2B85EB]/20 transition-all focus-visible:ring-2 focus-visible:ring-[#2B85EB] flex items-center gap-2 min-h-[40px]">
+                <LogIn className="w-4 h-4" />
+                {t('common:login', 'Entrar')}
+              </Link>
               <button onClick={() => {
                 sessionStorage.setItem('purchase_intent', 'musicscale_starter_monthly');
                 navigate('/login');
@@ -322,6 +363,11 @@ export function Navbar() {
                 {renderCommandCenter()}
               </div>
             </>
+          )}
+          {!user && (
+            <Link id="nav-login-mobile" to="/login" aria-label={t('common:login', 'Entrar')} className="text-sm font-semibold text-white px-3 py-2 rounded-lg bg-[#2B85EB]/10 border border-[#2B85EB]/30 hover:bg-[#2B85EB]/20 transition-all focus-visible:ring-2 focus-visible:ring-[#2B85EB] flex items-center min-h-[40px]">
+              {t('common:login', 'Entrar')}
+            </Link>
           )}
           <button 
             className="text-[#A0A7B5] hover:text-white transition-colors"
@@ -364,7 +410,7 @@ export function Navbar() {
                </>
             ) : (
                <>
-                <Link to="/login" className="text-lg font-medium text-[#A0A7B5] hover:text-white text-center py-2" onClick={() => setMobileMenuOpen(false)}>{t('common:login', 'Entrar')}</Link>
+                <Link id="nav-login-mobile-menu" to="/login" aria-label={t('common:login', 'Entrar')} className="text-lg font-medium text-[#A0A7B5] hover:text-white text-center py-2" onClick={() => setMobileMenuOpen(false)}>{t('common:login', 'Entrar')}</Link>
                 <button onClick={() => { 
                   sessionStorage.setItem('purchase_intent', 'musicscale_starter_monthly');
                   setMobileMenuOpen(false);
