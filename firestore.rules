@@ -161,6 +161,20 @@ service cloud.firestore {
         allow create, update, delete: if isAuthenticated() && (isOrgAdmin(orgId) || isSystemAdmin());
       }
 
+      match /join_requests/{requestId} {
+        allow read, list: if isAuthenticated() && (
+            exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('status', '') == 'active' &&
+            (
+              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('role', '') == 'owner' ||
+              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('role', '') == 'admin' ||
+              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('organizationRole', '') == 'owner' ||
+              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('organizationRole', '') == 'admin'
+            )
+        );
+        allow create, update, delete: if false;
+      }
+
       match /audit_logs/{document=**} {
         allow read: if isAuthenticated() && checkOrgAccess(orgId);
         allow write: if isAuthenticated() && checkOrgAccess(orgId);
@@ -171,9 +185,9 @@ service cloud.firestore {
       }
 
       match /{app}/{document=**} {
-        allow read: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow create: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow read: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 

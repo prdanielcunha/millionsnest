@@ -1112,69 +1112,14 @@ export function Dashboard() {
   const handleAcceptJoinRequest = async (requestId: string) => {
     try {
       const orgId = activeContextOrgId;
-      const requestRef = doc(db, `organizations/${orgId}/join_requests`, requestId);
-      const reqSnap = await getDoc(requestRef);
-      if (!reqSnap.exists()) return;
-      
-      const reqData = reqSnap.data();
-      
-      // Enforce user limits client-side securely
-      const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
-      const maxUsersLimit = entitlements?.limits?.users ?? 10;
-      const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
-      
-      if (maxUsersLimit !== -1 && occupiedSlots >= maxUsersLimit) {
-        alert(`Limite de usuários atingido! Faça o upgrade do seu plano para liberar mais vagas.`);
-        return;
-      }
-
-      await updateDoc(requestRef, {
-        status: 'approved',
-        approvedAt: serverTimestamp(),
-        approvedBy: user?.uid
+      const token = await user?.getIdToken();
+      const response = await fetch(`/api/v1/organizations/${encodeURIComponent(orgId)}/join-requests/${encodeURIComponent(requestId)}/approve`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}'
       });
-
-      const memberRef = doc(db, `organizations/${orgId}/members`, requestId);
-      await setDoc(memberRef, {
-        uid: requestId,
-        email: reqData.email || '',
-        displayName: reqData.displayName || '',
-        photoURL: reqData.photoURL || '',
-        role: 'member',
-        organizationRole: 'member',
-        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-        permissions: getDefaultPermissions('member'),
-        status: 'active',
-        joinedAt: serverTimestamp(),
-        invitedBy: user?.uid || 'system'
-      }, { merge: true });
-
-      const legacyMemberRef = doc(db, "organization_members", `${requestId}_${orgId}`);
-      await setDoc(legacyMemberRef, {
-        role: 'member',
-        organizationRole: 'member',
-        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-        permissions: getDefaultPermissions('member'),
-        addedAt: serverTimestamp()
-      }, { merge: true });
-
-      // Modifies target user's organizations array
-      const userRef = doc(db, "users", requestId);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-         const userData = userSnap.data();
-         const orgs = userData.organizations || [];
-         if (!orgs.includes(orgId)) {
-            await updateDoc(userRef, {
-               organizations: [...orgs, orgId]
-            });
-         }
-      }
+      if (!response.ok) throw new Error('JOIN_REQUEST_APPROVAL_FAILED');
 
       setJoinRequests(prev => prev.filter(r => r.id !== requestId));
-      
-      // refresh members
-      const newMemberSnap = await getDoc(memberRef);
+      const newMemberSnap = await getDoc(doc(db, `organizations/${orgId}/members`, requestId));
       if (newMemberSnap.exists()) {
         setMembers(prev => [...prev, { id: newMemberSnap.id, ...newMemberSnap.data() }]);
       }
@@ -1187,12 +1132,11 @@ export function Dashboard() {
   const handleRejectJoinRequest = async (requestId: string) => {
     try {
       const orgId = activeContextOrgId;
-      const requestRef = doc(db, `organizations/${orgId}/join_requests`, requestId);
-      await updateDoc(requestRef, {
-        status: 'rejected',
-        rejectedAt: serverTimestamp(),
-        rejectedBy: user?.uid
+      const token = await user?.getIdToken();
+      const response = await fetch(`/api/v1/organizations/${encodeURIComponent(orgId)}/join-requests/${encodeURIComponent(requestId)}/reject`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}'
       });
+      if (!response.ok) throw new Error('JOIN_REQUEST_REJECTION_FAILED');
       setJoinRequests(prev => prev.filter(r => r.id !== requestId));
     } catch (e) {
       console.error(e);
