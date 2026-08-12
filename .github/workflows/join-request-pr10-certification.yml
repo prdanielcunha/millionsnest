@@ -1,0 +1,78 @@
+name: PR10 Join Request Certification
+
+on:
+  push:
+    branches:
+      - "certify/join-requests-p0-pr10-0164bee"
+    paths:
+      - ".github/workflows/join-request-pr10-certification.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: "0164bee70f8617af9b38df70cdbbdd7acfab09a3"
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify exact remote PR head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "0164bee70f8617af9b38df70cdbbdd7acfab09a3"
+          test -z "$(git status --porcelain)"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Canonical join-request command certification
+        run: npx firebase emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-invitations-p0 "npx tsx scripts/test_p0_join_request_commands_certification.ts && npx tsx scripts/test_p0_join_request_hardening_certification.ts"
+
+      - name: Firestore Rules certification
+        run: npx firebase emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-rules-p0 "node --import tsx --test tests/firestore/join_requests.rules.test.ts tests/firestore/join_requests.hardening.rules.test.ts tests/firestore/organization_members.rules.test.ts"
+
+      - name: Invitation command regression certification
+        run: npx firebase emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-invitations-p0 "npx tsx scripts/test_p0_invitation_commands_certification.ts && npx tsx scripts/test_p0_invitation_final_certification.ts && npx tsx scripts/test_p0a3_invitation_acceptance_transaction.ts"
+
+      - name: Planner resolver handoff and governance regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx tsx scripts/test_p0a3_invitation_creation_planner.ts
+          npx tsx scripts/test_p0a3_invitation_acceptance_planner.ts
+          npx tsx scripts/test_p0a3_invitation_redirect_policy.ts
+          npx tsx scripts/test_p0a3_invitation_token_service.ts
+          npx tsx scripts/test_p0a3_join_client_policy.ts
+          npx tsx scripts/test_mn_access_01_musicscale_resolver.ts
+          npx tsx scripts/test_mn_access_02_musicscale_handoff.ts
+          npx tsx scripts/test_millionsnest_security_governance_p0.ts
+          npx tsx scripts/test_p0a2_bootstrap_transaction.ts
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Diff hygiene and final exact-head proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test "$(git rev-parse HEAD)" = "0164bee70f8617af9b38df70cdbbdd7acfab09a3"
+          test -z "$(git status --porcelain)"
