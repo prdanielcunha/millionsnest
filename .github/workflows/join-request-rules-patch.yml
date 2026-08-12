@@ -22,30 +22,19 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
           p = Path('firestore.rules')
-          s = p.read_text()
-          pattern = re.compile(r"      match /join_requests/\{requestId\} \{\n.*?        allow create, update, delete: if false;\n      \}", re.S)
-          replacement = '''      match /join_requests/{requestId} {
-        allow read, list: if isAuthenticated() && (
-          isSystemAdmin() ||
-          (
-            exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)) &&
-            get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('status', '') == 'active' &&
-            (
-              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('role', '') == 'owner' ||
-              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('role', '') == 'admin' ||
-              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('organizationRole', '') == 'owner' ||
-              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('organizationRole', '') == 'admin'
-            )
-          )
-        );
-        allow create, update, delete: if false;
-      }'''
-          out, count = pattern.subn(replacement, s, count=1)
-          if count != 1:
-              raise SystemExit(f'expected one join_requests block, got {count}')
-          p.write_text(out)
+          lines = p.read_text().splitlines()
+          start = next(i for i, line in enumerate(lines) if line.strip() == 'match /join_requests/{requestId} {')
+          allow = next(i for i in range(start + 1, len(lines)) if 'allow read, list: if isAuthenticated() && (' in lines[i])
+          if any('isSystemAdmin() ||' in lines[i] for i in range(allow + 1, min(allow + 4, len(lines)))):
+              raise SystemExit('join request global read rule already patched')
+          lines[allow + 1:allow + 1] = ['          isSystemAdmin() ||', '          (']
+          create_line = next(i for i in range(allow + 3, len(lines)) if 'allow create, update, delete: if false;' in lines[i])
+          close = create_line - 1
+          if lines[close].strip() != ');':
+              raise SystemExit('unexpected join request read-rule closing line')
+          lines[close:close] = ['          )']
+          p.write_text('\n'.join(lines) + '\n')
           PY
           git diff --check
           git diff -- firestore.rules
