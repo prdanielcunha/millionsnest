@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore';
 import { 
   planInvitationCreation, 
   isValidInvitationCreationEmail, 
@@ -15,7 +15,23 @@ import {
 } from './InvitationAcceptanceServerPolicy.js';
 import { normalizeInvitationEmail, isInvitationRole, InvitationRole } from './InvitationAcceptancePlanner.js';
 
-export async function createInvitation(req: Request, res: Response) {
+export type InvitationCreationDependencies = {
+  verifyIdToken?: (token: string) => Promise<{ uid: string }>;
+  getFirestore?: () => Firestore;
+  now?: () => number;
+  generateTokenMaterial?: typeof generateInvitationTokenMaterial;
+};
+
+export async function createInvitation(
+  req: Request,
+  res: Response,
+  dependencies: InvitationCreationDependencies = {}
+) {
+  const verifyIdToken = dependencies.verifyIdToken ?? ((token: string) => getAuth().verifyIdToken(token));
+  const resolveFirestore = dependencies.getFirestore ?? getFirestore;
+  const now = dependencies.now ?? Date.now;
+  const generateTokenMaterial = dependencies.generateTokenMaterial ?? generateInvitationTokenMaterial;
+
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
@@ -24,7 +40,7 @@ export async function createInvitation(req: Request, res: Response) {
     const token = authHeader.split('Bearer ')[1];
     let decodedToken;
     try {
-      decodedToken = await getAuth().verifyIdToken(token);
+      decodedToken = await verifyIdToken(token);
     } catch {
       return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
     }
@@ -44,7 +60,7 @@ export async function createInvitation(req: Request, res: Response) {
       return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_EMAIL' });
     }
 
-    const db = getFirestore();
+    const db = resolveFirestore();
     
     const result = await db.runTransaction(async (t) => {
       // Load user global role
@@ -83,7 +99,7 @@ export async function createInvitation(req: Request, res: Response) {
       const invitesRef = db.collection('organizations').doc(organizationId).collection('invites');
       const invitesQuery = await t.get(invitesRef);
       
-      const nowMs = Date.now();
+      const nowMs = now();
       let pendingInvitesCount = 0;
       let existingPendingInvite = null;
       
@@ -193,7 +209,7 @@ export async function createInvitation(req: Request, res: Response) {
       }
 
       // Generate tokens
-      const tokenMaterial = generateInvitationTokenMaterial();
+      const tokenMaterial = generateTokenMaterial();
       if (!tokenMaterial.success) {
          return { statusCode: 500, payload: { success: false, reasonCode: (tokenMaterial as any).reasonCode } };
       }
