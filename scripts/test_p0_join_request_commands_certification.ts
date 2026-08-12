@@ -25,7 +25,21 @@ const reject = (token: string | undefined, organizationId: string, requestId: st
   invokeHandler((req, res) => rejectJoinRequest(req, res, deps), { bearer: token, params: params(organizationId, requestId) });
 
 async function seedOrg(id: string, status = 'active') {
-  await db.doc(`organizations/${id}`).set({ id, status, ownerUid: `${id}-owner` });
+  await Promise.all([
+    db.doc(`organizations/${id}`).set({
+      id,
+      status,
+      ownerUid: `${id}-owner`,
+      apps: { musicscale: { status: 'active', plan: 'starter', limits: { users: 10 } } }
+    }),
+    db.doc(`subscriptions/${id}`).set({
+      organizationId: id,
+      app: 'musicscale',
+      status: 'active',
+      plan: 'starter',
+      limits: { users: 10 }
+    })
+  ]);
 }
 
 async function run() {
@@ -84,7 +98,6 @@ async function run() {
 
   await create('requester-token', 'b');
   const rejectRace = await Promise.all(Array.from({ length: 8 }, () => reject('b-owner-token', 'b', 'requester')));
-  // organization metadata owner is canonical authority; register only its token identity.
   assert('unregistered owner token is unauthenticated', rejectRace.every(result => result.statusCode === 401));
   auth('b-owner-token', 'b-owner');
   const resolvedRejectRace = await Promise.all(Array.from({ length: 8 }, () => reject('b-owner-token', 'b', 'requester')));
