@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: "0164bee70f8617af9b38df70cdbbdd7acfab09a3"
+          ref: "6202e76ad1949eed845696a95118f3e4fdf126c5"
           persist-credentials: false
           fetch-depth: 1
 
@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "0164bee70f8617af9b38df70cdbbdd7acfab09a3"
+          test "$(git rev-parse HEAD)" = "6202e76ad1949eed845696a95118f3e4fdf126c5"
           test -z "$(git status --porcelain)"
 
       - uses: actions/setup-node@v4
@@ -74,5 +74,5 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          test "$(git rev-parse HEAD)" = "0164bee70f8617af9b38df70cdbbdd7acfab09a3"
+          test "$(git rev-parse HEAD)" = "6202e76ad1949eed845696a95118f3e4fdf126c5"
           test -z "$(git status --porcelain)"
