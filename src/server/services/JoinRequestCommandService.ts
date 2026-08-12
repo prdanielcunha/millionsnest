@@ -275,7 +275,7 @@ async function resolveJoinRequest(req: Request, res: Response, command: Command,
           },
           memberStatuses: membersQuery.docs.map(doc => doc.data().status)
         });
-        if (!capacityResult.success) return { reasonCode: capacityResult.reasonCode };
+        if (capacityResult.success === false) return { reasonCode: capacityResult.reasonCode };
         if (capacityResult.capacity.mode === 'limited') {
           const currentActiveMembers = capacityResult.capacity.currentActiveMembers;
           const maxMembers = capacityResult.capacity.maxMembers;
