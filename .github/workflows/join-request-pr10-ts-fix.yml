@@ -1,0 +1,49 @@
+name: Apply PR10 Type Narrowing Fix
+
+on:
+  push:
+    branches:
+      - "certify/join-requests-p0-pr10-0164bee"
+    paths:
+      - ".github/workflows/join-request-pr10-ts-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: "codex/implementar-comandos-canonicos-de-join-request"
+          persist-credentials: true
+          fetch-depth: 1
+      - name: Verify exact PR head and apply one-line type fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "0164bee70f8617af9b38df70cdbbdd7acfab09a3"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/server/services/JoinRequestCommandService.ts')
+          s = p.read_text()
+          old = "if (!capacityResult.success) return { reasonCode: capacityResult.reasonCode };"
+          new = "if (capacityResult.success === false) return { reasonCode: capacityResult.reasonCode };"
+          if s.count(old) != 1:
+              raise SystemExit(f'expected exactly one target line, found {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          test "$(git diff --name-only)" = "src/server/services/JoinRequestCommandService.ts"
+          git diff --check
+          git diff -- src/server/services/JoinRequestCommandService.ts
+      - name: Commit and publish minimal fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server/services/JoinRequestCommandService.ts
+          git diff --cached --check
+          git commit -m "fix(types): narrow join request capacity result"
+          git push origin HEAD:codex/implementar-comandos-canonicos-de-join-request
