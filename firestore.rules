@@ -184,7 +184,7 @@ service cloud.firestore {
         checkOrgAccess(id.split('_')[1]) ||
         checkOrgAccess(id.split('_')[0])
       );
-      allow list: if isAuthenticated();
+      allow list: if isAuthenticated() && isSystemAdmin();
       allow create: if isAuthenticated() && (isOrgAdmin(request.resource.data.get('organizationId', '')) || isSystemAdmin());
       allow update: if isAuthenticated() && (
         isSystemAdmin() || 
