@@ -28,13 +28,14 @@ export async function clearInvitationEmulator(): Promise<void> {
 
 export async function invokeHandler(
   handler: (req: Request, res: Response) => Promise<unknown>,
-  options: { bearer?: string; body?: Record<string, unknown> } = {}
+  options: { bearer?: string; body?: Record<string, unknown>; params?: Record<string, string> } = {}
 ): Promise<HandlerResult> {
   let statusCode = 200;
   let body: Record<string, unknown> = {};
   const req = {
     headers: options.bearer ? { authorization: `Bearer ${options.bearer}` } : {},
     body: options.body ?? {}
+    ,params: options.params ?? {}
   } as Request;
   const res = {
     status(code: number) { statusCode = code; return this; },
