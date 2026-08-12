@@ -1,7 +1,7 @@
 import { planBootstrap, BootstrapDecisionCode, resolveLegacyMembershipCandidates } from './TenantBootstrapPlanner.js';
 import { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Firestore } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import { planInvitationAcceptance, normalizeInvitationEmail, InvitationAcceptanceInput } from './InvitationAcceptancePlanner.js';
 import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './InvitationAcceptanceServerPolicy.js';
@@ -416,7 +416,23 @@ export async function bootstrapUserContext(req: Request, res: Response) {
   }
 }
 
-export async function acceptInvitation(req: Request, res: Response) {
+export type InvitationAcceptanceDependencies = {
+  verifyIdToken?: (token: string) => Promise<{ uid: string }>;
+  getUser?: (uid: string) => Promise<{ email?: string | null }>;
+  getFirestore?: () => Firestore;
+  now?: () => number;
+};
+
+export async function acceptInvitation(
+  req: Request,
+  res: Response,
+  dependencies: InvitationAcceptanceDependencies = {}
+) {
+  const verifyIdToken = dependencies.verifyIdToken ?? ((token: string) => getAuth().verifyIdToken(token));
+  const getAuthenticatedUser = dependencies.getUser ?? ((uid: string) => getAuth().getUser(uid));
+  const resolveFirestore = dependencies.getFirestore ?? getFirestore;
+  const now = dependencies.now ?? Date.now;
+
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -426,7 +442,7 @@ export async function acceptInvitation(req: Request, res: Response) {
     const idToken = authHeader.split('Bearer ')[1];
     let uid: string | null = null;
     try {
-      const decoded = await getAuth().verifyIdToken(idToken);
+      const decoded = await verifyIdToken(idToken);
       uid = decoded.uid;
     } catch (e) {
       return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
@@ -438,7 +454,7 @@ export async function acceptInvitation(req: Request, res: Response) {
 
     let normalizedAuthenticatedEmail: string | null = null;
     try {
-      const authUser = await getAuth().getUser(uid);
+      const authUser = await getAuthenticatedUser(uid);
       normalizedAuthenticatedEmail = normalizeInvitationEmail(authUser.email);
     } catch (e) {
       return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
@@ -454,8 +470,8 @@ export async function acceptInvitation(req: Request, res: Response) {
     }
 
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const acceptanceNowMs = Date.now();
-    const db = getFirestore();
+    const acceptanceNowMs = now();
+    const db = resolveFirestore();
 
     const result = await db.runTransaction(async (t) => {
       const invitesQuery = await t.get(
@@ -581,6 +597,13 @@ export async function acceptInvitation(req: Request, res: Response) {
       }
 
       if (planResult.action === 'ALREADY_MEMBER') {
+         t.set(userRef, {
+           organizations: FieldValue.arrayUnion(orgId),
+           activeOrganizationId: orgId,
+           organizationId: orgId,
+           updatedAt: FieldValue.serverTimestamp()
+         }, { merge: true });
+
          return {
            status: 200,
            data: {

@@ -369,7 +369,7 @@ assertCondition('76. ALREADY_MEMBER sem exigir capacityResult.success', endpoint
 assertCondition('77. MEMBER_LIMIT_INVALID da política é preservado', endpointContent.includes("reasonCode = capacityResult.reasonCode;"));
 
 const alreadyMemberBlock = endpointContent.split("planResult.action === 'ALREADY_MEMBER'")[1].split("CREATE_MEMBERSHIP")[0];
-assertCondition('78. nenhuma escrita ocorre no ramo ALREADY_MEMBER', !alreadyMemberBlock.includes('t.set(') && !alreadyMemberBlock.includes('t.update('));
+assertCondition('78. ramo ALREADY_MEMBER atualiza somente a projeção de contexto do usuário', alreadyMemberBlock.includes('t.set(userRef') && !alreadyMemberBlock.includes('t.update('));
 
 const getMatches = txBody.match(/await t\.get\(/g) || [];
 const setMatches = txBody.match(/t\.set\(/g) || [];
@@ -415,10 +415,11 @@ const tempFiles = [
 assertCondition('89. nenhum dos arquivos temporários listados nesta instrução existe', tempFiles.every(f => !fs.existsSync(f)));
 
 const reasonCodeFallbackIdx = endpointContent.indexOf('reasonCode = capacityResult.reasonCode;');
-assertCondition('90. o ramo que preserva capacityResult.reasonCode em falha ocorre antes da primeira chamada t.set ou t.update', reasonCodeFallbackIdx !== -1 && reasonCodeFallbackIdx < firstWriteIdxTx);
+const createMembershipWriteIdx = endpointContent.indexOf('t.set(memRef');
+assertCondition('90. o ramo que preserva capacityResult.reasonCode em falha ocorre antes das escritas de CREATE_MEMBERSHIP', reasonCodeFallbackIdx !== -1 && createMembershipWriteIdx !== -1 && reasonCodeFallbackIdx < createMembershipWriteIdx);
 
 const amBranch = endpointContent.split("planResult.action === 'ALREADY_MEMBER'")[1].split("CREATE_MEMBERSHIP")[0];
-assertCondition('91. o ramo ALREADY_MEMBER continua sem t.set, t.update ou t.delete', !amBranch.includes('t.set(') && !amBranch.includes('t.update(') && !amBranch.includes('t.delete('));
+assertCondition('91. ramo ALREADY_MEMBER não altera membership, invitation, audit ou legacy', amBranch.includes('t.set(userRef') && !amBranch.includes('t.set(memRef') && !amBranch.includes('t.update(inviteDoc.ref') && !amBranch.includes('t.set(auditRef') && !amBranch.includes('t.set(legacyRef'));
 
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

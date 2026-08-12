@@ -615,8 +615,8 @@ async function startServer() {
   app.post('/api/v1/support/whatsapp-link', express.json({ limit: '8kb' }), createSupportWhatsAppLink);
   app.post('/api/v1/public/sales/whatsapp-link', express.json({ limit: '8kb' }), createPublicSalesWhatsAppLink);
   app.post('/api/v1/onboarding/bootstrap', express.json(), bootstrapUserContext);
-  app.post('/api/v1/invitations', express.json(), createInvitation);
-  app.post('/api/v1/invitations/accept', express.json(), acceptInvitation);
+  app.post('/api/v1/invitations', express.json(), (req, res) => createInvitation(req, res));
+  app.post('/api/v1/invitations/accept', express.json(), (req, res) => acceptInvitation(req, res));
   app.post('/api/v1/user/active-organization', express.json(), setActiveOrganization);
 
   app.post('/api/internal/repair-subscription', async (req: any, res) => {
