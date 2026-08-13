@@ -1,0 +1,62 @@
+name: Member Removal P0 Certification
+
+on:
+  push:
+    branches:
+      - "certify/member-removal-p0"
+    paths:
+      - ".github/workflows/member-removal-p0-certification.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: "1ad8447c00bee74bfbd03ccea884a8361a4f00b2"
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify exact feature head
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "1ad8447c00bee74bfbd03ccea884a8361a4f00b2"
+          test -z "$(git status --porcelain)"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install dependencies
+        run: npm ci
+      - name: Canonical member removal real emulator certification
+        run: npx firebase emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-invitations-p0 "npx tsx scripts/test_p0_member_removal_commands_certification.ts"
+      - name: Join request regression real emulator
+        run: npx firebase emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-invitations-p0 "npx tsx scripts/test_p0_join_request_commands_certification.ts"
+      - name: Invitation command regressions real emulator
+        run: npx firebase emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-invitations-p0 "npx tsx scripts/test_p0_invitation_commands_certification.ts && npx tsx scripts/test_p0_invitation_final_certification.ts && npx tsx scripts/test_p0a3_invitation_acceptance_transaction.ts"
+      - name: Firestore organization_members Rules regression
+        run: npx firebase emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-rules-p0 "node --import tsx --test tests/firestore/organization_members.rules.test.ts"
+      - name: Resolver and handoff regressions
+        run: |
+          npx tsx scripts/test_mn_access_01_musicscale_resolver.ts
+          npx tsx scripts/test_mn_access_02_musicscale_handoff.ts
+      - name: Security governance and bootstrap regressions
+        run: |
+          npx tsx scripts/test_millionsnest_security_governance_p0.ts
+          npx tsx scripts/test_p0a2_bootstrap_transaction.ts
+      - name: Lint typecheck
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Hygiene
+        run: |
+          set -euo pipefail
+          git diff --check
+          test "$(git rev-parse HEAD)" = "1ad8447c00bee74bfbd03ccea884a8361a4f00b2"
+          test -z "$(git status --porcelain)"
