@@ -128,7 +128,7 @@ const canonical = (await db.doc('organizations/org-1/members/target-1').get()).d
 const legacyA = (await db.doc('organization_members/target-1_org-1').get()).data()!;
 const legacyB = (await db.doc('organization_members/org-1_target-1').get()).data()!;
 assert('24 canonical role updated atomically', canonical.role === 'manager' && canonical.organizationRole === 'manager');
-assert('25 canonical permissions use current defaults', canonical.permissionsVersion === CURRENT_PERMISSIONS_VERSION && JSON.stringify(canonical.permissions) === JSON.stringify(getDefaultPermissions('manager')));
+assert('25 canonical permissions use current defaults', canonical.permissionsVersion === CURRENT_PERMISSIONS_VERSION && JSON.stringify(Object.entries(canonical.permissions ?? {}).sort()) === JSON.stringify(Object.entries(getDefaultPermissions('manager')).sort()));
 assert('26 uid_org compatibility projection matches canonical role', legacyA.role === 'manager' && legacyA.organizationRole === 'manager' && legacyA.status === 'active');
 assert('27 org_uid compatibility projection matches canonical role', legacyB.role === 'manager' && legacyB.organizationRole === 'manager' && legacyB.status === 'active');
 assert('28 role update does not add satellite role fields', !('roleId' in canonical) && !('musicscaleRole' in canonical) && !('ministryFunction' in canonical));
