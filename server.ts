@@ -2,6 +2,7 @@ import express from 'express';
 import { bootstrapUserContext, acceptInvitation, setActiveOrganization } from './src/server/services/TenantContextMutationService.js';
 import { createInvitation } from "./src/server/services/InvitationCreationService.js";
 import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
+import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { createSupportTicket } from './src/server/services/SupportTicketService.js';
 import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
 import { createSupportWhatsAppLink } from './src/server/services/SupportWhatsAppService.js';
@@ -621,6 +622,7 @@ async function startServer() {
   app.post('/api/v1/organizations/:organizationId/join-requests', express.json({ limit: '8kb' }), (req, res) => createJoinRequest(req, res));
   app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/approve', express.json({ limit: '8kb' }), (req, res) => approveJoinRequest(req, res));
   app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/reject', express.json({ limit: '8kb' }), (req, res) => rejectJoinRequest(req, res));
+  app.delete('/api/v1/organizations/:organizationId/members/:memberId', (req, res) => removeOrganizationMember(req, res));
   app.post('/api/v1/user/active-organization', express.json(), setActiveOrganization);
 
   app.post('/api/internal/repair-subscription', async (req: any, res) => {
