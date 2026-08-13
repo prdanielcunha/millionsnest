@@ -1,0 +1,39 @@
+name: Fix Role Permission Test Order
+
+on:
+  push:
+    branches:
+      - "certify/canonical-organization-role-p0"
+    paths:
+      - ".github/workflows/fix-role-permission-test-order.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: "feat/canonical-organization-role-p0"
+          persist-credentials: true
+          fetch-depth: 1
+      - name: Fix order-insensitive permission assertion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/test_p0_organization_role_commands_certification.ts')
+          s = p.read_text()
+          old = "assert('25 canonical permissions use current defaults', canonical.permissionsVersion === CURRENT_PERMISSIONS_VERSION && JSON.stringify(canonical.permissions) === JSON.stringify(getDefaultPermissions('manager')));"
+          new = "assert('25 canonical permissions use current defaults', canonical.permissionsVersion === CURRENT_PERMISSIONS_VERSION && JSON.stringify(Object.entries(canonical.permissions ?? {}).sort()) === JSON.stringify(Object.entries(getDefaultPermissions('manager')).sort()));"
+          if s.count(old) != 1:
+              raise SystemExit(f'assertion anchor mismatch: {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/test_p0_organization_role_commands_certification.ts
+          git commit -m "test: compare role permissions independent of key order"
+          git push origin HEAD:feat/canonical-organization-role-p0
