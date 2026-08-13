@@ -144,10 +144,6 @@ export async function updateOrganizationMemberRole(
       if (organizationOwnerMatches(organization, memberId) || targetMembership.role === 'owner') {
         return { success: false as const, reasonCode: 'OWNER_ROLE_REQUIRES_TRANSFER' };
       }
-      if (targetMembership.role === newRole) {
-        return { success: true as const, reasonCode: 'ALREADY_ROLE', previousOrganizationRole: targetMembership.role, organizationRole: newRole };
-      }
-
       const actorGlobal = isCanonicalGlobalRole(actorUserSnap.data()?.systemRole);
       const actorMetadataOwner = organizationOwnerMatches(organization, actorUid);
       const actorMembership = classifyMembership(actorMemberSnap.data());
@@ -159,6 +155,10 @@ export async function updateOrganizationMemberRole(
         newRole: newRole as AssignableRole
       });
       if (decision.allowed === false) return { success: false as const, reasonCode: decision.reasonCode };
+
+      if (targetMembership.role === newRole) {
+        return { success: true as const, reasonCode: 'ALREADY_ROLE', previousOrganizationRole: targetMembership.role, organizationRole: newRole };
+      }
 
       const permissions = getDefaultPermissions(newRole);
       const patch = {

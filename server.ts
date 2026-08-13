@@ -3,6 +3,7 @@ import { bootstrapUserContext, acceptInvitation, setActiveOrganization } from '.
 import { createInvitation } from "./src/server/services/InvitationCreationService.js";
 import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
+import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
 import { createSupportTicket } from './src/server/services/SupportTicketService.js';
 import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
 import { createSupportWhatsAppLink } from './src/server/services/SupportWhatsAppService.js';
@@ -623,6 +624,7 @@ async function startServer() {
   app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/approve', express.json({ limit: '8kb' }), (req, res) => approveJoinRequest(req, res));
   app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/reject', express.json({ limit: '8kb' }), (req, res) => rejectJoinRequest(req, res));
   app.delete('/api/v1/organizations/:organizationId/members/:memberId', (req, res) => removeOrganizationMember(req, res));
+  app.patch('/api/v1/organizations/:organizationId/members/:memberId/role', express.json({ limit: '8kb' }), (req, res) => updateOrganizationMemberRole(req, res));
   app.post('/api/v1/user/active-organization', express.json(), setActiveOrganization);
 
   app.post('/api/internal/repair-subscription', async (req: any, res) => {
@@ -1314,6 +1316,9 @@ async function startServer() {
       
       const { orgId, memberId } = req.params;
       const { displayName, photoURL, role, appRole } = req.body;
+      if (role !== undefined || appRole !== undefined) {
+        return res.status(400).json({ success: false, reasonCode: 'ROLE_MUTATION_REQUIRES_CANONICAL_COMMAND' });
+      }
       
       if (!db) return res.status(500).json({ error: 'Database not initialized' });
 
@@ -1401,99 +1406,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/organizations/:orgId/members/:memberId/role', express.json(), async (req: any, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const token = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(token);
-      const actorUid = decodedToken.uid;
-      
-      const { orgId, memberId } = req.params;
-      const { newRole } = req.body;
-      
-      if (!db) return res.status(500).json({ error: 'Database not initialized' });
-
-      // Actor global role
-      const actorUserDoc = await db.collection('users').doc(actorUid).get();
-      const actorSystemRole = actorUserDoc.data()?.systemRole;
-      const isGlobalAdmin = actorSystemRole === 'ceo' || actorSystemRole === 'admin' || actorSystemRole === 'global_admin';
-
-      // Actor local role
-      const actorMemberDoc = await db.collection('organizations').doc(orgId).collection('members').doc(actorUid).get();
-      const actorMemberRole = actorMemberDoc.exists ? actorMemberDoc.data()?.role : 'member';
-      
-      // Target local role
-      const targetMemberDoc = await db.collection('organizations').doc(orgId).collection('members').doc(memberId).get();
-      if (!targetMemberDoc.exists) return res.status(404).json({ error: 'Member not found' });
-      const targetMemberRole = targetMemberDoc.data()?.role;
-
-      const ORG_RANK: Record<string, number> = { guest: 5, member: 10, secretary: 20, leader: 30, admin: 70, owner: 100 };
-      const actorRank = ORG_RANK[actorMemberRole || 'member'] || 0;
-      const targetRank = ORG_RANK[targetMemberRole || 'member'] || 0;
-      const newRank = ORG_RANK[newRole || 'member'] || 0;
-      const isSelfDemotion = actorUid === memberId;
-
-      if (!isGlobalAdmin) {
-        if (actorRank < 70) return res.status(403).json({ error: 'Você não tem permissão para gerenciar funções neste nível.' });
-        
-        // Owner rules
-        if (actorRank === 100) {
-          if (isSelfDemotion) {
-            const ownersSnap = await db.collection('organizations').doc(orgId).collection('members').where('role', '==', 'owner').get();
-            if (ownersSnap.docs.length <= 1) return res.status(400).json({ error: 'Não é possível remover o último dono da organização.' });
-          } else if (targetRank === 100) {
-            return res.status(400).json({ error: 'Você não pode rebaixar ou alterar outro dono. Apenas o próprio usuário pode se rebaixar.' });
-          }
-        }
-        // Admin rules
-        else if (actorRank === 70) {
-          if (newRank >= 100) return res.status(400).json({ error: 'Você não pode conceder ou alterar um cargo acima do seu nível na organização.' });
-          if (targetRank >= 70 && !isSelfDemotion) return res.status(400).json({ error: 'Você não pode alterar outro administrador ou dono. Apenas donos podem alterar administradores.' });
-        }
-      }
-
-      // Update Member
-      const defaultPerms = newRole === 'owner' ? { "organization.manage": true, "organization.billing.manage": true, "organization.apps.manage": true, "organization.members.manage": true, "organization.audit.view": true } : 
-                          (newRole === 'admin' ? { "organization.apps.manage": true, "organization.members.manage": true, "organization.audit.view": true } : {});
-                          
-      await db.collection('organizations').doc(orgId).collection('members').doc(memberId).set({
-        role: newRole,
-        organizationRole: newRole,
-        permissions: defaultPerms,
-        permissionsVersion: CURRENT_PERMISSIONS_VERSION || 2
-      }, { merge: true });
-
-      // Update Legacy collection compat
-      await db.collection('organization_members').doc(`${memberId}_${orgId}`).set({
-        role: newRole,
-        organizationRole: newRole,
-        permissions: defaultPerms,
-        permissionsVersion: CURRENT_PERMISSIONS_VERSION || 2
-      }, { merge: true });
-
-      // Audit Log
-      await db.collection('audit_logs').add({
-        actorUid,
-        actorEmail: decodedToken.email,
-        actorSystemRole,
-        actorOrganizationRole: actorMemberRole,
-        targetUid: memberId,
-        targetPreviousRole: targetMemberRole || 'member',
-        targetNewRole: newRole,
-        scope: 'organization',
-        organizationId: orgId,
-        action: isSelfDemotion ? 'role.self_downgraded' : 'role.updated',
-        source: 'role_management',
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      return res.json({ success: true });
-    } catch (err: any) {
-      console.error('[API Update Org Role]', err);
-      return res.status(500).json({ error: err.message || 'Internal Server Error' });
-    }
-  });
+  app.post('/api/organizations/:orgId/members/:memberId/role', express.json({ limit: '8kb' }), (req: any, res) => updateOrganizationMemberRole(req, res));
 
   app.get('/api/admin/organizations', async (req: any, res) => {
     try {
