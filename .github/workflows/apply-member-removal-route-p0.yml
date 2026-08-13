@@ -1,0 +1,48 @@
+name: Apply canonical member removal route P0
+
+on:
+  push:
+    branches:
+      - "feat/canonical-member-removal-p0"
+    paths:
+      - ".github/workflows/apply-member-removal-route-p0.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Apply guarded server route patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('server.ts')
+          s = p.read_text()
+          old_import = "import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';\n"
+          new_import = old_import + "import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';\n"
+          if s.count(old_import) != 1:
+              raise SystemExit(f'import anchor mismatch: {s.count(old_import)}')
+          s = s.replace(old_import, new_import, 1)
+          old_route = "  app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/reject', express.json({ limit: '8kb' }), (req, res) => rejectJoinRequest(req, res));\n"
+          new_route = old_route + "  app.delete('/api/v1/organizations/:organizationId/members/:memberId', (req, res) => removeOrganizationMember(req, res));\n"
+          if s.count(old_route) != 1:
+              raise SystemExit(f'route anchor mismatch: {s.count(old_route)}')
+          p.write_text(s.replace(old_route, new_route, 1))
+          PY
+          git diff --check
+          git diff -- server.ts
+      - name: Commit route only
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server.ts
+          git diff --cached --check
+          test "$(git diff --cached --name-only)" = "server.ts"
+          git commit -m "feat(security): register canonical member removal route"
+          git push origin HEAD:feat/canonical-member-removal-p0
