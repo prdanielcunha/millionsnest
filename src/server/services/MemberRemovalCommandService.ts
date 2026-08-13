@@ -166,7 +166,9 @@ export async function removeOrganizationMember(
           actorMembership,
           targetRole: targetMembership.role
         });
-        if (!authorization.allowed) return { success: false as const, reasonCode: authorization.reasonCode };
+        if (authorization.allowed === false) {
+          return { success: false as const, reasonCode: authorization.reasonCode };
+        }
       }
 
       const remainingCandidates = membershipsQuery.docs
