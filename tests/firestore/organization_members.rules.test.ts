@@ -17,14 +17,15 @@ import {
 import { readFile } from 'node:fs/promises';
 
 const projectId = 'demo-millionsnest-rules-p0';
+const [firestoreHost, firestorePort] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8180').split(':');
 let testEnvironment: RulesTestEnvironment;
 
 before(async () => {
   testEnvironment = await initializeTestEnvironment({
     projectId,
     firestore: {
-      host: '127.0.0.1',
-      port: 8080,
+      host: firestoreHost,
+      port: Number(firestorePort),
       rules: await readFile('firestore.rules', 'utf8'),
     },
   });

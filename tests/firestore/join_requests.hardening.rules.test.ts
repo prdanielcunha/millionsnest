@@ -4,13 +4,14 @@ import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from '
 import { readFile } from 'node:fs/promises';
 
 let env: RulesTestEnvironment;
+const [firestoreHost, firestorePort] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8180').split(':');
 
 before(async () => {
   env = await initializeTestEnvironment({
     projectId: 'demo-millionsnest-rules-p0',
     firestore: {
-      host: '127.0.0.1',
-      port: 8080,
+      host: firestoreHost,
+      port: Number(firestorePort),
       rules: await readFile('firestore.rules', 'utf8')
     }
   });

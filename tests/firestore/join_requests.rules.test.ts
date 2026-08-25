@@ -4,10 +4,11 @@ import { doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { readFile } from 'node:fs/promises';
 
 let env: RulesTestEnvironment;
+const [firestoreHost, firestorePort] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8180').split(':');
 before(async () => {
   env = await initializeTestEnvironment({
     projectId: 'demo-millionsnest-rules-p0',
-    firestore: { host: '127.0.0.1', port: 8080, rules: await readFile('firestore.rules', 'utf8') }
+    firestore: { host: firestoreHost, port: Number(firestorePort), rules: await readFile('firestore.rules', 'utf8') }
   });
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();

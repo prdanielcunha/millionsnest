@@ -17,7 +17,7 @@ Este repositório contém a implementação técnica da plataforma MillionsNest,
 
 - **Framework Front-end:** React 19, React Router DOM, Vite
 - **Estilização:** Tailwind CSS v4, Framer Motion, Lucide React
-- **Back-end / APIs:** Express (Node.js 20.x), esbuild
+- **Back-end / APIs:** Express (Node.js 24.x), esbuild
 - **Linguagem:** TypeScript
 - **Integrações de Serviço:** Firebase (Authentication, Firestore), Stripe
 
@@ -35,7 +35,7 @@ Este repositório contém a implementação técnica da plataforma MillionsNest,
 
 ## Pré-requisitos
 
-- Node.js (Recomendado v20.x, conforme configurado em `package.json`).
+- Node.js (Recomendado v24.x, conforme configurado em `package.json` e no runtime da Vercel).
 
 ## Instalação
 
@@ -81,6 +81,11 @@ Exemplo de execução de testes manuais disponíveis:
 npx tsx scripts/test_millionsnest_security_governance_p0.ts
 ```
 *(Consulte a pasta `scripts/` para os módulos individuais de validação).*
+
+Os testes que usam Firestore devem ser executados somente no Emulator, com um projeto `demo-*` explícito:
+```bash
+firebase emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-invitations-p0 "npx tsx scripts/test_p0_invitation_final_certification.ts"
+```
 
 ## Variáveis de Ambiente
 
