@@ -234,7 +234,7 @@ export function Dashboard() {
         feedback.error('Acesso indisponível ao MusicScale.');
         return;
       }
-    } else if (!organization?.enabledApps?.includes(app.id)) {
+    } else if (!organization?.enabledApps?.includes(app.id) && !['active', 'trialing'].includes(organization?.apps?.[app.id]?.status)) {
        feedback.error(`Módulo Indisponível: O aplicativo ${app.name} não está habilitado para a sua organização.`);
        return;
     }
