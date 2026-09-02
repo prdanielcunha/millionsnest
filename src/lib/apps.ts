@@ -20,6 +20,21 @@ export interface EcosystemApp {
 
 export const ECOSYSTEM_APPS: EcosystemApp[] = [
   {
+    id: 'raiz_e_mesa',
+    name: 'Raiz e Mesa',
+    description: 'Acolhimento, cuidado, pequenos grupos e discipulado com pessoas ao lado de pessoas.',
+    shortDescription: 'Cuidado, conexão e discipulado',
+    icon: 'Sprout',
+    url: ((typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_RAIZ_E_MESA_APP_URL : undefined) || 'https://raiz-e-mesa.vercel.app',
+    operationalUrl: ((typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_RAIZ_E_MESA_APP_URL : undefined) || 'https://raiz-e-mesa.vercel.app',
+    status: 'active',
+    primaryAction: 'open',
+    featured: true,
+    order: 2,
+    category: 'core',
+    requiredPlan: 'free',
+  },
+  {
     id: 'musicscale',
     name: 'MusicScale',
     description: 'A excelência que seu ministério de louvor merece. Escalas, ensaios e repertório.',
@@ -46,7 +61,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     status: 'coming_soon',
     primaryAction: 'disabled',
     badgeLabelKey: 'footer_soon',
-    order: 2,
+    order: 4,
     category: 'beta',
     requiredPlan: 'free',
   },
