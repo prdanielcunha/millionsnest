@@ -108,9 +108,9 @@ export async function handleMusicScaleHandoffRequest(
 
   const { appId, orgId, supportMode } = req.body as any;
 
-  if (appId !== 'musicscale') {
+  if (!['musicscale', 'raiz_e_mesa'].includes(appId)) {
     return res.status(400).json({
-      error: 'Invalid request: appId must be "musicscale".',
+      error: 'Invalid request: unsupported appId.',
       code: 'INVALID_REQUEST',
       retryable: false
     });
@@ -194,13 +194,13 @@ export async function handleMusicScaleHandoffRequest(
     access = await resolveEcosystemAppAccess({
       uid,
       organizationId: cleanOrgId,
-      appId: 'musicscale',
+      appId,
       db: db as any
     });
   } catch (err: any) {
     if (dependencies.logger && typeof dependencies.logger.error === 'function') {
       dependencies.logger.error('[HANDOFF_RESOLVER_ERROR]', {
-        appId: 'musicscale',
+        appId,
         organizationId: cleanOrgId,
         maskedUid: maskUid(uid),
         code: 'HANDOFF_RESOLVER_FAILED',
@@ -240,7 +240,7 @@ export async function handleMusicScaleHandoffRequest(
     }
 
     console.log('[HANDOFF]', {
-      appId: 'musicscale',
+      appId,
       organizationId: cleanOrgId,
       maskedUid: maskUid(uid),
       accessGranted: false,
@@ -264,7 +264,7 @@ export async function handleMusicScaleHandoffRequest(
   // 6. Support Mode Authorization
   if (supportModeRequested && !access.isGlobalAccess) {
     console.log('[HANDOFF]', {
-      appId: 'musicscale',
+      appId,
       organizationId: cleanOrgId,
       maskedUid: maskUid(uid),
       accessGranted: false,
@@ -291,13 +291,13 @@ export async function handleMusicScaleHandoffRequest(
   try {
     customToken = await dependencies.createCustomToken(uid, {
       orgId: cleanOrgId,
-      appId: 'musicscale',
+      appId,
       supportMode: verifiedSupportMode
     });
   } catch (err: any) {
     if (dependencies.logger && typeof dependencies.logger.error === 'function') {
       dependencies.logger.error('[HANDOFF_TOKEN_ERROR]', {
-        appId: 'musicscale',
+        appId,
         organizationId: cleanOrgId,
         maskedUid: maskUid(uid),
         code: 'HANDOFF_TOKEN_FAILED',
@@ -313,7 +313,7 @@ export async function handleMusicScaleHandoffRequest(
 
   // 8. Log Structured Entry
   console.log('[HANDOFF]', {
-    appId: 'musicscale',
+    appId,
     organizationId: cleanOrgId,
     maskedUid: maskUid(uid),
     accessGranted: true,
@@ -328,7 +328,7 @@ export async function handleMusicScaleHandoffRequest(
 
   // 9. Send Success Response
   return res.status(200).json({
-    appId: 'musicscale',
+    appId,
     protocolVersion: '1.0.0',
     customToken,
     orgId: cleanOrgId,
