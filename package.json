@@ -12,7 +12,9 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --outfile=dist/server.cjs --external:express --external:stripe --external:firebase-admin",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:rules": "firebase emulators:exec --only firestore --project millionsnest-rules-test \"node --test firestore.rules.test.mjs\"",
+    "check": "npm run lint && npm run test:rules && npm run build"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
