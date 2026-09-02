@@ -116,7 +116,7 @@ service cloud.firestore {
       return isRaizEMesaActive(orgId) && checkOrgAccess(orgId) && (
         isOrgAdmin(orgId) ||
         raizHasRole(orgId, ['pastor', 'data_admin']) ||
-        (member != null && congregationId in member.get('congregationIds', []))
+        (member != null && (congregationId in member.get('congregationIds', []) || congregationId in member.get('campusIds', [])))
       );
     }
 
@@ -254,15 +254,25 @@ service cloud.firestore {
         }
         match /presence/{presenceId} {
           allow read: if raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
-          allow create, update: if request.resource.data.get('organizationId', '') == orgId
+          allow create: if request.resource.data.get('organizationId', '') == orgId
             && raizCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''))
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'coordinator']);
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('congregationId', '') == resource.data.get('congregationId', '')
+            && raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
             && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'coordinator']);
           allow delete: if false;
         }
         match /groups/{groupId} {
           allow read: if raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
-          allow create, update: if request.resource.data.get('organizationId', '') == orgId
+          allow create: if request.resource.data.get('organizationId', '') == orgId
             && raizCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''))
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'group_leader']);
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('congregationId', '') == resource.data.get('congregationId', '')
+            && raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
             && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'group_leader']);
           allow delete: if false;
         }
@@ -279,15 +289,23 @@ service cloud.firestore {
             && raizCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''));
           allow update: if resource.data.get('organizationId', '') == orgId
             && request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('congregationId', '') == resource.data.get('congregationId', '')
+            && raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
             && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'group_leader']);
           allow delete: if false;
         }
         match /discipleships/{discipleshipId} {
           allow read: if raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
             && (raizHasRole(orgId, ['owner', 'admin', 'pastor']) || resource.data.get('disciplerId', '') == request.auth.uid);
-          allow create, update: if request.resource.data.get('organizationId', '') == orgId
+          allow create: if request.resource.data.get('organizationId', '') == orgId
             && raizCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''))
             && (raizHasRole(orgId, ['owner', 'admin', 'pastor']) || request.resource.data.get('disciplerId', '') == request.auth.uid);
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('congregationId', '') == resource.data.get('congregationId', '')
+            && request.resource.data.get('disciplerId', '') == resource.data.get('disciplerId', '')
+            && raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
+            && (raizHasRole(orgId, ['owner', 'admin', 'pastor']) || resource.data.get('disciplerId', '') == request.auth.uid);
           allow delete: if false;
         }
         match /teamAssignments/{assignmentId} {
@@ -296,7 +314,12 @@ service cloud.firestore {
           allow delete: if false;
         }
         match /pastoral/{pastoralId} {
-          allow read, create, update: if request.resource.data.get('organizationId', resource.data.get('organizationId', '')) == orgId
+          allow read: if resource.data.get('organizationId', '') == orgId
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor']);
+          allow create: if request.resource.data.get('organizationId', '') == orgId
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor']);
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
             && raizHasRole(orgId, ['owner', 'admin', 'pastor']);
           allow delete: if false;
         }
