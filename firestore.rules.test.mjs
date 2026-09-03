@@ -25,32 +25,32 @@ beforeEach(async () => {
     const db = context.firestore();
     await setDoc(doc(db, 'organizations', org), {
       name: 'Igreja A',
-      apps: { raiz_e_mesa: { status: 'active' } },
+      apps: { nestjourney: { status: 'active' } },
     });
     await setDoc(doc(db, 'organizations', otherOrg), {
       name: 'Igreja B',
-      apps: { raiz_e_mesa: { status: 'active' } },
+      apps: { nestjourney: { status: 'active' } },
     });
     await setDoc(doc(db, `organizations/${org}/members/care-user`), {
       status: 'active',
       role: 'member',
       organizationRole: 'care',
       congregationIds: ['campus-a'],
-      appAccess: { raiz_e_mesa: { roles: ['care'] } },
+      appAccess: { nestjourney: { roles: ['care'] } },
     });
     await setDoc(doc(db, `organizations/${org}/members/pastor-user`), {
       status: 'active',
       role: 'member',
       organizationRole: 'pastor',
       congregationIds: ['campus-a'],
-      appAccess: { raiz_e_mesa: { roles: ['pastor'] } },
+      appAccess: { nestjourney: { roles: ['pastor'] } },
     });
     await setDoc(doc(db, `organizations/${otherOrg}/members/other-user`), {
       status: 'active',
       role: 'member',
       organizationRole: 'care',
       congregationIds: ['campus-b'],
-      appAccess: { raiz_e_mesa: { roles: ['care'] } },
+      appAccess: { nestjourney: { roles: ['care'] } },
     });
     await setDoc(doc(db, productPath(org, 'people', 'person-a')), {
       organizationId: org,
