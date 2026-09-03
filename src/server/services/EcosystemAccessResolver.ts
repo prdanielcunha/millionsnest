@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { isCanonicalGlobalRole, canAccessNestFinanceDevelopment } from '../../../src/lib/permissionService.js';
 
-export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'raiz_e_mesa';
+export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestjourney' | 'raiz_e_mesa' | 'raiz-e-mesa';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
 
 export type CanonicalAppAccessState = 'granted' | 'denied';
@@ -217,14 +217,14 @@ export async function resolveEcosystemAppAccess(params: {
      };
   }
 
-  // Raiz e Mesa usa entitlement específico do produto no documento da organização.
-  if (appId === 'raiz_e_mesa') {
-     const appEntitlement = orgData.apps?.raiz_e_mesa;
+  // NestJourney usa entitlement específico do produto; aliases antigos preservam compatibilidade.
+  if (appId === 'nestjourney' || appId === 'raiz_e_mesa' || appId === 'raiz-e-mesa') {
+     const appEntitlement = orgData.apps?.nestjourney || orgData.apps?.raiz_e_mesa || orgData.apps?.['raiz-e-mesa'];
      const validStatuses = ['active', 'trialing'];
      if (!appEntitlement || !validStatuses.includes(appEntitlement.status)) {
         return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.ENTITLEMENT_NOT_CONFIGURED };
      }
-     const memberAccess = memData.appAccess?.raiz_e_mesa || memData.appAccess?.['raiz-e-mesa'];
+     const memberAccess = memData.appAccess?.nestjourney || memData.appAccess?.raiz_e_mesa || memData.appAccess?.['raiz-e-mesa'];
      if (memberAccess?.enabled === false) {
         return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.MEMBER_APP_ACCESS_DISABLED };
      }
