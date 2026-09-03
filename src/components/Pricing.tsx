@@ -125,6 +125,10 @@ export function Pricing() {
             </p>
           </motion.div>
 
+          <p className="mt-4 text-xs text-[#A0A7B5]">
+            {t('pricing_trial_plan_note', 'O teste de 7 dias respeita os recursos e limites do plano que você escolher.')}
+          </p>
+
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
