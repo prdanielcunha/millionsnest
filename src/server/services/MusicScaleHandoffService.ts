@@ -108,7 +108,7 @@ export async function handleMusicScaleHandoffRequest(
 
   const { appId, orgId, supportMode } = req.body as any;
 
-  if (!['musicscale', 'raiz_e_mesa'].includes(appId)) {
+  if (!['musicscale', 'nestjourney', 'raiz_e_mesa', 'raiz-e-mesa'].includes(appId)) {
     return res.status(400).json({
       error: 'Invalid request: unsupported appId.',
       code: 'INVALID_REQUEST',
