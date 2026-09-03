@@ -20,13 +20,13 @@ export interface EcosystemApp {
 
 export const ECOSYSTEM_APPS: EcosystemApp[] = [
   {
-    id: 'raiz_e_mesa',
-    name: 'Raiz e Mesa',
-    description: 'Acolhimento, cuidado, pequenos grupos e discipulado com pessoas ao lado de pessoas.',
-    shortDescription: 'Cuidado, conexão e discipulado',
+    id: 'nestjourney',
+    name: 'NestJourney',
+    description: 'Jornadas de acolhimento, cuidado, comunidade e formação sem transformar pessoas em números.',
+    shortDescription: 'Jornadas de cuidado e formação',
     icon: 'Sprout',
-    url: ((typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_RAIZ_E_MESA_APP_URL : undefined) || 'https://raiz-e-mesa.vercel.app',
-    operationalUrl: ((typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_RAIZ_E_MESA_APP_URL : undefined) || 'https://raiz-e-mesa.vercel.app',
+    url: ((typeof import.meta !== 'undefined' && import.meta.env) ? (import.meta.env.VITE_NESTJOURNEY_APP_URL || import.meta.env.VITE_RAIZ_E_MESA_APP_URL) : undefined) || 'https://nestjourney.millionsnest.com',
+    operationalUrl: ((typeof import.meta !== 'undefined' && import.meta.env) ? (import.meta.env.VITE_NESTJOURNEY_APP_URL || import.meta.env.VITE_RAIZ_E_MESA_APP_URL) : undefined) || 'https://nestjourney.millionsnest.com',
     status: 'active',
     primaryAction: 'open',
     featured: true,
