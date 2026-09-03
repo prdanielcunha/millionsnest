@@ -126,7 +126,7 @@ export function Pricing() {
           </motion.div>
 
           <p className="mt-4 text-xs text-[#A0A7B5]">
-            {t('pricing_trial_plan_note', 'O teste de 7 dias respeita os recursos e limites do plano que você escolher.')}
+            {t('pricing_trial_plan_note', 'O teste usa os recursos do plano escolhido. Limites específicos da avaliação aparecem em cada plano.')}
           </p>
 
           <motion.div 
@@ -206,7 +206,7 @@ export function Pricing() {
               onClick={() => handlePurchase(isAnnual ? 'musicscale_starter_yearly' : 'musicscale_starter_monthly')}
               className="w-full py-3.5 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold text-sm hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block select-none"
             >
-              Começar no Starter
+              Testar Starter por 7 dias
             </button>
             <p className="text-[10px] text-center text-[#A0A7B5]/60 mb-6 -mt-4 uppercase tracking-widest">Ideal para começar</p>
             
@@ -276,7 +276,7 @@ export function Pricing() {
               onClick={() => handlePurchase(isAnnual ? 'musicscale_advanced_yearly' : 'musicscale_advanced_monthly')}
               className="w-full py-3.5 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold text-sm hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block select-none"
             >
-              Escolher Advanced
+              Testar Advanced por 7 dias
             </button>
             <p className="text-[10px] text-center text-[#A0A7B5]/60 mb-6 -mt-4 uppercase tracking-widest">Para equipes em crescimento</p>
             
@@ -339,6 +339,9 @@ export function Pricing() {
                  {t('pricing_free_trial', '7 dias grátis')}
                </span>
             </div>
+            <p className="relative z-10 -mt-3 mb-5 text-[11px] leading-relaxed text-[#A0A7B5]">
+              {t('pricing_pro_trial_library_note', 'No teste Pro: até 20 importações da Biblioteca Viva. Após a ativação paga, importações ilimitadas.')}
+            </p>
             
             {isAnnual ? (
               <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
@@ -356,7 +359,7 @@ export function Pricing() {
               onClick={() => handlePurchase(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
               className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#2B85EB]/90 to-[#2B85EB] text-[#F5F7FA] border border-[#2B85EB] text-center font-bold text-sm hover:from-[#2B85EB] hover:to-[#4ca4ff] transition-all shadow-[0_0_20px_rgba(43,133,235,0.3)] hover:shadow-[0_0_30px_rgba(43,133,235,0.5)] active:scale-95 mt-2 mb-8 block relative z-10 select-none"
             >
-              Começar com o Pro
+              Testar Pro por 7 dias
             </button>
             <p className="text-[10px] text-center text-[#2B85EB] mb-6 -mt-4 uppercase tracking-widest relative z-10 font-bold">Experiência completa</p>
             
