@@ -10,6 +10,7 @@ import { useAuth } from "../contexts/AuthContext.js";
 import { useOrganization } from "../contexts/OrganizationContext.js";
 import { isSubscriptionValid } from "../lib/subscriptionHelpers.js";
 import { openEcosystemModule } from "../lib/ecosystemLauncher.js";
+import { analytics } from "../lib/analytics.js";
 
 // Premium Brand Lockup Component to replace LogoMS_Horiz.png
 const MusicScaleLogo = ({ className = "" }: { className?: string }) => (
@@ -58,6 +59,10 @@ export function MusicScaleLanding() {
 
   useEffect(() => {
     window.scrollTo(0, 0);
+    analytics.track('page_view', {
+      app: 'musicscale',
+      metadata: { page: 'sales_landing' }
+    });
   }, []);
 
   const isSubscribed = isSubscriptionValid(subscription);
@@ -91,6 +96,13 @@ export function MusicScaleLanding() {
   };
 
   const handleStartTrial = () => {
+    analytics.track('trial_cta_clicked', {
+      app: 'musicscale',
+      userId: user?.uid,
+      organizationId: organization?.id,
+      metadata: { plan: 'pro', billingCycle: 'monthly', source: 'sales_landing_primary' }
+    });
+
     // Primary launch CTA intentionally demonstrates the complete product.
     // Pricing cards still let the customer choose Starter or Advanced.
     const intent = "musicscale_pro_monthly";
@@ -103,6 +115,12 @@ export function MusicScaleLanding() {
   };
 
   const scrollToDemo = () => {
+    analytics.track('app_usage', {
+      app: 'musicscale',
+      userId: user?.uid,
+      organizationId: organization?.id,
+      metadata: { action: 'sales_demo_opened', source: 'sales_landing' }
+    });
     const el = document.getElementById('musicscale-demo');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
@@ -459,7 +477,15 @@ export function MusicScaleLanding() {
                  <button
                    type="button"
                    key={item.step}
-                   onClick={() => setActiveDemoStep(i)}
+                   onClick={() => {
+                     setActiveDemoStep(i);
+                     analytics.track('app_usage', {
+                       app: 'musicscale',
+                       userId: user?.uid,
+                       organizationId: organization?.id,
+                       metadata: { action: 'sales_demo_step_selected', step: i + 1 }
+                     });
+                   }}
                    aria-pressed={activeDemoStep === i}
                    className={`flex gap-6 group text-left rounded-2xl p-2 -m-2 transition-colors ${activeDemoStep === i ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}
                  >
