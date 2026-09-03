@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
+import { analytics } from '../lib/analytics.js';
 
 export default function BillingSuccess() {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const navigate = useNavigate();
-  const { getIdToken } = useAuth();
+  const { getIdToken, user, profile } = useAuth();
   
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Seu pagamento foi confirmado. Estamos preparando o MusicScale para sua organização.');
@@ -38,6 +39,17 @@ export default function BillingSuccess() {
         if (data.ok && data.action === 'subscription_ready') {
           setStatus('success');
           setMessage('Tudo certo. O MusicScale já está disponível.');
+
+          const analyticsKey = `mn_checkout_completed_${sessionId}`;
+          if (!sessionStorage.getItem(analyticsKey)) {
+            analytics.track('checkout_completed', {
+              app: 'musicscale',
+              userId: user?.uid,
+              organizationId: profile?.activeOrganizationId || profile?.organizationId,
+              metadata: { source: 'billing_confirmation' }
+            });
+            sessionStorage.setItem(analyticsKey, '1');
+          }
           
           // Redirect automatically after a few seconds
           setTimeout(() => {
