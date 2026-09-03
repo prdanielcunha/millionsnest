@@ -95,23 +95,18 @@ export function MusicScaleLanding() {
     });
   };
 
-  const handleStartTrial = () => {
+  const handleChoosePlan = () => {
     analytics.track('trial_cta_clicked', {
       app: 'musicscale',
       userId: user?.uid,
       organizationId: organization?.id,
-      metadata: { plan: 'pro', billingCycle: 'monthly', source: 'sales_landing_primary' }
+      metadata: { action: 'choose_plan', source: 'sales_landing_primary' }
     });
 
-    // Primary launch CTA intentionally demonstrates the complete product.
-    // Pricing cards still let the customer choose Starter or Advanced.
-    const intent = "musicscale_pro_monthly";
-    sessionStorage.setItem("purchase_intent", intent);
-    if (user) {
-      navigate(`/checkout?plan=${intent}`);
-    } else {
-      navigate("/login");
-    }
+    // The trial always follows the plan explicitly chosen by the customer.
+    // Never preselect Pro from a generic landing CTA.
+    sessionStorage.removeItem("purchase_intent");
+    document.getElementById('precos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const scrollToDemo = () => {
@@ -204,7 +199,7 @@ export function MusicScaleLanding() {
                 </button>
               ) : (
                 <button 
-                  onClick={handleStartTrial}
+                  onClick={handleChoosePlan}
                   className="group relative w-full sm:w-auto px-8 py-4 bg-[#2B85EB] text-white text-lg font-bold rounded-2xl shadow-[0_0_40px_rgba(43,133,235,0.4)] hover:shadow-[0_0_60px_rgba(43,133,235,0.6)] transition-all overflow-hidden"
                 >
                   <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
@@ -231,7 +226,7 @@ export function MusicScaleLanding() {
                 transition={{ delay: 0.5 }}
                 className="mt-4 text-sm text-[#A0A7B5]"
               >
-                {t('musicscale:trial_microcopy', '7 dias grátis no Pro. Depois R$ 34,90/mês. Cancele antes do fim do teste para não ser cobrado.')}
+                {t('musicscale:trial_microcopy', 'Escolha seu plano e teste gratuitamente por 7 dias os recursos e limites dele. Cancele antes do fim do teste para não ser cobrado.')}
               </motion.p>
             )}
 
@@ -428,7 +423,7 @@ export function MusicScaleLanding() {
                </button>
              ) : (
                <button 
-                 onClick={handleStartTrial}
+                 onClick={handleChoosePlan}
                  className="group relative px-8 py-4 bg-white/5 border border-white/10 text-white text-lg font-semibold rounded-2xl hover:bg-white/10 transition-all shadow-[0_0_20px_rgba(255,255,255,0.02)] flex items-center justify-center gap-3 backdrop-blur-md"
                >
                  {t('musicscale:chaos_cta', 'Quero organizar minha próxima escala')}
@@ -811,7 +806,7 @@ export function MusicScaleLanding() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6 w-full sm:w-auto">
             <button 
-              onClick={handleStartTrial}
+              onClick={handleChoosePlan}
               className="group relative w-full sm:w-auto px-10 py-5 bg-[#2B85EB] text-white text-lg font-bold rounded-2xl shadow-[0_0_50px_rgba(43,133,235,0.3)] hover:shadow-[0_0_80px_rgba(43,133,235,0.6)] transition-all overflow-hidden"
             >
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
@@ -821,7 +816,7 @@ export function MusicScaleLanding() {
               </div>
             </button>
             <a 
-              href="#pricing-section"
+              href="#precos"
               className="w-full sm:w-auto px-10 py-5 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-lg font-bold rounded-2xl transition-all flex items-center justify-center backdrop-blur-md"
             >
               {t('musicscale:final_cta_secondary', 'Ver preços')}
