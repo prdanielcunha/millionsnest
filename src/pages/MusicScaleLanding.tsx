@@ -226,7 +226,7 @@ export function MusicScaleLanding() {
                 transition={{ delay: 0.5 }}
                 className="mt-4 text-sm text-[#A0A7B5]"
               >
-                {t('musicscale:trial_microcopy', 'Escolha seu plano e teste gratuitamente por 7 dias os recursos e limites dele. Cancele antes do fim do teste para não ser cobrado.')}
+                {t('musicscale:trial_microcopy', 'Escolha seu plano e teste por 7 dias. Starter e Advanced mantêm seus próprios limites; no teste Pro, a Biblioteca Viva permite até 20 importações. Pro pago é ilimitado.')}
               </motion.p>
             )}
 
