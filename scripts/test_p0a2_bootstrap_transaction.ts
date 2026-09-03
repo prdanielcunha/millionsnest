@@ -125,6 +125,8 @@ assertCondition('27. setActiveOrganization continua exportado', svcStr.includes(
 const hasForbidden = ['plan:', 'products:', 'appsAccess:', 'enabledApps:', 'entitlements:', 'subscription:', 'subscriptionStatus:', 'lifetimeAccess:'].some(f => bootstrapStr.includes(f));
 assertCondition('28. bootstrap não cria campos proibidos (plan, products, appsAccess, enabledApps, entitlements, subscription, subscriptionStatus, lifetimeAccess)', !hasForbidden);
 
+assertCondition('28b. organização pessoal nasce marcada para completar o perfil no MusicScale', bootstrapStr.includes("onboardingState: 'pending_profile'"));
+
 assertCondition('29. não existe ...legacyData', !bootstrapStr.includes('...legacyData'));
 assertCondition('30. consultas legadas incluem uid e user_id', bootstrapStr.includes("where('uid', '==', uid)") && bootstrapStr.includes("where('user_id', '==', uid)"));
 

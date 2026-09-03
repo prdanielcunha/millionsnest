@@ -318,6 +318,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
           slug: targetOrgId,
           ownerUid: uid,
           status: 'active',
+          onboardingState: 'pending_profile',
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp()
         });
