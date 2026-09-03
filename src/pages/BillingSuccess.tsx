@@ -8,7 +8,7 @@ export default function BillingSuccess() {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const navigate = useNavigate();
-  const { getIdToken, user, profile } = useAuth();
+  const { user, profile, loading } = useAuth();
   
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Seu pagamento foi confirmado. Estamos preparando o MusicScale para sua organização.');
@@ -20,10 +20,18 @@ export default function BillingSuccess() {
       return;
     }
 
+    if (loading) return;
+
+    if (!user) {
+      setStatus('error');
+      setMessage('Sua sessão expirou. Entre novamente para confirmar sua assinatura.');
+      return;
+    }
+
     let isMounted = true;
     const confirmCheckout = async () => {
       try {
-        const token = await getIdToken();
+        const token = await user.getIdToken();
         const res = await fetch('/api/v1/billing/checkout/confirm', {
           method: 'POST',
           headers: {
@@ -78,7 +86,7 @@ export default function BillingSuccess() {
     confirmCheckout();
 
     return () => { isMounted = false; };
-  }, [sessionId, retryCount, getIdToken, navigate]);
+  }, [sessionId, retryCount, user, loading, navigate]);
 
   return (
     <div className="min-h-screen bg-[#0A0D14] flex flex-col items-center justify-center p-6">
