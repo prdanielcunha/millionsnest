@@ -6,6 +6,7 @@ import { Check, ArrowRight, ShieldCheck, CreditCard, ChevronLeft, Briefcase, Zap
 import { useTranslation } from 'react-i18next';
 import { getProductByLookupKey } from '../lib/pricingCatalog.js';
 import { MillionsNestLogo } from '../components/MillionsNestLogo.js';
+import { analytics } from '../lib/analytics.js';
 
 interface NormalizedProduct {
   id: string; // Stripe Price ID
@@ -222,6 +223,17 @@ export default function Checkout() {
         return;
     }
     
+    analytics.track('checkout_started', {
+      app: 'musicscale',
+      userId: user.uid,
+      organizationId: activeOrganizationId,
+      metadata: {
+        planLookupKey: selectedPlanLookup,
+        addonCount: selectedAddonsLookup.length,
+        billingCycle
+      }
+    });
+
     setCheckoutLoading(true);
     try {
       const res = await fetch('/api/v1/billing/unified-checkout', {

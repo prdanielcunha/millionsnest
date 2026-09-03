@@ -10,6 +10,7 @@ import { useAuth } from "../contexts/AuthContext.js";
 import { useOrganization } from "../contexts/OrganizationContext.js";
 import { isSubscriptionValid } from "../lib/subscriptionHelpers.js";
 import { openEcosystemModule } from "../lib/ecosystemLauncher.js";
+import { analytics } from "../lib/analytics.js";
 
 // Premium Brand Lockup Component to replace LogoMS_Horiz.png
 const MusicScaleLogo = ({ className = "" }: { className?: string }) => (
@@ -54,9 +55,14 @@ export function MusicScaleLanding() {
   const { user, profile, loading: authLoading } = useAuth();
   const { organization, subscription, currentUserPerms, loadingOrg } = useOrganization();
   const [activeBentoCard, setActiveBentoCard] = useState<number | null>(null);
+  const [activeDemoStep, setActiveDemoStep] = useState(0);
 
   useEffect(() => {
     window.scrollTo(0, 0);
+    analytics.track('page_view', {
+      app: 'musicscale',
+      metadata: { page: 'sales_landing' }
+    });
   }, []);
 
   const isSubscribed = isSubscriptionValid(subscription);
@@ -90,7 +96,16 @@ export function MusicScaleLanding() {
   };
 
   const handleStartTrial = () => {
-    const intent = "musicscale_starter_monthly";
+    analytics.track('trial_cta_clicked', {
+      app: 'musicscale',
+      userId: user?.uid,
+      organizationId: organization?.id,
+      metadata: { plan: 'pro', billingCycle: 'monthly', source: 'sales_landing_primary' }
+    });
+
+    // Primary launch CTA intentionally demonstrates the complete product.
+    // Pricing cards still let the customer choose Starter or Advanced.
+    const intent = "musicscale_pro_monthly";
     sessionStorage.setItem("purchase_intent", intent);
     if (user) {
       navigate(`/checkout?plan=${intent}`);
@@ -100,11 +115,25 @@ export function MusicScaleLanding() {
   };
 
   const scrollToDemo = () => {
+    analytics.track('app_usage', {
+      app: 'musicscale',
+      userId: user?.uid,
+      organizationId: organization?.id,
+      metadata: { action: 'sales_demo_opened', source: 'sales_landing' }
+    });
     const el = document.getElementById('musicscale-demo');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  const demoSteps = [
+    { step: "01", title: t('musicscale:demo_step1_title', 'Crie a escala'), desc: t('musicscale:demo_step1_desc', 'Arraste membros e distribua funções rapidamente.') },
+    { step: "02", title: t('musicscale:demo_step2_title', 'Adicione repertório e tons'), desc: t('musicscale:demo_step2_desc', 'Anexe músicas da biblioteca com links e cifras.') },
+    { step: "03", title: t('musicscale:demo_step3_title', 'Notifique a equipe'), desc: t('musicscale:demo_step3_desc', 'Dispare notificações automáticas para todos os envolvidos.') },
+    { step: "04", title: t('musicscale:demo_step4_title', 'Receba confirmações'), desc: t('musicscale:demo_step4_desc', 'Acompanhe quem confirmou presença no aplicativo.') },
+    { step: "05", title: t('musicscale:demo_step5_title', 'Use o Performance Mode'), desc: t('musicscale:demo_step5_desc', 'Visual escuro e focado para o momento do culto.') },
+  ];
 
   return (
     <div className="min-h-screen font-sans overflow-x-hidden bg-[#050505] text-[#F5F7FA] selection:bg-[#2B85EB]/30 selection:text-white">
@@ -194,6 +223,17 @@ export function MusicScaleLanding() {
                 {t('musicscale:hero_cta_secondary', 'Ver app em ação')}
               </button>
             </motion.div>
+
+            {!isSubscribed && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="mt-4 text-sm text-[#A0A7B5]"
+              >
+                {t('musicscale:trial_microcopy', '7 dias grátis no Pro. Depois R$ 34,90/mês. Cancele antes do fim do teste para não ser cobrado.')}
+              </motion.p>
+            )}
 
             <motion.div
               initial={{ opacity: 0, y: 15 }}
@@ -418,42 +458,48 @@ export function MusicScaleLanding() {
                   <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/20 via-transparent to-transparent opacity-60" />
                   <img src="/telas.png" alt="MusicScale em Ação" className="absolute inset-0 w-full h-full object-cover object-top opacity-80" />
                   
-                  {/* Subtle overlay to make it look like an interactive demo */}
-                  <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center z-10 transition-colors group-hover:bg-black/20">
-                    <button className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white mb-6 group-hover:scale-110 group-hover:bg-[#2B85EB] transition-all duration-500 shadow-[0_0_30px_rgba(0,0,0,0.5)] cursor-default">
-                       <div className="w-8 h-8 flex items-center justify-center">
-                         <div className="w-2 h-2 rounded-full bg-white animate-ping" />
-                       </div>
-                    </button>
-                    <div className="overflow-hidden rounded-full p-[1px] bg-gradient-to-r from-white/10 via-white/30 to-white/10">
-                      <p className="text-xs font-bold tracking-widest uppercase text-white bg-[#050505]/90 px-6 py-2.5 rounded-full backdrop-blur-md">
-                        {t('musicscale:demo_placeholder', 'Fluxo de Escala Inteligente')}
-                      </p>
+                  {/* Honest guided demo: no fake play button while there is no video. */}
+                  <div className="absolute inset-0 bg-black/45 flex flex-col items-center justify-center z-10 transition-colors group-hover:bg-black/35 px-6 text-center">
+                    <div className="w-16 h-16 rounded-full bg-[#2B85EB]/90 border border-white/20 flex items-center justify-center text-white mb-5 shadow-[0_0_30px_rgba(43,133,235,0.35)]">
+                      <span className="text-xl font-bold">{activeDemoStep + 1}</span>
                     </div>
+                    <p className="text-xs font-bold tracking-widest uppercase text-[#8EC5FF] mb-2">
+                      {t('musicscale:demo_guided_label', 'Demonstração guiada')} · {activeDemoStep + 1}/{demoSteps.length}
+                    </p>
+                    <h3 className="text-2xl md:text-3xl font-bold text-white mb-3">{demoSteps[activeDemoStep].title}</h3>
+                    <p className="text-sm md:text-base text-white/75 max-w-md">{demoSteps[activeDemoStep].desc}</p>
                   </div>
                </div>
             </div>
             
             <div className="lg:col-span-4 flex flex-col gap-8">
-               {[
-                 { step: "01", title: t('musicscale:demo_step1_title', 'Crie a escala'), desc: t('musicscale:demo_step1_desc', 'Arraste membros e distribua funções rapidamente.') },
-                 { step: "02", title: t('musicscale:demo_step2_title', 'Adicione repertório e tons'), desc: t('musicscale:demo_step2_desc', 'Anexe músicas da biblioteca com links e cifras.') },
-                 { step: "03", title: t('musicscale:demo_step3_title', 'Notifique a equipe'), desc: t('musicscale:demo_step3_desc', 'Dispare notificações automáticas para todos os envolvidos.') },
-                 { step: "04", title: t('musicscale:demo_step4_title', 'Receba confirmações'), desc: t('musicscale:demo_step4_desc', 'Acompanhe quem confirmou presença no aplicativo.') },
-                 { step: "05", title: t('musicscale:demo_step5_title', 'Use o Performance Mode'), desc: t('musicscale:demo_step5_desc', 'Visual escuro e focado para o momento do culto.') },
-               ].map((item, i) => (
-                 <div key={i} className="flex gap-6 group">
+               {demoSteps.map((item, i) => (
+                 <button
+                   type="button"
+                   key={item.step}
+                   onClick={() => {
+                     setActiveDemoStep(i);
+                     analytics.track('app_usage', {
+                       app: 'musicscale',
+                       userId: user?.uid,
+                       organizationId: organization?.id,
+                       metadata: { action: 'sales_demo_step_selected', step: i + 1 }
+                     });
+                   }}
+                   aria-pressed={activeDemoStep === i}
+                   className={`flex gap-6 group text-left rounded-2xl p-2 -m-2 transition-colors ${activeDemoStep === i ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}
+                 >
                    <div className="flex flex-col items-center">
-                     <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-sm font-bold text-[#A0A7B5] group-hover:border-[#2B85EB] group-hover:text-[#2B85EB] transition-colors shadow-inner">
+                     <div className={`w-10 h-10 rounded-full border flex items-center justify-center text-sm font-bold transition-colors shadow-inner ${activeDemoStep === i ? 'bg-[#2B85EB]/15 border-[#2B85EB] text-[#8EC5FF]' : 'bg-white/5 border-white/10 text-[#A0A7B5] group-hover:border-[#2B85EB] group-hover:text-[#2B85EB]'}`}>
                        {item.step}
                      </div>
-                     {i !== 4 && <div className="w-px h-full bg-gradient-to-b from-white/10 to-transparent my-2" />}
+                     {i !== demoSteps.length - 1 && <div className="w-px h-full bg-gradient-to-b from-white/10 to-transparent my-2" />}
                    </div>
                    <div className="pt-1.5 pb-2">
-                     <h4 className="text-lg font-semibold text-white mb-1.5 group-hover:text-[#2B85EB] transition-colors">{item.title}</h4>
+                     <h4 className={`text-lg font-semibold mb-1.5 transition-colors ${activeDemoStep === i ? 'text-[#8EC5FF]' : 'text-white group-hover:text-[#2B85EB]'}`}>{item.title}</h4>
                      <p className="text-sm text-[#A0A7B5] leading-relaxed">{item.desc}</p>
                    </div>
-                 </div>
+                 </button>
                ))}
             </div>
           </div>
@@ -731,7 +777,7 @@ export function MusicScaleLanding() {
             />
             <FAQItem 
               question={t('musicscale:faq_q7', 'Posso testar antes de pagar?')} 
-              answer={t('musicscale:faq_a7', 'Com certeza. Todo plano inclui 7 dias de teste totalmente gratuito, com acesso a todos os recursos premium. Se achar que não ajudou sua equipe, você cancela antes de qualquer cobrança sem burocracia.')} 
+              answer={t('musicscale:faq_a7', 'Com certeza. Todo plano inclui 7 dias de teste gratuito e libera os recursos do plano escolhido. O botão principal testa o Pro, nosso plano completo. Se não fizer sentido para sua equipe, cancele antes do fim do teste para não haver cobrança.')} 
             />
           </div>
         </div>
