@@ -94,13 +94,13 @@ service cloud.firestore {
       let orgData = get(/databases/$(database)/documents/organizations/$(orgId)).data;
       return isSystemAdmin() || (
         orgData != null &&
-        orgData.get('apps', {}).get('raiz_e_mesa', {}).get('status', '') in ['active', 'trialing']
+        orgData.get('apps', {}).get('nestjourney', orgData.get('apps', {}).get('raiz_e_mesa', orgData.get('apps', {}).get('raiz-e-mesa', {}))).get('status', '') in ['active', 'trialing']
       );
     }
 
     function raizMemberRole(orgId) {
       let member = getMemberPermissions(orgId);
-      let appAccess = member != null ? member.get('appAccess', {}).get('raiz_e_mesa', {}) : {};
+      let appAccess = member != null ? member.get('appAccess', {}).get('nestjourney', member.get('appAccess', {}).get('raiz_e_mesa', member.get('appAccess', {}).get('raiz-e-mesa', {}))) : {};
       let roles = appAccess.get('roles', []);
       return roles is list && roles.size() > 0
         ? roles[0]
