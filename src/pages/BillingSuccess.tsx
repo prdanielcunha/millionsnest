@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { analytics } from '../lib/analytics.js';
+import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 
 export default function BillingSuccess() {
   const [searchParams] = useSearchParams();
@@ -13,6 +14,39 @@ export default function BillingSuccess() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Seu pagamento foi confirmado. Estamos preparando o MusicScale para sua organização.');
   const [retryCount, setRetryCount] = useState(0);
+  const [confirmedOrganizationId, setConfirmedOrganizationId] = useState<string | null>(null);
+  const [launchingMusicScale, setLaunchingMusicScale] = useState(false);
+  const autoLaunchAttemptedRef = useRef(false);
+
+  const launchMusicScale = useCallback(async (organizationId: string | null) => {
+    if (!user || !organizationId) {
+      navigate('/dashboard');
+      return;
+    }
+
+    autoLaunchAttemptedRef.current = true;
+    setLaunchingMusicScale(true);
+    try {
+      analytics.track('app_usage', {
+        app: 'musicscale',
+        userId: user.uid,
+        organizationId,
+        metadata: { action: 'post_checkout_launch', source: 'billing_success' }
+      });
+
+      await openEcosystemModule(
+        'musicscale',
+        user,
+        profile,
+        { id: organizationId },
+        {}
+      );
+    } catch (error) {
+      console.warn('[BillingSuccess] Direct MusicScale launch failed; keeping recovery UI available.', error);
+      setMessage('Sua assinatura está ativa. Não conseguimos abrir o MusicScale automaticamente; tente novamente pelo botão abaixo.');
+      setLaunchingMusicScale(false);
+    }
+  }, [navigate, profile, user]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -48,21 +82,19 @@ export default function BillingSuccess() {
           setStatus('success');
           setMessage('Tudo certo. O MusicScale já está disponível.');
 
+          const organizationId = data.organizationId || null;
+          setConfirmedOrganizationId(organizationId);
+
           const analyticsKey = `mn_checkout_completed_${sessionId}`;
           if (!sessionStorage.getItem(analyticsKey)) {
             analytics.track('checkout_completed', {
               app: 'musicscale',
               userId: user?.uid,
-              organizationId: profile?.activeOrganizationId || profile?.organizationId,
+              organizationId: organizationId || undefined,
               metadata: { source: 'billing_confirmation' }
             });
             sessionStorage.setItem(analyticsKey, '1');
           }
-          
-          // Redirect automatically after a few seconds
-          setTimeout(() => {
-             if (isMounted) navigate('/dashboard');
-          }, 3000);
         } else if (data.ok && data.action === 'provisioning') {
           if (retryCount < 5) {
              setTimeout(() => {
@@ -88,6 +120,25 @@ export default function BillingSuccess() {
     return () => { isMounted = false; };
   }, [sessionId, retryCount, user, loading, navigate]);
 
+  useEffect(() => {
+    if (
+      status !== 'success' ||
+      !confirmedOrganizationId ||
+      !user ||
+      autoLaunchAttemptedRef.current
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (!autoLaunchAttemptedRef.current) {
+        void launchMusicScale(confirmedOrganizationId);
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [status, confirmedOrganizationId, user, launchMusicScale]);
+
   return (
     <div className="min-h-screen bg-[#0A0D14] flex flex-col items-center justify-center p-6">
       <div className="max-w-md w-full bg-[#1A1D24] border border-white/5 rounded-2xl p-8 flex flex-col items-center text-center">
@@ -112,13 +163,31 @@ export default function BillingSuccess() {
             <p className="text-[#A0A7B5] leading-relaxed mb-8">
               {message}
             </p>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="w-full flex items-center justify-center gap-2 bg-[#2B85EB] hover:bg-[#2B85EB]/90 text-white font-semibold py-3 px-6 rounded-xl transition-all"
-            >
-              Abrir MusicScale
-              <ArrowRight className="w-5 h-5" />
-            </button>
+            <div className="w-full flex flex-col gap-3">
+              <button
+                onClick={() => void launchMusicScale(confirmedOrganizationId)}
+                disabled={launchingMusicScale}
+                className="w-full flex items-center justify-center gap-2 bg-[#2B85EB] hover:bg-[#2B85EB]/90 disabled:opacity-60 text-white font-semibold py-3 px-6 rounded-xl transition-all"
+              >
+                {launchingMusicScale ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Abrindo MusicScale...
+                  </>
+                ) : (
+                  <>
+                    Abrir MusicScale
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="w-full text-[#A0A7B5] hover:text-white font-medium py-2 px-6 transition-colors"
+              >
+                Ir para o painel
+              </button>
+            </div>
           </>
         )}
 
