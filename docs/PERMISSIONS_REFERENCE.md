@@ -17,6 +17,7 @@ All capabilities within the MillionsNest ecosystem must be explicitly documented
 - `musicScale.manageSongs`: Add, edit, or remove songs in the organization's repertoire.
 - `musicScale.manageScales`: Create, edit, or delete event schedules/scales.
 - `musicScale.manageTeams`: Manage team composition within the music scope.
+- `musicscale.live.conduct`: Conduct an active MusicScale Live Worship/Stage session without granting permission to create, edit, publish, or delete scales. Owner/Admin/Leader access remains inherited for backward compatibility; other active members can receive this capability explicitly.
 
 ## Multiapp Readiness
 As new apps are integrated (e.g., Cells, Cults, Financials), their permissions must be added to `AppPermissions` type in `src/lib/rbac.ts` following this strict namespacing format:
