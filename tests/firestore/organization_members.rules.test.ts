@@ -157,6 +157,26 @@ test('update privilege escalation remains denied', async () => {
   await assertFails(updateDoc(doc(db, 'organization_members/ordinary_tenant-a'), { role: 'owner' }));
 });
 
+test('ordinary member cannot self-grant MusicScale live conductor capability on canonical membership', async () => {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'organizations/tenant-a/members/ordinary'), {
+      uid: 'ordinary',
+      organizationId: 'tenant-a',
+      status: 'active',
+      role: 'member',
+      organizationRole: 'member',
+      permissions: {},
+    });
+  });
+
+  const db = testEnvironment.authenticatedContext('ordinary').firestore();
+  await assertFails(
+    updateDoc(doc(db, 'organizations/tenant-a/members/ordinary'), {
+      'permissions.musicscale.live.conduct': true,
+    }),
+  );
+});
+
 test('delete privilege escalation remains denied', async () => {
   const db = testEnvironment.authenticatedContext('ordinary').firestore();
   await assertFails(deleteDoc(doc(db, 'organization_members/ordinary_tenant-a')));
