@@ -4,6 +4,7 @@ import { createInvitation } from "./src/server/services/InvitationCreationServic
 import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
+import { updateMusicScaleMemberCapability } from './src/server/services/MusicScaleMemberCapabilityCommandService.js';
 import { createSupportTicket } from './src/server/services/SupportTicketService.js';
 import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
 import { createSupportWhatsAppLink } from './src/server/services/SupportWhatsAppService.js';
@@ -625,6 +626,7 @@ async function startServer() {
   app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/reject', express.json({ limit: '8kb' }), (req, res) => rejectJoinRequest(req, res));
   app.delete('/api/v1/organizations/:organizationId/members/:memberId', (req, res) => removeOrganizationMember(req, res));
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/role', express.json({ limit: '8kb' }), (req, res) => updateOrganizationMemberRole(req, res));
+  app.patch('/api/v1/organizations/:organizationId/members/:memberId/musicscale-capability', express.json({ limit: '8kb' }), (req, res) => updateMusicScaleMemberCapability(req, res));
   app.post('/api/v1/user/active-organization', express.json(), setActiveOrganization);
 
   app.post('/api/internal/repair-subscription', async (req: any, res) => {

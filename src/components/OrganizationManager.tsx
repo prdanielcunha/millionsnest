@@ -44,7 +44,66 @@ export function OrganizationManager({
   const [activeTab, setActiveTabInternal] = useState<OrgTab>((initialTab as OrgTab) || 'settings');
   const [slugStatus, setSlugStatus] = useState<string | null>(null);
   const [adminOrgs, setAdminOrgs] = useState<any[]>([]);
+  const [liveConductorByMember, setLiveConductorByMember] = useState<Record<string, boolean>>({});
+  const [liveConductorSavingId, setLiveConductorSavingId] = useState<string | null>(null);
+  const [liveConductorError, setLiveConductorError] = useState<string | null>(null);
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+
+  useEffect(() => {
+    const next: Record<string, boolean> = {};
+    for (const member of members || []) {
+      next[member.id] =
+        member?.permissions?.['musicscale.live.conduct'] === true;
+    }
+    setLiveConductorByMember(next);
+  }, [members]);
+
+  const roleInheritsLiveConduct = (role: string | null | undefined) =>
+    ['owner', 'admin', 'leader'].includes(
+      String(role || '').trim().toLowerCase(),
+    );
+
+  const handleToggleLiveConduct = async (member: any) => {
+    if (!organization?.id || !user || roleInheritsLiveConduct(member?.role)) return;
+
+    const current = liveConductorByMember[member.id] === true;
+    const next = !current;
+    setLiveConductorSavingId(member.id);
+    setLiveConductorError(null);
+
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(organization.id)}/members/${encodeURIComponent(member.id)}/musicscale-capability`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            capability: 'musicscale.live.conduct',
+            enabled: next,
+          }),
+        },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success !== true) {
+        throw new Error(data?.reasonCode || 'CAPABILITY_UPDATE_FAILED');
+      }
+      setLiveConductorByMember((previous) => ({
+        ...previous,
+        [member.id]: next,
+      }));
+    } catch (error) {
+      console.error('[OrganizationManager] Live conductor update failed', error);
+      setLiveConductorError(
+        'Não foi possível atualizar a permissão de condução. Nenhuma outra permissão foi alterada.',
+      );
+    } finally {
+      setLiveConductorSavingId(null);
+    }
+  };
 
   useEffect(() => {
     if (isGlobalAdmin) {
@@ -308,6 +367,12 @@ export function OrganizationManager({
                  )}
                </div>
                
+               {liveConductorError && (
+                 <div className="mb-3 rounded-xl border border-red-500/15 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200/80">
+                   {liveConductorError}
+                 </div>
+               )}
+
                <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
                   {members.map((member: any, i: number) => (
                     <div key={member.id} className={`flex items-center justify-between p-4 ${i !== members.length - 1 ? 'border-b border-white/5' : ''}`}>
@@ -323,8 +388,49 @@ export function OrganizationManager({
                         </div>
                       </div>
                       
-                      {currentUserPerms['organization.roles.manage'] ? (
-                        <div className="flex items-center gap-3">
+                      {(currentUserPerms['organization.roles.manage'] || isGlobalAdmin) ? (
+                        <div className="flex items-center gap-2.5 flex-wrap justify-end">
+                          {(() => {
+                            const inherited = roleInheritsLiveConduct(member.role);
+                            const enabled = inherited || liveConductorByMember[member.id] === true;
+                            const isSaving = liveConductorSavingId === member.id;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => void handleToggleLiveConduct(member)}
+                                disabled={inherited || isSaving}
+                                aria-pressed={enabled}
+                                title={
+                                  inherited
+                                    ? 'Este cargo já pode conduzir ao vivo.'
+                                    : enabled
+                                      ? 'Remover permissão individual de condução'
+                                      : 'Permitir condução ao vivo sem liberar gestão de escalas'
+                                }
+                                className={`h-8 px-3 rounded-full border inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-all ${
+                                  enabled
+                                    ? 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300'
+                                    : 'border-white/[0.08] bg-white/[0.025] text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/[0.05]'
+                                } disabled:cursor-default`}
+                              >
+                                {isSaving ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      enabled ? 'bg-emerald-300' : 'bg-white/25'
+                                    }`}
+                                  />
+                                )}
+                                {inherited
+                                  ? 'Direção · cargo'
+                                  : enabled
+                                    ? 'Pode conduzir'
+                                    : 'Condução'}
+                              </button>
+                            );
+                          })()}
+
                           <select
                             value={member.role || 'member'}
                             onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}

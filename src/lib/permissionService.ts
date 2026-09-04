@@ -189,7 +189,8 @@ export function getEffectiveCapabilities(userProfile: any, organization?: any, a
          'musicscale.useGlobalLibrary': true,
          'musicscale.cloneScales': true,
          'musicscale.unlimitedUsers': true,
-         'musicscale.unlimitedImports': true
+         'musicscale.unlimitedImports': true,
+         'musicscale.live.conduct': true
       } : {})
     };
   }
