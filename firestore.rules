@@ -385,7 +385,130 @@ service cloud.firestore {
     // ==========================================
 
     match /analytics_events/{eventId} {
-      allow create: if true;
+      function isValidRootAnalyticsEnvelope() {
+        return request.resource.data.keys().hasOnly([
+          'eventType',
+          'organizationId',
+          'userId',
+          'sessionId',
+          'app',
+          'metadata',
+          'timestamp'
+        ]) &&
+        request.resource.data.keys().hasAll([
+          'eventType',
+          'organizationId',
+          'userId',
+          'sessionId',
+          'app',
+          'metadata',
+          'timestamp'
+        ]) &&
+        request.resource.data.eventType is string &&
+        request.resource.data.eventType.size() > 0 &&
+        request.resource.data.eventType.size() <= 64 &&
+        request.resource.data.organizationId is string &&
+        request.resource.data.organizationId == 'none' &&
+        request.resource.data.userId is string &&
+        request.resource.data.userId.size() > 0 &&
+        request.resource.data.userId.size() <= 128 &&
+        request.resource.data.sessionId is string &&
+        request.resource.data.sessionId.size() > 0 &&
+        request.resource.data.sessionId.size() <= 128 &&
+        request.resource.data.app is string &&
+        request.resource.data.app.size() > 0 &&
+        request.resource.data.app.size() <= 64 &&
+        request.resource.data.metadata is map &&
+        request.resource.data.timestamp is timestamp;
+      }
+
+      function isKnownRootAnalyticsEvent() {
+        return request.resource.data.eventType in [
+          'login',
+          'signup',
+          'app_usage',
+          'create_scale',
+          'create_song',
+          'ai_import',
+          'invite_sent',
+          'invite_accepted',
+          'page_view',
+          'checkout_started',
+          'checkout_completed',
+          'error',
+          'performance_metric',
+          'onboarding_started',
+          'onboarding_completed',
+          'song_import_started',
+          'ai_processing_started',
+          'ai_processing_completed',
+          'ai_processing_failed',
+          'import_abandoned',
+          'scale_creation_started',
+          'scale_creation_completed',
+          'performance_mode_started',
+          'performance_mode_ended',
+          'trial_cta_clicked'
+        ];
+      }
+
+      function isPublicSalesPageView() {
+        let metadata = request.resource.data.metadata;
+        return request.resource.data.eventType == 'page_view' &&
+          metadata.keys().hasOnly(['page']) &&
+          metadata.keys().hasAll(['page']) &&
+          metadata.page == 'sales_landing';
+      }
+
+      function isPublicSalesTrialCta() {
+        let metadata = request.resource.data.metadata;
+        return request.resource.data.eventType == 'trial_cta_clicked' &&
+          metadata.keys().hasOnly(['action', 'source']) &&
+          metadata.keys().hasAll(['action', 'source']) &&
+          metadata.action == 'choose_plan' &&
+          metadata.source == 'sales_landing_primary';
+      }
+
+      function isPublicSalesDemoUsage() {
+        let metadata = request.resource.data.metadata;
+        return request.resource.data.eventType == 'app_usage' && (
+          (
+            metadata.keys().hasOnly(['action', 'source']) &&
+            metadata.keys().hasAll(['action', 'source']) &&
+            metadata.action == 'sales_demo_opened' &&
+            metadata.source == 'sales_landing'
+          ) ||
+          (
+            metadata.keys().hasOnly(['action', 'step']) &&
+            metadata.keys().hasAll(['action', 'step']) &&
+            metadata.action == 'sales_demo_step_selected' &&
+            metadata.step is int &&
+            metadata.step >= 1 &&
+            metadata.step <= 5
+          )
+        );
+      }
+
+      function isPublicSalesAnalyticsEvent() {
+        return request.resource.data.userId == 'none' &&
+          request.resource.data.app == 'musicscale' &&
+          (
+            isPublicSalesPageView() ||
+            isPublicSalesTrialCta() ||
+            isPublicSalesDemoUsage()
+          );
+      }
+
+      function isAuthenticatedRootAnalyticsEvent() {
+        return isAuthenticated() &&
+          request.resource.data.userId == request.auth.uid &&
+          isKnownRootAnalyticsEvent();
+      }
+
+      allow create: if isValidRootAnalyticsEnvelope() && (
+        isPublicSalesAnalyticsEvent() ||
+        isAuthenticatedRootAnalyticsEvent()
+      );
       allow read: if isSystemAdmin();
       allow update, delete: if false;
     }
