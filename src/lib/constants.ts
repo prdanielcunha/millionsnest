@@ -1,4 +1,4 @@
-export const CURRENT_PERMISSIONS_VERSION = 2;
+export const CURRENT_PERMISSIONS_VERSION = 3;
 
 export const ROLE_KEYS = {
   OWNER: 'owner',
@@ -22,6 +22,7 @@ export const PERMISSION_KEYS = {
   MUSIC_EDIT_SONGS: 'musicscale.songs.edit',
   MUSIC_MANAGE_SCALES: 'musicscale.scales.manage',
   MUSIC_MANAGE_TEAMS: 'musicscale.teams.manage',
+  MUSIC_LIVE_CONDUCT: 'musicscale.live.conduct',
 } as const;
 
 export type PermissionKey = typeof PERMISSION_KEYS[keyof typeof PERMISSION_KEYS];
