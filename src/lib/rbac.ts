@@ -13,6 +13,7 @@ export interface AppPermissions {
   [PERMISSION_KEYS.MUSIC_EDIT_SONGS]: boolean;
   [PERMISSION_KEYS.MUSIC_MANAGE_SCALES]: boolean;
   [PERMISSION_KEYS.MUSIC_MANAGE_TEAMS]: boolean;
+  [PERMISSION_KEYS.MUSIC_LIVE_CONDUCT]: boolean;
   [key: string]: boolean;
 }
 
@@ -36,6 +37,7 @@ export function getDefaultPermissions(role: string): AppPermissions {
       'musicscale.songs.edit': true,
       'musicscale.scales.manage': true,
       'musicscale.teams.manage': true,
+      'musicscale.live.conduct': true,
     };
   }
 
@@ -53,6 +55,7 @@ export function getDefaultPermissions(role: string): AppPermissions {
         'musicscale.songs.edit': true,
         'musicscale.scales.manage': true,
         'musicscale.teams.manage': true,
+        'musicscale.live.conduct': true,
       };
     case 'admin':
       return {
@@ -67,6 +70,7 @@ export function getDefaultPermissions(role: string): AppPermissions {
         'musicscale.songs.edit': false,
         'musicscale.scales.manage': false,
         'musicscale.teams.manage': false,
+        'musicscale.live.conduct': true,
       };
     case 'manager':
       return {
@@ -81,6 +85,7 @@ export function getDefaultPermissions(role: string): AppPermissions {
         'musicscale.songs.edit': false,
         'musicscale.scales.manage': false,
         'musicscale.teams.manage': false,
+        'musicscale.live.conduct': false,
       };
     case 'member':
     case 'viewer':
@@ -97,6 +102,7 @@ export function getDefaultPermissions(role: string): AppPermissions {
         'musicscale.songs.edit': false,
         'musicscale.scales.manage': false,
         'musicscale.teams.manage': false,
+        'musicscale.live.conduct': false,
       };
   }
 }
@@ -110,8 +116,15 @@ export function normalizePermissions(permissions: any, role: string, version?: n
   
   const defaultPerms = getDefaultPermissions(role);
 
-  // If old version lacking version or using old paths
+  // Preserve every canonical permission from older schema versions before
+  // applying legacy aliases. Version bumps must never erase custom access.
   if (permissions && typeof permissions === 'object') {
+     for (const key of Object.values(PERMISSION_KEYS)) {
+       if (permissions[key] !== undefined) {
+         defaultPerms[key] = permissions[key] === true;
+       }
+     }
+
      if (permissions['organization.manageMembers'] !== undefined) defaultPerms['organization.members.manage'] = permissions['organization.manageMembers'];
      if (permissions['organization.manageRoles'] !== undefined) defaultPerms['organization.roles.manage'] = permissions['organization.manageRoles'];
      if (permissions['organization.manageBilling'] !== undefined) defaultPerms['organization.billing.manage'] = permissions['organization.manageBilling'];
