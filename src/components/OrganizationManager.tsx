@@ -388,7 +388,7 @@ export function OrganizationManager({
                         </div>
                       </div>
                       
-                      {currentUserPerms['organization.roles.manage'] ? (
+                      {(currentUserPerms['organization.roles.manage'] || isGlobalAdmin) ? (
                         <div className="flex items-center gap-2.5 flex-wrap justify-end">
                           {(() => {
                             const inherited = roleInheritsLiveConduct(member.role);
