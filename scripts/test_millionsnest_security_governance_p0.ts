@@ -111,6 +111,24 @@ function runTests() {
     assert(false, "match /invites/{inviteId} not found in organizations");
   }
 
+  // 4. Root analytics events must not be an unrestricted anonymous write sink.
+  assert(
+    !rulesCode.includes("match /analytics_events/{eventId} {\n      allow create: if true;"),
+    "analytics_events does not allow unrestricted anonymous create"
+  );
+  assert(
+    rulesCode.includes('function isValidRootAnalyticsEnvelope()'),
+    "analytics_events validates the root event envelope"
+  );
+  assert(
+    rulesCode.includes('function isPublicSalesAnalyticsEvent()'),
+    "analytics_events preserves an explicit bounded anonymous sales-funnel contract"
+  );
+  assert(
+    rulesCode.includes('function isAuthenticatedRootAnalyticsEvent()'),
+    "analytics_events binds authenticated root events to authenticated identity"
+  );
+
   console.log(`\nTests completed: ${passed} passed, ${failed} failed.`);
   if (failed > 0) {
     process.exit(1);
