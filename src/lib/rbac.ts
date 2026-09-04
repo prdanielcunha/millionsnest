@@ -119,9 +119,9 @@ export function normalizePermissions(permissions: any, role: string, version?: n
   // Preserve every canonical permission from older schema versions before
   // applying legacy aliases. Version bumps must never erase custom access.
   if (permissions && typeof permissions === 'object') {
-     for (const key of Object.values(PERMISSION_KEYS)) {
-       if (permissions[key] !== undefined) {
-         defaultPerms[key] = permissions[key] === true;
+     for (const [key, value] of Object.entries(permissions)) {
+       if (typeof value === 'boolean') {
+         defaultPerms[key] = value;
        }
      }
 
