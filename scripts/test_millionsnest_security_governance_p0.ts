@@ -111,6 +111,21 @@ function runTests() {
     assert(false, "match /invites/{inviteId} not found in organizations");
   }
 
+  // 4. Anonymous analytics diagnostics must never poison a valid public sales batch.
+  const analyticsCode = fs.readFileSync(path.join(process.cwd(), 'src/lib/analytics.ts'), 'utf8');
+  assert(
+    analyticsCode.includes("'trial_cta_clicked'") && !analyticsCode.includes('| string;'),
+    "analytics event types are explicit and include trial_cta_clicked"
+  );
+  assert(
+    analyticsCode.includes('private isAllowedAnonymousRootEvent(event: AnalyticsEvent): boolean'),
+    "analytics collector validates anonymous root events before batching"
+  );
+  assert(
+    analyticsCode.includes('hasAuthenticatedAttribution || this.isAllowedAnonymousRootEvent(event)'),
+    "analytics collector drops unattributed non-public root events before Firestore batching"
+  );
+
   console.log(`\nTests completed: ${passed} passed, ${failed} failed.`);
   if (failed > 0) {
     process.exit(1);
