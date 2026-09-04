@@ -26,7 +26,7 @@ export type AnalyticsEventType =
   | 'scale_creation_completed'
   | 'performance_mode_started'
   | 'performance_mode_ended'
-  | string;
+  | 'trial_cta_clicked';
 
 interface AnalyticsEvent {
   eventType: AnalyticsEventType;
@@ -107,6 +107,53 @@ class AnalyticsManager {
     }
   }
 
+  private isAllowedAnonymousRootEvent(event: AnalyticsEvent): boolean {
+    if (
+      event.organizationId !== 'none' ||
+      event.userId !== 'none' ||
+      event.app !== 'musicscale'
+    ) {
+      return false;
+    }
+
+    const metadata = event.metadata || {};
+    const hasExactKeys = (expected: string[]) => {
+      const actual = Object.keys(metadata).sort();
+      const wanted = [...expected].sort();
+      return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
+    };
+
+    if (event.eventType === 'page_view') {
+      return hasExactKeys(['page']) && metadata.page === 'sales_landing';
+    }
+
+    if (event.eventType === 'trial_cta_clicked') {
+      return (
+        hasExactKeys(['action', 'source']) &&
+        metadata.action === 'choose_plan' &&
+        metadata.source === 'sales_landing_primary'
+      );
+    }
+
+    if (event.eventType === 'app_usage') {
+      const openedDemo =
+        hasExactKeys(['action', 'source']) &&
+        metadata.action === 'sales_demo_opened' &&
+        metadata.source === 'sales_landing';
+
+      const selectedStep =
+        hasExactKeys(['action', 'step']) &&
+        metadata.action === 'sales_demo_step_selected' &&
+        Number.isInteger(metadata.step) &&
+        metadata.step >= 1 &&
+        metadata.step <= 5;
+
+      return openedDemo || selectedStep;
+    }
+
+    return false;
+  }
+
   private startInterval() {
     if (typeof window !== 'undefined') {
       this.flushInterval = setInterval(() => {
@@ -161,7 +208,10 @@ class AnalyticsManager {
            if (!orgEvents[event.organizationId]) orgEvents[event.organizationId] = [];
            orgEvents[event.organizationId].push(event);
         } else {
-           rootEvents.push(event);
+           const hasAuthenticatedAttribution = event.userId !== 'none';
+           if (hasAuthenticatedAttribution || this.isAllowedAnonymousRootEvent(event)) {
+             rootEvents.push(event);
+           }
         }
       });
 
