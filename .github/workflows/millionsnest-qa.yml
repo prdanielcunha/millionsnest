@@ -61,7 +61,7 @@ jobs:
           --config firebase.rules-test.json
           --only firestore
           --project demo-millionsnest-ci
-          "npx tsx --test tests/firestore/*.test.ts"
+          "npx tsx --test --test-concurrency=1 tests/firestore/*.test.ts"
 
       - name: Build
         run: npm run build
