@@ -64,6 +64,9 @@ jobs:
       - name: Checkout confirmation tenant-binding contract
         run: npx tsx scripts/test_checkout_confirm_tenant_binding.ts
 
+      - name: Billing portal authorization contract
+        run: npx tsx scripts/test_billing_portal_authorization.ts
+
       - name: Firestore Rules emulator tests
         run: >-
           npx firebase emulators:exec
