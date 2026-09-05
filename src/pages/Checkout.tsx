@@ -67,22 +67,26 @@ export default function Checkout() {
          if (data.plans) setPlans(data.plans);
          if (data.addons) setAddons(data.addons);
          
-         // UX Optimized: Prioritize plan from URL or Session
+         // A trial/checkout must always follow an explicit customer plan choice.
+         // Never silently default a generic or direct checkout visit to Pro.
          const params = new URLSearchParams(window.location.search);
          const planParam = params.get('plan');
-         
-         if (planParam) {
-           setSelectedPlanLookup(planParam);
-           // If it's an addon, also select it
-           if (data.addons?.some((a: any) => a.lookupKey === planParam)) {
-             setSelectedAddonsLookup([planParam]);
-             // If we only selected an addon, we still need a base plan usually, but we'll let the user decide
-           }
-         } else if (data.plans) {
-             const proMonthly = data.plans.find((p: any) => p.lookupKey === 'musicscale_pro_monthly');
-             if (proMonthly) {
-                 setSelectedPlanLookup(proMonthly.lookupKey);
-             }
+
+         const requestedPlan = planParam
+           ? data.plans?.find((p: any) => p.lookupKey === planParam)
+           : null;
+         const requestedAddon = planParam
+           ? data.addons?.find((a: any) => a.lookupKey === planParam)
+           : null;
+
+         if (requestedPlan?.lookupKey) {
+           setSelectedPlanLookup(requestedPlan.lookupKey);
+         } else {
+           setSelectedPlanLookup(null);
+         }
+
+         if (requestedAddon?.lookupKey) {
+           setSelectedAddonsLookup([requestedAddon.lookupKey]);
          }
          
          setLoading(false);
@@ -103,10 +107,12 @@ export default function Checkout() {
          const currentPlan = plans.find(p => p.lookupKey === selectedPlanLookup);
          if (currentPlan) {
             const corresponding = availablePlans.find(p => p.tier === currentPlan.tier);
-            if (corresponding) {
+            if (corresponding?.lookupKey) {
                setSelectedPlanLookup(corresponding.lookupKey);
             } else {
-               setSelectedPlanLookup(availablePlans[0].lookupKey);
+               // Never switch the customer to another tier just because a
+               // monthly/yearly counterpart is missing from the catalog.
+               setSelectedPlanLookup(null);
             }
          }
       }
