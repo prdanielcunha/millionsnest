@@ -73,6 +73,9 @@ jobs:
       - name: Checkout reconciliation authorization contract
         run: npx tsx scripts/test_sync_checkout_authorization.ts
 
+      - name: Reactivation billing capability contract
+        run: npx tsx scripts/test_reactivation_billing_capability.ts
+
       - name: Firestore Rules emulator tests
         run: >-
           npx firebase emulators:exec
