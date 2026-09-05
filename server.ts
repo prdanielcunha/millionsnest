@@ -6341,6 +6341,23 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
   app.get('/api/v1/billing/sync-checkout', async (req, res) => {
     try {
+      if (!db) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      let decodedToken: any;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7));
+      } catch {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      const authenticatedUid = decodedToken.uid;
       const sessionId = req.query.session_id as string;
       if (!sessionId) return res.status(400).json({ error: 'Missing session_id' });
 
@@ -6353,23 +6370,80 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         return res.status(404).json({ error: 'Session or subscription not found' });
       }
 
-      const orgId = session.metadata?.organizationId || session.metadata?.uid || session.client_reference_id;
-      const userId = session.metadata?.userId || session.metadata?.uid || session.client_reference_id;
+      const sessionUserId =
+        session.client_reference_id ||
+        session.metadata?.userId ||
+        session.metadata?.uid ||
+        null;
+      const orgId =
+        session.metadata?.organizationId ||
+        session.metadata?.orgId ||
+        null;
+
+      if (!sessionUserId || sessionUserId !== authenticatedUid) {
+        return res.status(403).json({
+          ok: false,
+          code: 'SYNC_CHECKOUT_USER_MISMATCH',
+          error: 'Esta sessão de checkout não pertence ao usuário autenticado.'
+        });
+      }
+
+      if (!orgId) {
+        return res.status(400).json({
+          ok: false,
+          code: 'SYNC_CHECKOUT_ORG_MISSING',
+          error: 'A sessão de checkout não possui uma organização válida.'
+        });
+      }
+
+      const [orgContext, userDoc] = await Promise.all([
+        resolveUserOrganizationContext(authenticatedUid),
+        db.collection('users').doc(authenticatedUid).get(),
+      ]);
+      const organizationContext = orgContext.organizations.find((org: any) => org.id === orgId);
+      const membership = organizationContext?.membership || null;
+      const role = membership?.role || membership?.organizationRole || organizationContext?.userRole || null;
+      const canManageBilling =
+        orgContext.ownedOrganizations.some((org: any) => org.id === orgId) ||
+        role === 'owner' ||
+        role === 'admin' ||
+        membership?.permissions?.['organization.billing.manage'] === true;
+      const systemRole = userDoc.exists ? userDoc.data()?.systemRole : null;
+      const isGlobalAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole || '');
+
+      if (!canManageBilling && !isGlobalAdmin) {
+        return res.status(403).json({
+          ok: false,
+          code: 'SYNC_CHECKOUT_ORG_FORBIDDEN',
+          error: 'Você não tem permissão para reconciliar o faturamento desta organização.'
+        });
+      }
+
       const sub = session.subscription as Stripe.Subscription;
 
       if (sub.status === 'active' || sub.status === 'trialing') {
          await upsertEcosystemSubscription({
-             userId: userId as string,
-             orgId: orgId as string,
+             userId: authenticatedUid,
+             orgId,
              subscription: sub,
              eventCreatedTs: Math.floor(Date.now() / 1000),
-             event_type: 'manual_reconciliation_admin'
+             event_type: 'checkout_session_reconciliation'
          });
 
-         return res.json({ ok: true, message: 'Reconciliation complete', session: sessionId, status: sub.status });
-      } else {
-         return res.json({ ok: false, message: 'Subscription is not active/trialing', status: sub.status });
+         return res.json({
+           ok: true,
+           message: 'Reconciliation complete',
+           session: sessionId,
+           status: sub.status,
+           organizationId: orgId
+         });
       }
+
+      return res.json({
+        ok: false,
+        message: 'Subscription is not active/trialing',
+        status: sub.status
+      });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
