@@ -6620,34 +6620,28 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          return res.status(500).json({ error: 'Database error' });
       }
 
-      // Resolve the authenticated user's organization context
-      const orgContext = await resolveUserOrganizationContext(uid);
-      
-      // Verify that the user belongs to the requested organization
-      let isMember = false;
-      let isOrgAdmin = false;
+      // Resolve authorization from the canonical organization context.
+      // Billing can be delegated explicitly; it is not limited to the role label.
+      const [orgContext, userDoc] = await Promise.all([
+        resolveUserOrganizationContext(uid),
+        db.collection('users').doc(uid).get(),
+      ]);
+      const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
+      const membership = orgItem?.membership || null;
+      const role = membership?.role || membership?.organizationRole || orgItem?.userRole || null;
+      const canManageBilling =
+        orgContext.ownedOrganizations.some((org: any) => org.id === organizationId) ||
+        role === 'owner' ||
+        role === 'admin' ||
+        membership?.permissions?.['organization.billing.manage'] === true;
 
-      if (orgContext.organizations) {
-         const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
-         if (orgItem) {
-             isMember = true;
-             if (['owner', 'admin'].includes(orgItem.userRole)) {
-                 isOrgAdmin = true;
-             }
-         }
-      }
-
-      // Verify RBAC for billing: Only authorized global roles or Org Owner/Admin should be able to do this.
-      const userDoc = await db.collection('users').doc(uid).get();
       const systemRole = userDoc.data()?.systemRole || 'user';
-      const isSystemAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(systemRole);
+      const isSystemAdmin = ['ceo', 'admin', 'global_admin', 'ecosystem_owner', 'founder'].includes(systemRole);
 
-      if (!isMember && !isSystemAdmin) {
-         return res.status(403).json({ error: 'Você não tem permissão nesta organização.' });
-      }
-
-      if (!isSystemAdmin && !isOrgAdmin) {
-         return res.status(403).json({ error: 'Apenas administradores podem gerenciar assinaturas.' });
+      if (!canManageBilling && !isSystemAdmin) {
+        return res.status(403).json({
+          error: 'Você não tem permissão para gerenciar assinaturas desta organização.'
+        });
       }
 
       // Retrieve the canonical subscription from Firestore
