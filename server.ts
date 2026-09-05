@@ -807,52 +807,89 @@ async function startServer() {
 
           if (session.mode === 'payment') {
             const feature = session.metadata?.feature;
+            const sessionOrganizationId =
+              session.metadata?.organizationId ||
+              session.metadata?.orgId ||
+              null;
+
             if (!feature) {
               console.error('[STRIPE_WEBHOOK] Payment mode completed but missing feature metadata');
               await auditRef.update({ status: 'error', error: 'Missing feature metadata' });
               break;
             }
 
-            console.log(`[STRIPE_WEBHOOK] Processing payment for feature: ${feature} / user: ${userId}`);
+            if (!sessionOrganizationId) {
+              console.error('[STRIPE_WEBHOOK] Payment mode completed without organization metadata');
+              await auditRef.update({
+                status: 'error',
+                error: 'Missing organizationId for organization-scoped addon purchase'
+              });
+              break;
+            }
+
+            const organizationRef = db.collection('organizations').doc(sessionOrganizationId);
+            const organizationSnap = await organizationRef.get();
+            if (!organizationSnap.exists) {
+              console.error('[STRIPE_WEBHOOK] Addon organization does not exist', {
+                organizationId: sessionOrganizationId,
+                feature,
+              });
+              await auditRef.update({
+                status: 'error',
+                error: 'Addon organization not found',
+                organizationId: sessionOrganizationId
+              });
+              break;
+            }
+
+            console.log('[STRIPE_WEBHOOK] Processing organization addon payment.', {
+              feature,
+              userId,
+              organizationId: sessionOrganizationId,
+            });
             const batch = db.batch();
 
-            // Store purchase history
             const purchaseRef = db.collection('purchases').doc(session.id);
             batch.set(purchaseRef, {
               uid: userId,
+              organizationId: sessionOrganizationId,
               stripeCustomerId: customerId,
               stripeSessionId: session.id,
-              feature: feature,
+              feature,
               amountTotal: session.amount_total,
               currency: session.currency,
               status: session.payment_status,
               createdAt: admin.firestore.FieldValue.serverTimestamp()
             });
 
-            // Update user features access
-            const userRef = db.collection('users').doc(userId);
-            const updateData: any = {
-               updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            const organizationUpdate: any = {
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
             };
 
-            // Music pack increments counter, others flip to true
             if (feature === 'music_pack_10') {
-               updateData['musicCredits'] = admin.firestore.FieldValue.increment(10);
+              organizationUpdate['musicCredits'] = admin.firestore.FieldValue.increment(10);
             } else {
-               updateData[`appsAccess.${feature}`] = true;
-               updateData[`permissions.${feature}`] = true;
-               updateData[`addons.${feature}`] = true;
+              organizationUpdate[`appsAccess.${feature}`] = true;
+              organizationUpdate[`permissions.${feature}`] = true;
+              organizationUpdate[`addons.${feature}`] = true;
             }
 
-            batch.set(userRef, updateData, { merge: true });
-
-            // Apply to org as well to keep in sync if needed
-            const orgRef = db.collection('organizations').doc(userId);
-            batch.set(orgRef, updateData, { merge: true });
+            // Add-ons are purchased for the organization. Do not derive the target
+            // organization from uid: a user may belong to multiple tenants.
+            batch.set(organizationRef, organizationUpdate, { merge: true });
 
             await batch.commit();
-            console.log(`[STRIPE_WEBHOOK] Successfully provisioned addon ${feature} for user: ${userId}`);
-            await auditRef.update({ status: 'success', processedUserId: userId, feature: feature });
+            console.log('[STRIPE_WEBHOOK] Successfully provisioned organization addon.', {
+              feature,
+              userId,
+              organizationId: sessionOrganizationId,
+            });
+            await auditRef.update({
+              status: 'success',
+              processedUserId: userId,
+              organizationId: sessionOrganizationId,
+              feature
+            });
             break;
           }
 
@@ -6340,61 +6377,103 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
   app.post('/api/v1/billing/addons', async (req, res) => {
     try {
-      const { userId, email, lookupKey } = req.body;
-
-      if (!userId || !email || !lookupKey) {
-        res.status(400).json({ error: 'Missing userId, email or lookupKey' });
-        return;
+      if (!db) {
+        return res.status(500).json({ error: 'Database error' });
       }
 
-      console.log(`[Checkout Addon] Creating checkout session for user ${userId} with lookupKey ${lookupKey}`);
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      let decodedToken: any;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7));
+      } catch {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      const userId = decodedToken.uid;
+      const email = decodedToken.email;
+      const lookupKey = typeof req.body?.lookupKey === 'string' ? req.body.lookupKey.trim() : '';
+      const requestedOrganizationId =
+        typeof req.body?.organizationId === 'string' && req.body.organizationId.trim()
+          ? req.body.organizationId.trim()
+          : null;
+
+      if (!lookupKey) {
+        return res.status(400).json({ error: 'Missing lookupKey' });
+      }
+
+      const [orgContext, userDoc] = await Promise.all([
+        resolveUserOrganizationContext(userId),
+        db.collection('users').doc(userId).get(),
+      ]);
+
+      const orgId =
+        requestedOrganizationId ||
+        orgContext.activeOrganizationId ||
+        orgContext.primaryOrganizationId;
+
+      if (!orgId) {
+        return res.status(400).json({ error: 'Nenhuma organização ativa foi encontrada.' });
+      }
+
+      const organizationContext = orgContext.organizations.find((org: any) => org.id === orgId);
+      const membership = organizationContext?.membership || null;
+      const role = membership?.role || membership?.organizationRole || organizationContext?.userRole || null;
+      const canManageBilling =
+        orgContext.ownedOrganizations.some((org: any) => org.id === orgId) ||
+        role === 'owner' ||
+        role === 'admin' ||
+        membership?.permissions?.['organization.billing.manage'] === true;
+      const systemRole = userDoc.exists ? userDoc.data()?.systemRole : null;
+      const isGlobalAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole || '');
+
+      if (!canManageBilling && !isGlobalAdmin) {
+        return res.status(403).json({
+          error: 'Você não tem permissão para comprar complementos para esta organização.'
+        });
+      }
 
       const service = getBillingService();
       const isMock = process.env.STRIPE_SECRET_KEY === undefined;
 
       if (isMock) {
          console.error('[Checkout Addon] STRIPE_SECRET_KEY env variable is missing');
-         res.status(400).json({ error: 'A Chave do Stripe não está configurada (Modo Mock).' });
-         return;
+         return res.status(400).json({ error: 'A Chave do Stripe não está configurada (Modo Mock).' });
+      }
+
+      const products = await service.getProducts();
+      const addonItem = products.addons.find(p => p.lookupKey === lookupKey);
+      if (!addonItem) {
+        return res.status(400).json({ error: 'Addon não encontrado no sistema.' });
       }
 
       const priceId = await service.getPriceByLookupKey(lookupKey);
-      
       if (!priceId) {
          console.error(`[Checkout Addon] Preço com lookup_key ${lookupKey} não encontrado no Stripe.`);
-         res.status(400).json({ error: `Addon não encontrado no sistema.` });
-         return;
+         return res.status(400).json({ error: 'Addon não encontrado no sistema.' });
       }
 
-      // Check if user has a customer ID in firestore to link it to the same customer
       let customerId: string | undefined;
-      let orgId = userId;
-      if (db) {
-         const userDoc = await db.collection('users').doc(userId).get();
-         if (userDoc.exists) {
-            customerId = userDoc.data()?.stripeCustomerId;
-            orgId = userDoc.data()?.organizationId || userId;
-         }
-         
-         if (!customerId) {
-            const subDoc = await db.collection('subscriptions').doc(orgId).get();
-            if (subDoc.exists) customerId = subDoc.data()?.stripeCustomerId;
-         }
+      const subDoc = await db.collection('subscriptions').doc(orgId).get();
+      if (subDoc.exists) {
+        customerId = subDoc.data()?.stripeCustomerId;
+      }
+      if (!customerId && userDoc.exists) {
+        customerId = userDoc.data()?.stripeCustomerId;
       }
 
+      const stripe = getStripe();
       if (!customerId && email) {
-        const stripe = getStripe();
         const customers = await stripe.customers.list({ email, limit: 1 });
         if (customers.data.length > 0) {
            customerId = customers.data[0].id;
         }
       }
 
-      const stripe = getStripe();
-      
-      const products = await service.getProducts();
-      const addonItem = products.addons.find(p => p.lookupKey === lookupKey);
-      const feature = addonItem ? addonItem.feature : 'unknown';
+      const feature = addonItem.feature;
 
       const sessionArgs: Stripe.Checkout.SessionCreateParams = {
         payment_method_types: ['card'],
@@ -6405,13 +6484,15 @@ async function autoRepairSingleOrganizationUser(uid: string) {
           },
         ],
         mode: 'payment',
-        allow_promotion_codes: true, // Permite uso de cupons de desconto para addons
+        allow_promotion_codes: true,
         client_reference_id: userId,
         metadata: {
           uid: userId,
-          feature: feature,
-          type: addonItem ? addonItem.type : 'addon',
-          app: addonItem ? addonItem.app : 'musicscale'
+          userId,
+          organizationId: orgId,
+          feature,
+          type: addonItem.type,
+          app: addonItem.app || 'musicscale'
         },
         success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard?addon_success=${feature}`,
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
@@ -6419,13 +6500,19 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       if (customerId) {
         sessionArgs.customer = customerId;
-      } else {
+      } else if (email) {
         sessionArgs.customer_email = email;
+      } else {
+        return res.status(400).json({ error: 'E-mail autenticado indisponível para o checkout.' });
       }
 
       const session = await stripe.checkout.sessions.create(sessionArgs);
 
-      console.log(`[Checkout Addon] Session created successfully for user ${userId}`);
+      console.log('[Checkout Addon] Authorized addon checkout created.', {
+        userId,
+        organizationId: orgId,
+        lookupKey,
+      });
       res.json({ url: session.url });
     } catch (e: any) {
       console.error('[Checkout Addon] Error creating checkout session:', e);
