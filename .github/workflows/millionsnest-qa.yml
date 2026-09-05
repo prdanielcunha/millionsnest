@@ -70,6 +70,9 @@ jobs:
       - name: Tenant-scoped addon checkout contract
         run: npx tsx scripts/test_addon_checkout_tenant_scope.ts
 
+      - name: Checkout reconciliation authorization contract
+        run: npx tsx scripts/test_sync_checkout_authorization.ts
+
       - name: Firestore Rules emulator tests
         run: >-
           npx firebase emulators:exec
