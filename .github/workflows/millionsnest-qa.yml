@@ -61,6 +61,9 @@ jobs:
       - name: MusicScale one-trial-per-organization contract
         run: npx tsx scripts/test_music_scale_trial_history.ts
 
+      - name: Checkout confirmation tenant-binding contract
+        run: npx tsx scripts/test_checkout_confirm_tenant_binding.ts
+
       - name: Firestore Rules emulator tests
         run: >-
           npx firebase emulators:exec

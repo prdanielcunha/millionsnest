@@ -6070,14 +6070,67 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
 
       const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
-      
-      // Validação do tenant e usuário
-      if (session.client_reference_id && session.client_reference_id !== userId) {
-          console.warn(`[Checkout Confirm] Mismatch client_reference_id for user ${userId}. Session has ${session.client_reference_id}`);
-          // Might not block completely if metadata matches, but let's log it
+
+      // The Stripe session must be cryptographically retrieved server-side AND bound
+      // to the authenticated user who is confirming it. Session IDs can appear in
+      // browser history/referrers, so a mismatch is a hard authorization failure.
+      const sessionUserId =
+        session.client_reference_id ||
+        session.metadata?.uid ||
+        session.metadata?.userId ||
+        null;
+
+      if (!sessionUserId || sessionUserId !== userId) {
+        console.warn('[Checkout Confirm] Session/user binding rejected.', {
+          authenticatedUid: userId,
+          hasClientReference: Boolean(session.client_reference_id),
+          hasMetadataUid: Boolean(session.metadata?.uid || session.metadata?.userId),
+        });
+        return res.status(403).json({
+          ok: false,
+          code: 'CHECKOUT_SESSION_USER_MISMATCH',
+          error: 'Esta sessão de checkout não pertence ao usuário autenticado.'
+        });
       }
 
-      const orgId = session.metadata?.organizationId || session.metadata?.orgId || userId;
+      const orgId = session.metadata?.organizationId || session.metadata?.orgId || null;
+      if (!orgId) {
+        return res.status(400).json({
+          ok: false,
+          code: 'CHECKOUT_SESSION_ORG_MISSING',
+          error: 'A sessão de checkout não possui uma organização válida.'
+        });
+      }
+
+      // Re-authorize the organization at confirmation time. Creating checkout already
+      // requires billing permission; this second check prevents a stale/leaked session
+      // from provisioning an organization after membership or privileges changed.
+      const [orgContext, confirmingUserDoc] = await Promise.all([
+        resolveUserOrganizationContext(userId),
+        db.collection('users').doc(userId).get(),
+      ]);
+      const organizationContext = orgContext.organizations.find((org: any) => org.id === orgId);
+      const membership = organizationContext?.membership || null;
+      const role = membership?.role || membership?.organizationRole || organizationContext?.userRole || null;
+      const canManageBilling =
+        orgContext.ownedOrganizations.some((org: any) => org.id === orgId) ||
+        role === 'owner' ||
+        role === 'admin' ||
+        membership?.permissions?.['organization.billing.manage'] === true;
+      const systemRole = confirmingUserDoc.exists ? confirmingUserDoc.data()?.systemRole : null;
+      const isGlobalAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole || '');
+
+      if (!canManageBilling && !isGlobalAdmin) {
+        console.warn('[Checkout Confirm] Organization billing authorization rejected.', {
+          authenticatedUid: userId,
+          organizationId: orgId,
+        });
+        return res.status(403).json({
+          ok: false,
+          code: 'CHECKOUT_ORG_FORBIDDEN',
+          error: 'Você não tem permissão para confirmar o faturamento desta organização.'
+        });
+      }
 
       if (session.status !== 'complete') {
         return res.json({
