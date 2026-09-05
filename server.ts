@@ -6584,39 +6584,81 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
   app.post('/api/v1/billing/portal', async (req, res) => {
     try {
-      const { userId } = req.body;
-      if (!userId) {
-        return res.status(400).json({ error: 'Missing userId' });
-      }
-
       if (!db) {
          return res.status(500).json({ error: 'Database error' });
       }
 
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      let decodedToken: any;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7));
+      } catch {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      const userId = decodedToken.uid;
+      const requestedOrganizationId =
+        typeof req.body?.organizationId === 'string' && req.body.organizationId.trim()
+          ? req.body.organizationId.trim()
+          : null;
+
+      const [orgContext, userDoc] = await Promise.all([
+        resolveUserOrganizationContext(userId),
+        db.collection('users').doc(userId).get(),
+      ]);
+
+      const orgId =
+        requestedOrganizationId ||
+        orgContext.activeOrganizationId ||
+        orgContext.primaryOrganizationId;
+
+      if (!orgId) {
+        return res.status(400).json({ error: 'Nenhuma organização ativa foi encontrada.' });
+      }
+
+      const organizationContext = orgContext.organizations.find((org: any) => org.id === orgId);
+      const membership = organizationContext?.membership || null;
+      const role = membership?.role || membership?.organizationRole || organizationContext?.userRole || null;
+      const canManageBilling =
+        orgContext.ownedOrganizations.some((org: any) => org.id === orgId) ||
+        role === 'owner' ||
+        role === 'admin' ||
+        membership?.permissions?.['organization.billing.manage'] === true;
+      const systemRole = userDoc.exists ? userDoc.data()?.systemRole : null;
+      const isGlobalAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole || '');
+
+      if (!canManageBilling && !isGlobalAdmin) {
+        return res.status(403).json({
+          error: 'Você não tem permissão para gerenciar o faturamento desta organização.'
+        });
+      }
+
       let customerId: string | undefined;
-      let orgId = userId;
-      const userDoc = await db.collection('users').doc(userId).get();
-      if (userDoc.exists) {
+
+      // Organization subscription is canonical for billing. User-level Stripe data
+      // remains only as a compatibility fallback for older records.
+      const subDoc = await db.collection('subscriptions').doc(orgId).get();
+      if (subDoc.exists) {
+        customerId = subDoc.data()?.stripeCustomerId;
+      }
+
+      if (!customerId && userDoc.exists) {
         customerId = userDoc.data()?.stripeCustomerId;
-        orgId = userDoc.data()?.organizationId || userId;
       }
-      
+
       if (!customerId) {
-         const subDoc = await db.collection('subscriptions').doc(orgId).get();
-         if (subDoc.exists) {
-            customerId = subDoc.data()?.stripeCustomerId;
-         }
-      }
-          
-      if (!customerId) {
-         const email = userDoc.data()?.email;
-         if (email) {
-            const stripe = getStripe();
-            const customers = await stripe.customers.list({ email, limit: 1 });
-            if (customers.data.length > 0) {
-               customerId = customers.data[0].id;
-            }
-         }
+        const email = decodedToken.email || userDoc.data()?.email;
+        if (email) {
+          const stripeLookup = getStripe();
+          const customers = await stripeLookup.customers.list({ email, limit: 1 });
+          if (customers.data.length > 0) {
+            customerId = customers.data[0].id;
+          }
+        }
       }
 
       if (!customerId) {
@@ -6631,8 +6673,11 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          return res.status(400).json({ error: 'A variável STRIPE_SECRET_KEY não está configurada no Vercel.' });
       }
 
-      console.log(`[Portal] Creating billing portal for user ${userId}`);
-      
+      console.log('[Portal] Creating authorized billing portal session.', {
+        userId,
+        organizationId: orgId,
+      });
+
       const session = await stripe.billingPortal.sessions.create({
         customer: customerId,
         return_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
