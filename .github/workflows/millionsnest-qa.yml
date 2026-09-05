@@ -55,6 +55,9 @@ jobs:
       - name: MusicScale entitlement hygiene
         run: npx tsx scripts/test_millionsnest_musicscale_entitlement_hygiene.ts
 
+      - name: MusicScale explicit checkout plan contract
+        run: npx tsx scripts/test_music_scale_checkout_explicit_plan.ts
+
       - name: Firestore Rules emulator tests
         run: >-
           npx firebase emulators:exec
