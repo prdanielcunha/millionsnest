@@ -437,10 +437,14 @@ export function Dashboard() {
         organizationId: profile?.organizationId,
         metadata: { type: 'portal' }
       });
+      const token = await user.getIdToken();
       const res = await fetch('/api/v1/billing/portal', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ organizationId: activeContextOrgId })
       });
       const data = await res.json();
       if (data.url) {
