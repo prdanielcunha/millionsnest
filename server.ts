@@ -5637,8 +5637,35 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          
          const subDoc = await db.collection('subscriptions').doc(orgId).get();
          if (subDoc.exists) {
-            if (!customerId) customerId = subDoc.data()?.stripeCustomerId;
-            if (subDoc.data()?.trialUsed) hasTrialHistory = true;
+            const subData = subDoc.data() || {};
+            if (!customerId) customerId = subData.stripeCustomerId;
+
+            // Commercial rule: one 7-day evaluation per organization lifetime.
+            // Older records did not always persist `trialUsed`, so any canonical
+            // Stripe subscription identity or materialized subscription lifecycle
+            // is sufficient proof that this organization has already subscribed.
+            const priorStatus = String(subData.status || '').toLowerCase().trim();
+            const materializedStatuses = new Set([
+              'active',
+              'trialing',
+              'trial',
+              'canceled',
+              'cancelled',
+              'past_due',
+              'unpaid',
+              'incomplete',
+              'incomplete_expired',
+              'expired',
+              'paused',
+            ]);
+
+            if (
+              subData.trialUsed === true ||
+              Boolean(subData.stripeSubscriptionId) ||
+              materializedStatuses.has(priorStatus)
+            ) {
+              hasTrialHistory = true;
+            }
          }
       }
 
@@ -5690,8 +5717,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
           });
         }
 
-        if (eligibility.reason === 'previous_subscription_canceled' || eligibility.reason === 'previous_subscription_terminal') {
-          hasTrialHistory = true; // They've had a subscription before, so no trial.
+        if (eligibility.reason === 'previous_subscription_expired') {
+          hasTrialHistory = true; // A prior MusicScale subscription exists, so no second trial.
         }
       }
 
@@ -5860,8 +5887,35 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          
          const subDoc = await db.collection('subscriptions').doc(orgId).get();
          if (subDoc.exists) {
-            if (!customerId) customerId = subDoc.data()?.stripeCustomerId;
-            if (subDoc.data()?.trialUsed) hasTrialHistory = true;
+            const subData = subDoc.data() || {};
+            if (!customerId) customerId = subData.stripeCustomerId;
+
+            // Commercial rule: one 7-day evaluation per organization lifetime.
+            // Older records did not always persist `trialUsed`, so any canonical
+            // Stripe subscription identity or materialized subscription lifecycle
+            // is sufficient proof that this organization has already subscribed.
+            const priorStatus = String(subData.status || '').toLowerCase().trim();
+            const materializedStatuses = new Set([
+              'active',
+              'trialing',
+              'trial',
+              'canceled',
+              'cancelled',
+              'past_due',
+              'unpaid',
+              'incomplete',
+              'incomplete_expired',
+              'expired',
+              'paused',
+            ]);
+
+            if (
+              subData.trialUsed === true ||
+              Boolean(subData.stripeSubscriptionId) ||
+              materializedStatuses.has(priorStatus)
+            ) {
+              hasTrialHistory = true;
+            }
          }
       }
 
@@ -5912,8 +5966,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         });
       }
 
-      if (eligibility.reason === 'previous_subscription_canceled' || eligibility.reason === 'previous_subscription_terminal') {
-        hasTrialHistory = true; // They've had a subscription before, so no trial.
+      if (eligibility.reason === 'previous_subscription_expired') {
+        hasTrialHistory = true; // A prior MusicScale subscription exists, so no second trial.
       }
 
       const sessionArgs: Stripe.Checkout.SessionCreateParams = {
