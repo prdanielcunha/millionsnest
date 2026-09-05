@@ -58,6 +58,9 @@ jobs:
       - name: MusicScale explicit checkout plan contract
         run: npx tsx scripts/test_music_scale_checkout_explicit_plan.ts
 
+      - name: MusicScale one-trial-per-organization contract
+        run: npx tsx scripts/test_music_scale_trial_history.ts
+
       - name: Firestore Rules emulator tests
         run: >-
           npx firebase emulators:exec
