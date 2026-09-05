@@ -103,7 +103,7 @@ export async function openEcosystemModule(
       if (err.name === 'AbortError') {
         throw new Error('Tempo limite esgotado. Verifique sua conexão e tente novamente.');
       }
-      throw new Error('Não foi possível preparar o acesso ao MusicScale.');
+      throw new Error('Não foi possível preparar o acesso ao aplicativo.');
     }
     
     clearTimeout(timeoutId);
@@ -118,24 +118,24 @@ export async function openEcosystemModule(
       }
       
       if (response.status === 401) {
-        throw new Error('Sua sessão expirou. Entre novamente e tente abrir o MusicScale.');
+        throw new Error('Sua sessão expirou. Entre novamente e tente abrir o aplicativo.');
       } else if (response.status === 403) {
         if (errorData.reason === 'SUBSCRIPTION_PAYMENT_REQUIRED') {
           throw new Error('Existe uma pendência no pagamento desta organização.');
         } else {
-          throw new Error('Não encontramos um acesso ativo ao MusicScale para esta organização.');
+          throw new Error('Não encontramos um acesso ativo ao aplicativo para esta organização.');
         }
       } else if (response.status === 500 || response.status === 503) {
-        throw new Error('O MusicScale está temporariamente indisponível. Tente novamente em instantes.');
+        throw new Error('O aplicativo está temporariamente indisponível. Tente novamente em instantes.');
       } else {
-        throw new Error('Não foi possível preparar o acesso ao MusicScale.');
+        throw new Error('Não foi possível preparar o acesso ao aplicativo.');
       }
     }
     
     try {
       handoff = await response.json();
     } catch(e) {
-      throw new Error('A resposta de acesso ao MusicScale é inválida. Tente novamente.');
+      throw new Error('A resposta de acesso ao aplicativo é inválida. Tente novamente.');
     }
     
     break;
@@ -144,7 +144,7 @@ export async function openEcosystemModule(
   const validationNow = deps.now();
 
   if (!handoff || typeof handoff !== 'object' || 
-       handoff.appId !== 'musicscale' || 
+       handoff.appId !== moduleKey || 
        handoff.protocolVersion !== '1.0.0' || 
        handoff.orgId !== expectedOrganizationId || 
        handoff.uid !== expectedUid || 
@@ -152,7 +152,7 @@ export async function openEcosystemModule(
       typeof handoff.expiresAt !== 'number' || !Number.isFinite(handoff.expiresAt) || 
        handoff.expiresAt <= validationNow || handoff.expiresAt > validationNow + 600000 ||
       typeof handoff.supportMode !== 'boolean') {
-    throw new Error('A resposta de acesso ao MusicScale é inválida. Tente novamente.');
+    throw new Error('A resposta de acesso ao aplicativo é inválida. Tente novamente.');
   }
 
   const context = {

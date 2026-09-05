@@ -234,7 +234,7 @@ export function Dashboard() {
         feedback.error('Acesso indisponível ao MusicScale.');
         return;
       }
-    } else if (!organization?.enabledApps?.includes(app.id)) {
+    } else if (!organization?.enabledApps?.includes(app.id) && !['active', 'trialing'].includes(organization?.apps?.[app.id]?.status)) {
        feedback.error(`Módulo Indisponível: O aplicativo ${app.name} não está habilitado para a sua organização.`);
        return;
     }
@@ -1346,7 +1346,10 @@ export function Dashboard() {
   const installedApps = ECOSYSTEM_APPS.filter(app => {
     if (app.id === 'nestfinance') return false;
     if (app.id === 'musicscale') return msIsInstalled;
-    return organization?.enabledApps?.includes(app.id);
+    return Boolean(
+      organization?.enabledApps?.includes(app.id) ||
+      ['active', 'trialing'].includes(organization?.apps?.[app.id]?.status)
+    );
   });
   const musicScaleApp = ECOSYSTEM_APPS.find(a => a.id === 'musicscale');
   const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
@@ -1701,7 +1704,7 @@ export function Dashboard() {
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
                              <LayoutGrid className="w-3.5 h-3.5" /> Apps Ativos
                           </p>
-                          <p className="text-2xl font-semibold text-[#F5F7FA]">{organization?.enabledApps?.length || (msIsInstalled ? 1 : 0)}</p>
+                          <p className="text-2xl font-semibold text-[#F5F7FA]">{installedApps.length}</p>
                         </div>
                         <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
@@ -1734,7 +1737,10 @@ export function Dashboard() {
                       {ECOSYSTEM_APPS.map(app => {
                         const isMusicScale = app.id === 'musicscale';
                         const isNestFinance = app.id === 'nestfinance';
-                        const isInstalled = isNestFinance ? false : isMusicScale ? msIsInstalled : organization?.enabledApps?.includes(app.id);
+                        const isInstalled = isNestFinance ? false : isMusicScale ? msIsInstalled : Boolean(
+                          organization?.enabledApps?.includes(app.id) ||
+                          ['active', 'trialing'].includes(organization?.apps?.[app.id]?.status)
+                        );
 
                         let cardStatusText = t('dashboard.apps.available', 'Disponível');
                         let isWarningState = false;

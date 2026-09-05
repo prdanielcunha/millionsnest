@@ -90,6 +90,36 @@ service cloud.firestore {
       return userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'global_admin' || userDoc.data.systemRole == 'ecosystem_owner' || userDoc.data.systemRole == 'founder');
     }
 
+    function isRaizEMesaActive(orgId) {
+      let orgData = get(/databases/$(database)/documents/organizations/$(orgId)).data;
+      return isSystemAdmin() || (
+        orgData != null &&
+        orgData.get('apps', {}).get('nestjourney', orgData.get('apps', {}).get('raiz_e_mesa', {})).get('status', '') in ['active', 'trialing']
+      );
+    }
+
+    function raizMemberRole(orgId) {
+      let member = getMemberPermissions(orgId);
+      let appAccess = member != null ? member.get('appAccess', {}).get('nestjourney', member.get('appAccess', {}).get('raiz_e_mesa', {})) : {};
+      let roles = appAccess.get('roles', []);
+      return roles is list && roles.size() > 0
+        ? roles[0]
+        : appAccess.get('role', member != null ? member.get('organizationRole', member.get('role', '')) : '');
+    }
+
+    function raizHasRole(orgId, roles) {
+      return isSystemAdmin() || (checkOrgAccess(orgId) && raizMemberRole(orgId) in roles);
+    }
+
+    function raizCanAccessCongregation(orgId, congregationId) {
+      let member = getMemberPermissions(orgId);
+      return isRaizEMesaActive(orgId) && checkOrgAccess(orgId) && (
+        isOrgAdmin(orgId) ||
+        raizHasRole(orgId, ['pastor', 'data_admin']) ||
+        (member != null && (congregationId in member.get('congregationIds', []) || congregationId in member.get('campusIds', [])))
+      );
+    }
+
     // ==========================================
     // 1. DADOS DOS USUÁRIOS
     // ==========================================
@@ -187,10 +217,143 @@ service cloud.firestore {
         allow write: if isAuthenticated() && checkOrgAccess(orgId);
       }
 
+      match /products/raiz_e_mesa {
+        allow read: if isAuthenticated() && checkOrgAccess(orgId) && isRaizEMesaActive(orgId);
+        allow write: if false;
+
+        match /settings/{settingId} {
+          allow read: if isAuthenticated() && checkOrgAccess(orgId) && isRaizEMesaActive(orgId);
+          allow create, update: if isRaizEMesaActive(orgId) && (isOrgAdmin(orgId) || raizHasRole(orgId, ['pastor', 'data_admin']))
+            && request.resource.data.get('organizationId', '') == orgId;
+          allow delete: if false;
+        }
+        match /implementation/{progressId} {
+          allow read: if isAuthenticated() && checkOrgAccess(orgId) && isRaizEMesaActive(orgId);
+          allow create, update: if isRaizEMesaActive(orgId)
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'coordinator'])
+            && request.resource.data.get('organizationId', '') == orgId;
+          allow delete: if false;
+        }
+        match /congregations/{congregationId} {
+          allow read: if raizCanAccessCongregation(orgId, congregationId) || isOrgAdmin(orgId);
+          allow create, update: if isRaizEMesaActive(orgId) && (isOrgAdmin(orgId) || raizHasRole(orgId, ['pastor', 'data_admin']))
+            && request.resource.data.get('organizationId', '') == orgId;
+          allow delete: if false;
+        }
+        match /people/{personId} {
+          allow read: if raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if request.resource.data.get('organizationId', '') == orgId
+            && raizCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''))
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'coordinator', 'care', 'data_admin']);
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('congregationId', '') == resource.data.get('congregationId', '')
+            && raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'coordinator', 'care', 'data_admin']);
+          allow delete: if false;
+        }
+        match /presence/{presenceId} {
+          allow read: if raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if request.resource.data.get('organizationId', '') == orgId
+            && raizCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''))
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'coordinator']);
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('congregationId', '') == resource.data.get('congregationId', '')
+            && raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'coordinator']);
+          allow delete: if false;
+        }
+        match /groups/{groupId} {
+          allow read: if raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if request.resource.data.get('organizationId', '') == orgId
+            && raizCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''))
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'group_leader']);
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('congregationId', '') == resource.data.get('congregationId', '')
+            && raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'group_leader']);
+          allow delete: if false;
+        }
+        match /groupMeetings/{meetingId} {
+          allow read: if raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create, update: if request.resource.data.get('organizationId', '') == orgId
+            && raizCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''))
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'group_leader']);
+          allow delete: if false;
+        }
+        match /joinRequests/{requestId} {
+          allow read: if raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if request.resource.data.get('organizationId', '') == orgId
+            && raizCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''));
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('congregationId', '') == resource.data.get('congregationId', '')
+            && raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor', 'group_leader']);
+          allow delete: if false;
+        }
+        match /discipleships/{discipleshipId} {
+          allow read: if raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
+            && (raizHasRole(orgId, ['owner', 'admin', 'pastor']) || resource.data.get('disciplerId', '') == request.auth.uid);
+          allow create: if request.resource.data.get('organizationId', '') == orgId
+            && raizCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''))
+            && (raizHasRole(orgId, ['owner', 'admin', 'pastor']) || request.resource.data.get('disciplerId', '') == request.auth.uid);
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('congregationId', '') == resource.data.get('congregationId', '')
+            && request.resource.data.get('disciplerId', '') == resource.data.get('disciplerId', '')
+            && raizCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
+            && (raizHasRole(orgId, ['owner', 'admin', 'pastor']) || resource.data.get('disciplerId', '') == request.auth.uid);
+          allow delete: if false;
+        }
+        match /teamAssignments/{assignmentId} {
+          allow read: if isOrgAdmin(orgId) || raizHasRole(orgId, ['pastor', 'data_admin']);
+          allow create, update: if isOrgAdmin(orgId) && request.resource.data.get('organizationId', '') == orgId;
+          allow delete: if false;
+        }
+        match /pastoral/{pastoralId} {
+          allow read: if resource.data.get('organizationId', '') == orgId
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor']);
+          allow create: if request.resource.data.get('organizationId', '') == orgId
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor']);
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
+            && raizHasRole(orgId, ['owner', 'admin', 'pastor']);
+          allow delete: if false;
+        }
+        match /audit/{auditId} {
+          allow read: if isOrgAdmin(orgId) || raizHasRole(orgId, ['pastor', 'data_admin']);
+          allow create: if request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('actorId', '') == request.auth.uid
+            && request.resource.data.get('createdAt', null) == request.time
+            && isAuthenticated() && checkOrgAccess(orgId) && isRaizEMesaActive(orgId);
+          allow update, delete: if false;
+        }
+        match /retentionRequests/{requestId} {
+          allow read: if isOrgAdmin(orgId) || raizHasRole(orgId, ['data_admin']);
+          allow create: if request.resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('requestedBy', '') == request.auth.uid
+            && isAuthenticated() && checkOrgAccess(orgId) && isRaizEMesaActive(orgId);
+          allow update: if resource.data.get('organizationId', '') == orgId
+            && request.resource.data.get('organizationId', '') == orgId
+            && (isOrgAdmin(orgId) || raizHasRole(orgId, ['data_admin']))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', '_updatedAt', '_updatedBy']);
+          allow delete: if false;
+        }
+        match /{document=**} { allow read, write: if false; }
+      }
+
+      match /products/{productId}/{document=**} {
+        allow read, create, update, delete: if productId != 'raiz_e_mesa'
+          && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+      }
+
       match /{app}/{document=**} {
-        allow read: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow create: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow read: if app != 'join_requests' && app != 'products' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if app != 'join_requests' && app != 'products' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if app != 'join_requests' && app != 'products' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 
