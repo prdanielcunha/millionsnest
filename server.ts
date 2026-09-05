@@ -5966,8 +5966,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         });
       }
 
-      if (eligibility.reason === 'previous_subscription_canceled' || eligibility.reason === 'previous_subscription_terminal') {
-        hasTrialHistory = true; // They've had a subscription before, so no trial.
+      if (eligibility.reason === 'previous_subscription_expired') {
+        hasTrialHistory = true; // A prior MusicScale subscription exists, so no second trial.
       }
 
       const sessionArgs: Stripe.Checkout.SessionCreateParams = {
