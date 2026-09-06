@@ -74,9 +74,13 @@ export function EcosystemWorkspaceHome({
 
   // Selector UI
   const renderWorkspaceSelector = () => {
+    // A single-app customer does not need an extra navigation layer on the home screen.
+    // Keep the selector when they are inside an app or when the organization has multiple apps.
+    if (selectedWorkspace === 'home' && installedApps.length <= 1) return null;
+
     return (
       <div className="mb-8 border-b border-white/5 pb-4 overflow-x-auto no-scrollbar">
-        <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('workspace.spaces_title', 'Seus espaços')}</h3>
+        <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('workspace.spaces_title', 'Acesso rápido')}</h3>
         <div className="flex items-center gap-4 min-w-max">
           <button
             type="button"
@@ -139,6 +143,8 @@ export function EcosystemWorkspaceHome({
     const isError = musicScaleAccess?.catalogState === "error";
     const hasPaymentIssue = musicScaleAccess?.catalogState === "payment_issue";
         const progressPercent = maxUsersLimit > 0 ? Math.min(100, (occupiedSlots / maxUsersLimit) * 100) : 0;
+    const canInviteMembers = Boolean(currentUserPerms['organization.members.invite'] || isGlobalAdmin);
+    const teamStarted = members.length > 1 || pendingInvites.length > 0;
 
     type MusicScaleDisplayStatus =
       | 'available'
@@ -165,14 +171,99 @@ export function EcosystemWorkspaceHome({
       'unavailable'
     ].includes(musicScaleDisplayStatus);
 
+    const nextStep =
+      hasPaymentIssue
+        ? {
+            tone: 'warning',
+            title: t('workspace.next_step.payment_title', 'Revise o pagamento do MusicScale'),
+            description: t('workspace.next_step.payment_desc', 'Precisamos confirmar sua assinatura para liberar o acesso normalmente.'),
+            action: 'billing' as const,
+            label: t('workspace.next_step.payment_action', 'Revisar pagamento')
+          }
+        : isLoading
+          ? {
+              tone: 'neutral',
+              title: t('workspace.next_step.loading_title', 'Estamos conferindo seu acesso'),
+              description: t('workspace.next_step.loading_desc', 'Isso acontece automaticamente. Você pode continuar assim que a verificação terminar.'),
+              action: 'none' as const,
+              label: ''
+            }
+          : musicScaleDisplayStatus === 'available'
+            ? {
+                tone: 'primary',
+                title: t('workspace.next_step.choose_plan_title', 'Escolha o plano que combina com sua equipe'),
+                description: t('workspace.next_step.choose_plan_desc', 'Depois disso, o MusicScale fica disponível para você começar a organizar o ministério.'),
+                action: 'billing' as const,
+                label: t('workspace.next_step.choose_plan_action', 'Ver planos')
+              }
+            : !teamStarted && canInviteMembers
+              ? {
+                  tone: 'primary',
+                  title: t('workspace.next_step.invite_title', 'Convide sua equipe'),
+                  description: t('workspace.next_step.invite_desc', 'Adicione as primeiras pessoas que vão usar o MusicScale com você.'),
+                  action: 'invite' as const,
+                  label: t('workspace.next_step.invite_action', 'Convidar equipe')
+                }
+              : isReadyToOpen
+                ? {
+                    tone: 'success',
+                    title: t('workspace.next_step.open_title', 'Seu MusicScale está pronto'),
+                    description: t('workspace.next_step.open_desc', 'Abra o aplicativo e continue a organização de músicas, integrantes e escalas.'),
+                    action: 'open' as const,
+                    label: t('workspace.next_step.open_action', 'Abrir MusicScale')
+                  }
+                : {
+                    tone: 'neutral',
+                    title: t('workspace.next_step.learn_title', 'Veja os primeiros passos'),
+                    description: t('workspace.next_step.learn_desc', 'Siga o guia em ordem e veja o que já está pronto e o que ainda falta fazer.'),
+                    action: 'guide' as const,
+                    label: t('workspace.next_step.learn_action', 'Ver primeiros passos')
+                  };
+
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-12">
         {/* Welcome Section */}
         <div>
-          <h2 className="text-2xl font-bold text-white mb-1">{t('workspace.intro', 'Sua Central de Gerenciamento')}</h2>
-          <p className="text-[#A0A7B5] text-sm leading-relaxed max-w-xl">
-            {t('workspace.sub_intro', 'Gerencie a preparação do seu ministério de louvor e controle os acessos de segurança da sua equipe.')}
+          <h2 className="text-2xl font-bold text-white mb-1">{t('workspace.intro', 'Tudo da sua organização em um só lugar')}</h2>
+          <p className="text-[#A0A7B5] text-sm leading-relaxed max-w-2xl">
+            {t('workspace.sub_intro', 'Veja o que está funcionando, o que precisa de atenção e qual é o próximo passo.')}
           </p>
+        </div>
+
+        {/* Context-aware next action: the dashboard interprets the state for the customer. */}
+        <div className={`rounded-3xl border p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 ${
+          nextStep.tone === 'warning'
+            ? 'bg-amber-500/10 border-amber-500/20'
+            : nextStep.tone === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/20'
+              : nextStep.tone === 'primary'
+                ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20'
+                : 'bg-white/[0.03] border-white/10'
+        }`}>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#A0A7B5] mb-2">
+              {t('workspace.next_step.eyebrow', 'Próximo passo')}
+            </p>
+            <h3 className="text-lg md:text-xl font-bold text-white mb-1">{nextStep.title}</h3>
+            <p className="text-sm text-[#A0A7B5] leading-relaxed max-w-2xl">{nextStep.description}</p>
+          </div>
+          {nextStep.action !== 'none' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (nextStep.action === 'billing') onNavigateToBilling();
+                if (nextStep.action === 'invite') onOpenInviteModal();
+                if (nextStep.action === 'open' && musicScaleApp) onLaunchApp(musicScaleApp);
+                if (nextStep.action === 'guide') {
+                  onSelectWorkspace('musicscale');
+                  onSelectMusicScaleSection('getting-started');
+                }
+              }}
+              className="shrink-0 min-h-[44px] px-5 py-3 rounded-xl bg-white text-[#050505] hover:bg-[#F5F7FA] text-sm font-semibold transition-all active:scale-[0.98]"
+            >
+              {nextStep.label}
+            </button>
+          )}
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -281,7 +372,7 @@ export function EcosystemWorkspaceHome({
           <div className="space-y-6">
             <div className="flex items-center gap-2 mb-2">
               <span className="w-1.5 h-6 bg-purple-500 rounded-full"></span>
-              <h3 className="text-lg font-bold text-white tracking-tight">{t('workspace.org_group_title', 'Organização e Acesso')}</h3>
+              <h3 className="text-lg font-bold text-white tracking-tight">{t('workspace.org_group_title', 'Sua igreja e equipe')}</h3>
             </div>
 
             {/* ORGANIZATION CARD */}
@@ -289,7 +380,9 @@ export function EcosystemWorkspaceHome({
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-bold text-white text-base">{organization?.name || t('workspace.organization_unnamed', 'Sua Organização')}</h4>
-                  <p className="text-xs text-[#A0A7B5] mt-1 font-mono">slug: {organization?.slug || '...'}</p>
+                  <p className="text-xs text-[#A0A7B5] mt-1">
+                    {t('workspace.public_page_label', 'Página pública:')} <span className="text-white/80">/{organization?.slug || '...'}</span>
+                  </p>
                 </div>
                 {(currentUserPerms['organization.settings.update'] || isGlobalAdmin) && (
                   <button 
@@ -328,14 +421,14 @@ export function EcosystemWorkspaceHome({
                   {t('workspace.team_title', 'Membros e Equipe')}
                 </h4>
                 <p className="text-xs text-[#A0A7B5] mt-1">
-                  {t('workspace.team_desc', 'Administre quem tem acesso à organização e segurança do painel.')}
+                  {t('workspace.team_desc', 'Veja quem já está na equipe, convide novas pessoas e ajuste os acessos quando precisar.')}
                 </p>
               </div>
 
               {/* Slots progress bar */}
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-[#A0A7B5]">{t('workspace.slots_allocated', 'Vagas preenchidas')}</span>
+                  <span className="text-[#A0A7B5]">{t('workspace.slots_allocated', 'Pessoas usando o plano')}</span>
                   <span className="text-white">
                     {maxUsersLimit === -1 ? `${occupiedSlots} / ∞` : `${occupiedSlots} / ${maxUsersLimit}`}
                   </span>
