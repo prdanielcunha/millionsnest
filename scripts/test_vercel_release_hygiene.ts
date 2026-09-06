@@ -17,8 +17,11 @@ assert.notEqual(
 const apiHeaders = (config.headers || [])
   .find((entry: any) => entry.source === '/api/(.*)')?.headers || [];
 
-const headerMap = new Map(
-  apiHeaders.map((entry: any) => [String(entry.key).toLowerCase(), String(entry.value)])
+const headerMap = new Map<string, string>(
+  apiHeaders.map((entry: any): [string, string] => [
+    String(entry.key).toLowerCase(),
+    String(entry.value)
+  ])
 );
 
 assert.equal(
