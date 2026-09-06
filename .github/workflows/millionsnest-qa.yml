@@ -55,6 +55,9 @@ jobs:
       - name: Hub zero-knowledge customer UX
         run: npx tsx scripts/test_hub_zero_knowledge_ux.ts
 
+      - name: Complete central Hub realtime and admin contract
+        run: npx tsx scripts/test_complete_central_hub.ts
+
       - name: Public home conversion funnel and analytics security
         run: npx tsx scripts/test_public_home_funnel.ts
 
