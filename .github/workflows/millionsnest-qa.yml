@@ -43,6 +43,9 @@ jobs:
       - name: Lint and typecheck
         run: npm run lint
 
+      - name: Vercel release and CORS hygiene
+        run: npx tsx scripts/test_vercel_release_hygiene.ts
+
       - name: Security governance contract
         run: npx tsx scripts/test_millionsnest_security_governance_p0.ts
 
