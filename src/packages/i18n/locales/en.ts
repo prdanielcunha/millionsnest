@@ -980,7 +980,11 @@ export default {
             "getting_started": {
                   "title": "First steps in MusicScale",
                   "description": "Let's prepare your organization, your team and the initial setup. You can complete each step at your own pace.",
-                  "operational_notice": "The Repertoire, chords, lyrics, members and scales steps take place inside MusicScale. Open the app and follow the guidelines below.",
+                  "guidance_title": "You do not need to memorize the system",
+                  "guidance_ready": "Your organization and team are ready. Start by adding your first songs, then follow the order below.",
+                  "guidance_org": "Start by checking your church or organization details. The dashboard will show you what to do next.",
+                  "guidance_team": "Your organization is ready. Now invite the people who will use MusicScale with you.",
+                  "operational_notice": "The next tasks take place inside MusicScale. Open the app and follow the order shown in the guide.",
                   "sections": {
                         "millionsnest": "Preparation in MillionsNest",
                         "musicscale": "Continue in MusicScale"
@@ -989,6 +993,8 @@ export default {
                         "completed": "Completed",
                         "attention": "Needs attention",
                         "continue_in_ms": "Continue in MusicScale",
+                        "next_step": "Next step",
+                        "do_in_ms": "Do this in MusicScale",
                         "pending": "Pending",
                         "pending_invite": "Invite sent"
                   },
