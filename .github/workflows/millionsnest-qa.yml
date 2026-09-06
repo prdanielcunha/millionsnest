@@ -100,6 +100,9 @@ jobs:
       - name: Billing catalog Stripe metadata fallback
         run: npx tsx scripts/test_billing_catalog_stripe_fallback.ts
 
+      - name: Internal billing operations authorization
+        run: npx tsx scripts/test_internal_billing_route_authorization.ts
+
       - name: Firestore Rules emulator tests
         run: >-
           npx firebase emulators:exec
