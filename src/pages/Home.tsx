@@ -7,16 +7,16 @@ import { useAuth } from "../contexts/AuthContext.js";
 
 const SocialProof = lazy(() => import("../components/SocialProof.js").then((module) => ({ default: module.SocialProof })));
 const Problem = lazy(() => import("../components/Problem.js").then((module) => ({ default: module.Problem })));
-const Ecosystem = lazy(() => import("../components/Ecosystem.js").then((module) => ({ default: module.Ecosystem })));
 const Flagship = lazy(() => import("../components/Flagship.js").then((module) => ({ default: module.Flagship })));
-const Guarantee = lazy(() => import("../components/Guarantee.js").then((module) => ({ default: module.Guarantee })));
-const FAQ = lazy(() => import("../components/FAQ.js").then((module) => ({ default: module.FAQ })));
-const SalesChat = lazy(() => import("../components/SalesChat.js").then((module) => ({ default: module.SalesChat })));
+const Ecosystem = lazy(() => import("../components/Ecosystem.js").then((module) => ({ default: module.Ecosystem })));
 const Vision = lazy(() => import("../components/Vision.js").then((module) => ({ default: module.Vision })));
+const FAQ = lazy(() => import("../components/FAQ.js").then((module) => ({ default: module.FAQ })));
+const Guarantee = lazy(() => import("../components/Guarantee.js").then((module) => ({ default: module.Guarantee })));
 const Footer = lazy(() => import("../components/Footer.js").then((module) => ({ default: module.Footer })));
+const SalesChat = lazy(() => import("../components/SalesChat.js").then((module) => ({ default: module.SalesChat })));
 
 function SectionFallback() {
-  return <div className="py-20 flex justify-center"><div className="w-6 h-6 border-2 border-[#2B85EB]/30 border-t-[#2B85EB] rounded-full animate-spin"></div></div>;
+  return <div className="flex justify-center bg-[#050505] py-20"><div className="h-5 w-5 animate-spin rounded-full border-2 border-white/10 border-t-[#6EAFFF]" /></div>;
 }
 
 export function Home() {
@@ -26,12 +26,7 @@ export function Home() {
 
   useEffect(() => {
     if (hash) {
-      setTimeout(() => {
-        const element = document.querySelector(hash);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 100);
+      setTimeout(() => document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' }), 100);
     } else {
       window.scrollTo(0, 0);
     }
@@ -39,31 +34,29 @@ export function Home() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#050505]">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 rounded-full border-2 border-[#2B85EB]/30 border-t-[#2B85EB] animate-spin" aria-live="polite" />
-          <span className="text-[#A1A1AA] text-sm font-medium">{t('loadingDashboard', 'Abrindo seu painel...')}</span>
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#2B85EB]/25 border-t-[#2B85EB]" aria-live="polite" />
+          <span className="text-sm font-medium text-[#A1A1AA]">{t('loadingDashboard', 'Abrindo seu painel...')}</span>
         </div>
       </div>
     );
   }
 
-  if (user) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  if (user) return <Navigate to="/dashboard" replace />;
 
   return (
-    <div className="min-h-screen font-sans overflow-x-hidden bg-[#050505] text-[#F5F7FA]">
+    <div className="min-h-screen overflow-x-hidden bg-[#050505] font-sans text-[#F5F7FA]">
       <Navbar />
       <Hero />
       <Suspense fallback={<SectionFallback />}>
         <SocialProof />
         <Problem />
         <Flagship />
-        <Guarantee />
-        <FAQ />
         <Ecosystem />
         <Vision />
+        <FAQ />
+        <Guarantee />
         <Footer />
         <SalesChat />
       </Suspense>
