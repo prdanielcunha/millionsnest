@@ -1302,6 +1302,7 @@ export function Dashboard() {
       setPendingInvites([]);
       setJoinRequests([]);
       setAuditLogs([]);
+      setMusicScaleHubSummary(EMPTY_MUSICSCALE_SUMMARY);
       
       if (musicScaleProjectionAbortControllerRef.current) {
         musicScaleProjectionAbortControllerRef.current.abort();
@@ -1326,23 +1327,101 @@ export function Dashboard() {
     
     const requestId = ++requestSequenceRef.current;
     currentActiveOrgIdRef.current = activeContextOrgId;
-    loadOrganizationData(activeContextOrgId, requestId);
-    refreshMusicScaleAccessProjection(activeContextOrgId);
-    // Subscribe to real-time organization updates for immediate database sync
+    void loadOrganizationData(activeContextOrgId, requestId);
+    void refreshMusicScaleAccessProjection(activeContextOrgId);
+
     const orgId = activeContextOrgId;
+    const unsubscribers: Array<() => void> = [];
+
     const orgRef = doc(db, "organizations", orgId);
-    
-    const unsubscribeOrg = onSnapshot(orgRef, (snap) => {
-      if (snap.exists()) {
-        const orgData = { id: snap.id, ...snap.data() };
-        setOrganization(orgData);
+    unsubscribers.push(onSnapshot(orgRef, (snap) => {
+      if (snap.exists() && currentActiveOrgIdRef.current === orgId) {
+        setOrganization({ id: snap.id, ...snap.data() });
       }
     }, (err) => {
       console.warn("[Dashboard] Real-time organization update failed, falling back to manual fetches:", err);
-    });
+    }));
+
+    const subscriptionRef = doc(db, "subscriptions", orgId);
+    unsubscribers.push(onSnapshot(subscriptionRef, (snap) => {
+      if (currentActiveOrgIdRef.current !== orgId) return;
+      setSubscription(snap.exists() ? snap.data() : null);
+      setLoadingSub(false);
+      void refreshMusicScaleAccessProjection(orgId);
+    }, (err) => {
+      console.warn("[Dashboard] Real-time subscription update failed:", err);
+    }));
+
+    const membersRef = collection(db, `organizations/${orgId}/members`);
+    unsubscribers.push(onSnapshot(membersRef, async (snap) => {
+      const baseMembers = snap.docs.map(memberDoc => ({
+        id: memberDoc.id,
+        uid: memberDoc.id,
+        ...memberDoc.data()
+      })) as any[];
+
+      const enrichedMembers = await Promise.all(baseMembers.map(async (member) => {
+        if (member.displayName && member.email) return member;
+        try {
+          const profileSnap = await getDoc(doc(db, "users", member.id));
+          if (!profileSnap.exists()) return member;
+          const profileData = profileSnap.data() as any;
+          return {
+            ...profileData,
+            ...member,
+            displayName: member.displayName || profileData.displayName || profileData.name || "Usuário",
+            email: member.email || profileData.email || "",
+            photoURL: member.photoURL || profileData.photoURL || ""
+          };
+        } catch {
+          return member;
+        }
+      }));
+
+      if (currentActiveOrgIdRef.current === orgId) {
+        setMembers(enrichedMembers);
+      }
+    }, (err) => {
+      console.warn("[Dashboard] Real-time member update failed:", err);
+    }));
+
+    const pendingInviteQuery = query(
+      collection(db, `organizations/${orgId}/invites`),
+      where("status", "==", "pending")
+    );
+    unsubscribers.push(onSnapshot(pendingInviteQuery, (snap) => {
+      if (currentActiveOrgIdRef.current !== orgId) return;
+      setPendingInvites(snap.docs.map(inviteDoc => ({ id: inviteDoc.id, ...inviteDoc.data() })));
+    }, (err) => {
+      console.warn("[Dashboard] Real-time invitation update failed:", err);
+    }));
+
+    const joinRequestQuery = query(
+      collection(db, `organizations/${orgId}/join_requests`),
+      where("status", "==", "pending")
+    );
+    unsubscribers.push(onSnapshot(joinRequestQuery, (snap) => {
+      if (currentActiveOrgIdRef.current !== orgId) return;
+      setJoinRequests(snap.docs.map(requestDoc => ({ id: requestDoc.id, ...requestDoc.data() })));
+    }, (err) => {
+      console.warn("[Dashboard] Real-time join request update failed:", err);
+    }));
+
+    const auditQuery = query(
+      collection(db, `organizations/${orgId}/audit_logs`),
+      limit(5)
+    );
+    unsubscribers.push(onSnapshot(auditQuery, (snap) => {
+      if (currentActiveOrgIdRef.current !== orgId) return;
+      const audits = snap.docs.map(auditDoc => ({ id: auditDoc.id, ...auditDoc.data() })) as any[];
+      audits.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+      setAuditLogs(audits.slice(0, 5));
+    }, (err) => {
+      console.warn("[Dashboard] Real-time audit update failed:", err);
+    }));
 
     return () => {
-      unsubscribeOrg();
+      unsubscribers.forEach(unsubscribe => unsubscribe());
       if (musicScaleProjectionAbortControllerRef.current) {
         musicScaleProjectionAbortControllerRef.current.abort();
       }
