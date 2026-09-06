@@ -9,6 +9,30 @@ import { canChangeOrganizationRole } from '../lib/roleResolver.js';
 
 type OrgTab = 'settings' | 'members' | 'apps' | 'roles' | 'billing' | 'audit';
 
+const humanizeOrganizationAuditAction = (action: unknown) => {
+  const value = String(action || '').toLowerCase();
+  if (!value) return 'Atividade registrada';
+  if (value.includes('invitation') && value.includes('created')) return 'Convite criado para a equipe';
+  if (value.includes('invite') && value.includes('revok')) return 'Convite revogado';
+  if (value.includes('member') && value.includes('remove')) return 'Pessoa removida da equipe';
+  if (value.includes('member') && (value.includes('role') || value.includes('permission'))) return 'Acesso de uma pessoa foi atualizado';
+  if (value.includes('join') && (value.includes('approve') || value.includes('accept'))) return 'Entrada de uma pessoa foi aprovada';
+  if (value.includes('join') && value.includes('reject')) return 'Solicitação de entrada foi recusada';
+  if (value.includes('organization') && value.includes('update')) return 'Dados da organização foram atualizados';
+  if (value.includes('billing') || value.includes('subscription')) return 'Assinatura ou pagamento foi atualizado';
+  if (value.includes('support.ticket')) return 'Solicitação de suporte criada';
+  if (value.includes('admin_accessed')) return 'Suporte acessou a organização';
+  return 'Atividade administrativa registrada';
+};
+
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('FILE_READ_FAILED'));
+    reader.readAsDataURL(file);
+  });
+
 export function OrganizationManager({ 
   organization, 
   members, 
@@ -39,7 +63,8 @@ export function OrganizationManager({
   initialTab,
   onOpenInviteModal,
   adminSelectedOrgId,
-  setAdminSelectedOrgId
+  setAdminSelectedOrgId,
+  onOpenMusicScale
 }: any) {
   const [activeTab, setActiveTabInternal] = useState<OrgTab>((initialTab as OrgTab) || 'settings');
   const [slugStatus, setSlugStatus] = useState<string | null>(null);
@@ -47,7 +72,130 @@ export function OrganizationManager({
   const [liveConductorByMember, setLiveConductorByMember] = useState<Record<string, boolean>>({});
   const [liveConductorSavingId, setLiveConductorSavingId] = useState<string | null>(null);
   const [liveConductorError, setLiveConductorError] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [detailsSaving, setDetailsSaving] = useState(false);
+  const [detailsMessage, setDetailsMessage] = useState<string | null>(null);
+  const [organizationDetails, setOrganizationDetails] = useState({
+    addressLine: '',
+    city: '',
+    state: '',
+    country: 'Brasil',
+    postalCode: '',
+    phone: '',
+    whatsapp: '',
+    website: '',
+    instagram: '',
+    locale: 'pt-BR',
+    timeZone: 'America/Sao_Paulo'
+  });
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+
+  useEffect(() => {
+    setOrganizationDetails({
+      addressLine: organization?.addressLine || organization?.address?.street || '',
+      city: organization?.city || organization?.address?.city || '',
+      state: organization?.state || organization?.address?.state || '',
+      country: organization?.country || organization?.address?.country || 'Brasil',
+      postalCode: organization?.postalCode || organization?.address?.zip || '',
+      phone: organization?.phone || '',
+      whatsapp: organization?.whatsapp || '',
+      website: organization?.website || '',
+      instagram: organization?.instagram || '',
+      locale: organization?.locale || 'pt-BR',
+      timeZone: organization?.timeZone || 'America/Sao_Paulo'
+    });
+  }, [
+    organization?.id,
+    organization?.addressLine,
+    organization?.city,
+    organization?.state,
+    organization?.country,
+    organization?.postalCode,
+    organization?.phone,
+    organization?.whatsapp,
+    organization?.website,
+    organization?.instagram,
+    organization?.locale,
+    organization?.timeZone
+  ]);
+
+  const updateOrganizationDetail = (key: string, value: string) => {
+    setOrganizationDetails(previous => ({ ...previous, [key]: value }));
+    setDetailsMessage(null);
+  };
+
+  const handleSaveOrganizationDetails = async () => {
+    if (!user || !organization?.id) return;
+    setDetailsSaving(true);
+    setDetailsMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch('/api/user/organization', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orgId: organization.id,
+          ...organizationDetails
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success !== true) {
+        throw new Error(data?.error || 'Não foi possível salvar os dados.');
+      }
+      setDetailsMessage('Dados atualizados com sucesso.');
+    } catch (error: any) {
+      setDetailsMessage(error?.message || 'Não foi possível salvar os dados.');
+    } finally {
+      setDetailsSaving(false);
+    }
+  };
+
+  const handleLogoUpload = async (file?: File | null) => {
+    if (!file || !user || !organization?.id) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setDetailsMessage('Use uma imagem PNG, JPG ou WebP.');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setDetailsMessage('A imagem precisa ter no máximo 1 MB.');
+      return;
+    }
+
+    setLogoUploading(true);
+    setDetailsMessage(null);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const base64 = dataUrl.split(',')[1] || '';
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(organization.id)}/logo`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: file.type,
+            base64
+          })
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success !== true) {
+        throw new Error(data?.error || 'Não foi possível atualizar a logo.');
+      }
+      setDetailsMessage('Logo atualizada com sucesso.');
+    } catch (error: any) {
+      setDetailsMessage(error?.message || 'Não foi possível atualizar a logo.');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   useEffect(() => {
     const next: Record<string, boolean> = {};
