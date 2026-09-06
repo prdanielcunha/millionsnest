@@ -6,6 +6,12 @@ function runTests() {
   
   const serverPath = path.join(process.cwd(), 'server.ts');
   const serverCode = fs.readFileSync(serverPath, 'utf8');
+  const permissionServiceCode = fs.readFileSync(
+    path.join(process.cwd(), 'src/lib/permissionService.ts'),
+    'utf8'
+  );
+  const canonicalGlobalRoleDeclaration =
+    "export const CANONICAL_GLOBAL_ROLES = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'] as const;";
   
   let passed = 0;
   let failed = 0;
@@ -61,7 +67,11 @@ function runTests() {
 
     // G & H. systemRole checks
     assert(!diagCode.includes("organizationRole"), "Endpoint doesn't check organizational role");
-    assert(diagCode.includes("['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(userData.systemRole)"), "Endpoint only allows specific system roles");
+    assert(
+      diagCode.includes('isCanonicalGlobalRole(userData.systemRole)')
+        && permissionServiceCode.includes(canonicalGlobalRoleDeclaration),
+      "Endpoint only allows specific system roles"
+    );
   } else {
     assert(false, "Diagnostic endpoint not found");
   }
