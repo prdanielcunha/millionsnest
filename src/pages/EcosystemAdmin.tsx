@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { EcosystemShell } from "../components/EcosystemShell.js";
 import { ASSIGNABLE_SYSTEM_ROLES, canChangeSystemRole, getSystemRoleLabel } from "../lib/roleResolver.js";
 import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
+import { GrowthFunnelPanel } from "../components/admin/GrowthFunnelPanel.js";
 
 function resolveUserOrganizationContextLocal(
   userId: string,
@@ -531,9 +532,7 @@ export function EcosystemAdmin() {
       // Also fetching users securely
       const usersSnap = await getDocs(query(collection(db, "users")));
       setUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      
-      const analyticsSnap = await getDocs(query(collection(db, "analytics_events")));
-      setAnalyticsEvents(analyticsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
     } catch (err) {
       console.error(err);
     } finally {
@@ -941,6 +940,7 @@ export function EcosystemAdmin() {
 
             {activeTab === 'analytics' && (
               <div className="space-y-6">
+                <GrowthFunnelPanel user={user} onRecentEvents={setAnalyticsEvents} />
                 {/* Computed Metrics */}
                 {(() => {
                   const now = Date.now();
@@ -1106,7 +1106,7 @@ export function EcosystemAdmin() {
                     </div>
                   </div>
                   <p className="text-sm text-[#A0A7B5] mb-6">
-                    A fundação de inteligência de produto e Product Health está ativa. Os eventos de performance (Long Tasks, Erros JS) e os eventos de uso contínuo são processados em batches. O monitoramento de vitalidade em tempo real protege a experiência do usuário.
+                    A inteligência de produto continua ativa. A lista abaixo usa a amostra recente carregada pelo painel de Growth, evitando baixar o histórico inteiro do Firestore a cada abertura do painel global.
                   </p>
                   
                   <div className="space-y-4">

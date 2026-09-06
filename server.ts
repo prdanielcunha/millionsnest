@@ -13,6 +13,7 @@ import {
   parsePublicHomeAnalyticsPayload,
   toPublicHomeAnalyticsDocument,
 } from './src/server/services/PublicHomeAnalyticsService.js';
+import { summarizeGrowthEvents, type GrowthAnalyticsEvent } from './src/server/services/GrowthFunnelService.js';
 
 import Stripe from 'stripe';
 import cors from 'cors';
@@ -659,6 +660,82 @@ async function startServer() {
       return res.status(500).json({ error: 'Analytics unavailable' });
     }
   });
+
+  app.get('/api/admin/analytics/growth', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ error: 'Database not initialized' });
+      }
+
+      const actorDoc = await dbInstance.collection('users').doc(decodedToken.uid).get();
+      if (!actorDoc.exists || !isGlobalPrivilegedRole(actorDoc.data()?.systemRole)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const daysRaw = Number(req.query.days || 7);
+      const windowDays = daysRaw === 30 ? 30 : 7;
+      const start = admin.firestore.Timestamp.fromMillis(
+        Date.now() - windowDays * 24 * 60 * 60 * 1000
+      );
+      const maxEvents = 5000;
+
+      const snapshot = await dbInstance
+        .collection('analytics_events')
+        .where('timestamp', '>=', start)
+        .orderBy('timestamp', 'desc')
+        .limit(maxEvents)
+        .get();
+
+      const events: GrowthAnalyticsEvent[] = snapshot.docs.map((document) => {
+        const data = document.data() || {};
+        const timestampMs =
+          typeof data.timestamp?.toMillis === 'function'
+            ? data.timestamp.toMillis()
+            : typeof data.timestamp?.seconds === 'number'
+              ? data.timestamp.seconds * 1000
+              : 0;
+
+        return {
+          id: document.id,
+          eventType: data.eventType,
+          app: data.app,
+          sessionId: data.sessionId,
+          userId: data.userId,
+          organizationId: data.organizationId,
+          metadata: data.metadata || {},
+          timestampMs,
+        };
+      });
+
+      const summary = summarizeGrowthEvents(events, windowDays);
+      const recentEvents = events.slice(0, 250);
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.json({
+        windowDays,
+        truncated: snapshot.size >= maxEvents,
+        summary,
+        recentEvents,
+      });
+    } catch (error) {
+      console.error('[GrowthAnalytics] Failed to load admin funnel', error);
+      return res.status(500).json({ error: 'Unable to load growth analytics' });
+    }
+  });
+
   app.post('/api/v1/onboarding/bootstrap', express.json(), bootstrapUserContext);
   app.post('/api/v1/invitations', express.json(), (req, res) => createInvitation(req, res));
   app.post('/api/v1/invitations/accept', express.json(), (req, res) => acceptInvitation(req, res));
