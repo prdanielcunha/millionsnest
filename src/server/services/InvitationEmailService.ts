@@ -17,10 +17,11 @@ export async function deliverInvitationEmail(params: {
   inviteUrl: string;
   roleLabel: string;
 }): Promise<InvitationEmailDeliveryResult> {
+  const provider = process.env.INVITATION_EMAIL_PROVIDER || process.env.SUPPORT_EMAIL_PROVIDER;
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.INVITATION_FROM_EMAIL || process.env.SUPPORT_FROM_EMAIL;
 
-  if (!apiKey || !from) {
+  if (provider !== 'resend' || !apiKey || !from) {
     return { success: false, reasonCode: 'NOT_CONFIGURED' };
   }
 
