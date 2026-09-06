@@ -98,6 +98,7 @@ type MusicScaleHubSummary = {
     songCount: number;
     assignmentCount: number;
     bandScaleId?: string | null;
+    responseSummaryAvailable: boolean;
     responseCounts: {
       pending: number;
       accepted: number;
@@ -1452,6 +1453,9 @@ export function Dashboard() {
     };
     let responsesUnsubscribe: (() => void) | null = null;
     let responseScaleId: string | null = null;
+    const currentMember = members.find(member => member.id === user.uid || member.uid === user.uid);
+    const currentRole = String(currentMember?.role || currentMember?.organizationRole || '').toLowerCase();
+    const canReadResponseSummary = isGlobalAdmin || currentRole === 'owner' || currentRole === 'admin';
 
     const publishSummary = () => {
       if (currentActiveOrgIdRef.current !== orgId) return;
@@ -1478,7 +1482,7 @@ export function Dashboard() {
           declined: 0
         };
 
-        if (nextScale?.id) {
+        if (nextScale?.id && canReadResponseSummary) {
           responsesUnsubscribe = onSnapshot(
             collection(db, `scales/${nextScale.id}/responses`),
             (responseSnapshot) => {
@@ -1526,6 +1530,7 @@ export function Dashboard() {
           songCount: Array.isArray(nextScale.songIds) ? nextScale.songIds.length : 0,
           assignmentCount: activeAssignments.length,
           bandScaleId: nextScale.bandScaleId || null,
+          responseSummaryAvailable: canReadResponseSummary,
           responseCounts: { ...live.responseCounts }
         } : null,
         updatedAtMs: Date.now()
@@ -1583,7 +1588,7 @@ export function Dashboard() {
       unsubscribers.forEach(unsubscribe => unsubscribe());
       responsesUnsubscribe?.();
     };
-  }, [user, activeContextOrgId, musicScaleProjection?.accessible]);
+  }, [user, activeContextOrgId, musicScaleProjection?.accessible, isGlobalAdmin, members]);
 
   useEffect(() => {
     fetch('/api/v1/billing/products')
