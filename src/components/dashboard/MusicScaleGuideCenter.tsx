@@ -76,21 +76,21 @@ export function MusicScaleGuideCenter({
       </button>
       <button 
         type="button" 
-        onClick={() => onSelectSection('resources')} 
-        role="tab"
-        aria-selected={activeSection === 'resources'}
-        className={`pb-3 border-b-2 transition-colors font-medium ${activeSection === 'resources' ? 'border-[#2B85EB] text-white' : 'border-transparent text-[#A0A7B5] hover:text-white'}`}
-      >
-        {t('musicscale.center.tabs.resources', 'Recursos')}
-      </button>
-      <button 
-        type="button" 
         onClick={() => onSelectSection('getting-started')} 
         role="tab"
         aria-selected={activeSection === 'getting-started'}
         className={`pb-3 border-b-2 transition-colors font-medium ${activeSection === 'getting-started' ? 'border-[#2B85EB] text-white' : 'border-transparent text-[#A0A7B5] hover:text-white'}`}
       >
         {t('musicscale.center.tabs.getting_started', 'Primeiros passos')}
+      </button>
+      <button 
+        type="button" 
+        onClick={() => onSelectSection('resources')} 
+        role="tab"
+        aria-selected={activeSection === 'resources'}
+        className={`pb-3 border-b-2 transition-colors font-medium ${activeSection === 'resources' ? 'border-[#2B85EB] text-white' : 'border-transparent text-[#A0A7B5] hover:text-white'}`}
+      >
+        {t('musicscale.center.tabs.resources', 'Recursos')}
       </button>
     </div>
   );
@@ -358,6 +358,22 @@ export function MusicScaleGuideCenter({
           </p>
         </div>
 
+        <div className="mb-8 rounded-2xl border border-[#2B85EB]/20 bg-[#2B85EB]/10 p-4 md:p-5 flex items-start gap-3">
+          <Info className="w-5 h-5 text-[#2B85EB] shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-white mb-1">
+              {t('musicscale.center.getting_started.guidance_title', 'Você não precisa decorar o sistema')}
+            </p>
+            <p className="text-sm text-[#A0A7B5] leading-relaxed">
+              {organizationReady && teamStarted
+                ? t('musicscale.center.getting_started.guidance_ready', 'Sua organização e sua equipe já estão prontas. Agora comece adicionando as primeiras músicas e siga a ordem abaixo.')
+                : !organizationReady
+                  ? t('musicscale.center.getting_started.guidance_org', 'Comece conferindo os dados da sua igreja ou organização. Depois, o painel mostra o próximo passo.')
+                  : t('musicscale.center.getting_started.guidance_team', 'Sua organização está pronta. Agora convide as pessoas que usarão o MusicScale com você.')}
+            </p>
+          </div>
+        </div>
+
         <div className="space-y-12 ml-6 border-l-2 border-white/10 pl-8 py-4">
           {steps.map((step, index) => {
             const stepNum = index + 1;
@@ -400,7 +416,10 @@ export function MusicScaleGuideCenter({
             } else {
               title = t(step.titleKey, t('musicscale.center.fallback.guide_step', 'Etapa do guia'));
               stepStatus = 'pending';
-              statusText = t('musicscale.center.getting_started.statuses.continue_in_ms', 'Continue no MusicScale');
+              statusText =
+                step.id === 'songs' && organizationReady && teamStarted
+                  ? t('musicscale.center.getting_started.statuses.next_step', 'Próxima etapa')
+                  : t('musicscale.center.getting_started.statuses.do_in_ms', 'Faça no MusicScale');
             }
 
             const what = t(`musicscale.center.getting_started.steps.${step.key}.what`, '');
