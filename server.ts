@@ -830,7 +830,10 @@ async function startServer() {
 
       const requestHost = String(req.get('host') || '').toLowerCase();
       const allowedHosts = new Set(['millionsnest.com', 'www.millionsnest.com', requestHost]);
+      const isLocalDevelopmentHost =
+        parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
       if (
+        (!isLocalDevelopmentHost && parsedUrl.protocol !== 'https:') ||
         !allowedHosts.has(parsedUrl.host.toLowerCase()) ||
         parsedUrl.pathname !== `/join/${organizationId}` ||
         Array.from(parsedUrl.searchParams.keys()).length !== 1
@@ -1042,6 +1045,13 @@ async function startServer() {
         const tokenResult = generateInvitationTokenMaterial();
         if (!tokenResult.success) {
           return { status: 500, payload: { success: false, reasonCode: tokenResult.reasonCode } };
+        }
+
+        const collisionQuery = await transaction.get(
+          dbInstance.collectionGroup('invites').where('tokenHash', '==', tokenResult.material.tokenHash)
+        );
+        if (!collisionQuery.empty) {
+          return { status: 500, payload: { success: false, reasonCode: 'TOKEN_STATE_INCONSISTENT' } };
         }
 
         const newInviteRef = orgRef.collection('invites').doc();
