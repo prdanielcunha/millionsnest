@@ -5199,14 +5199,46 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
-  app.post('/api/internal/sync-stripe-products', async (req, res) => {
+  app.post('/api/internal/sync-stripe-products', express.json({ limit: '1kb' }), async (req: any, res) => {
     try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ error: 'Database not initialized' });
+      }
+
+      const actorDoc = await dbInstance.collection('users').doc(decodedToken.uid).get();
+      if (!actorDoc.exists || !isGlobalPrivilegedRole(actorDoc.data()?.systemRole)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
       const service = getBillingService();
       const result = await service.syncStripeToFirestore();
-      res.json(result);
+
+      await dbInstance.collection('audit_logs').add({
+        action: 'billing.catalog.sync_requested',
+        actorUid: decodedToken.uid,
+        source: 'millionsnest_internal_api',
+        success: result?.success === true,
+        syncedCount: typeof result?.count === 'number' ? result.count : null,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json(result);
     } catch (e: any) {
       console.error('[Billing Sync] Fatal error:', e);
-      res.status(500).json({ error: e.message });
+      return res.status(500).json({ error: e.message });
     }
   });
 
@@ -5236,18 +5268,44 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
-  app.get('/api/v1/billing/debug', async (req, res) => {
+  app.get('/api/v1/billing/debug', async (req: any, res) => {
     try {
+      if (process.env.MILLIONSNEST_DEBUG_ENDPOINTS_ENABLED !== 'true') {
+        return res.status(403).json({ error: 'Debug endpoints disabled' });
+      }
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ error: 'Database not initialized' });
+      }
+
+      const actorDoc = await dbInstance.collection('users').doc(decodedToken.uid).get();
+      if (!actorDoc.exists || !isGlobalPrivilegedRole(actorDoc.data()?.systemRole)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
       const service = getBillingService();
       
       // Try a direct firestore read to validate connection
       let firestoreStatus = 'unknown';
       let docCount = 0;
-      if (db) {
+      if (dbInstance) {
         try {
-          const testSnap = await db.collection('billing_products').limit(1).get();
+          const testSnap = await dbInstance.collection('billing_products').limit(1).get();
           firestoreStatus = 'connected - query successful';
-          const fullSnap = await db.collection('billing_products').get();
+          const fullSnap = await dbInstance.collection('billing_products').get();
           docCount = fullSnap.size;
         } catch(fsError: any) {
           firestoreStatus = `error: ${fsError.message}`;
