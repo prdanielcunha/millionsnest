@@ -1,6 +1,7 @@
 import { ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useTranslation, Trans } from 'react-i18next';
+import { trackHomeMusicScaleInterest } from "../lib/publicFunnelAnalytics.js";
 
 export function Guarantee() {
   const { t } = useTranslation(['landing']);
@@ -29,10 +30,10 @@ export function Guarantee() {
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-              <Link to="/musicscale" className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-black transition hover:-translate-y-0.5">
+              <Link to="/musicscale" onClick={() => trackHomeMusicScaleInterest('guarantee_primary')} className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-black transition hover:-translate-y-0.5">
                 {t('guarantee_cta')} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
               </Link>
-              <a href="/musicscale#pricing-section" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-6 py-3.5 text-sm font-medium text-[#E4E8EE] transition hover:bg-white/[0.06]">
+              <a href="/musicscale#pricing-section" onClick={() => trackHomeMusicScaleInterest('guarantee_pricing')} className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-6 py-3.5 text-sm font-medium text-[#E4E8EE] transition hover:bg-white/[0.06]">
                 {t('guarantee_secondary')}
               </a>
             </div>

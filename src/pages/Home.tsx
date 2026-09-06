@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Navbar } from "../components/Navbar.js";
 import { Hero } from "../components/Hero.js";
 import { useAuth } from "../contexts/AuthContext.js";
+import { trackPublicHomeView } from "../lib/publicFunnelAnalytics.js";
 
 const SocialProof = lazy(() => import("../components/SocialProof.js").then((module) => ({ default: module.SocialProof })));
 const Problem = lazy(() => import("../components/Problem.js").then((module) => ({ default: module.Problem })));
@@ -23,6 +24,10 @@ export function Home() {
   const { hash } = useLocation();
   const { user, loading: authLoading } = useAuth();
   const { t } = useTranslation('common');
+
+  useEffect(() => {
+    if (!authLoading && !user) trackPublicHomeView();
+  }, [authLoading, user]);
 
   useEffect(() => {
     if (hash) {
