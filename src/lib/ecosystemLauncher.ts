@@ -18,7 +18,8 @@ export async function openEcosystemModule(
   profile: any,
   organization: any,
   currentUserData: any,
-  injectedDependencies?: Partial<EcosystemLauncherDependencies>
+  injectedDependencies?: Partial<EcosystemLauncherDependencies>,
+  destinationPath?: string
 ) {
   if (!user || typeof user !== 'object' || typeof user.uid !== 'string' || user.uid.trim() === '') {
     console.error('[EcosystemLaunch] Missing required user data');
@@ -167,6 +168,30 @@ export async function openEcosystemModule(
   
   const encodedContext = btoa(JSON.stringify(context));
   const targetUrl = new URL(app.url);
+  if (destinationPath) {
+    const allowedMusicScalePaths = [
+      '/',
+      '/songs',
+      '/scales',
+      '/band-scales',
+      '/users',
+      '/roles',
+      '/profile',
+      '/plan-usage',
+      '/library',
+      '/notifications'
+    ];
+    const cleanDestinationPath = destinationPath.trim();
+    if (
+      moduleKey !== 'musicscale' ||
+      !allowedMusicScalePaths.some(path =>
+        cleanDestinationPath === path || cleanDestinationPath.startsWith(`${path}/`)
+      )
+    ) {
+      throw new Error('Destino do aplicativo inválido.');
+    }
+    targetUrl.pathname = cleanDestinationPath;
+  }
   targetUrl.searchParams.set('ecosystem_ctx', encodedContext);
   
   deps.markPerformance('handoff_completed');
