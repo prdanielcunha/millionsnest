@@ -1433,6 +1433,155 @@ export function Dashboard() {
   }, [user, activeContextOrgId]);
 
   useEffect(() => {
+    if (!user || !activeContextOrgId || musicScaleProjection?.accessible !== true) {
+      setMusicScaleHubSummary(EMPTY_MUSICSCALE_SUMMARY);
+      return;
+    }
+
+    const orgId = activeContextOrgId;
+    const live = {
+      songs: [] as any[],
+      scales: [] as any[],
+      bandScales: [] as any[],
+      configuredMembersCount: 0,
+      responseCounts: { pending: 0, accepted: 0, maybe: 0, declined: 0 }
+    };
+    let responsesUnsubscribe: (() => void) | null = null;
+    let responseScaleId: string | null = null;
+
+    const publishSummary = () => {
+      if (currentActiveOrgIdRef.current !== orgId) return;
+
+      const now = Date.now();
+      const candidateScales = live.scales
+        .filter(scale => !['cancelled', 'completed'].includes(String(scale.status || '').toLowerCase()))
+        .filter(scale => toEventEpoch(scale) >= now - 6 * 60 * 60 * 1000)
+        .sort((a, b) => toEventEpoch(a) - toEventEpoch(b));
+
+      const nextScale = candidateScales[0] || null;
+      const activeAssignments = Array.isArray(nextScale?.eventAssignments)
+        ? nextScale.eventAssignments.filter((assignment: any) => assignment?.active !== false)
+        : [];
+
+      if (nextScale?.id !== responseScaleId) {
+        responsesUnsubscribe?.();
+        responsesUnsubscribe = null;
+        responseScaleId = nextScale?.id || null;
+        live.responseCounts = {
+          pending: activeAssignments.length,
+          accepted: 0,
+          maybe: 0,
+          declined: 0
+        };
+
+        if (nextScale?.id) {
+          responsesUnsubscribe = onSnapshot(
+            collection(db, `scales/${nextScale.id}/responses`),
+            (responseSnapshot) => {
+              const counts = { pending: 0, accepted: 0, maybe: 0, declined: 0 };
+              const respondedAssignmentIds = new Set<string>();
+
+              responseSnapshot.docs.forEach(responseDoc => {
+                const data = responseDoc.data() as any;
+                if (data?.active === false) return;
+                respondedAssignmentIds.add(data.eventAssignmentId || responseDoc.id);
+                const status = String(data.status || 'pending').toLowerCase();
+                if (status === 'accepted') counts.accepted += 1;
+                else if (status === 'maybe') counts.maybe += 1;
+                else if (status === 'declined') counts.declined += 1;
+                else counts.pending += 1;
+              });
+
+              counts.pending += activeAssignments.filter((assignment: any) =>
+                !respondedAssignmentIds.has(assignment.eventAssignmentId)
+              ).length;
+
+              live.responseCounts = counts;
+              publishSummary();
+            },
+            (error) => {
+              console.warn('[Dashboard] MusicScale response summary listener failed:', error);
+            }
+          );
+        }
+      }
+
+      setMusicScaleHubSummary({
+        songsCount: live.songs.length,
+        songsWithContentCount: live.songs.filter(song =>
+          Boolean(String(song?.lyrics || '').trim()) || Boolean(String(song?.chords || '').trim())
+        ).length,
+        configuredMembersCount: live.configuredMembersCount,
+        scalesCount: live.scales.length,
+        bandScalesCount: live.bandScales.length,
+        nextScale: nextScale ? {
+          id: nextScale.id,
+          date: nextScale.date,
+          time: nextScale.time || null,
+          status: nextScale.status || null,
+          songCount: Array.isArray(nextScale.songIds) ? nextScale.songIds.length : 0,
+          assignmentCount: activeAssignments.length,
+          bandScaleId: nextScale.bandScaleId || null,
+          responseCounts: { ...live.responseCounts }
+        } : null,
+        updatedAtMs: Date.now()
+      });
+    };
+
+    const unsubscribers: Array<() => void> = [];
+
+    unsubscribers.push(onSnapshot(
+      query(collection(db, 'songs'), where('organizationId', '==', orgId)),
+      snapshot => {
+        live.songs = snapshot.docs.map(songDoc => ({ id: songDoc.id, ...songDoc.data() }));
+        publishSummary();
+      },
+      error => console.warn('[Dashboard] MusicScale songs summary listener failed:', error)
+    ));
+
+    unsubscribers.push(onSnapshot(
+      query(collection(db, 'scales'), where('organizationId', '==', orgId)),
+      snapshot => {
+        live.scales = snapshot.docs.map(scaleDoc => ({ id: scaleDoc.id, ...scaleDoc.data() }));
+        publishSummary();
+      },
+      error => console.warn('[Dashboard] MusicScale scales summary listener failed:', error)
+    ));
+
+    unsubscribers.push(onSnapshot(
+      query(collection(db, 'bandScales'), where('organizationId', '==', orgId)),
+      snapshot => {
+        live.bandScales = snapshot.docs.map(scaleDoc => ({ id: scaleDoc.id, ...scaleDoc.data() }));
+        publishSummary();
+      },
+      error => console.warn('[Dashboard] MusicScale band-scale summary listener failed:', error)
+    ));
+
+    unsubscribers.push(onSnapshot(
+      collection(db, `organizations/${orgId}/musicscale_members`),
+      snapshot => {
+        live.configuredMembersCount = snapshot.docs.filter(memberDoc => {
+          const data = memberDoc.data() as any;
+          return Boolean(
+            data.musicscaleRole ||
+            data.ministryFunction ||
+            data.roleId ||
+            data.internalRoleId ||
+            (Array.isArray(data.specialtyIds) && data.specialtyIds.length > 0)
+          );
+        }).length;
+        publishSummary();
+      },
+      error => console.warn('[Dashboard] MusicScale member summary listener failed:', error)
+    ));
+
+    return () => {
+      unsubscribers.forEach(unsubscribe => unsubscribe());
+      responsesUnsubscribe?.();
+    };
+  }, [user, activeContextOrgId, musicScaleProjection?.accessible]);
+
+  useEffect(() => {
     fetch('/api/v1/billing/products')
       .then(res => res.json())
       .then(data => {
