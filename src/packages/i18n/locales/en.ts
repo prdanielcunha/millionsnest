@@ -760,7 +760,7 @@ export default {
         open_action: "Open MusicScale",
         learn_title: "See the getting-started guide",
         learn_desc: "Follow the guide in order to see what is ready and what still needs to be done.",
-        learn_action: "View getting started"
+        learn_action: "View getting started",
         songs_title: "Add your first songs",
         songs_desc: "Start your repertoire so you can build service schedules next.",
         songs_action: "Add songs",
