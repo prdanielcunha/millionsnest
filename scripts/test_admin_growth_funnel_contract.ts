@@ -26,8 +26,8 @@ assert.equal(
 );
 assert.match(admin, /GrowthFunnelPanel/, 'admin Analytics tab must mount the commercial funnel');
 assert.match(panel, /\/api\/admin\/analytics\/growth\?days=/, 'panel must use bounded admin growth API');
-assert.match(panel, /7 dias/, 'panel must expose 7-day window');
-assert.match(panel, /30 dias/, 'panel must expose 30-day window');
+assert.match(panel, /\[7, 30\]/, 'panel must expose the 7/30-day window selector');
+assert.match(panel, /useState<7 \| 30>\(7\)/, 'panel must default to the 7-day sales window');
 assert.match(server, /app\.get\('\/api\/admin\/analytics\/growth'/, 'server must expose admin growth endpoint');
 assert.match(server, /verifyIdToken/, 'growth endpoint must verify Firebase auth');
 assert.match(server, /isGlobalPrivilegedRole/, 'growth endpoint must require global privileged role');
