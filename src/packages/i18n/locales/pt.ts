@@ -776,7 +776,7 @@ export default {
         open_action: "Abrir MusicScale",
         learn_title: "Veja os primeiros passos",
         learn_desc: "Siga o guia em ordem e veja o que já está pronto e o que ainda falta fazer.",
-        learn_action: "Ver primeiros passos"
+        learn_action: "Ver primeiros passos",
         songs_title: "Adicione as primeiras músicas",
         songs_desc: "Comece seu repertório para depois montar as escalas dos cultos.",
         songs_action: "Adicionar músicas",
