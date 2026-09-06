@@ -321,9 +321,9 @@ export function OrganizationManager({
     { id: 'settings', label: 'Ajustes', icon: Settings, perms: ['organization.settings.update'] },
     { id: 'members', label: 'Membros & Convites', icon: Users, perms: ['organization.members.manage', 'organization.members.invite'] },
     { id: 'roles', label: 'Cargos e Permissões', icon: ShieldCheck, perms: ['organization.roles.manage'] },
-    { id: 'apps', label: 'Aplicativos & Ad-ons', icon: LayoutGrid, perms: ['organization.apps.manage'] },
+    { id: 'apps', label: 'Aplicativos', icon: LayoutGrid, perms: ['organization.apps.manage'] },
     { id: 'billing', label: 'Assinatura', icon: CreditCard, perms: ['organization.billing.manage'] },
-    { id: 'audit', label: 'Auditoria e Logs', icon: Settings, perms: ['organization.audit.view'] }
+    { id: 'audit', label: 'Atividade e segurança', icon: Settings, perms: ['organization.audit.view'] }
   ];
 
   const visibleTabs = TABS.filter(t => t.perms.some(p => currentUserPerms[p] || isGlobalAdmin));
@@ -365,7 +365,7 @@ export function OrganizationManager({
            <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
             <Building2 className="w-4 h-4 text-[#A0A7B5]" />
           </span>
-          Governança
+          Administração
         </h2>
         
         {visibleTabs.map(tab => {
@@ -400,20 +400,31 @@ export function OrganizationManager({
           
           {activeTab === 'settings' && (
             <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Ajustes da Organização</h3>
+              <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Dados da organização</h3>
               
               <div className="space-y-6 max-w-xl">
                   <div className="bg-transparent p-0 rounded-none border-none">
-                     <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Perfil Principal</p>
+                     <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Dados principais</p>
                      
                      <div className="flex items-start gap-5 bg-[#050505] p-5 rounded-2xl border border-white/5 mb-6">
                         <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-2xl text-[#F5F7FA]">
                           {organization?.logo ? <img src={organization.logo} className="w-full h-full rounded-xl object-cover" /> : organization?.name?.charAt(0) || 'O'}
                         </div>
                         <div className="flex-1">
-                           <p className="text-xs font-semibold text-[#F5F7FA] mb-1.5">Mudar Logotipo</p>
+                           <p className="text-xs font-semibold text-[#F5F7FA] mb-1.5">Logo da organização</p>
                            <div className="flex items-center gap-2">
-                              <input type="file" className="text-xs text-[#A0A7B5] file:mr-4 file:py-1.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/5 file:text-[#F5F7FA] hover:file:bg-white/10 transition-all cursor-pointer" />
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                disabled={logoUploading}
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0];
+                                  void handleLogoUpload(file);
+                                  event.currentTarget.value = '';
+                                }}
+                                className="text-xs text-[#A0A7B5] file:mr-4 file:py-1.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/5 file:text-[#F5F7FA] hover:file:bg-white/10 transition-all cursor-pointer disabled:opacity-50"
+                              />
+                              {logoUploading && <Loader2 className="w-4 h-4 text-[#2B85EB] animate-spin" />}
                            </div>
                         </div>
                      </div>
@@ -447,7 +458,7 @@ export function OrganizationManager({
 
                        <div>
                          <p className="text-xs font-semibold text-[#A0A7B5] mb-1.5 flex justify-between">
-                            <span>Slug (URL Público)</span>
+                            <span>Endereço da página pública</span>
                             {organization?.slug && !isEditingOrg && (
                                <span className="flex items-center gap-2">
                                    <button onClick={() => { navigator.clipboard.writeText(`https://millionsnest.com/${organization.slug}`); alert('Link copiado!'); }} className="text-[#A0A7B5] hover:text-white flex items-center gap-1.5 font-normal px-2 py-1 rounded-md hover:bg-white/5 transition-colors"><Copy className="w-3.5 h-3.5" /> Copiar</button>
@@ -470,7 +481,7 @@ export function OrganizationManager({
                                {slugStatus === 'available' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#10B981] shrink-0 bg-[#10B981]/10 px-2 py-1 rounded">Disponível</span>}
                                {slugStatus === 'taken' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#EF4444] shrink-0 bg-[#EF4444]/10 px-2 py-1 rounded">Em uso</span>}
                                {slugStatus === 'reserved' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#EF4444] shrink-0 bg-[#EF4444]/10 px-2 py-1 rounded">Reservado</span>}
-                               {slugStatus === 'current_org' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#2B85EB] shrink-0 bg-[#2B85EB]/10 px-2 py-1 rounded">Seu Slug</span>}
+                               {slugStatus === 'current_org' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#2B85EB] shrink-0 bg-[#2B85EB]/10 px-2 py-1 rounded">Seu endereço</span>}
                              </>
                            ) : (
                              <input 
@@ -491,12 +502,95 @@ export function OrganizationManager({
                      </div>
                   </div>
                   
-                  <div className="bg-transparent pt-6 border-t border-white/5">
-                     <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Identificador Único</p>
-                     <div className="flex items-center justify-between">
+                  <details className="group bg-[#050505] border border-white/5 rounded-2xl p-5">
+                    <summary className="cursor-pointer list-none flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-[#F5F7FA]">Contato e localização</p>
+                        <p className="text-xs text-[#A0A7B5] mt-1">Complete somente as informações que sua igreja deseja usar.</p>
+                      </div>
+                      <span className="text-xs text-[#2B85EB] group-open:hidden">Editar</span>
+                      <span className="text-xs text-[#A0A7B5] hidden group-open:inline">Fechar</span>
+                    </summary>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+                      <label className="text-xs text-[#A0A7B5]">
+                        Endereço
+                        <input value={organizationDetails.addressLine} onChange={(e) => updateOrganizationDetail('addressLine', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" placeholder="Rua e número" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Cidade
+                        <input value={organizationDetails.city} onChange={(e) => updateOrganizationDetail('city', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Estado
+                        <input value={organizationDetails.state} onChange={(e) => updateOrganizationDetail('state', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        CEP
+                        <input value={organizationDetails.postalCode} onChange={(e) => updateOrganizationDetail('postalCode', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Telefone
+                        <input value={organizationDetails.phone} onChange={(e) => updateOrganizationDetail('phone', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" placeholder="(00) 0000-0000" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        WhatsApp
+                        <input value={organizationDetails.whatsapp} onChange={(e) => updateOrganizationDetail('whatsapp', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" placeholder="(00) 00000-0000" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Site
+                        <input value={organizationDetails.website} onChange={(e) => updateOrganizationDetail('website', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" placeholder="https://..." />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Instagram
+                        <input value={organizationDetails.instagram} onChange={(e) => updateOrganizationDetail('instagram', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" placeholder="@suaigreja" />
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/5">
+                      <label className="text-xs text-[#A0A7B5]">
+                        Idioma principal
+                        <select value={organizationDetails.locale} onChange={(e) => updateOrganizationDetail('locale', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]">
+                          <option value="pt-BR">Português (Brasil)</option>
+                          <option value="en">English</option>
+                          <option value="es">Español</option>
+                        </select>
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Fuso horário
+                        <select value={organizationDetails.timeZone} onChange={(e) => updateOrganizationDetail('timeZone', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]">
+                          <option value="America/Sao_Paulo">Brasília / São Paulo</option>
+                          <option value="America/Manaus">Manaus</option>
+                          <option value="America/Rio_Branco">Rio Branco</option>
+                          <option value="America/Noronha">Fernando de Noronha</option>
+                          <option value="UTC">UTC</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    {detailsMessage && (
+                      <p className={`mt-4 text-xs ${detailsMessage.includes('sucesso') ? 'text-emerald-400' : 'text-amber-300'}`}>{detailsMessage}</p>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={detailsSaving}
+                      onClick={() => void handleSaveOrganizationDetails()}
+                      className="mt-5 min-h-[44px] px-5 py-2.5 rounded-xl bg-white text-black text-sm font-semibold hover:bg-gray-100 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {detailsSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Salvar informações
+                    </button>
+                  </details>
+
+                  {isGlobalAdmin && (
+                    <details className="bg-transparent pt-4 border-t border-white/5">
+                      <summary className="cursor-pointer text-xs font-semibold text-[#A0A7B5]">Informações técnicas</summary>
+                      <div className="mt-3">
                         <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-3 py-2 rounded-xl border border-white/5 select-all">{organization?.id || user.uid}</span>
-                     </div>
-                  </div>
+                      </div>
+                    </details>
+                  )}
               </div>
             </motion.div>
           )}
