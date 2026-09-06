@@ -11,7 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
 import { framerTokens } from '../packages/ui/motion.js';
-import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
+import { openEcosystemModule } from '../lib/ecosystemAplicativos.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 import { feedback } from '../packages/ui/feedback.js';
 
@@ -252,10 +252,17 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                   
                   {canonicalContext.needsRepair && (
                      <div className="mt-2 pt-2 border-t border-white/5 px-2">
-                         <div className="flex items-center gap-2 p-2 bg-amber-500/10 text-amber-500 rounded-lg text-xs font-medium">
-                            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                            Inconsistência detectada. <a href="/app/admin/diagnose" className="underline ml-1">Reparar.</a>
-                         </div>
+                       <div className="flex items-start gap-2 p-2 bg-amber-500/10 text-amber-400 rounded-lg text-xs font-medium">
+                         <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse mt-1.5"></span>
+                         <span>
+                           Encontramos um problema no acesso desta organização.
+                           {isGlobalPrivilegedUser(profile) ? (
+                             <a href="/app/admin/diagnose" className="underline ml-1 text-white">Corrigir acesso.</a>
+                           ) : (
+                             <span className="text-white/70 ml-1">Atualize a página; se continuar, fale com o suporte.</span>
+                           )}
+                         </span>
+                       </div>
                      </div>
                   )}
                 </motion.div>
@@ -266,7 +273,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
           <div className="hidden md:flex border-l border-white/10 h-4 mx-1" />
           
           <div className="hidden md:flex items-center gap-1.5 text-xs font-semibold px-2">
-            <span className="text-[#A0A7B5] hover:text-[#F5F7FA] cursor-pointer transition-colors" onClick={() => navigate('/dashboard')}>Ecosystem</span>
+            <span className="text-[#A0A7B5] hover:text-[#F5F7FA] cursor-pointer transition-colors" onClick={() => navigate('/dashboard')}>MillionsNest</span>
             <span className="text-[#A0A7B5]">/</span>
             <span className={`px-2 py-0.5 rounded-md border text-[#F5F7FA] ${!breadcrumbList || breadcrumbList.length === 0 ? 'bg-white/5 border-white/10' : 'bg-transparent border-transparent cursor-pointer hover:bg-white/5 transition-colors'} `} onClick={() => (!breadcrumbList || breadcrumbList.length === 0) ? null : navigate('/dashboard')}>
               {activeApp.name}
@@ -287,7 +294,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
             ))}
             {isDegraded && (
                <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded ml-2 border border-orange-500/20">
-                  <AlertTriangle className="w-3 h-3" /> Degraded
+                  <AlertTriangle className="w-3 h-3" /> Conexão instável
                </span>
             )}
           </div>
@@ -327,7 +334,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                          className="absolute top-full mt-3 right-0 w-[340px] bg-[#050505]/95 backdrop-blur-2xl border border-white/10 shadow-[0_0_40px_rgba(0,0,0,1)] rounded-2xl p-2 origin-top-right z-50"
                        >
                          <div className="px-3 py-2 text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest border-b border-white/5 mb-2">
-                           Módulos do Ecossistema
+                           Seus aplicativos
                          </div>
                          
                          <div className="grid grid-cols-3 gap-2">
@@ -424,7 +431,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                       </div>
                    </div>
                    
-                   <Link to="/dashboard" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/5 rounded-lg transition-colors">
+                   <Link to="/dashboard/account" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/5 rounded-lg transition-colors">
                      <User className="w-4 h-4" /> Minha Conta
                    </Link>
                    
