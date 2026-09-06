@@ -795,112 +795,130 @@ export function OrganizationManager({
 
           {activeTab === 'roles' && (
              <motion.div key="roles" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-2">Cargos e Capabilities</h3>
-                <p className="text-sm text-[#A0A7B5] mb-6">MillionsNest usa um sistema hierárquico baseado em capacidades (capabilities). Veja os perfis atuais:</p>
+                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-2">Cargos e permissões</h3>
+                <p className="text-sm text-[#A0A7B5] mb-6">Escolha o nível de acesso que combina com a responsabilidade de cada pessoa. As regras técnicas ficam protegidas nos bastidores.</p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="bg-[#050505] p-5 rounded-2xl border border-[#2B85EB]/20 shadow-[0_0_15px_rgba(43,133,235,0.05)]">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><ShieldCheck className="w-4 h-4 text-[#2B85EB]" /> Dono (Owner) & Admin</h4>
-                      <p className="text-xs text-[#A0A7B5] mb-3">Têm acesso a todas as capacidades de governança e aplicativos habilitados na organização.</p>
-                      <div className="flex flex-wrap gap-1.5">
-                         <span className="px-1.5 py-0.5 bg-white/5 text-[9px] text-[#A0A7B5] rounded border border-white/10 font-mono">*.manage</span>
-                         <span className="px-1.5 py-0.5 bg-white/5 text-[9px] text-[#A0A7B5] rounded border border-white/10 font-mono">*.edit</span>
-                      </div>
+                   <div className="bg-[#050505] p-5 rounded-2xl border border-[#2B85EB]/20">
+                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><ShieldCheck className="w-4 h-4 text-[#2B85EB]" /> Dono</h4>
+                      <p className="text-xs text-[#A0A7B5]">Responsável principal pela organização. Pode administrar equipe, aplicativos, assinatura e configurações críticas.</p>
                    </div>
                    <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Operador (Secretary)</h4>
-                      <p className="text-xs text-[#A0A7B5] mb-3">Pode convidar membros e gerenciar dados nos aplicativos, mas não altera políticas ou pagamentos.</p>
-                      <div className="flex flex-wrap gap-1.5">
-                         <span className="px-1.5 py-0.5 bg-white/5 text-[9px] text-[#A0A7B5] rounded border border-white/10 font-mono">organization.members.invite</span>
-                         <span className="px-1.5 py-0.5 bg-white/5 text-[9px] text-[#A0A7B5] rounded border border-white/10 font-mono">musicscale.*.edit</span>
-                      </div>
+                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><ShieldCheck className="w-4 h-4 text-[#A0A7B5]" /> Administrador</h4>
+                      <p className="text-xs text-[#A0A7B5]">Pode administrar a organização e a equipe, sem assumir a propriedade principal da conta.</p>
                    </div>
                    <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Membro Padrão</h4>
-                      <p className="text-xs text-[#A0A7B5] mb-3">Acesso restrito. Só interage com dados relacionados e delegados a ele na interface pública, sem acesso administrativo aos módulos.</p>
+                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Líder / Operador</h4>
+                      <p className="text-xs text-[#A0A7B5]">Ajuda na rotina da equipe e nos aplicativos conforme as permissões recebidas, sem controlar cobrança ou propriedade.</p>
                    </div>
+                   <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
+                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Membro / Visitante</h4>
+                      <p className="text-xs text-[#A0A7B5]">Usa somente as áreas liberadas para sua participação, sem acesso às configurações administrativas.</p>
+                   </div>
+                </div>
+
+                <div className="mt-6 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+                  <p className="text-xs text-[#A0A7B5] leading-relaxed">Funções ministeriais como músico, vocal, ministro ou instrumento são configuradas no MusicScale. Aqui você controla somente o acesso administrativo à organização.</p>
                 </div>
              </motion.div>
           )}
 
           {activeTab === 'apps' && (
              <motion.div key="apps" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Aplicativos & Ad-ons</h3>
-                <p className="text-sm text-[#A0A7B5] mb-6">Gerencie os módulos ativados na sua organização.</p>
+                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-2">Aplicativos da organização</h3>
+                <p className="text-sm text-[#A0A7B5] mb-6">Abra cada aplicativo ou vá direto para as configurações mais usadas.</p>
                 
-                <div className="bg-[#050505] rounded-2xl border border-white/5 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                   <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB] shadow-[0_0_15px_rgba(43,133,235,0.1)]">
-                         <LayoutGrid className="w-6 h-6" />
+                <div className="bg-[#050505] rounded-2xl border border-white/5 p-5 mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB]">
+                        <LayoutGrid className="w-6 h-6" />
                       </div>
                       <div>
-                         <p className="font-semibold text-[#F5F7FA]">MusicScale <span className="text-[10px] ml-2 font-bold uppercase tracking-widest bg-[#10B981]/10 text-[#10B981] rounded px-1.5 py-0.5 border border-[#10B981]/20">Instalado</span></p>
-                         <p className="text-sm text-[#A0A7B5]">Módulo original do ecossistema</p>
+                        <p className="font-semibold text-[#F5F7FA]">MusicScale <span className="text-[10px] ml-2 font-bold uppercase tracking-widest bg-[#10B981]/10 text-[#10B981] rounded px-1.5 py-0.5 border border-[#10B981]/20">Ativo</span></p>
+                        <p className="text-sm text-[#A0A7B5]">Louvor, repertório, equipe e escalas.</p>
                       </div>
-                   </div>
-                   <div className="flex items-center gap-3">
-                      <button onClick={() => {
-                        import('../packages/events/index.js').then(({ eventBus }) => {
-                          eventBus.publish('action.contextual.open_musicscale', {
-                             organizationId: organization?.id || '',
-                             userId: user?.uid || '',
-                             appSource: 'core'
-                          } as any);
-                        });
-                      }} className="px-5 py-2 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold text-sm hover:bg-white transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)]">
-                         Abrir App
-                      </button>
-                      <button className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/5 text-[#A0A7B5] hover:bg-white/10 transition-colors border border-white/10">
-                         <Settings className="w-4 h-4" />
-                      </button>
-                   </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onOpenMusicScale?.('/')}
+                      className="px-5 py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold text-sm hover:bg-white transition-all"
+                    >
+                      Abrir MusicScale
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-5 pt-5 border-t border-white/5">
+                    <button type="button" onClick={() => onOpenMusicScale?.('/users')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                      <p className="text-sm font-semibold text-white">Equipe no MusicScale</p>
+                      <p className="text-xs text-[#A0A7B5] mt-1">Músicos, vocais e funções ministeriais.</p>
+                    </button>
+                    <button type="button" onClick={() => onOpenMusicScale?.('/scales')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                      <p className="text-sm font-semibold text-white">Escalas</p>
+                      <p className="text-xs text-[#A0A7B5] mt-1">Cultos, músicas e confirmações.</p>
+                    </button>
+                    <button type="button" onClick={() => onOpenMusicScale?.('/profile')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                      <p className="text-sm font-semibold text-white">Preferências do aplicativo</p>
+                      <p className="text-xs text-[#A0A7B5] mt-1">Perfil e opções pessoais do MusicScale.</p>
+                    </button>
+                    <button type="button" onClick={() => onOpenMusicScale?.('/plan-usage')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                      <p className="text-sm font-semibold text-white">Uso do plano</p>
+                      <p className="text-xs text-[#A0A7B5] mt-1">Veja limites e utilização dos recursos.</p>
+                    </button>
+                  </div>
                 </div>
                 
                 {organization?.enabledApps?.filter((a: string) => a !== 'musicscale').map((appId: string) => (
-                   <div key={appId} className="bg-[#050505] rounded-2xl border border-white/5 p-4 flex items-center justify-between mb-4">
-                   <div className="flex items-center gap-3">
+                  <div key={appId} className="bg-[#050505] rounded-2xl border border-white/5 p-4 flex items-center justify-between mb-4 gap-4">
+                    <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-[#F5F7FA]">
-                         <LayoutGrid className="w-5 h-5" />
+                        <LayoutGrid className="w-5 h-5" />
                       </div>
                       <div>
-                         <p className="text-sm font-semibold text-[#F5F7FA] uppercase">{appId}</p>
-                         <p className="text-xs text-[#A0A7B5]">Módulo terceirizado instalado via plano</p>
+                        <p className="text-sm font-semibold text-[#F5F7FA]">{appId}</p>
+                        <p className="text-xs text-[#A0A7B5]">A disponibilidade deste aplicativo é controlada pelo seu plano.</p>
                       </div>
-                   </div>
-                   <div className="flex items-center gap-3">
-                      <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest bg-white/5 text-[#A0A7B5] rounded-md border border-white/10">Habilitado</span>
-                      <button className="text-xs text-[#EF4444] font-medium ml-2">Desativar</button>
-                   </div>
-                </div>
+                    </div>
+                    <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest bg-white/5 text-[#A0A7B5] rounded-md border border-white/10">Habilitado</span>
+                  </div>
                 ))}
              </motion.div>
           )}
 
           {activeTab === 'audit' && (
              <motion.div key="audit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Registro de Auditoria</h3>
+                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-2">Atividade da organização</h3>
+                <p className="text-sm text-[#A0A7B5] mb-6">Acompanhe mudanças importantes sem precisar interpretar códigos técnicos.</p>
                 
                 <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
-                   {auditLogs.length > 0 ? auditLogs.map((log: any, index: number) => (
-                      <div key={log.id} className={`p-4 flex gap-4 ${index !== auditLogs.length -1 ? 'border-b border-white/5' : ''}`}>
-                         <div className="w-8 h-8 shrink-0 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mt-0.5">
-                            <Settings className="w-4 h-4 text-[#A0A7B5]" />
-                         </div>
-                         <div>
-                            <p className="text-sm text-[#F5F7FA] mb-1">{log.action}</p>
-                            <div className="flex flex-wrap items-center gap-3 text-[10px] text-[#A0A7B5] font-mono">
-                               <span>{log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('pt-BR') : 'Sem data'}</span>
-                               <span>Actor: {log.actorUid || 'Sistema'}</span>
-                               {log.metadata && <span>Target: {JSON.stringify(log.metadata)}</span>}
-                            </div>
-                         </div>
-                      </div>
-                   )) : (
+                   {auditLogs.length > 0 ? auditLogs.map((log: any, index: number) => {
+                      const actor = members.find((member: any) => member.id === log.actorUid || member.uid === log.actorUid);
+                      return (
+                        <div key={log.id} className={`p-4 flex gap-4 ${index !== auditLogs.length -1 ? 'border-b border-white/5' : ''}`}>
+                           <div className="w-8 h-8 shrink-0 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mt-0.5">
+                              <Settings className="w-4 h-4 text-[#A0A7B5]" />
+                           </div>
+                           <div className="min-w-0">
+                              <p className="text-sm text-[#F5F7FA] mb-1">{humanizeOrganizationAuditAction(log.action)}</p>
+                              <p className="text-xs text-[#A0A7B5]">
+                                {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('pt-BR') : 'Data não disponível'}
+                                {actor?.displayName ? ` · por ${actor.displayName}` : ''}
+                              </p>
+                              {isGlobalAdmin && (
+                                <details className="mt-2">
+                                  <summary className="cursor-pointer text-[10px] text-[#A0A7B5]">Detalhes técnicos</summary>
+                                  <pre className="mt-2 text-[10px] text-[#A0A7B5] whitespace-pre-wrap break-all bg-black/20 p-2 rounded-lg">{JSON.stringify({ action: log.action, actorUid: log.actorUid, metadata: log.metadata }, null, 2)}</pre>
+                                </details>
+                              )}
+                           </div>
+                        </div>
+                      );
+                   }) : (
                       <div className="py-2">
                         <PremiumEmptyState 
                           icon={<ShieldCheck className="w-6 h-6" />}
-                          title="Auditoria Limpa"
-                          description="Nenhuma atividade administrativa recente na organização."
+                          title="Tudo tranquilo por aqui"
+                          description="As mudanças administrativas importantes aparecerão nesta área."
                         />
                       </div>
                    )}
