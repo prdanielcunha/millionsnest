@@ -45,8 +45,22 @@ export class BillingService {
       console.error("[BillingService] Failed to load PRODUCT_CATALOG");
     }
 
+    const legacyEnvAliases: Record<string, string[]> = {
+      musicscale_setup_premium: ['STRIPE_PRICE_SETUP_PREMIUM'],
+      musicscale_training_express: ['STRIPE_PRICE_TRAINING_EXPRESS'],
+      musicscale_worship_100: ['STRIPE_PRICE_ACERVO_WORSHIP_100'],
+      musicscale_music_pack_10: ['STRIPE_PRICE_MUSIC_PACK_10'],
+    };
+
     PRODUCT_CATALOG.forEach((item: any) => {
       let stripeId = process.env[item.envKey];
+
+      if (!stripeId) {
+        for (const alias of legacyEnvAliases[item.lookupKey] || []) {
+          stripeId = process.env[alias];
+          if (stripeId) break;
+        }
+      }
       
       // Fallback for mock mode or missing keys
       if (!stripeId) stripeId = `mock_${item.lookupKey}`;
