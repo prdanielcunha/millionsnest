@@ -84,6 +84,47 @@ const humanizeAuditAction = (action: unknown) => {
   return 'Atividade registrada';
 };
 
+type MusicScaleHubSummary = {
+  songsCount: number;
+  songsWithContentCount: number;
+  configuredMembersCount: number;
+  scalesCount: number;
+  bandScalesCount: number;
+  nextScale: null | {
+    id: string;
+    date: string;
+    time?: string | null;
+    status?: string | null;
+    songCount: number;
+    assignmentCount: number;
+    bandScaleId?: string | null;
+    responseCounts: {
+      pending: number;
+      accepted: number;
+      maybe: number;
+      declined: number;
+    };
+  };
+  updatedAtMs: number;
+};
+
+const EMPTY_MUSICSCALE_SUMMARY: MusicScaleHubSummary = {
+  songsCount: 0,
+  songsWithContentCount: 0,
+  configuredMembersCount: 0,
+  scalesCount: 0,
+  bandScalesCount: 0,
+  nextScale: null,
+  updatedAtMs: 0,
+};
+
+const toEventEpoch = (scale: any): number => {
+  const date = typeof scale?.date === 'string' ? scale.date : '';
+  const time = typeof scale?.time === 'string' && /^\d{2}:\d{2}$/.test(scale.time) ? scale.time : '23:59';
+  const parsed = Date.parse(`${date}T${time}:00`);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+};
+
 const withDashboardTimeout = <T,>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -145,6 +186,7 @@ export function Dashboard() {
   }, [tab]);
 
   const [subscription, setSubscription] = useState<any>(null);
+  const [musicScaleHubSummary, setMusicScaleHubSummary] = useState<MusicScaleHubSummary>(EMPTY_MUSICSCALE_SUMMARY);
   const [organization, setOrganization] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
