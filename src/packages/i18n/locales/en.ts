@@ -489,7 +489,7 @@ export default {
     yearly_period: "year",
     one_time_badge: "One-Time Payment",
     error_plan: "Please select a primary plan."
-  }
+  },
   dashboard: {
     support: {
       actions: {

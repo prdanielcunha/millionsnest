@@ -498,7 +498,7 @@ export default {
     yearly_period: "año",
     one_time_badge: "Pago Único",
     error_plan: "Por favor, seleccione un plan principal."
-  }
+  },
   dashboard: {
     support: {
       actions: {
