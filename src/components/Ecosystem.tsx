@@ -3,6 +3,7 @@ import { ArrowUpRight, MapPin, Network, Route } from "lucide-react";
 import { useTranslation, Trans } from 'react-i18next';
 import { useNavigate } from "react-router-dom";
 import { ECOSYSTEM_APPS, type EcosystemApp } from "../lib/apps.js";
+import { trackHomeMusicScaleInterest } from "../lib/publicFunnelAnalytics.js";
 
 const publicProductIds = new Set(['musicscale', 'nestfinance', 'nestlocal', 'nestjourney']);
 
@@ -53,7 +54,10 @@ export function Ecosystem() {
               initial={{ opacity: 0, y: 16 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              onClick={() => activeProduct.landingRoute && navigate(activeProduct.landingRoute)}
+              onClick={() => {
+                if (activeProduct.id === 'musicscale') trackHomeMusicScaleInterest('ecosystem_live');
+                if (activeProduct.landingRoute) navigate(activeProduct.landingRoute);
+              }}
               className="group relative min-h-[430px] overflow-hidden rounded-[28px] border border-[#2B85EB]/25 bg-[#0A1019] p-7 text-left shadow-[0_35px_90px_rgba(0,0,0,0.28)] transition hover:border-[#2B85EB]/45 md:p-9"
             >
               <div className="absolute right-[-10%] top-[-20%] h-80 w-80 rounded-full bg-[#2B85EB]/15 blur-[100px]" />

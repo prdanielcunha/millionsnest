@@ -110,8 +110,7 @@ class AnalyticsManager {
   private isAllowedAnonymousRootEvent(event: AnalyticsEvent): boolean {
     if (
       event.organizationId !== 'none' ||
-      event.userId !== 'none' ||
-      event.app !== 'musicscale'
+      event.userId !== 'none'
     ) {
       return false;
     }
@@ -122,6 +121,25 @@ class AnalyticsManager {
       const wanted = [...expected].sort();
       return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
     };
+
+    if (event.app === 'millionsnest_core') {
+      if (event.eventType === 'page_view') {
+        return hasExactKeys(['page']) && metadata.page === 'home';
+      }
+
+      if (event.eventType === 'app_usage') {
+        return (
+          hasExactKeys(['action', 'product', 'source']) &&
+          metadata.action === 'product_interest' &&
+          metadata.product === 'musicscale' &&
+          ['hero_primary', 'nav_product', 'nav_pricing', 'nav_trial', 'flagship_primary', 'flagship_pricing', 'ecosystem_live', 'guarantee_primary', 'guarantee_pricing'].includes(metadata.source)
+        );
+      }
+
+      return false;
+    }
+
+    if (event.app !== 'musicscale') return false;
 
     if (event.eventType === 'page_view') {
       return hasExactKeys(['page']) && metadata.page === 'sales_landing';

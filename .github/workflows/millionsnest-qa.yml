@@ -52,6 +52,9 @@ jobs:
       - name: Hub authority landing and visual hierarchy
         run: npx tsx scripts/test_hub_authority_landing.ts
 
+      - name: Public home conversion funnel and analytics security
+        run: npx tsx scripts/test_public_home_funnel.ts
+
       - name: MusicScale sales truth and i18n contract
         run: npx tsx scripts/test_musicscale_sales_truth.ts
 

@@ -12,6 +12,7 @@ import { ECOSYSTEM_APPS, type EcosystemApp } from '../lib/apps.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
+import { trackHomeMusicScaleInterest } from '../lib/publicFunnelAnalytics.js';
 
 export function Navbar() {
   const { user, profile, logout } = useAuth();
@@ -267,10 +268,10 @@ export function Navbar() {
         <nav className="hidden lg:flex items-center gap-8">
           {!user && (
             <>
-              <Link to="/musicscale" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_musicscale', 'MusicScale')}</Link>
+              <Link to="/musicscale" onClick={() => trackHomeMusicScaleInterest('nav_product')} className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_musicscale', 'MusicScale')}</Link>
               <a href="/#principios" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_features', 'Por que MillionsNest')}</a>
               <a href="/#ecossistema" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_ecosystem', 'Ecossistema')}</a>
-              <a href="/musicscale#pricing-section" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_pricing', 'Planos')}</a>
+              <a href="/musicscale#pricing-section" onClick={() => trackHomeMusicScaleInterest('nav_pricing')} className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_pricing', 'Planos')}</a>
             </>
           )}
           {user && (
@@ -331,8 +332,8 @@ export function Navbar() {
                 {t('common:login', 'Entrar')}
               </Link>
               <button onClick={() => {
-                sessionStorage.setItem('purchase_intent', 'musicscale_starter_monthly');
-                navigate('/login');
+                trackHomeMusicScaleInterest('nav_trial');
+                navigate('/musicscale#pricing-section');
               }} className="text-sm font-medium px-6 py-2.5 rounded-lg bg-white text-black hover:bg-gray-100 transition-all shadow-md hover:shadow-lg active:scale-95">
                 {t('common:nav_try_musicscale', 'Experimentar MusicScale')}
               </button>
@@ -413,9 +414,9 @@ export function Navbar() {
                <>
                 <Link id="nav-login-mobile-menu" to="/login" aria-label={t('common:login', 'Entrar')} className="text-lg font-medium text-[#A0A7B5] hover:text-white text-center py-2" onClick={() => setMobileMenuOpen(false)}>{t('common:login', 'Entrar')}</Link>
                 <button onClick={() => { 
-                  sessionStorage.setItem('purchase_intent', 'musicscale_starter_monthly');
+                  trackHomeMusicScaleInterest('nav_trial');
                   setMobileMenuOpen(false);
-                  navigate('/login');
+                  navigate('/musicscale#pricing-section');
                 }} className="text-lg font-bold w-full bg-white text-black hover:bg-gray-100 text-center py-4 rounded-xl shadow-lg active:scale-95 transition-all">
                   {t('common:nav_try_musicscale', 'Experimentar MusicScale')}
                 </button>

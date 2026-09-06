@@ -3,6 +3,7 @@ import { ArrowRight, CreditCard, Languages, ShieldCheck, Sparkles, Workflow } fr
 import { useNavigate } from "react-router-dom";
 import { useTranslation, Trans } from 'react-i18next';
 import { DashboardMockup } from "./DashboardMockup.js";
+import { trackHomeMusicScaleInterest } from "../lib/publicFunnelAnalytics.js";
 
 export function Hero() {
   const navigate = useNavigate();
@@ -61,7 +62,10 @@ export function Hero() {
               className="mt-9 flex flex-col gap-3 sm:flex-row"
             >
               <button
-                onClick={() => navigate('/musicscale')}
+                onClick={() => {
+                  trackHomeMusicScaleInterest('hero_primary');
+                  navigate('/musicscale');
+                }}
                 className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#F7F9FC] px-6 py-3.5 text-sm font-semibold text-[#06080D] shadow-[0_18px_50px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white active:translate-y-0"
               >
                 {t('hero_cta_primary')}

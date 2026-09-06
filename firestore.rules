@@ -420,6 +420,38 @@ service cloud.firestore {
       request.resource.data.timestamp is timestamp;
     }
 
+    function isValidPublicHomeAnalytics() {
+      let data = request.resource.data;
+      let isPublicIdentity =
+        data.organizationId == 'none' &&
+        data.userId == 'none' &&
+        data.app == 'millionsnest_core';
+
+      let isHomeView =
+        data.eventType == 'page_view' &&
+        data.metadata.keys().hasOnly(['page']) &&
+        data.metadata.get('page', '') == 'home';
+
+      let isMusicScaleInterest =
+        data.eventType == 'app_usage' &&
+        data.metadata.keys().hasOnly(['action', 'product', 'source']) &&
+        data.metadata.get('action', '') == 'product_interest' &&
+        data.metadata.get('product', '') == 'musicscale' &&
+        data.metadata.get('source', '') in [
+          'hero_primary',
+          'nav_product',
+          'nav_pricing',
+          'nav_trial',
+          'flagship_primary',
+          'flagship_pricing',
+          'ecosystem_live',
+          'guarantee_primary',
+          'guarantee_pricing'
+        ];
+
+      return isPublicIdentity && (isHomeView || isMusicScaleInterest);
+    }
+
     function isValidPublicMusicScaleAnalytics() {
       let data = request.resource.data;
       let isPublicIdentity =
@@ -470,6 +502,7 @@ service cloud.firestore {
     match /analytics_events/{eventId} {
       allow create: if hasValidAnalyticsEnvelope() && (
         isValidAuthenticatedAnalytics() ||
+        isValidPublicHomeAnalytics() ||
         isValidPublicMusicScaleAnalytics()
       );
       allow read: if isSystemAdmin();
