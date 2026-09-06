@@ -72,6 +72,8 @@ export function OrganizationManager({
   const [liveConductorByMember, setLiveConductorByMember] = useState<Record<string, boolean>>({});
   const [liveConductorSavingId, setLiveConductorSavingId] = useState<string | null>(null);
   const [liveConductorError, setLiveConductorError] = useState<string | null>(null);
+  const [reissuingInviteId, setReissuingInviteId] = useState<string | null>(null);
+  const [inviteActionMessage, setInviteActionMessage] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
   const [detailsSaving, setDetailsSaving] = useState(false);
   const [detailsMessage, setDetailsMessage] = useState<string | null>(null);
@@ -205,6 +207,57 @@ export function OrganizationManager({
     }
     setLiveConductorByMember(next);
   }, [members]);
+
+  const handleReissueInvite = async (invite: any) => {
+    if (!user || !organization?.id || !invite?.id) return;
+    setReissuingInviteId(invite.id);
+    setInviteActionMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(organization.id)}/invitations/${encodeURIComponent(invite.id)}/reissue`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: '{}'
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success !== true || typeof data?.invitePath !== 'string') {
+        throw new Error(data?.reasonCode || 'REISSUE_FAILED');
+      }
+
+      const inviteUrl = new URL(data.invitePath, window.location.origin).toString();
+      const emailResponse = await fetch('/api/v1/invitations/email', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          organizationId: organization.id,
+          invitationId: data.invitation.id,
+          inviteUrl
+        })
+      });
+      const emailData = await emailResponse.json().catch(() => ({}));
+
+      if (emailResponse.ok && emailData?.success === true) {
+        setInviteActionMessage(`Novo convite enviado para ${data.invitation.email}.`);
+      } else {
+        await navigator.clipboard.writeText(inviteUrl);
+        setInviteActionMessage('Novo convite criado com segurança e link copiado.');
+      }
+    } catch (error: any) {
+      console.error('[OrganizationManager] Invitation reissue failed', error);
+      setInviteActionMessage('Não foi possível reenviar o convite. Tente novamente.');
+    } finally {
+      setReissuingInviteId(null);
+    }
+  };
 
   const roleInheritsLiveConduct = (role: string | null | undefined) =>
     ['owner', 'admin', 'leader'].includes(
@@ -727,6 +780,9 @@ export function OrganizationManager({
                {pendingInvites && pendingInvites.length > 0 && (
                  <div className="mt-8">
                    <h4 className="text-sm font-semibold text-[#A0A7B5] mb-4 uppercase tracking-wider">Convites Pendentes</h4>
+                   {inviteActionMessage && (
+                     <p className="text-xs text-[#A0A7B5] mb-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">{inviteActionMessage}</p>
+                   )}
                    <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
                      {pendingInvites.map((invite: any, i: number) => {
                        const isExpired = invite.status === 'pending' && invite.expiresAt && invite.expiresAt.toMillis && invite.expiresAt.toMillis() < Date.now();
@@ -739,14 +795,26 @@ export function OrganizationManager({
                              <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
                                Status: <span className={showAsExpired ? "text-red-400" : "text-[#10B981]"}>{showAsExpired ? 'Expirado' : 'Aguardando'}</span>
                              </span>
-                             <span className="text-xs text-[#A0A7B5]">Função: {{owner: 'Dono', admin: 'Admin', leader: 'Líder', secretary: 'Operador', member: 'Membro', guest: 'Visitante'}[(invite.role as string) || 'member'] || invite.role || 'Membro'}</span>
+                             <span className="text-xs text-[#A0A7B5]">{invite.email || invite.emailNormalized || 'E-mail protegido'}</span>
+                             <span className="text-xs text-[#A0A7B5]">Acesso: {{owner: 'Dono', admin: 'Administrador', manager: 'Gestor', leader: 'Líder', secretary: 'Operador', member: 'Membro', viewer: 'Visualizador', guest: 'Visitante'}[(invite.role as string) || 'member'] || invite.role || 'Membro'}</span>
                            </div>
                          </div>
                          
                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
-                           <button onClick={() => handleRevokeInvite(invite.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 rounded-lg">
-                             Revogar
-                           </button>
+                           <div className="flex flex-wrap justify-end gap-2">
+                             <button
+                               type="button"
+                               disabled={reissuingInviteId === invite.id}
+                               onClick={() => void handleReissueInvite(invite)}
+                               className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB] transition-colors px-3 py-1.5 bg-[#2B85EB]/10 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                             >
+                               {reissuingInviteId === invite.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                               Reenviar
+                             </button>
+                             <button onClick={() => handleRevokeInvite(invite.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 rounded-lg">
+                               Revogar
+                             </button>
+                           </div>
                          )}
                        </div>
                        );
