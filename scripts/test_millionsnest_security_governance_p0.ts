@@ -10,6 +10,11 @@ function runTests() {
   const rulesPath = path.join(process.cwd(), 'firestore.rules');
   const rulesCode = fs.readFileSync(rulesPath, 'utf8');
 
+  const permissionServicePath = path.join(process.cwd(), 'src/lib/permissionService.ts');
+  const permissionServiceCode = fs.readFileSync(permissionServicePath, 'utf8');
+  const canonicalGlobalRoleDeclaration =
+    "export const CANONICAL_GLOBAL_ROLES = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'] as const;";
+
   let passed = 0;
   let failed = 0;
 
@@ -33,7 +38,10 @@ function runTests() {
     const code = serverCode.substring(debugFinalCheckIndex, debugFinalCheckIndex + 2000);
     assert(code.includes('headers.authorization'), "debug-final-check uses Authorization Bearer");
     assert(code.includes('verifyIdToken(token)'), "debug-final-check verifies ID Token");
-    assert(code.includes("['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes("), "debug-final-check restricts to canonical global roles");
+    assert(
+      code.includes('isCanonicalGlobalRole(') && permissionServiceCode.includes(canonicalGlobalRoleDeclaration),
+      "debug-final-check restricts to canonical global roles"
+    );
     assert(code.includes("audit_logs').add"), "debug-final-check adds audit log");
     assert(!code.includes('userData,'), "debug-final-check does not return full userData");
   } else {
@@ -46,7 +54,10 @@ function runTests() {
     const code = serverCode.substring(subStatusIndex, subStatusIndex + 8000);
     assert(code.includes('headers.authorization'), "subscription-status uses Authorization Bearer");
     assert(code.includes('verifyIdToken(token)'), "subscription-status verifies ID Token");
-    assert(code.includes("['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes("), "subscription-status restricts to canonical global roles");
+    assert(
+      code.includes('isCanonicalGlobalRole(') && permissionServiceCode.includes(canonicalGlobalRoleDeclaration),
+      "subscription-status restricts to canonical global roles"
+    );
     assert(code.includes("audit_logs').add"), "subscription-status adds audit log");
     assert(!code.includes('stripe: {'), "subscription-status does not return full stripe data");
     assert(!code.includes('firestore: {'), "subscription-status does not return full firestore data");
