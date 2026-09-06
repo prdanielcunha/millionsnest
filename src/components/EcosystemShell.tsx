@@ -11,7 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
 import { framerTokens } from '../packages/ui/motion.js';
-import { openEcosystemModule } from '../lib/ecosystemAplicativos.js';
+import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 import { feedback } from '../packages/ui/feedback.js';
 
@@ -391,7 +391,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                </Tooltip.Trigger>
                <Tooltip.Portal>
                   <Tooltip.Content sideOffset={5} className="bg-[#0B0F19] border border-white/10 px-2 py-1 rounded-md text-[10px] font-bold text-[#F5F7FA] uppercase tracking-widest shadow-xl">
-                    Launcher
+                    Aplicativos
                   </Tooltip.Content>
                </Tooltip.Portal>
             </Tooltip.Root>
