@@ -6024,7 +6024,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
-  app.post('/api/v1/organizations/:organizationId/logo', express.json({ limit: '2mb' }), async (req, res) => {
+  app.post('/api/v1/organizations/:organizationId/logo', express.json({ limit: '512kb' }), async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader?.startsWith('Bearer ')) {
@@ -6078,7 +6078,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         return res.status(403).json({ success: false, error: 'Você não possui permissão para alterar a logo.' });
       }
 
-      const { base64, contentType, fileName } = req.body || {};
+      const { base64, contentType } = req.body || {};
       if (typeof base64 !== 'string' || typeof contentType !== 'string') {
         return res.status(400).json({ success: false, error: 'Imagem inválida.' });
       }
@@ -6090,51 +6090,27 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
 
       const buffer = Buffer.from(base64, 'base64');
-      if (!buffer.length || buffer.length > 1024 * 1024) {
-        return res.status(413).json({ success: false, error: 'A imagem precisa ter no máximo 1 MB.' });
+      if (!buffer.length || buffer.length > 260 * 1024) {
+        return res.status(413).json({ success: false, error: 'A imagem ficou muito grande. Escolha uma imagem mais simples.' });
       }
 
-      const extension = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
-      const bucketName = process.env.FIREBASE_STORAGE_BUCKET || 'millionsnest.appspot.com';
-      const bucket = admin.storage().bucket(bucketName);
-      const storagePath = `organizations/${organizationId}/branding/logo-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${extension}`;
-      const downloadToken = crypto.randomUUID();
-      const storageFile = bucket.file(storagePath);
-
-      await storageFile.save(buffer, {
-        resumable: false,
-        contentType,
-        metadata: {
-          cacheControl: 'public,max-age=3600',
-          metadata: {
-            firebaseStorageDownloadTokens: downloadToken,
-            originalName: typeof fileName === 'string' ? fileName.slice(0, 120) : ''
-          }
-        }
-      });
-
-      const publicUrl =
-        `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(storagePath)}?alt=media&token=${encodeURIComponent(downloadToken)}`;
-
+      const dataUrl = `data:${contentType};base64,${buffer.toString('base64')}`;
       const orgRef = dbInstance.collection('organizations').doc(organizationId);
-      await orgRef.set({
-        logo: publicUrl,
-        logoStoragePath: storagePath,
+      const batch = dbInstance.batch();
+      batch.set(orgRef, {
+        logo: dataUrl,
+        logoStoragePath: admin.firestore.FieldValue.delete(),
+        logoUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
-
-      await orgRef.collection('audit_logs').add({
+      batch.set(orgRef.collection('audit_logs').doc(), {
         action: 'organization.logo.updated',
         actorUid: decodedToken.uid,
         timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
+      await batch.commit();
 
-      const previousPath = typeof orgData.logoStoragePath === 'string' ? orgData.logoStoragePath : null;
-      if (previousPath && previousPath.startsWith(`organizations/${organizationId}/branding/`) && previousPath !== storagePath) {
-        bucket.file(previousPath).delete({ ignoreNotFound: true }).catch(() => {});
-      }
-
-      return res.json({ success: true, logo: publicUrl });
+      return res.json({ success: true, logo: dataUrl });
     } catch (error: any) {
       console.error('[OrganizationLogo] Upload failed', error);
       return res.status(500).json({ success: false, error: 'Não foi possível atualizar a logo.' });
