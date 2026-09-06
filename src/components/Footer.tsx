@@ -79,7 +79,7 @@ export function Footer() {
                       <span className="truncate" title={app.name}>{app.name}</span>
                       {app.status !== 'active' && (
                          <span className="text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[#A0A7B5] uppercase tracking-widest font-medium shrink-0 leading-none select-none">
-                           {t('footer_soon')}
+                           {t(app.badgeLabelKey || 'footer_soon', t('footer_soon'))}
                          </span>
                       )}
                     </span>
