@@ -25,11 +25,38 @@ const humanizeOrganizationAuditAction = (action: unknown) => {
   return 'Atividade administrativa registrada';
 };
 
-const fileToDataUrl = (file: File): Promise<string> =>
+const resizeOrganizationLogo = (file: File): Promise<{ base64: string; contentType: string }> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(reader.error || new Error('FILE_READ_FAILED'));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('IMAGE_DECODE_FAILED'));
+      image.onload = () => {
+        const maxDimension = 512;
+        const ratio = Math.min(1, maxDimension / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * ratio));
+        canvas.height = Math.max(1, Math.round(image.height * ratio));
+        const context = canvas.getContext('2d');
+        if (!context) {
+          reject(new Error('CANVAS_UNAVAILABLE'));
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        let dataUrl = canvas.toDataURL('image/webp', 0.82);
+        if (dataUrl.length > 300000) {
+          dataUrl = canvas.toDataURL('image/webp', 0.62);
+        }
+        const base64 = dataUrl.split(',')[1] || '';
+        if (!base64 || base64.length > 340000) {
+          reject(new Error('IMAGE_TOO_LARGE_AFTER_RESIZE'));
+          return;
+        }
+        resolve({ base64, contentType: 'image/webp' });
+      };
+      image.src = String(reader.result || '');
+    };
     reader.readAsDataURL(file);
   });
 
@@ -161,16 +188,16 @@ export function OrganizationManager({
       setDetailsMessage('Use uma imagem PNG, JPG ou WebP.');
       return;
     }
-    if (file.size > 1024 * 1024) {
-      setDetailsMessage('A imagem precisa ter no máximo 1 MB.');
+    if (file.size > 5 * 1024 * 1024) {
+      setDetailsMessage('A imagem original precisa ter no máximo 5 MB.');
       return;
     }
 
     setLogoUploading(true);
     setDetailsMessage(null);
     try {
-      const dataUrl = await fileToDataUrl(file);
-      const base64 = dataUrl.split(',')[1] || '';
+      const processed = await resizeOrganizationLogo(file);
+      const base64 = processed.base64;
       const token = await user.getIdToken();
       const response = await fetch(
         `/api/v1/organizations/${encodeURIComponent(organization.id)}/logo`,
@@ -182,7 +209,7 @@ export function OrganizationManager({
           },
           body: JSON.stringify({
             fileName: file.name,
-            contentType: file.type,
+            contentType: processed.contentType,
             base64
           })
         }
