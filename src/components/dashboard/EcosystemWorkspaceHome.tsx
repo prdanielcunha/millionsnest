@@ -694,6 +694,81 @@ export function EcosystemWorkspaceHome({
 
     const overviewContent = (
       <div className="space-y-6">
+        <div className="bg-[#050505] border border-white/5 rounded-2xl p-5 md:p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400 mb-1">
+                {t('musicscale.summary.live_label', 'Dados ao vivo')}
+              </p>
+              <h3 className="text-lg font-bold text-white">
+                {t('musicscale.summary.title', 'Como está o MusicScale agora')}
+              </h3>
+            </div>
+            <p className="text-xs text-[#A0A7B5]">
+              {musicScaleSummary.updatedAtMs
+                ? t('musicscale.summary.synced', 'Atualizado automaticamente')
+                : t('musicscale.summary.loading', 'Carregando dados do aplicativo...')}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <button type="button" onClick={() => musicScaleApp && onLaunchApp(musicScaleApp, '/songs')} className="text-left rounded-xl bg-white/[0.03] border border-white/5 p-4 hover:bg-white/[0.05] transition-colors">
+              <p className="text-2xl font-bold text-white">{musicScaleSummary.songsCount}</p>
+              <p className="text-xs text-[#A0A7B5] mt-1">{t('musicscale.summary.repertoire', 'músicas no repertório')}</p>
+            </button>
+            <button type="button" onClick={() => musicScaleApp && onLaunchApp(musicScaleApp, '/users')} className="text-left rounded-xl bg-white/[0.03] border border-white/5 p-4 hover:bg-white/[0.05] transition-colors">
+              <p className="text-2xl font-bold text-white">{musicScaleSummary.configuredMembersCount}</p>
+              <p className="text-xs text-[#A0A7B5] mt-1">{t('musicscale.summary.configured_members', 'integrantes configurados')}</p>
+            </button>
+            <button type="button" onClick={() => musicScaleApp && onLaunchApp(musicScaleApp, '/scales')} className="text-left rounded-xl bg-white/[0.03] border border-white/5 p-4 hover:bg-white/[0.05] transition-colors">
+              <p className="text-2xl font-bold text-white">{musicScaleSummary.scalesCount}</p>
+              <p className="text-xs text-[#A0A7B5] mt-1">{t('musicscale.summary.music_scales', 'escalas de músicas')}</p>
+            </button>
+            <button type="button" onClick={() => musicScaleApp && onLaunchApp(musicScaleApp, '/band-scales')} className="text-left rounded-xl bg-white/[0.03] border border-white/5 p-4 hover:bg-white/[0.05] transition-colors">
+              <p className="text-2xl font-bold text-white">{musicScaleSummary.bandScalesCount}</p>
+              <p className="text-xs text-[#A0A7B5] mt-1">{t('musicscale.summary.band_scales', 'escalas da banda')}</p>
+            </button>
+          </div>
+
+          {musicScaleSummary.nextScale ? (
+            <button
+              type="button"
+              onClick={() => musicScaleApp && onLaunchApp(musicScaleApp, `/scales/${musicScaleSummary.nextScale?.id}`)}
+              className="mt-4 w-full rounded-xl border border-[#2B85EB]/20 bg-[#2B85EB]/[0.07] p-4 text-left hover:bg-[#2B85EB]/10 transition-colors"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-[#2B85EB] uppercase tracking-wider">{t('musicscale.summary.next_scale', 'Próxima escala')}</p>
+                  <p className="text-sm font-semibold text-white mt-1">
+                    {new Date(`${musicScaleSummary.nextScale.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: '2-digit', month: 'short' })}
+                    {musicScaleSummary.nextScale.time ? ` · ${musicScaleSummary.nextScale.time}` : ''}
+                  </p>
+                  <p className="text-xs text-[#A0A7B5] mt-1">
+                    {t('musicscale.summary.next_scale_details', '{{songs}} músicas · {{people}} participações', {
+                      songs: musicScaleSummary.nextScale.songCount,
+                      people: musicScaleSummary.nextScale.assignmentCount
+                    })}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wider">
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/15">
+                    {musicScaleSummary.nextScale.responseCounts.accepted} {t('musicscale.summary.accepted', 'confirmadas')}
+                  </span>
+                  {musicScaleSummary.nextScale.responseCounts.pending > 0 && (
+                    <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/15">
+                      {musicScaleSummary.nextScale.responseCounts.pending} {t('musicscale.summary.pending', 'aguardando')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          ) : musicScaleSummary.updatedAtMs > 0 ? (
+            <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.02] p-4">
+              <p className="text-sm font-semibold text-white">{t('musicscale.summary.no_upcoming', 'Nenhuma próxima escala encontrada')}</p>
+              <p className="text-xs text-[#A0A7B5] mt-1">{t('musicscale.summary.no_upcoming_desc', 'Quando uma nova escala for criada, ela aparecerá aqui automaticamente.')}</p>
+            </div>
+          ) : null}
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Column (Recursos do MusicScale) */}
           <div className="lg:col-span-2 space-y-6">
@@ -832,6 +907,7 @@ export function EcosystemWorkspaceHome({
         overviewContent={overviewContent}
         memberCount={members.length}
         pendingInviteCount={pendingInvites.length}
+        musicScaleSummary={musicScaleSummary}
       />
     );
   };
