@@ -287,6 +287,17 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageScales') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
     }
 
+    // Aggregated response state in the Hub is restricted to organization admins.
+    // Response documents can include decline reasons, so ordinary members must not read
+    // the full response collection just to render dashboard counts.
+    match /scales/{scaleId}/responses/{responseId} {
+      allow read: if isAuthenticated()
+        && get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', '') is string
+        && isOrgAdmin(get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', ''))
+        && isOrgActive(get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', ''));
+      allow write: if false;
+    }
+
     match /bandScales/{scaleId} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
       allow create: if isAuthenticated() && hasPermission(incoming().get('organizationId', ''), 'canManageScales') && isOrgActive(incoming().get('organizationId', ''));
