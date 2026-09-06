@@ -941,164 +941,13 @@ export function EcosystemAdmin() {
             {activeTab === 'analytics' && (
               <div className="space-y-6">
                 <GrowthFunnelPanel user={user} onRecentEvents={setAnalyticsEvents} />
-                {/* Computed Metrics */}
-                {(() => {
-                  const now = Date.now();
-                  const last24h = now - 24 * 60 * 60 * 1000;
-                  const last7d = now - 7 * 24 * 60 * 60 * 1000;
-
-                  // Active Users
-                  const dauMap = new Set();
-                  const wauMap = new Set();
-
-                  // Errors & Performance
-                  let totalErrors = 0;
-                  let perfIssues = 0;
-
-                  // Conversions
-                  let checkoutsStarted = 0;
-                  let checkoutsCompleted = 0;
-
-                  analyticsEvents.forEach(evt => {
-                    const timestamp = evt.timestamp?.seconds ? evt.timestamp.seconds * 1000 : now;
-                    
-                    if (timestamp >= last24h && evt.userId && evt.userId !== 'none') {
-                      dauMap.add(evt.userId);
-                    }
-                    if (timestamp >= last7d && evt.userId && evt.userId !== 'none') {
-                      wauMap.add(evt.userId);
-                    }
-
-                    if (evt.eventType === 'error') totalErrors++;
-                    if (evt.eventType === 'performance_metric') perfIssues++;
-                    if (evt.eventType === 'checkout_started') checkoutsStarted++;
-                    if (evt.eventType === 'checkout_completed') checkoutsCompleted++;
-                  });
-
-                  const conversionRate = checkoutsStarted > 0 ? Math.round((checkoutsCompleted / checkoutsStarted) * 100) : 0;
-
-                  // UX Funnels
-                  let onboardingStarted = 0;
-                  let onboardingCompleted = 0;
-                  let aiImportStarted = 0;
-                  let aiImportCompleted = 0;
-                  let aiImportAbandoned = 0;
-
-                  analyticsEvents.forEach(evt => {
-                    if (evt.eventType === 'onboarding_started') onboardingStarted++;
-                    if (evt.eventType === 'onboarding_completed') onboardingCompleted++;
-                    if (evt.eventType === 'ai_processing_started') aiImportStarted++;
-                    if (evt.eventType === 'ai_processing_completed') aiImportCompleted++;
-                    if (evt.eventType === 'import_abandoned') aiImportAbandoned++;
-                  });
-
-                  const onboardingConv = onboardingStarted > 0 ? Math.round((onboardingCompleted / onboardingStarted) * 100) : 0;
-                  const aiConv = aiImportStarted > 0 ? Math.round((aiImportCompleted / aiImportStarted) * 100) : 0;
-
-                  return (
-                    <>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                        <div className="bg-[#0B0F19] rounded-2xl p-6 border border-white/10 group hover:border-[#2B85EB]/50 transition-colors">
-                          <div className="flex items-center gap-3 mb-2">
-                            <Users className="w-5 h-5 text-[#2B85EB]" />
-                            <h3 className="text-[#A0A7B5] font-medium text-sm">DAU / WAU</h3>
-                          </div>
-                          <div className="flex items-end gap-2">
-                            <p className="text-3xl font-semibold text-[#F5F7FA]">{dauMap.size}</p>
-                            <p className="text-sm text-[#A0A7B5] pb-1">/ {wauMap.size}</p>
-                          </div>
-                          <p className="text-xs text-[#A0A7B5] mt-2">Usuários ativos únicos (24h/7d)</p>
-                        </div>
-
-                        <div className="bg-[#0B0F19] rounded-2xl p-6 border border-white/10 group hover:border-[#10B981]/50 transition-colors">
-                          <div className="flex items-center gap-3 mb-2">
-                            <TrendingUp className="w-5 h-5 text-[#10B981]" />
-                            <h3 className="text-[#A0A7B5] font-medium text-sm">Conversão Checkout</h3>
-                          </div>
-                          <p className="text-3xl font-semibold text-[#F5F7FA]">{conversionRate}%</p>
-                          <p className="text-xs text-[#A0A7B5] mt-2">{checkoutsCompleted} concluídos de {checkoutsStarted} iniciados</p>
-                        </div>
-
-                        <div className="bg-[#0B0F19] rounded-2xl p-6 border border-red-500/10 group hover:border-red-500/50 transition-colors">
-                          <div className="flex items-center gap-3 mb-2">
-                            <AlertCircle className="w-5 h-5 text-red-500" />
-                            <h3 className="text-[#A0A7B5] font-medium text-sm">Erros Críticos (UX)</h3>
-                          </div>
-                          <p className="text-3xl font-semibold text-[#F5F7FA]">{totalErrors}</p>
-                          <p className="text-xs text-[#A0A7B5] mt-2">Falhas JS, Crashes e Rejections</p>
-                        </div>
-
-                        <div className="bg-[#0B0F19] rounded-2xl p-6 border border-yellow-500/10 group hover:border-yellow-500/50 transition-colors">
-                          <div className="flex items-center gap-3 mb-2">
-                            <ActivityIcon className="w-5 h-5 text-yellow-500" />
-                            <h3 className="text-[#A0A7B5] font-medium text-sm">Gargalos e Lags</h3>
-                          </div>
-                          <p className="text-3xl font-semibold text-[#F5F7FA]">{perfIssues}</p>
-                          <p className="text-xs text-[#A0A7B5] mt-2">Long Tasks e Slow Renders detectados</p>
-                        </div>
-                      </div>
-
-                      {/* UX Funnels */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div className="bg-[#0B0F19] rounded-2xl p-6 border border-white/10">
-                           <h3 className="text-[#F5F7FA] font-medium mb-4 flex items-center gap-2">
-                             <Users className="w-4 h-4 text-[#A0A7B5]"/> Onboarding Funnel
-                           </h3>
-                           <div className="space-y-4">
-                              <div>
-                                <div className="flex justify-between text-xs mb-1">
-                                  <span className="text-[#A0A7B5]">Iniciou ({onboardingStarted})</span>
-                                  <span className="text-[#A0A7B5]">100%</span>
-                                </div>
-                                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                                  <div className="h-full bg-[#2B85EB]" style={{ width: '100%' }} />
-                                </div>
-                              </div>
-                              <div>
-                                <div className="flex justify-between text-xs mb-1">
-                                  <span className="text-[#A0A7B5]">Concluiu ({onboardingCompleted})</span>
-                                  <span className="text-[#A0A7B5]">{onboardingConv}%</span>
-                                </div>
-                                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                                  <div className="h-full bg-[#10B981]" style={{ width: `${onboardingConv}%` }} />
-                                </div>
-                              </div>
-                           </div>
-                        </div>
-
-                        <div className="bg-[#0B0F19] rounded-2xl p-6 border border-white/10">
-                           <h3 className="text-[#F5F7FA] font-medium mb-4 flex items-center gap-2">
-                             <TrendingUp className="w-4 h-4 text-[#A0A7B5]"/> IA Import Funnel
-                           </h3>
-                           <div className="space-y-4">
-                              <div>
-                                <div className="flex justify-between text-xs mb-1">
-                                  <span className="text-[#A0A7B5]">Iniciou ({aiImportStarted})</span>
-                                  <span className="text-[#A0A7B5]">100%</span>
-                                </div>
-                                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                                  <div className="h-full bg-[#A855F7]" style={{ width: '100%' }} />
-                                </div>
-                              </div>
-                              <div>
-                                <div className="flex justify-between text-xs mb-1">
-                                  <span className="text-[#A0A7B5]">Concluiu ({aiImportCompleted} / Abandono {aiImportAbandoned})</span>
-                                  <span className="text-[#A0A7B5]">{aiConv}%</span>
-                                </div>
-                                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                                  <div className="h-full bg-[#10B981]" style={{ width: `${aiConv}%` }} />
-                                </div>
-                              </div>
-                           </div>
-                        </div>
-                      </div>
-                    </>
-                  );
-                })()}
+                <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-5 py-4 text-xs leading-relaxed text-[#788392]">
+                  Os indicadores abaixo mostram apenas o feed recente carregado pelo Growth. Métricas de saúde de produto que exigem cobertura completa por tenant não são apresentadas como totais para evitar números incompletos.
+                </div>
 
                 <div className="bg-[#0B0F19] border border-white/10 rounded-xl overflow-hidden p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-[#F5F7FA]">Log Completo e Monitoramento</h3>
+                    <h3 className="text-lg font-semibold text-[#F5F7FA]">Feed recente de Growth</h3>
                     <div className="flex items-center gap-4 text-xs text-[#A0A7B5]">
                       <span className="flex items-center gap-1.5"><Users className="w-4 h-4 text-[#A0A7B5]" /> {users.length} Total Users</span>
                       <span className="flex items-center gap-1.5"><Building className="w-4 h-4 text-[#A0A7B5]" /> {organizations.length} Orgs</span>
@@ -1110,7 +959,7 @@ export function EcosystemAdmin() {
                   </p>
                   
                   <div className="space-y-4">
-                    <h4 className="text-sm font-medium text-[#F5F7FA]">UX Timeline (Sessões Recentes)</h4>
+                    <h4 className="text-sm font-medium text-[#F5F7FA]">Sessões recentes do feed global</h4>
                     <div className="space-y-4">
                       {(() => {
                         // Group events by session

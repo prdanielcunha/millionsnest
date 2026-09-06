@@ -36,3 +36,6 @@ assert.match(server, /maxEvents = 5000/, 'growth endpoint must define an explici
 assert.match(server, /Cache-Control', 'private, no-store'/, 'growth response must not be publicly cached');
 
 console.log('PASS bounded admin Growth funnel, authentication, and commercial event mirror contract');
+
+assert.equal(admin.includes('DAU / WAU'), false, 'admin must not present incomplete DAU/WAU totals from the bounded Growth feed');
+assert.equal(admin.includes('Erros Críticos (UX)'), false, 'admin must not present incomplete tenant-wide UX error totals');
