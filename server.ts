@@ -886,9 +886,10 @@ async function startServer() {
       });
 
       if (!result.success) {
-        return res.status(result.reasonCode === 'NOT_CONFIGURED' ? 503 : 502).json({
+        const reasonCode = 'reasonCode' in result ? result.reasonCode : 'DELIVERY_FAILED';
+        return res.status(reasonCode === 'NOT_CONFIGURED' ? 503 : 502).json({
           success: false,
-          reasonCode: result.reasonCode
+          reasonCode
         });
       }
 
@@ -1044,7 +1045,8 @@ async function startServer() {
 
         const tokenResult = generateInvitationTokenMaterial();
         if (!tokenResult.success) {
-          return { status: 500, payload: { success: false, reasonCode: tokenResult.reasonCode } };
+          const reasonCode = 'reasonCode' in tokenResult ? tokenResult.reasonCode : 'TOKEN_GENERATION_FAILED';
+          return { status: 500, payload: { success: false, reasonCode } };
         }
 
         const collisionQuery = await transaction.get(
