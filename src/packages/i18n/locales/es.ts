@@ -988,7 +988,11 @@ export default {
             "getting_started": {
                   "title": "Primeros pasos en MusicScale",
                   "description": "Vamos a preparar tu organización, tu equipo y la primera configuración. Puedes completar cada paso a tu ritmo.",
-                  "operational_notice": "Los pasos de Repertorio, acordes, letras, integrantes y escalas ocurren dentro de MusicScale. Abre la aplicación y sigue las pautas a continuación.",
+                  "guidance_title": "No necesitas memorizar el sistema",
+                  "guidance_ready": "Tu organización y tu equipo están listos. Empieza agregando las primeras canciones y sigue el orden de abajo.",
+                  "guidance_org": "Empieza revisando los datos de tu iglesia u organización. Después, el panel te mostrará el siguiente paso.",
+                  "guidance_team": "Tu organización está lista. Ahora invita a las personas que usarán MusicScale contigo.",
+                  "operational_notice": "Las próximas tareas ocurren dentro de MusicScale. Abre la aplicación y sigue el orden indicado en la guía.",
                   "sections": {
                         "millionsnest": "Preparación en MillionsNest",
                         "musicscale": "Continuar en MusicScale"
@@ -997,6 +1001,8 @@ export default {
                         "completed": "Completado",
                         "attention": "Requiere atención",
                         "continue_in_ms": "Continuar en MusicScale",
+                        "next_step": "Siguiente paso",
+                        "do_in_ms": "Hazlo en MusicScale",
                         "pending": "Pendiente",
                         "pending_invite": "Invitación enviada"
                   },
