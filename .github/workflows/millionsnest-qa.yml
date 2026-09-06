@@ -58,6 +58,12 @@ jobs:
       - name: Public home analytics backend validator
         run: npx tsx scripts/test_public_home_analytics_service.ts
 
+      - name: Growth funnel cohort aggregation
+        run: npx tsx scripts/test_growth_funnel_service.ts
+
+      - name: Admin Growth funnel security and bounded reads
+        run: npx tsx scripts/test_admin_growth_funnel_contract.ts
+
       - name: MusicScale sales truth and i18n contract
         run: npx tsx scripts/test_musicscale_sales_truth.ts
 

@@ -215,12 +215,28 @@ class AnalyticsManager {
         }
       });
 
-      // Write organization-scoped events
+      // Write organization-scoped events. A very small set of commercial funnel
+      // events is mirrored into the global admin feed so Growth reporting never
+      // needs an unbounded collection-group scan across every tenant.
+      const growthMirrorEventTypes = new Set<AnalyticsEventType>([
+        'trial_cta_clicked',
+        'signup',
+        'checkout_started',
+        'checkout_completed',
+        'onboarding_started',
+        'onboarding_completed',
+      ]);
+
       for (const [orgId, evts] of Object.entries(orgEvents)) {
         const orgEventsRef = collection(db, `organizations/${orgId}/analytics`);
         evts.forEach(event => {
           const newRef = doc(orgEventsRef);
           batch.set(newRef, event);
+
+          if (growthMirrorEventTypes.has(event.eventType)) {
+            const growthRef = doc(collection(db, 'analytics_events'));
+            batch.set(growthRef, event);
+          }
         });
       }
 
