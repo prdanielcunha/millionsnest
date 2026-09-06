@@ -5406,134 +5406,371 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
-  app.post('/api/user/organization', express.json(), async (req, res) => {
+  app.post('/api/user/organization', express.json({ limit: '32kb' }), async (req, res) => {
     try {
-      const { orgId, name, slug } = req.body;
-      if (!orgId) {
-        res.status(400).json({ error: 'Missing orgId' });
-        return;
+      const {
+        orgId,
+        name,
+        slug,
+        addressLine,
+        city,
+        state,
+        country,
+        postalCode,
+        phone,
+        whatsapp,
+        website,
+        instagram,
+        locale,
+        timeZone
+      } = req.body || {};
+
+      if (typeof orgId !== 'string' || !orgId.trim() || orgId.length > 256) {
+        return res.status(400).json({ error: 'Organização inválida.' });
       }
+
       const authHeader = req.headers.authorization;
       if (!authHeader?.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
-      
-      const token = authHeader.split('Bearer ')[1];
+
       let decodedToken;
       try {
-        decodedToken = await admin.auth().verifyIdToken(token);
-      } catch (err) {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
         return res.status(401).json({ error: 'Invalid token' });
       }
 
       const uid = decodedToken.uid;
-      const batch = admin.firestore().batch();
-      
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ error: 'Database not initialized' });
+      }
+
+      const [orgDocRes, actorDoc, membershipDoc] = await Promise.all([
+        dbInstance.collection('organizations').doc(orgId).get(),
+        dbInstance.collection('users').doc(uid).get(),
+        dbInstance.collection('organizations').doc(orgId).collection('members').doc(uid).get()
+      ]);
+
+      if (!orgDocRes.exists) {
+        return res.status(404).json({ error: 'Organização não encontrada.' });
+      }
+
+      const currentOrgData = orgDocRes.data() || {};
+      const actorData = actorDoc.exists ? actorDoc.data() || {} : {};
+      const membershipData = membershipDoc.exists ? membershipDoc.data() || {} : {};
+      const actorIsOwner =
+        currentOrgData.ownerUid === uid ||
+        currentOrgData.ownerId === uid ||
+        currentOrgData.ownerUserId === uid ||
+        currentOrgData.owner_user_id === uid;
+      const membershipRole = String(membershipData.role || membershipData.organizationRole || '').toLowerCase();
+      const canUpdateSettings =
+        isGlobalPrivilegedRole(actorData.systemRole) ||
+        actorIsOwner ||
+        membershipRole === 'owner' ||
+        membershipRole === 'admin' ||
+        membershipData.permissions?.['organization.settings.update'] === true;
+
+      if (!canUpdateSettings) {
+        return res.status(403).json({ error: 'Você não possui permissão para alterar esta organização.' });
+      }
+
       const updateData: any = {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
 
-      if (name) {
-        updateData.name = name;
-        updateData.ownerUid = uid;
-        updateData.ownerId = uid;
+      const normalizeText = (value: unknown, maxLength: number): string | null => {
+        if (value === undefined) return null;
+        if (typeof value !== 'string') throw new Error('INVALID_FIELD');
+        return value.trim().slice(0, maxLength);
+      };
+
+      if (name !== undefined) {
+        if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 120) {
+          return res.status(400).json({ error: 'Informe um nome válido para a organização.' });
+        }
+        updateData.name = name.trim();
+        updateData.displayName = name.trim();
       }
 
-      let oldSlug: string | null = null;
+      let oldSlug: string | null = currentOrgData.slug || null;
       if (slug !== undefined) {
-         const orgDocRes = await admin.firestore().collection('organizations').doc(orgId).get();
-         if (orgDocRes.exists) {
-            oldSlug = orgDocRes.data()?.slug || null;
-         }
+        if (typeof slug !== 'string') {
+          return res.status(400).json({ error: 'Endereço público inválido.' });
+        }
 
-         if (!slug || slug.trim() === '') {
-            updateData.slug = null;
-         } else {
-            const slugRegex = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
-            if (!slugRegex.test(slug) || slug.includes('--')) {
-                return res.status(400).json({ error: 'Formato de link inválido.' });
+        const cleanSlug = slug.trim().toLowerCase();
+        if (!cleanSlug) {
+          updateData.slug = null;
+        } else {
+          const slugRegex = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+          if (!slugRegex.test(cleanSlug) || cleanSlug.includes('--')) {
+            return res.status(400).json({ error: 'Formato de link inválido.' });
+          }
+
+          const RESERVED_PUBLIC_ROUTES = [
+            'login', 'dashboard', 'pricing', 'checkout', 'invite', 'join',
+            'start', 'admin', 'api', 'support', 'billing', 'apps', 'settings',
+            'termos-de-uso', 'politica-de-privacidade', 'politicas-de-reembolso',
+            'politicas-de-cancelamento', 'upgrade', 'org', 'organizations',
+            'musicscale', 'millionsnest'
+          ];
+          if (RESERVED_PUBLIC_ROUTES.includes(cleanSlug)) {
+            return res.status(400).json({ error: 'Este endereço é reservado. Escolha outro.' });
+          }
+
+          const indexRef = dbInstance.collection('organizationSlugs').doc(cleanSlug);
+          const indexDoc = await indexRef.get();
+          if (indexDoc.exists && indexDoc.data()?.organizationId !== orgId) {
+            return res.status(409).json({ error: 'Este endereço já está em uso.' });
+          }
+
+          if (!indexDoc.exists) {
+            const slugQuery = await dbInstance.collection('organizations').where('slug', '==', cleanSlug).limit(2).get();
+            const collision = slugQuery.docs.find(existingDoc => existingDoc.id !== orgId);
+            if (collision) {
+              return res.status(409).json({ error: 'Este endereço já está em uso.' });
             }
+          }
 
-            const RESERVED_PUBLIC_ROUTES = [
-              'login', 'dashboard', 'pricing', 'checkout', 'invite', 'join', 
-              'start', 'admin', 'api', 'support', 'billing', 'apps', 'settings',
-              'termos-de-uso', 'politica-de-privacidade', 'politicas-de-reembolso', 'politicas-de-cancelamento',
-              'upgrade', 'org', 'organizations', 'musicscale', 'millionsnest', 'api'
-            ];
-
-            if (RESERVED_PUBLIC_ROUTES.includes(slug)) {
-               return res.status(400).json({ error: 'Palavra reservada, escolha outra.' });
-            }
-
-            // Transaction-like constraint using a dedicated collection index
-            const indexRef = admin.firestore().collection('organizationSlugs').doc(slug);
-            const indexDoc = await indexRef.get();
-            if (indexDoc.exists) {
-                const existingData = indexDoc.data();
-                if (existingData?.organizationId !== orgId) {
-                    return res.status(400).json({ error: 'Este link já está em uso.' });
-                }
-            } else {
-                // Not in index, double check organizations just in case legacy data exists
-                const slugQuery = await admin.firestore().collection('organizations').where('slug', '==', slug).get();
-                if (!slugQuery.empty) {
-                   const existingDoc = slugQuery.docs[0];
-                   if (existingDoc.id !== orgId) {
-                      return res.status(400).json({ error: 'Este link já está em uso (legado).' });
-                   }
-                }
-            }
-            updateData.slug = slug;
-         }
+          updateData.slug = cleanSlug;
+        }
       }
 
-      batch.set(admin.firestore().collection('organizations').doc(orgId), updateData, { merge: true });
-      
+      try {
+        const normalizedAddressLine = normalizeText(addressLine, 160);
+        const normalizedCity = normalizeText(city, 80);
+        const normalizedState = normalizeText(state, 80);
+        const normalizedCountry = normalizeText(country, 80);
+        const normalizedPostalCode = normalizeText(postalCode, 24);
+        const normalizedPhone = normalizeText(phone, 40);
+        const normalizedWhatsapp = normalizeText(whatsapp, 40);
+        const normalizedInstagram = normalizeText(instagram, 120);
+        let normalizedWebsite = normalizeText(website, 240);
+
+        if (normalizedWebsite) {
+          if (!/^https?:\/\//i.test(normalizedWebsite)) normalizedWebsite = `https://${normalizedWebsite}`;
+          let parsedWebsite: URL;
+          try {
+            parsedWebsite = new URL(normalizedWebsite);
+          } catch {
+            return res.status(400).json({ error: 'Informe um site válido.' });
+          }
+          if (!['http:', 'https:'].includes(parsedWebsite.protocol)) {
+            return res.status(400).json({ error: 'Informe um site válido.' });
+          }
+          normalizedWebsite = parsedWebsite.toString();
+        }
+
+        if (locale !== undefined) {
+          if (!['pt-BR', 'en', 'es'].includes(locale)) {
+            return res.status(400).json({ error: 'Idioma inválido.' });
+          }
+          updateData.locale = locale;
+        }
+
+        if (timeZone !== undefined) {
+          if (typeof timeZone !== 'string' || timeZone.length > 80) {
+            return res.status(400).json({ error: 'Fuso horário inválido.' });
+          }
+          try {
+            new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+          } catch {
+            return res.status(400).json({ error: 'Fuso horário inválido.' });
+          }
+          updateData.timeZone = timeZone;
+        }
+
+        const optionalFields: Array<[string, string | null]> = [
+          ['addressLine', normalizedAddressLine],
+          ['city', normalizedCity],
+          ['state', normalizedState],
+          ['country', normalizedCountry],
+          ['postalCode', normalizedPostalCode],
+          ['phone', normalizedPhone],
+          ['whatsapp', normalizedWhatsapp],
+          ['website', normalizedWebsite],
+          ['instagram', normalizedInstagram]
+        ];
+        optionalFields.forEach(([key, value]) => {
+          if (value !== null) updateData[key] = value;
+        });
+
+        const anyAddressFieldChanged =
+          addressLine !== undefined ||
+          city !== undefined ||
+          state !== undefined ||
+          country !== undefined ||
+          postalCode !== undefined;
+        if (anyAddressFieldChanged) {
+          updateData.address = {
+            street: normalizedAddressLine ?? currentOrgData.address?.street ?? '',
+            city: normalizedCity ?? currentOrgData.address?.city ?? '',
+            state: normalizedState ?? currentOrgData.address?.state ?? '',
+            country: normalizedCountry ?? currentOrgData.address?.country ?? '',
+            zip: normalizedPostalCode ?? currentOrgData.address?.zip ?? ''
+          };
+        }
+      } catch (error: any) {
+        if (error?.message === 'INVALID_FIELD') {
+          return res.status(400).json({ error: 'Um dos campos informados é inválido.' });
+        }
+        throw error;
+      }
+
+      const batch = dbInstance.batch();
+      const orgRef = dbInstance.collection('organizations').doc(orgId);
+      batch.set(orgRef, updateData, { merge: true });
+
       if (slug !== undefined && updateData.slug) {
-          batch.set(admin.firestore().collection('organizationSlugs').doc(updateData.slug), {
-              organizationId: orgId,
-              createdAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-      }
-
-      if (oldSlug && slug !== undefined && updateData.slug !== oldSlug) {
-         batch.set(admin.firestore().collection('organizationSlugRedirects').doc(oldSlug), {
-             organizationId: orgId,
-             currentSlug: updateData.slug,
-             createdAt: admin.firestore.FieldValue.serverTimestamp()
-         });
-         // Also we should free up the old slug in the organizationSlugs index, or keep it reserved.
-         // Let's delete the old index document so another org can use it, but keeping the redirect.
-         batch.delete(admin.firestore().collection('organizationSlugs').doc(oldSlug));
-      }
-
-      if (name) {
-        batch.set(admin.firestore().collection('organization_members').doc(`${uid}_${orgId}`), {
-          uid: uid,
+        batch.set(dbInstance.collection('organizationSlugs').doc(updateData.slug), {
           organizationId: orgId,
-          role: 'owner',
-          permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-          permissions: getDefaultPermissions('owner')
-        }, { merge: true });
-
-        batch.set(admin.firestore().collection('users').doc(uid), {
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
       }
 
-      await batch.commit();
+      if (oldSlug && slug !== undefined && updateData.slug !== oldSlug) {
+        batch.set(dbInstance.collection('organizationSlugRedirects').doc(oldSlug), {
+          organizationId: orgId,
+          currentSlug: updateData.slug || null,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        batch.delete(dbInstance.collection('organizationSlugs').doc(oldSlug));
+      }
 
-      console.log('[OWNERSHIP_SYNC]', {
-        uid: uid,
-        organizationId: orgId,
-        role_anterior: 'unknown',
-        role_nova: 'owner',
-        motivo: 'criação/edição da organização'
+      const auditRef = orgRef.collection('audit_logs').doc();
+      batch.set(auditRef, {
+        action: 'organization.updated',
+        actorUid: uid,
+        changedFields: Object.keys(updateData).filter(key => key !== 'updatedAt'),
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      res.json({ success: true });
+      await batch.commit();
+
+      return res.json({ success: true, organizationId: orgId });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error('[OrganizationProfile] Update failed', e);
+      return res.status(500).json({ error: 'Não foi possível atualizar a organização.' });
+    }
+  });
+
+  app.post('/api/v1/organizations/:organizationId/logo', express.json({ limit: '2mb' }), async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+      }
+
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+      }
+
+      const organizationId = String(req.params.organizationId || '').trim();
+      if (!organizationId || organizationId.length > 256 || organizationId.includes('/') || organizationId.includes('\\')) {
+        return res.status(400).json({ success: false, error: 'Organização inválida.' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, error: 'Database not initialized' });
+      }
+
+      const [orgSnap, actorSnap, memberSnap] = await Promise.all([
+        dbInstance.collection('organizations').doc(organizationId).get(),
+        dbInstance.collection('users').doc(decodedToken.uid).get(),
+        dbInstance.collection('organizations').doc(organizationId).collection('members').doc(decodedToken.uid).get()
+      ]);
+
+      if (!orgSnap.exists) {
+        return res.status(404).json({ success: false, error: 'Organização não encontrada.' });
+      }
+
+      const orgData = orgSnap.data() || {};
+      const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+      const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+      const actorIsOwner =
+        orgData.ownerUid === decodedToken.uid ||
+        orgData.ownerId === decodedToken.uid ||
+        orgData.ownerUserId === decodedToken.uid ||
+        orgData.owner_user_id === decodedToken.uid;
+      const role = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+      const allowed =
+        isGlobalPrivilegedRole(actorData.systemRole) ||
+        actorIsOwner ||
+        role === 'owner' ||
+        role === 'admin' ||
+        memberData.permissions?.['organization.settings.update'] === true;
+
+      if (!allowed) {
+        return res.status(403).json({ success: false, error: 'Você não possui permissão para alterar a logo.' });
+      }
+
+      const { base64, contentType, fileName } = req.body || {};
+      if (typeof base64 !== 'string' || typeof contentType !== 'string') {
+        return res.status(400).json({ success: false, error: 'Imagem inválida.' });
+      }
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(contentType)) {
+        return res.status(400).json({ success: false, error: 'Use uma imagem PNG, JPG ou WebP.' });
+      }
+      if (!/^[A-Za-z0-9+/=\r\n]+$/.test(base64)) {
+        return res.status(400).json({ success: false, error: 'Imagem inválida.' });
+      }
+
+      const buffer = Buffer.from(base64, 'base64');
+      if (!buffer.length || buffer.length > 1024 * 1024) {
+        return res.status(413).json({ success: false, error: 'A imagem precisa ter no máximo 1 MB.' });
+      }
+
+      const extension = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
+      const bucketName = process.env.FIREBASE_STORAGE_BUCKET || 'millionsnest.appspot.com';
+      const bucket = admin.storage().bucket(bucketName);
+      const storagePath = `organizations/${organizationId}/branding/logo-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${extension}`;
+      const downloadToken = crypto.randomUUID();
+      const storageFile = bucket.file(storagePath);
+
+      await storageFile.save(buffer, {
+        resumable: false,
+        contentType,
+        metadata: {
+          cacheControl: 'public,max-age=3600',
+          metadata: {
+            firebaseStorageDownloadTokens: downloadToken,
+            originalName: typeof fileName === 'string' ? fileName.slice(0, 120) : ''
+          }
+        }
+      });
+
+      const publicUrl =
+        `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(storagePath)}?alt=media&token=${encodeURIComponent(downloadToken)}`;
+
+      const orgRef = dbInstance.collection('organizations').doc(organizationId);
+      await orgRef.set({
+        logo: publicUrl,
+        logoStoragePath: storagePath,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      await orgRef.collection('audit_logs').add({
+        action: 'organization.logo.updated',
+        actorUid: decodedToken.uid,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      const previousPath = typeof orgData.logoStoragePath === 'string' ? orgData.logoStoragePath : null;
+      if (previousPath && previousPath.startsWith(`organizations/${organizationId}/branding/`) && previousPath !== storagePath) {
+        bucket.file(previousPath).delete({ ignoreNotFound: true }).catch(() => {});
+      }
+
+      return res.json({ success: true, logo: publicUrl });
+    } catch (error: any) {
+      console.error('[OrganizationLogo] Upload failed', error);
+      return res.status(500).json({ success: false, error: 'Não foi possível atualizar a logo.' });
     }
   });
 
