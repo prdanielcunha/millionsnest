@@ -52,6 +52,33 @@ export class BillingService {
       musicscale_music_pack_10: ['STRIPE_PRICE_MUSIC_PACK_10'],
     };
 
+    let stripeAddonFallbacks: Stripe.Price[] = [];
+    const needsStripeAddonFallback = PRODUCT_CATALOG.some((item: any) => {
+      if (item.type !== 'addon') return false;
+      if (process.env[item.envKey]) return false;
+      return !(legacyEnvAliases[item.lookupKey] || []).some(alias => !!process.env[alias]);
+    });
+
+    if (needsStripeAddonFallback && !this.isMock) {
+      try {
+        const activePrices = await this.stripe.prices.list({
+          active: true,
+          limit: 100
+        });
+
+        stripeAddonFallbacks = activePrices.data.filter((price: Stripe.Price) =>
+          price.active &&
+          price.currency.toLowerCase() === 'brl' &&
+          price.type === 'one_time' &&
+          price.metadata?.app === 'musicscale' &&
+          price.metadata?.type === 'addon' &&
+          !!price.metadata?.catalog_key
+        );
+      } catch (err: any) {
+        console.warn('[BillingService] Failed to resolve missing add-on price IDs from Stripe metadata:', err?.message || err);
+      }
+    }
+
     PRODUCT_CATALOG.forEach((item: any) => {
       let stripeId = process.env[item.envKey];
 
@@ -60,6 +87,13 @@ export class BillingService {
           stripeId = process.env[alias];
           if (stripeId) break;
         }
+      }
+
+      if (!stripeId && item.type === 'addon') {
+        const stripeFallback = stripeAddonFallbacks.find(
+          (price: Stripe.Price) => price.metadata?.catalog_key === item.lookupKey
+        );
+        if (stripeFallback) stripeId = stripeFallback.id;
       }
       
       // Fallback for mock mode or missing keys
