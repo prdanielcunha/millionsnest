@@ -277,7 +277,11 @@ export function Dashboard() {
   const [subscriptionBlockedReason, setSubscriptionBlockedReason] = useState<string | null>(null);
   const [verifyingStripe, setVerifyingStripe] = useState(false);
 
-  const handleLaunchEcosystemApp = async (app: EcosystemApp, permsMap: Record<string, boolean>) => {
+  const handleLaunchEcosystemApp = async (
+    app: EcosystemApp,
+    permsMap: Record<string, boolean>,
+    destinationPath?: string
+  ) => {
     analytics.track('app_usage', { userId: user?.uid, organizationId: profile?.organizationId, app: app.id });
     if (!profile || !organization) {
       feedback.error('Erro de Sessão: Sessão do ecossistema inválida ou expirada.');
@@ -314,7 +318,7 @@ export function Dashboard() {
            source: 'global_admin'
          });
       }
-      await openEcosystemModule(app.id, user, profile, organization, permsMap);
+      await openEcosystemModule(app.id, user, profile, organization, permsMap, undefined, destinationPath);
       feedback.dismiss(toastId);
     } catch (e: any) {
       feedback.dismiss(toastId);
@@ -1911,7 +1915,8 @@ export function Dashboard() {
                 occupiedSlots={occupiedSlots}
                 maxUsersLimit={maxUsersLimit}
                 onSelectWorkspace={handleSelectWorkspace}
-                onLaunchApp={(app) => handleLaunchEcosystemApp(app, currentUserPerms)}
+                onLaunchApp={(app, destinationPath) => handleLaunchEcosystemApp(app, currentUserPerms, destinationPath)}
+                musicScaleSummary={musicScaleHubSummary}
                 onOpenInviteModal={() => setIsInviteModalOpen(true)}
                 onNavigateToOrganizationMembers={() => navigate('/dashboard/organization/members')}
                 onNavigateToBilling={() => setActiveTab('billing')}
@@ -2300,6 +2305,11 @@ export function Dashboard() {
                 auditLogs={auditLogs}
                 setActiveDashboardTab={setActiveTab}
                 initialTab={tab === 'team' ? 'members' : subTab}
+                onOpenMusicScale={(destinationPath?: string) => {
+                  if (musicScaleApp) {
+                    void handleLaunchEcosystemApp(musicScaleApp, currentUserPerms, destinationPath);
+                  }
+                }}
               />
             </motion.section>
           )}
