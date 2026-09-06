@@ -11,20 +11,26 @@ import { useOrganization } from "../contexts/OrganizationContext.js";
 import { isSubscriptionValid } from "../lib/subscriptionHelpers.js";
 import { openEcosystemModule } from "../lib/ecosystemLauncher.js";
 import { analytics } from "../lib/analytics.js";
+import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
 
 // Premium Brand Lockup Component to replace LogoMS_Horiz.png
-const MusicScaleLogo = ({ className = "" }: { className?: string }) => (
-  <div className={`flex items-center gap-3 ${className}`}>
-    <div className="relative flex-shrink-0">
-      <div className="absolute inset-0 bg-[#2B85EB]/20 blur-md rounded-full" />
-      <img src="/LogoIconMusicScale-1.png" alt="" className="w-10 h-10 md:w-12 md:h-12 object-contain relative z-10" />
+const MusicScaleLogo = ({ className = "" }: { className?: string }) => {
+  const { t } = useTranslation(["musicscale"]);
+  return (
+    <div className={`flex items-center gap-3 ${className}`}>
+      <div className="relative flex-shrink-0">
+        <div className="absolute inset-0 bg-[#2B85EB]/20 blur-md rounded-full" />
+        <img src="/LogoIconMusicScale-1.png" alt="" className="w-10 h-10 md:w-12 md:h-12 object-contain relative z-10" />
+      </div>
+      <div className="flex flex-col items-start justify-center">
+        <span className="text-xl md:text-2xl font-bold tracking-tight text-white leading-none mb-1">MusicScale</span>
+        <span className="text-[10px] md:text-xs font-medium text-[#A0A7B5] tracking-widest uppercase leading-none">
+          {t('tagline', 'Menos caos. Mais propósito.')}
+        </span>
+      </div>
     </div>
-    <div className="flex flex-col items-start justify-center">
-      <span className="text-xl md:text-2xl font-bold tracking-tight text-white leading-none mb-1">MusicScale</span>
-      <span className="text-[10px] md:text-xs font-medium text-[#A0A7B5] tracking-widest uppercase leading-none">Menos caos. Mais propósito.</span>
-    </div>
-  </div>
-);
+  );
+};
 
 const FAQItem = ({ question, answer }: { question: string, answer: string }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -66,7 +72,7 @@ export function MusicScaleLanding() {
   }, []);
 
   const isSubscribed = isSubscriptionValid(subscription);
-  const isGlobalAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(profile?.systemRole || 'user');
+  const isGlobalAdmin = isGlobalPrivilegedUser(profile);
   const hasAccess = isSubscribed || isGlobalAdmin;
 
   if (authLoading || (user && loadingOrg)) {
@@ -193,7 +199,7 @@ export function MusicScaleLanding() {
                 >
                   <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
                   <div className="relative flex items-center justify-center gap-2">
-                    Abrir MusicScale
+                    {t('musicscale:open_app', 'Abrir MusicScale')}
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </div>
                 </button>
@@ -286,8 +292,8 @@ export function MusicScaleLanding() {
                 <CheckCircle2 className="w-4 h-4 text-[#2B85EB]" />
               </div>
               <div>
-                <div className="text-xs text-[#A0A7B5]">Baterista</div>
-                <div className="text-sm font-semibold text-white">Confirmado</div>
+                <div className="text-xs text-[#A0A7B5]">{t('musicscale:mock_role', 'Baterista')}</div>
+                <div className="text-sm font-semibold text-white">{t('musicscale:mock_confirmed', 'Confirmado')}</div>
               </div>
             </div>
           </div>
@@ -298,8 +304,8 @@ export function MusicScaleLanding() {
                 <Music className="w-4 h-4 text-purple-400" />
               </div>
               <div>
-                <div className="text-xs text-[#A0A7B5]">Tom definido</div>
-                <div className="text-sm font-semibold text-white">G maior</div>
+                <div className="text-xs text-[#A0A7B5]">{t('musicscale:mock_key_label', 'Tom definido')}</div>
+                <div className="text-sm font-semibold text-white">{t('musicscale:mock_key_value', 'G maior')}</div>
               </div>
             </div>
           </div>
@@ -317,7 +323,7 @@ export function MusicScaleLanding() {
                   </div>
                   <div className="mx-auto flex items-center gap-2 px-3 py-1 bg-black/30 rounded-md text-[10px] md:text-xs text-[#A0A7B5] font-mono border border-white/5">
                     <LayoutDashboard className="w-3 h-3 opacity-50" />
-                    app.millionsnest.com/musicscale
+                    musicscale.millionsnest.com
                   </div>
                </div>
 
@@ -336,7 +342,7 @@ export function MusicScaleLanding() {
                     <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#2B85EB]/10 via-transparent to-transparent" />
                     <div className="text-center">
                        <MusicScaleLogo className="justify-center mb-6 scale-150 opacity-20" />
-                       <p className="text-[#A0A7B5] tracking-widest uppercase text-sm font-semibold">Interface Premium Placeholder</p>
+                       <p className="text-[#A0A7B5] tracking-widest uppercase text-sm font-semibold">{t('musicscale:interface_placeholder', 'Prévia da interface')}</p>
                     </div>
                  </div>
                </picture>
@@ -772,7 +778,7 @@ export function MusicScaleLanding() {
             />
             <FAQItem 
               question={t('musicscale:faq_q7', 'Posso testar antes de pagar?')} 
-              answer={t('musicscale:faq_a7', 'Com certeza. Todo plano inclui 7 dias de teste gratuito e libera os recursos do plano escolhido. O botão principal testa o Pro, nosso plano completo. Se não fizer sentido para sua equipe, cancele antes do fim do teste para não haver cobrança.')} 
+              answer={t('musicscale:faq_a7', 'Com certeza. Todo plano inclui 7 dias de teste gratuito e libera os recursos do plano escolhido. Selecione Starter, Advanced ou Pro na seção de planos; o teste seguirá exatamente essa escolha. Se não fizer sentido para sua equipe, cancele antes do fim do teste para não haver cobrança.')} 
             />
           </div>
         </div>

@@ -49,6 +49,9 @@ jobs:
       - name: Hub product positioning and trust contract
         run: npx tsx scripts/test_hub_product_positioning.ts
 
+      - name: MusicScale sales truth and i18n contract
+        run: npx tsx scripts/test_musicscale_sales_truth.ts
+
       - name: Security governance contract
         run: npx tsx scripts/test_millionsnest_security_governance_p0.ts
 

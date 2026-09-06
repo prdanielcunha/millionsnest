@@ -1,22 +1,26 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check, Star, Zap, Headphones, Settings, Video, ListMusic } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.js";
 import { useTranslation, Trans } from 'react-i18next';
 
 import { PRODUCT_CATALOG, getProductByLookupKey } from "../lib/pricingCatalog.js";
 
 export function Pricing() {
-  const { t } = useTranslation(['landing']);
+  const { t, i18n } = useTranslation(['landing']);
   const [isAnnual, setIsAnnual] = useState(true);
   const navigate = useNavigate();
   const { user } = useAuth();
   
-  // Dynamic prices state
-  const [plansData, setPlansData] = useState<any[]>([]);
-  const [addonsData, setAddonsData] = useState<any[]>([]);
-  
+  const priceLocale = i18n.resolvedLanguage === 'en'
+    ? 'en-US'
+    : i18n.resolvedLanguage === 'es'
+      ? 'es-ES'
+      : 'pt-BR';
+
+  const proCompareAt = (getProductByLookupKey('musicscale_pro_monthly')?.compareAtPriceInCents || 4490) / 100;
+
   // Use CATALOG as root fallback
   const fallbackPrices = PRODUCT_CATALOG.reduce((acc: any, p) => {
      const key = p.lookupKey.replace('musicscale_', '');
@@ -30,9 +34,6 @@ export function Pricing() {
     fetch('/api/v1/billing/products')
       .then(res => res.json())
       .then(data => {
-         if (data.plans) setPlansData(data.plans);
-         if (data.addons) setAddonsData(data.addons);
-         
          setPrices(prev => {
            const newPrices = { ...prev };
            
@@ -66,17 +67,65 @@ export function Pricing() {
   }, []);
 
   const handlePurchase = (lookupKey: string) => {
-    // Analytics/UX: Guardar a intenção imediata de compra
     sessionStorage.setItem('purchase_intent', lookupKey);
-    
     if (user) {
-      // Se logado, vai direto pro checkout com o plano selecionado
       navigate(`/checkout?plan=${lookupKey}`);
     } else {
-      // Se deslogado, vai pro login. O Login.tsx cuidará do redirect inteligente.
       navigate('/login');
     }
   };
+
+  const starterFeatures = [
+    t('pricing_starter_f1'),
+    t('pricing_starter_f2'),
+    t('pricing_starter_f3'),
+    t('pricing_starter_f4'),
+    t('pricing_starter_f5'),
+    t('pricing_starter_f6'),
+    t('pricing_starter_f7'),
+    t('pricing_starter_f8'),
+    t('pricing_starter_f9'),
+  ];
+
+  const advancedFeatures = [
+    t('pricing_advanced_f1'),
+    t('pricing_advanced_f2'),
+    t('pricing_advanced_f3'),
+    t('pricing_advanced_f4'),
+    t('pricing_advanced_f5'),
+    t('pricing_advanced_f6'),
+    t('pricing_advanced_f7'),
+    t('pricing_advanced_f8'),
+  ];
+
+  const proFeatures = [
+    t('pricing_pro_f1'),
+    t('pricing_pro_f2'),
+    t('pricing_pro_f3'),
+    t('pricing_pro_f4'),
+    t('pricing_pro_f5'),
+    t('pricing_pro_f6'),
+    t('pricing_pro_f7'),
+    t('pricing_pro_f8'),
+    t('pricing_pro_f9'),
+    t('pricing_pro_f10'),
+    t('pricing_pro_f11'),
+    t('pricing_pro_f12'),
+  ];
+
+  const comparisonRows: Array<{ name: string; s: string; a: string; p: string | boolean }> = [
+    { name: t('pricing_compare_people'), s: t('pricing_value_up_to_10'), a: t('pricing_value_up_to_20'), p: t('pricing_value_unlimited') },
+    { name: t('pricing_compare_music_scales'), s: t('pricing_value_unlimited_plural'), a: t('pricing_value_unlimited_plural'), p: t('pricing_value_unlimited_plural') },
+    { name: t('pricing_compare_song_fields'), s: t('pricing_yes'), a: t('pricing_yes'), p: true },
+    { name: t('pricing_compare_library'), s: t('pricing_none'), a: t('pricing_limited'), p: t('pricing_complete') },
+    { name: t('pricing_compare_imports'), s: t('pricing_none'), a: t('pricing_value_10_month'), p: t('pricing_value_unlimited_plural') },
+    { name: t('pricing_compare_history'), s: t('pricing_basic'), a: t('pricing_complete'), p: t('pricing_complete') },
+    { name: t('pricing_compare_ai_import'), s: t('pricing_no'), a: t('pricing_no'), p: true },
+    { name: t('pricing_compare_ai_suggestions'), s: t('pricing_no'), a: t('pricing_no'), p: true },
+    { name: t('pricing_compare_scale_clone'), s: t('pricing_no'), a: t('pricing_no'), p: true },
+    { name: t('pricing_compare_priority_features'), s: t('pricing_no'), a: t('pricing_no'), p: true },
+    { name: t('pricing_compare_support'), s: t('pricing_support_standard'), a: t('pricing_support_basic_priority'), p: t('pricing_support_high_priority') },
+  ];
 
   return (
     <section id="precos" className="py-24 md:py-32 bg-[#050505] relative overflow-hidden">
@@ -170,12 +219,12 @@ export function Pricing() {
           >
             <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">Starter</h3>
             <p className="text-[#A0A7B5] text-sm mb-6 min-h-[60px]">
-              Para ministérios que querem começar a organizar o louvor com simplicidade.
+              {t('pricing_starter_desc')}
             </p>
             
             <div className="flex items-baseline gap-1 mb-1">
               <span className="text-4xl font-semibold text-[#F5F7FA] tracking-tight">
-                 R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "19,90"}
+                 R$ {prices.starter_monthly > 0 ? (isAnnual ? (prices.starter_annual / 12).toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.starter_monthly.toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "19,90"}
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
@@ -195,7 +244,7 @@ export function Pricing() {
             
             {isAnnual ? (
               <div className="flex items-center gap-2 mb-6 text-xs font-medium">
-                 {prices.starter_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.starter_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                 {prices.starter_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.starter_monthly * 12).toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
                  {prices.starter_monthly > 0 && prices.starter_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.starter_annual / (prices.starter_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
               </div>
             ) : (
@@ -206,22 +255,12 @@ export function Pricing() {
               onClick={() => handlePurchase(isAnnual ? 'musicscale_starter_yearly' : 'musicscale_starter_monthly')}
               className="w-full py-3.5 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold text-sm hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block select-none"
             >
-              Testar Starter por 7 dias
+              {t('pricing_starter_cta')}
             </button>
-            <p className="text-[10px] text-center text-[#A0A7B5]/60 mb-6 -mt-4 uppercase tracking-widest">Ideal para começar</p>
+            <p className="text-[10px] text-center text-[#A0A7B5]/60 mb-6 -mt-4 uppercase tracking-widest">{t('pricing_starter_tag')}</p>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5">
-              {[
-                'Até 10 usuários por organização',
-                'Escalas ilimitadas',
-                'Músicas ilimitadas',
-                'Cadastro de letras, cifras, tom e BPM',
-                'Compartilhamento de escalas',
-                'Organização por cultos e eventos',
-                'Acesso pelo celular, tablet e computador',
-                'Sincronização em nuvem',
-                'Suporte padrão'
-              ].map((item, i) => (
+              {starterFeatures.map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#A0A7B5]">
                   <Check className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />
                   <span className="font-normal text-sm">{item}</span>
@@ -240,12 +279,12 @@ export function Pricing() {
           >
             <h3 className="text-sm font-bold text-[#A0A7B5] mb-2 uppercase tracking-widest">Advanced</h3>
             <p className="text-[#A0A7B5] text-sm mb-6 min-h-[60px]">
-              Para ministérios em crescimento que precisam de mais controle e repertório.
+              {t('pricing_advanced_desc')}
             </p>
             
             <div className="flex items-baseline gap-1 mb-1">
               <span className="text-4xl font-semibold text-[#F5F7FA] tracking-tight">
-                 R$ {prices.advanced_monthly > 0 ? (isAnnual ? (prices.advanced_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.advanced_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "29,90"}
+                 R$ {prices.advanced_monthly > 0 ? (isAnnual ? (prices.advanced_annual / 12).toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.advanced_monthly.toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "29,90"}
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
@@ -265,7 +304,7 @@ export function Pricing() {
             
             {isAnnual && prices.advanced_monthly > 0 ? (
               <div className="flex items-center gap-2 mb-6 text-xs font-medium">
-                 {prices.advanced_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.advanced_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                 {prices.advanced_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.advanced_monthly * 12).toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
                  {prices.advanced_monthly > 0 && prices.advanced_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.advanced_annual / (prices.advanced_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
               </div>
             ) : (
@@ -276,21 +315,12 @@ export function Pricing() {
               onClick={() => handlePurchase(isAnnual ? 'musicscale_advanced_yearly' : 'musicscale_advanced_monthly')}
               className="w-full py-3.5 px-6 rounded-xl bg-transparent border border-[#2B85EB]/30 text-[#A0A7B5] hover:text-[#F5F7FA] text-center font-semibold text-sm hover:bg-[#2B85EB]/10 transition-all active:scale-95 mt-2 mb-8 block select-none"
             >
-              Testar Advanced por 7 dias
+              {t('pricing_advanced_cta')}
             </button>
-            <p className="text-[10px] text-center text-[#A0A7B5]/60 mb-6 -mt-4 uppercase tracking-widest">Para equipes em crescimento</p>
+            <p className="text-[10px] text-center text-[#A0A7B5]/60 mb-6 -mt-4 uppercase tracking-widest">{t('pricing_advanced_tag')}</p>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5">
-              {[
-                'Tudo do Starter',
-                'Até 20 usuários por organização',
-                'Biblioteca Viva limitada',
-                '10 importações da Biblioteca Viva /mês',
-                'Histórico completo de repertório',
-                'Recursos intermediários de organização',
-                'Personalização avançada de repertório',
-                'Suporte prioritário básico'
-              ].map((item, i) => (
+              {advancedFeatures.map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#A0A7B5]">
                   <Check className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />
                   <span className="font-normal text-sm">{item}</span>
@@ -311,18 +341,18 @@ export function Pricing() {
             
             <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-max">
               <div className="bg-[#2B85EB] text-white text-[10px] font-bold px-4 py-1.5 rounded-full shadow-lg uppercase tracking-widest flex items-center gap-1.5 border border-white/10">
-                <Star className="w-3 h-3" /> ⭐ Mais Escolhido
+                <Star className="w-3 h-3" /> {t('pricing_pro_badge')}
               </div>
             </div>
 
             <h3 className="text-sm font-bold text-[#F5F7FA] mb-2 uppercase tracking-widest relative z-10 mt-6 mt-4">Pro</h3>
             <p className="text-[#A0A7B5] text-sm mb-4 min-h-[60px] relative z-10">
-              Para ministérios que querem a experiência completa do MusicScale.
+              {t('pricing_pro_desc')}
             </p>
             
             <div className="flex items-baseline gap-1 mb-1 relative z-10">
               <span className="text-4xl font-semibold text-[#F5F7FA] tracking-tight">
-                 R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "34,90"}
+                 R$ {prices.pro_monthly > 0 ? (isAnnual ? (prices.pro_annual / 12).toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : prices.pro_monthly.toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : "34,90"}
               </span>
               <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
@@ -345,13 +375,13 @@ export function Pricing() {
             
             {isAnnual ? (
               <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
-                 {prices.pro_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.pro_monthly * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                 {prices.pro_monthly > 0 && <span className="text-[#A0A7B5]/50 line-through">R$ {(prices.pro_monthly * 12).toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
                  {prices.pro_monthly > 0 && prices.pro_annual > 0 && <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">{(100 - (prices.pro_annual / (prices.pro_monthly * 12)) * 100).toFixed(0)}% OFF</span>}
               </div>
             ) : (
               <div className="flex items-center gap-2 mb-6 text-xs font-medium relative z-10">
-                 <span className="text-[#A0A7B5]/50 line-through">R$ 44,90</span>
-                 <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-widest">Lançamento</span>
+                 <span className="text-[#A0A7B5]/50 line-through">R$ {proCompareAt.toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                 <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-widest">{t('pricing_launch_label')}</span>
               </div>
             )}
             
@@ -359,25 +389,12 @@ export function Pricing() {
               onClick={() => handlePurchase(isAnnual ? 'musicscale_pro_yearly' : 'musicscale_pro_monthly')}
               className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#2B85EB]/90 to-[#2B85EB] text-[#F5F7FA] border border-[#2B85EB] text-center font-bold text-sm hover:from-[#2B85EB] hover:to-[#4ca4ff] transition-all shadow-[0_0_20px_rgba(43,133,235,0.3)] hover:shadow-[0_0_30px_rgba(43,133,235,0.5)] active:scale-95 mt-2 mb-8 block relative z-10 select-none"
             >
-              Testar Pro por 7 dias
+              {t('pricing_pro_cta')}
             </button>
-            <p className="text-[10px] text-center text-[#2B85EB] mb-6 -mt-4 uppercase tracking-widest relative z-10 font-bold">Experiência completa</p>
+            <p className="text-[10px] text-center text-[#2B85EB] mb-6 -mt-4 uppercase tracking-widest relative z-10 font-bold">{t('pricing_pro_tag')}</p>
             
             <ul className="space-y-4 flex-1 pt-6 border-t border-white/5 relative z-10">
-              {[
-                'Tudo do Advanced',
-                'Usuários ilimitados por organização',
-                'Biblioteca Viva completa',
-                'Importações ilimitadas da Biblioteca',
-                'Importação inteligente de músicas (IA)',
-                'Estruturação automática (letra, tom, BPM)',
-                'Sugestões inteligentes para repertório e escalas',
-                'Clonagem de escalas em um toque',
-                'Recursos futuros premium inclusos',
-                'Prioridade em novos recursos',
-                'Suporte prioritário',
-                'Experiência premium completa'
-              ].map((item, i) => (
+              {proFeatures.map((item, i) => (
                 <li key={i} className="flex items-start gap-3 text-[#F5F7FA]">
                   <Zap className="w-4 h-4 text-[#2B85EB] flex-shrink-0 mt-0.5" />
                   <span className="font-normal text-sm opacity-90">{item}</span>
@@ -391,10 +408,10 @@ export function Pricing() {
         <div className="max-w-5xl mx-auto mt-20 pt-20 border-t border-white/5 relative z-10 hidden md:block">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <h3 className="text-2xl md:text-3xl font-semibold tracking-tight text-[#F5F7FA] mb-4">
-              Compare os Planos
+              {t('pricing_compare_title')}
             </h3>
             <p className="text-[#A0A7B5] text-base">
-              Veja em detalhes as diferenças estruturais de cada plano.
+              {t('pricing_compare_desc')}
             </p>
           </div>
           
@@ -402,7 +419,7 @@ export function Pricing() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-white/10 relative">
-                  <th className="py-5 px-6 text-[#A0A7B5] font-semibold w-2/5 text-xs uppercase tracking-widest">Recursos Principais</th>
+                  <th className="py-5 px-6 text-[#A0A7B5] font-semibold w-2/5 text-xs uppercase tracking-widest">{t('pricing_compare_main_features')}</th>
                   <th className="py-5 px-6 text-[#A0A7B5] font-semibold text-center text-xs uppercase tracking-widest border-l border-white/5">Starter</th>
                   <th className="py-5 px-6 text-[#A0A7B5] font-semibold text-center text-xs uppercase tracking-widest border-l border-white/5">Advanced</th>
                   <th className="py-5 px-6 text-[#2B85EB] font-semibold text-center text-xs uppercase tracking-widest bg-[#2B85EB]/5 border-l border-white/5 relative overflow-hidden">
@@ -412,25 +429,13 @@ export function Pricing() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 text-sm">
-                {[
-                  { name: 'Pessoas por organização', s: 'Até 10', a: 'Até 20', p: 'Ilimitado' },
-                  { name: 'Músicas e Escalas', s: 'Ilimitadas', a: 'Ilimitadas', p: 'Ilimitadas' },
-                  { name: 'Letras, Cifras, Tom e BPM', s: 'Sim', a: 'Sim', p: 'Sim' },
-                  { name: 'Biblioteca Viva', s: 'Não', a: 'Limitada', p: 'Completa' },
-                  { name: 'Importações da Biblioteca', s: 'Nenhuma', a: '10/mês', p: 'Ilimitadas' },
-                  { name: 'Histórico de repertório', s: 'Básico', a: 'Completo', p: 'Completo' },
-                  { name: 'Importação inteligente com IA', s: 'Não', a: 'Não', p: 'Sim' },
-                  { name: 'Sugestões Inteligentes (IA)', s: 'Não', a: 'Não', p: 'Sim' },
-                  { name: 'Clonagem de escalas em um toque', s: 'Não', a: 'Não', p: 'Sim' },
-                  { name: 'Acesso prioritário a novos recursos', s: 'Não', a: 'Não', p: 'Sim' },
-                  { name: 'Suporte', s: 'Padrão', a: 'Básico Prioritário', p: 'Prioridade Alta' },
-                ].map((row, i) => (
+                {comparisonRows.map((row, i) => (
                   <tr key={i} className="hover:bg-white/[0.02] transition-colors">
                     <td className="py-4 px-6 text-[#F5F7FA] font-medium">{row.name}</td>
                     <td className="py-4 px-6 text-[#A0A7B5] text-center text-xs border-l border-white/5">{row.s}</td>
                     <td className="py-4 px-6 text-[#A0A7B5] text-center text-xs border-l border-white/5">{row.a}</td>
                     <td className="py-4 px-6 text-[#F5F7FA] text-center font-medium bg-[#2B85EB]/[0.02] text-xs border-l border-white/5 relative">
-                      {row.p === 'Sim' ? <Check className="w-4 h-4 mx-auto text-[#2B85EB]" /> : row.p === 'Não' ? <span className="text-white/20">-</span> : row.p}
+                      {row.p === true ? <Check className="w-4 h-4 mx-auto text-[#2B85EB]" /> : row.p === false ? <span className="text-white/20">-</span> : row.p}
                     </td>
                   </tr>
                 ))}
@@ -476,7 +481,7 @@ export function Pricing() {
               </div>
               <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">{t('addon_setup_title', 'Setup Premium')}</h4>
               <div className="text-[#2B85EB] font-mono text-sm mb-4">
-                 R$ {prices.setup_premium > 0 ? prices.setup_premium.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
+                 R$ {prices.setup_premium > 0 ? prices.setup_premium.toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
               </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
                 {t('addon_setup_desc', 'Configuração inicial assistida para estruturar rapidamente sua equipe no MusicScale.')}
@@ -504,7 +509,7 @@ export function Pricing() {
               </div>
               <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">{t('addon_training_title', 'Treinamento Express')}</h4>
               <div className="text-[#2B85EB] font-mono text-sm mb-4">
-                 R$ {prices.training_express > 0 ? prices.training_express.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
+                 R$ {prices.training_express > 0 ? prices.training_express.toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
               </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
                 {t('addon_training_desc', 'Treinamento online prático para aprender rapidamente o fluxo do MusicScale.')}
@@ -532,7 +537,7 @@ export function Pricing() {
               </div>
               <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">{t('addon_worship_title', 'Acervo Inicial Worship')}</h4>
               <div className="text-[#2B85EB] font-mono text-sm mb-4">
-                 R$ {prices.worship_100 > 0 ? prices.worship_100.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
+                 R$ {prices.worship_100 > 0 ? prices.worship_100.toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
               </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
                 {t('addon_worship_desc', 'Comece mais rápido com um acervo pronto de 100 músicas já organizadas no MusicScale, incluindo cifra e letra integradas.')}
@@ -563,7 +568,7 @@ export function Pricing() {
               </div>
               <h4 className="text-[#F5F7FA] font-semibold text-lg mb-1">{t('addon_pack_title', 'Music Pack +10')}</h4>
               <div className="text-[#2B85EB] font-mono text-sm mb-4">
-                 R$ {prices.music_pack_10 > 0 ? prices.music_pack_10.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
+                 R$ {prices.music_pack_10 > 0 ? prices.music_pack_10.toLocaleString(priceLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."} <span className="text-[#A0A7B5] text-xs font-sans">{t('pricing_one_time', '/único')}</span>
               </div>
               <p className="text-[#A0A7B5] text-sm mb-6 flex-1">
                 {t('addon_pack_desc', 'Pacote avulso para adicionar até 10 novas músicas ao acervo da sua organização.')}
@@ -585,9 +590,9 @@ export function Pricing() {
         {/* CONCLUSÃO */}
         <div className="max-w-3xl mx-auto mt-32 text-center relative z-10 pb-16">
            <h3 className="text-xl md:text-2xl font-light tracking-tight text-[#F5F7FA] mb-4">
-             MusicScale ajuda sua equipe a chegar mais preparada, mais alinhada, e mais livre para focar no que realmente importa: <span className="font-semibold text-white">o ministério.</span>
+             {t('pricing_conclusion_title')}
            </h3>
-           <p className="text-[#A0A7B5] text-sm">Organização de ministério de louvor elevada à excelência.</p>
+           <p className="text-[#A0A7B5] text-sm">{t('pricing_conclusion_desc')}</p>
         </div>
 
       </div>
