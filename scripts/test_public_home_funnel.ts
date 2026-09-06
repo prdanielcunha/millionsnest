@@ -2,15 +2,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const helper = readFileSync('src/lib/publicFunnelAnalytics.ts', 'utf8');
-const analytics = readFileSync('src/lib/analytics.ts', 'utf8');
 const home = readFileSync('src/pages/Home.tsx', 'utf8');
 const hero = readFileSync('src/components/Hero.tsx', 'utf8');
 const flagship = readFileSync('src/components/Flagship.tsx', 'utf8');
 const ecosystem = readFileSync('src/components/Ecosystem.tsx', 'utf8');
 const guarantee = readFileSync('src/components/Guarantee.tsx', 'utf8');
 const navbar = readFileSync('src/components/Navbar.tsx', 'utf8');
+const server = readFileSync('server.ts', 'utf8');
 const rules = readFileSync('firestore.rules', 'utf8');
-const ruleTests = readFileSync('tests/firestore/analytics_events.rules.test.ts', 'utf8');
 
 const sources = [
   'hero_primary',
@@ -26,13 +25,12 @@ const sources = [
 
 assert.match(home, /trackPublicHomeView/, 'public home must record one anonymous view per session');
 assert.match(helper, /mn_public_home_view_tracked/, 'home view tracking must be session-deduplicated');
-assert.match(helper, /action:\s*'product_interest'/, 'home product-interest event must use the canonical action');
-assert.match(helper, /product:\s*'musicscale'/, 'home funnel must identify the live product without PII');
+assert.match(helper, /\/api\/v1\/public\/analytics\/home/, 'public funnel must use the hardened backend endpoint');
+assert.match(helper, /keepalive:\s*true/, 'CTA analytics should survive same-origin navigation');
+assert.equal(helper.includes("from \"./analytics.js\""), false, 'public home analytics must not require anonymous Firestore writes');
 
 for (const source of sources) {
-  assert.match(helper, new RegExp(source), `helper missing source: ${source}`);
-  assert.match(analytics, new RegExp(source), `client allowlist missing source: ${source}`);
-  assert.match(rules, new RegExp(source), `Firestore allowlist missing source: ${source}`);
+  assert.match(helper, new RegExp(source), `client helper missing source: ${source}`);
 }
 
 assert.match(hero, /hero_primary/, 'hero CTA must be attributable');
@@ -52,11 +50,16 @@ assert.match(
   'generic trial CTA must take the visitor to explicit plan selection'
 );
 
-assert.match(rules, /function isValidPublicHomeAnalytics\(\)/, 'public home analytics must have a dedicated Rules validator');
-assert.match(rules, /data\.app == 'millionsnest_core'/, 'home analytics validator must bind the app identity');
-assert.match(rules, /data\.userId == 'none'/, 'anonymous home analytics must not claim a user');
-assert.match(ruleTests, /untrusted_source/, 'Rules tests must deny arbitrary marketing sources');
-assert.match(ruleTests, /another_product/, 'Rules tests must deny arbitrary products');
-assert.match(ruleTests, /should-not-be-accepted@example\.com/, 'Rules tests must prove arbitrary PII metadata is rejected');
+assert.match(server, /parsePublicHomeAnalyticsPayload/, 'backend must validate public analytics before writing');
+assert.match(server, /public_home_/, 'backend must use a deterministic dedupe document id');
+assert.match(server, /createHash\('sha256'\)/, 'session/source dedupe key must be hashed');
+assert.match(server, /limit:\s*'2kb'/, 'public analytics request body must stay tightly bounded');
+assert.match(server, /Cache-Control', 'no-store'/, 'public analytics endpoint must not be cacheable');
 
-console.log('PASS public home funnel attribution, explicit-plan routing, and anonymous analytics security');
+assert.equal(
+  rules.includes("data.app == 'millionsnest_core'"),
+  false,
+  'public-home funnel must not broaden anonymous Firestore Rules'
+);
+
+console.log('PASS public home funnel attribution, explicit-plan routing, and backend-mediated analytics security');

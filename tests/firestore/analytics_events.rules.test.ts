@@ -32,68 +32,6 @@ const baseEvent = {
   timestamp: Timestamp.now(),
 };
 
-const homeEvent = {
-  ...baseEvent,
-  app: 'millionsnest_core',
-};
-
-test('anonymous MillionsNest home view and strict MusicScale interest events are allowed', async () => {
-  const db = env.unauthenticatedContext().firestore();
-
-  await assertSucceeds(setDoc(doc(db, 'analytics_events/public-home-view'), {
-    ...homeEvent,
-    eventType: 'page_view',
-    metadata: { page: 'home' },
-  }));
-
-  await assertSucceeds(setDoc(doc(db, 'analytics_events/public-home-product-interest'), {
-    ...homeEvent,
-    eventType: 'app_usage',
-    metadata: {
-      action: 'product_interest',
-      product: 'musicscale',
-      source: 'hero_primary',
-    },
-  }));
-});
-
-test('anonymous MillionsNest home analytics rejects unknown source, product, metadata, and identity spoofing', async () => {
-  const db = env.unauthenticatedContext().firestore();
-
-  await assertFails(setDoc(doc(db, 'analytics_events/public-home-bad-source'), {
-    ...homeEvent,
-    eventType: 'app_usage',
-    metadata: {
-      action: 'product_interest',
-      product: 'musicscale',
-      source: 'untrusted_source',
-    },
-  }));
-
-  await assertFails(setDoc(doc(db, 'analytics_events/public-home-bad-product'), {
-    ...homeEvent,
-    eventType: 'app_usage',
-    metadata: {
-      action: 'product_interest',
-      product: 'another_product',
-      source: 'hero_primary',
-    },
-  }));
-
-  await assertFails(setDoc(doc(db, 'analytics_events/public-home-extra-metadata'), {
-    ...homeEvent,
-    eventType: 'page_view',
-    metadata: { page: 'home', email: 'should-not-be-accepted@example.com' },
-  }));
-
-  await assertFails(setDoc(doc(db, 'analytics_events/public-home-spoofed-user'), {
-    ...homeEvent,
-    userId: 'victim-user',
-    eventType: 'page_view',
-    metadata: { page: 'home' },
-  }));
-});
-
 test('anonymous MusicScale sales landing page_view remains allowed', async () => {
   const db = env.unauthenticatedContext().firestore();
   await assertSucceeds(setDoc(doc(db, 'analytics_events/public-page-view'), {

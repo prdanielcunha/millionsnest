@@ -9,6 +9,10 @@ import { createSupportTicket } from './src/server/services/SupportTicketService.
 import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
 import { createSupportWhatsAppLink } from './src/server/services/SupportWhatsAppService.js';
 import { createPublicSalesWhatsAppLink } from './src/server/services/PublicSalesWhatsAppService.js';
+import {
+  parsePublicHomeAnalyticsPayload,
+  toPublicHomeAnalyticsDocument,
+} from './src/server/services/PublicHomeAnalyticsService.js';
 
 import Stripe from 'stripe';
 import cors from 'cors';
@@ -620,6 +624,41 @@ async function startServer() {
   app.get('/api/v1/support/capabilities', getSupportCapabilities);
   app.post('/api/v1/support/whatsapp-link', express.json({ limit: '8kb' }), createSupportWhatsAppLink);
   app.post('/api/v1/public/sales/whatsapp-link', express.json({ limit: '8kb' }), createPublicSalesWhatsAppLink);
+  app.post('/api/v1/public/analytics/home', express.json({ limit: '2kb' }), async (req, res) => {
+    try {
+      const payload = parsePublicHomeAnalyticsPayload(req.body);
+      if (!payload) {
+        return res.status(400).json({ error: 'Invalid analytics payload' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ error: 'Analytics unavailable' });
+      }
+
+      const canonicalKey =
+        payload.event === 'home_view'
+          ? `${payload.event}|${payload.sessionId}`
+          : `${payload.event}|${payload.sessionId}|${payload.source}`;
+
+      const eventId =
+        'public_home_' +
+        crypto.createHash('sha256').update(canonicalKey).digest('hex').slice(0, 40);
+
+      const eventDocument = toPublicHomeAnalyticsDocument(payload);
+
+      await dbInstance.collection('analytics_events').doc(eventId).set({
+        ...eventDocument,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(204).send();
+    } catch (error) {
+      console.error('[PublicHomeAnalytics] Failed to record event', error);
+      return res.status(500).json({ error: 'Analytics unavailable' });
+    }
+  });
   app.post('/api/v1/onboarding/bootstrap', express.json(), bootstrapUserContext);
   app.post('/api/v1/invitations', express.json(), (req, res) => createInvitation(req, res));
   app.post('/api/v1/invitations/accept', express.json(), (req, res) => acceptInvitation(req, res));
