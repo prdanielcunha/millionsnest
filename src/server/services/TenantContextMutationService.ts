@@ -1,3 +1,4 @@
+import { isCanonicalGlobalRole } from '../../lib/permissionService.js';
 import { planBootstrap, BootstrapDecisionCode, resolveLegacyMembershipCandidates } from './TenantBootstrapPlanner.js';
 import { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
@@ -746,7 +747,7 @@ export async function setActiveOrganization(req: Request, res: Response) {
       hasAccess = true;
     } else {
       // Check if global admin
-      const isGlobalAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(userData?.systemRole);
+      const isGlobalAdmin = isCanonicalGlobalRole(userData?.systemRole);
       if (isGlobalAdmin) {
         hasAccess = true;
       }

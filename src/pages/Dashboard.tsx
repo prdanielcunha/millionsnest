@@ -2940,7 +2940,7 @@ export function Dashboard() {
                   </div>
                 </div>
 
-                {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin' || profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin') && (
+                {(isGlobalAdmin || profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin') && (
                   <div>
                     <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Nível de acesso na Organização</label>
                     {editingMember?.role === 'owner' ? (

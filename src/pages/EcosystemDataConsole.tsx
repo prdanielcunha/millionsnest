@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EcosystemShell } from "../components/EcosystemShell.js";
+import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
 
 export function EcosystemDataConsole() {
   const { user, profile, loading } = useAuth();
@@ -71,7 +72,7 @@ export function EcosystemDataConsole() {
     if (!loading) {
       if (!user) {
         navigate('/login');
-      } else if (profile && !['ceo', 'admin', 'global_admin'].includes(profile.systemRole)) {
+      } else if (profile && !isGlobalPrivilegedUser(profile)) {
         navigate('/');
       }
     }
@@ -114,7 +115,7 @@ export function EcosystemDataConsole() {
   };
 
   useEffect(() => {
-    if (user && profile && ['ceo', 'admin', 'global_admin'].includes(profile.systemRole)) {
+    if (user && profile && isGlobalPrivilegedUser(profile)) {
       loadEcosystemDatabase();
     }
   }, [user, profile]);

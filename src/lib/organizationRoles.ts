@@ -1,3 +1,5 @@
+import { isGlobalPrivilegedRole } from './permissionService.js';
+
 export const ORGANIZATION_ROLE_KEYS = {
   OWNER: 'owner',
   ADMIN: 'admin',
@@ -33,7 +35,7 @@ export function getInviteableOrganizationRolesForActor(actor: OrganizationInvite
   if (!actor) return [];
 
   const sys = actor.systemRole?.toLowerCase() || '';
-  if (sys === 'ceo' || sys === 'global_admin' || sys === 'ecosystem_owner' || sys === 'founder') {
+  if (isGlobalPrivilegedRole(sys)) {
     return ['admin', 'manager', 'member', 'viewer'];
   }
 

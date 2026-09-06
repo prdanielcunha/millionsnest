@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { ECOSYSTEM_APPS, type EcosystemApp } from '../lib/apps.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
+import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 
 export function Navbar() {
   const { user, profile, logout } = useAuth();
@@ -65,7 +66,7 @@ export function Navbar() {
   };
 
   const renderCommandCenter = () => {
-    const isGlobalAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(profile?.systemRole || 'user');
+    const isGlobalAdmin = isGlobalPrivilegedUser(profile);
 
     const myApps = ECOSYSTEM_APPS.filter(app => {
       if (app.id === 'musicscale') return false;

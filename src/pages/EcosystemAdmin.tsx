@@ -5,7 +5,8 @@ import { useAuth } from "../contexts/AuthContext.js";
 import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp, Pencil, Database, Layers } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EcosystemShell } from "../components/EcosystemShell.js";
-import { canChangeSystemRole } from "../lib/roleResolver.js";
+import { ASSIGNABLE_SYSTEM_ROLES, canChangeSystemRole, getSystemRoleLabel } from "../lib/roleResolver.js";
+import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
 
 function resolveUserOrganizationContextLocal(
   userId: string,
@@ -507,7 +508,7 @@ export function EcosystemAdmin() {
 
   useEffect(() => {
     if (!loading) {
-      if (!['ceo', 'admin', 'global_admin'].includes(profile?.systemRole || '')) {
+      if (!isGlobalPrivilegedUser(profile)) {
         navigate('/dashboard');
       } else {
         loadEcosystemData();
@@ -753,17 +754,12 @@ export function EcosystemAdmin() {
                             )}
                           </td>
                           <td className="px-6 py-4">
-                            {mappedUser.systemRole === 'ceo' && (
-                              <span className="inline-flex items-center px-2 py-1 rounded bg-purple-500/10 text-purple-400 text-xs font-semibold border border-purple-500/20">
-                                CEO
-                              </span>
-                            )}
-                            {mappedUser.systemRole === 'admin' && (
+                            {mappedUser.systemRole && mappedUser.systemRole !== 'user' && (
                               <span className="inline-flex items-center px-2 py-1 rounded bg-[#2B85EB]/10 text-[#2B85EB] text-xs font-semibold border border-[#2B85EB]/20">
-                                Admin Global
+                                {getSystemRoleLabel(mappedUser.systemRole)}
                               </span>
                             )}
-                            {!mappedUser.systemRole && (
+                            {(!mappedUser.systemRole || mappedUser.systemRole === 'user') && (
                               <span className="inline-flex items-center px-2 py-1 rounded bg-white/5 text-[#A0A7B5] text-xs border border-white/10">
                                 Usuário Padrão
                               </span>
@@ -771,7 +767,7 @@ export function EcosystemAdmin() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
-                              {(profile?.systemRole === 'ceo' || profile?.systemRole === 'admin' || profile?.systemRole === 'global_admin') && mappedUser.id !== profile.uid && (
+                              {isGlobalPrivilegedUser(profile) && mappedUser.id !== profile.uid && (
                                 <select
                                   value={mappedUser.systemRole || 'user'}
                                   onChange={(e) => handleUpdateRole(mappedUser.id, mappedUser.systemRole, e.target.value)}
@@ -786,21 +782,33 @@ export function EcosystemAdmin() {
                                   }
                                   className="bg-[#050505] border border-white/10 rounded-lg px-2 py-1 text-xs text-[#F5F7FA] focus:outline-none disabled:opacity-50"
                                 >
-                                  {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'user', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
-                                    <option value="user">Remover Acesso Global</option>
+                                  {mappedUser.systemRole === 'admin' && (
+                                    <option value="admin">Administrador Global (legado)</option>
                                   )}
-                                  {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'admin', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
-                                    <option value="admin">Tornar Admin Global</option>
+                                  {ASSIGNABLE_SYSTEM_ROLES.map((role) =>
+                                    canChangeSystemRole(
+                                      profile?.systemRole,
+                                      mappedUser.systemRole,
+                                      role,
+                                      mappedUser.id === profile?.uid,
+                                      users.filter(u => u.systemRole === 'ceo').length
+                                    ).allowed ? (
+                                      <option key={role} value={role}>
+                                        {role === 'user' ? 'Remover Acesso Global' : getSystemRoleLabel(role)}
+                                      </option>
+                                    ) : null
                                   )}
-                                  {canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'ceo', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
-                                    <option value="ceo">Tornar CEO</option>
-                                  )}
-                                  
-                                  {!canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'user', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
-                                   !canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'admin', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed &&
-                                   !canChangeSystemRole(profile?.systemRole, mappedUser.systemRole, 'ceo', mappedUser.id === profile?.uid, users.filter(u => u.systemRole === 'ceo').length).allowed && (
+                                  {!ASSIGNABLE_SYSTEM_ROLES.some((role) =>
+                                    canChangeSystemRole(
+                                      profile?.systemRole,
+                                      mappedUser.systemRole,
+                                      role,
+                                      mappedUser.id === profile?.uid,
+                                      users.filter(u => u.systemRole === 'ceo').length
+                                    ).allowed
+                                  ) && (
                                     <option value={mappedUser.systemRole || 'user'}>
-                                      {mappedUser.systemRole === 'ceo' ? 'CEO' : mappedUser.systemRole === 'admin' || mappedUser.systemRole === 'global_admin' ? 'Admin Global' : 'Usuário Padrão'}
+                                      {getSystemRoleLabel(mappedUser.systemRole)}
                                     </option>
                                   )}
                                 </select>

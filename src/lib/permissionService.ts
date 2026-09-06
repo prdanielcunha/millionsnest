@@ -1,11 +1,8 @@
-export const CANONICAL_GLOBAL_ROLES = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'];
+export const CANONICAL_GLOBAL_ROLES = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'] as const;
+export const LEGACY_GLOBAL_ROLES = ['admin'] as const;
 export const ECOSYSTEM_SUPPORT_ROLES = ['ecosystem_support'] as const;
 
-export const NESTFINANCE_DEVELOPMENT_SYSTEM_ROLES = [
-  'ceo',
-  'global_admin',
-  'ecosystem_owner'
-] as const;
+export const NESTFINANCE_DEVELOPMENT_SYSTEM_ROLES = CANONICAL_GLOBAL_ROLES;
 
 export function canAccessNestFinanceDevelopment(
   systemRole: string | undefined | null
@@ -19,7 +16,21 @@ export function canAccessNestFinanceDevelopment(
 
 export function isCanonicalGlobalRole(systemRole: string | undefined | null): boolean {
   if (!systemRole) return false;
-  return CANONICAL_GLOBAL_ROLES.includes(systemRole);
+  return CANONICAL_GLOBAL_ROLES.includes(systemRole as (typeof CANONICAL_GLOBAL_ROLES)[number]);
+}
+
+export function isLegacyGlobalRole(systemRole: string | undefined | null): boolean {
+  if (!systemRole) return false;
+  return LEGACY_GLOBAL_ROLES.includes(systemRole as (typeof LEGACY_GLOBAL_ROLES)[number]);
+}
+
+/**
+ * Transitional compatibility helper.
+ * New assignments must use canonical roles; legacy "admin" remains recognized
+ * until live Firestore records can be inventoried and migrated safely.
+ */
+export function isGlobalPrivilegedRole(systemRole: string | undefined | null): boolean {
+  return isCanonicalGlobalRole(systemRole) || isLegacyGlobalRole(systemRole);
 }
 
 export function isCEO(userProfile: any) {
@@ -28,7 +39,7 @@ export function isCEO(userProfile: any) {
 
 export function isGlobalAdmin(userProfile: any) {
   if (!userProfile?.systemRole || typeof userProfile.systemRole !== 'string') return false;
-  return isCanonicalGlobalRole(userProfile.systemRole);
+  return isGlobalPrivilegedRole(userProfile.systemRole);
 }
 
 export function isGlobalPrivilegedUser(userProfile: any) {
@@ -37,6 +48,7 @@ export function isGlobalPrivilegedUser(userProfile: any) {
 
 export interface EcosystemPrivilegePolicy {
   isCanonicalGlobalRole: boolean;
+  isLegacyGlobalRole: boolean;
   isEcosystemSupportStaff: boolean;
   hasFullProductEntitlements: boolean;
   hasPrioritySupport: boolean;
@@ -46,12 +58,14 @@ export interface EcosystemPrivilegePolicy {
 
 export function resolveEcosystemPrivilegePolicy(systemRole: string | undefined | null): EcosystemPrivilegePolicy {
   const role = systemRole || '';
-  const isCanonical = CANONICAL_GLOBAL_ROLES.includes(role);
+  const isCanonical = isCanonicalGlobalRole(role);
+  const isLegacy = isLegacyGlobalRole(role);
   const isSupport = ECOSYSTEM_SUPPORT_ROLES.includes(role as any);
 
-  if (isCanonical) {
+  if (isCanonical || isLegacy) {
     return {
-      isCanonicalGlobalRole: true,
+      isCanonicalGlobalRole: isCanonical,
+      isLegacyGlobalRole: isLegacy,
       isEcosystemSupportStaff: false,
       hasFullProductEntitlements: true,
       hasPrioritySupport: true,
@@ -63,6 +77,7 @@ export function resolveEcosystemPrivilegePolicy(systemRole: string | undefined |
   if (isSupport) {
     return {
       isCanonicalGlobalRole: false,
+      isLegacyGlobalRole: false,
       isEcosystemSupportStaff: true,
       hasFullProductEntitlements: true,
       hasPrioritySupport: true,
@@ -73,6 +88,7 @@ export function resolveEcosystemPrivilegePolicy(systemRole: string | undefined |
 
   return {
     isCanonicalGlobalRole: false,
+    isLegacyGlobalRole: false,
     isEcosystemSupportStaff: false,
     hasFullProductEntitlements: false,
     hasPrioritySupport: false,
@@ -126,7 +142,7 @@ export function resolveEffectiveSupportAccess({
 
   if (privilegePolicy.hasPrioritySupport) {
     supportTier = 'priority';
-    if (privilegePolicy.isCanonicalGlobalRole) {
+    if (privilegePolicy.isCanonicalGlobalRole || privilegePolicy.isLegacyGlobalRole) {
       accessSource = 'global_privilege';
     } else {
       accessSource = 'ecosystem_support';

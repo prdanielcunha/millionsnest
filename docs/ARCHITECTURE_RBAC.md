@@ -21,3 +21,19 @@ We do **NOT** use hardcoded role evaluations in the frontend (e.g., `if (role ==
 Permissions are versioned using `permissionsVersion`. 
 This allows backward compatibility when introducing new apps in the MillionsNest multi-app ecosystem. 
 If an older user logs in without namespaced permissions, the `normalizePermissions` function automatically maps legacy boolean values to the new namespaced standard based on their `role`.
+
+
+## Global ecosystem roles
+
+Canonical global roles are:
+
+- `ceo` — highest operational authority; the last active CEO cannot self-demote.
+- `founder` — founder-level governance, below CEO for role assignment.
+- `ecosystem_owner` — ecosystem governance, below Founder and above Global Admin.
+- `global_admin` — global administration.
+- `ecosystem_support` — support entitlement role; it is **not** global governance.
+- `user` — no global privilege.
+
+The historical `admin` system role is **legacy compatibility only**. It remains recognized so existing live users are not locked out before Firestore can be inventoried and migrated, but the UI/API must normalize new `admin` assignments to `global_admin`.
+
+Global-role decisions must use the helpers in `src/lib/permissionService.ts` and `src/lib/roleResolver.ts`. Do not introduce new hardcoded arrays such as `['ceo', 'admin', 'global_admin']` in server or frontend code.

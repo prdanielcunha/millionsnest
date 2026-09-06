@@ -46,6 +46,9 @@ jobs:
       - name: Security governance contract
         run: npx tsx scripts/test_millionsnest_security_governance_p0.ts
 
+      - name: Global role canonicalization contract
+        run: npx tsx scripts/test_global_role_canonicalization.ts
+
       - name: MusicScale access resolver contract
         run: npx tsx scripts/test_mn_access_01_musicscale_resolver.ts
 

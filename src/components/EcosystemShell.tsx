@@ -428,7 +428,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                      <User className="w-4 h-4" /> Minha Conta
                    </Link>
                    
-                   {['ceo', 'admin', 'global_admin'].includes(profile?.systemRole) && (
+                   {isGlobalPrivilegedUser(profile) && (
                      <>
                        <div className="h-px bg-white/5 my-1" />
                        <Link to="/admin/ecosystem-data" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-[#2B85EB]/80 hover:text-white hover:bg-white/5 rounded-lg transition-all font-semibold">

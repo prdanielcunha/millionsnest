@@ -23,6 +23,8 @@ import { handleEcosystemAccessProjectionRequest } from './src/server/services/Ec
 import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
+import { isCanonicalGlobalRole, isGlobalPrivilegedRole } from './src/lib/permissionService.js';
+import { canChangeSystemRole, isAssignableSystemRole, normalizeLegacySystemRole } from './src/lib/roleResolver.js';
 import { 
   MUSIC_SCALE_PLANS, 
   priceIdToMusicScalePlan, 
@@ -646,7 +648,7 @@ async function startServer() {
 
       const userDoc = await dbInstance.collection('users').doc(decodedToken.uid).get();
       const systemRole = userDoc.data()?.systemRole;
-      if (systemRole !== 'ceo' && systemRole !== 'admin' && systemRole !== 'global_admin') {
+      if (!isGlobalPrivilegedRole(systemRole)) {
          return res.status(403).json({ error: 'Forbidden. Admin only.' });
       }
 
@@ -1276,49 +1278,51 @@ async function startServer() {
       const actorUid = decodedToken.uid;
       
       const targetUserId = req.params.userId;
-      const { newRole } = req.body; // 'ceo', 'admin', 'global_admin', or null/undefined/'user'
-      
+      const { newRole } = req.body;
+
       if (!db) return res.status(500).json({ error: 'Database not initialized' });
 
-      // Fetch actor
       const actorDoc = await db.collection('users').doc(actorUid).get();
       if (!actorDoc.exists) return res.status(403).json({ error: 'Forbidden' });
       const actorSystemRole = actorDoc.data()?.systemRole;
 
-      // Import the helper dynamically or statically. For node, we'll just implement the rules to be safe.
-      const actorRank = actorSystemRole === 'ceo' ? 100 : (actorSystemRole === 'admin' || actorSystemRole === 'global_admin' ? 80 : 0);
-      
-      if (actorRank === 0) return res.status(403).json({ error: 'Acesso restrito', message: 'Você não tem permissão para alterar cargos globais.' });
+      const normalizedRequestedRole = normalizeLegacySystemRole(newRole ?? 'user');
+      if (!isAssignableSystemRole(normalizedRequestedRole)) {
+        return res.status(400).json({
+          error: 'Cargo global inválido.',
+          message: 'Use apenas cargos globais canônicos.'
+        });
+      }
 
-      // Fetch target
       const targetDoc = await db.collection('users').doc(targetUserId).get();
-      if (!targetDoc.exists) return res.status(404).json({ error: 'Not found', message: 'Usuário alvo não encontrado.' });
-      const targetSystemRole = targetDoc.data()?.systemRole;
-      const targetRank = targetSystemRole === 'ceo' ? 100 : (targetSystemRole === 'admin' || targetSystemRole === 'global_admin' ? 80 : 0);
+      if (!targetDoc.exists) {
+        return res.status(404).json({ error: 'Not found', message: 'Usuário alvo não encontrado.' });
+      }
 
-      const targetNewRole = newRole === 'user' ? null : newRole;
-      const newRank = targetNewRole === 'ceo' ? 100 : (targetNewRole === 'admin' || targetNewRole === 'global_admin' ? 80 : 0);
+      const targetSystemRole = targetDoc.data()?.systemRole;
+      const targetNewRole = normalizedRequestedRole === 'user' ? null : normalizedRequestedRole;
       const isSelfDemotion = actorUid === targetUserId;
 
-      // Count CEOs if demoting CEO
       let activeCeosCount = 0;
-      if (isSelfDemotion && actorRank === 100) {
+      if (isSelfDemotion && actorSystemRole === 'ceo') {
         const ceosSnap = await db.collection('users').where('systemRole', '==', 'ceo').get();
         activeCeosCount = ceosSnap.docs.length;
       }
 
-      // CEO Rules
-      if (actorRank === 100) {
-         if (isSelfDemotion) {
-            if (activeCeosCount <= 1) return res.status(400).json({ error: 'Não é possível remover o último CEO do ecossistema.' });
-         } else if (targetRank === 100) {
-            return res.status(400).json({ error: 'Você não pode rebaixar, remover ou alterar o cargo de outro CEO do ecossistema.' });
-         }
-      } 
-      // Admin Rules
-      else if (actorRank === 80) {
-         if (newRank > actorRank) return res.status(400).json({ error: 'Você não pode conceder um cargo acima do seu nível de acesso.' });
-         if (targetRank >= actorRank && !isSelfDemotion) return res.status(400).json({ error: 'Você não pode alterar o cargo de um usuário com o mesmo ou maior nível de acesso.' });
+      const roleDecision = canChangeSystemRole(
+        actorSystemRole,
+        targetSystemRole,
+        normalizedRequestedRole,
+        isSelfDemotion,
+        activeCeosCount
+      );
+
+      if (!roleDecision.allowed) {
+        const statusCode = isGlobalPrivilegedRole(actorSystemRole) ? 400 : 403;
+        return res.status(statusCode).json({
+          error: roleDecision.message || 'Acesso negado.',
+          message: roleDecision.message
+        });
       }
 
       await db.collection('users').doc(targetUserId).update({ systemRole: targetNewRole });
@@ -1364,7 +1368,7 @@ async function startServer() {
       // Actor global role
       const actorUserDoc = await db.collection('users').doc(actorUid).get();
       const actorSystemRole = actorUserDoc.data()?.systemRole;
-      const isGlobalAdmin = actorSystemRole === 'ceo' || actorSystemRole === 'admin' || actorSystemRole === 'global_admin';
+      const isGlobalAdmin = isGlobalPrivilegedRole(actorSystemRole);
 
       // Actor local role
       const actorMemberDoc = await db.collection('organizations').doc(orgId).collection('members').doc(actorUid).get();
@@ -1465,7 +1469,7 @@ async function startServer() {
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       if (!userRef.exists) return res.status(403).json({ error: 'Forbidden' });
       const userData = userRef.data();
-      const isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(userData?.systemRole);
+      const isSystemAdmin = isGlobalPrivilegedRole(userData?.systemRole);
       if (!isSystemAdmin) {
          return res.status(403).json({ error: 'Acesso restrito' });
       }
@@ -1502,7 +1506,7 @@ async function startServer() {
       
       const userRef = await db!.collection('users').doc(decoded.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -1575,7 +1579,7 @@ async function startServer() {
       
       const userRef = await db!.collection('users').doc(decoded.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -1634,7 +1638,7 @@ async function startServer() {
         const db = admin.firestore();
         
         const actorDoc = await db.collection('users').doc(decoded.uid).get();
-        if (!actorDoc.exists || !['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(actorDoc.data()?.systemRole)) {
+        if (!actorDoc.exists || !isCanonicalGlobalRole(actorDoc.data()?.systemRole)) {
            return res.status(403).json({ error: 'Forbidden' });
         }
 
@@ -1679,7 +1683,7 @@ async function startServer() {
       
       const userRef = await db!.collection('users').doc(decoded.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -1817,7 +1821,7 @@ async function startServer() {
       
       const userRef = await db!.collection('users').doc(decoded.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -2258,7 +2262,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const userSnap = await db!.collection('users').doc(decoded.uid).get();
       const userDataCheck = userSnap.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userDataCheck?.systemRole || '')) {
+      if (!isGlobalPrivilegedRole(userDataCheck?.systemRole || '')) {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -2325,7 +2329,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const actorSnap = await db!.collection('users').doc(decoded.uid).get();
       const actorData = actorSnap.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(actorData?.systemRole || '')) {
+      if (!isGlobalPrivilegedRole(actorData?.systemRole || '')) {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -2446,7 +2450,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const actorDoc = await db!.collection('users').doc(decoded.uid).get();
       const actorRole = actorDoc.data()?.systemRole;
-      if (!['ceo', 'global_admin'].includes(actorRole)) {
+      if (!isCanonicalGlobalRole(actorRole)) {
         return res.status(403).json({ error: 'Forbidden. Required ceo/global_admin' });
       }
 
@@ -2542,7 +2546,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
       const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
       const actorDoc = await db!.collection('users').doc(decoded.uid).get();
-      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+      if (!isCanonicalGlobalRole(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
 
       const { uid } = req.params;
       
@@ -2591,7 +2595,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
       const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
       const actorDoc = await db!.collection('users').doc(decoded.uid).get();
-      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+      if (!isCanonicalGlobalRole(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
 
       const { uid } = req.params;
       const { organizationId } = req.body;
@@ -2623,7 +2627,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
       const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
       const actorDoc = await db!.collection('users').doc(decoded.uid).get();
-      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+      if (!isCanonicalGlobalRole(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
 
       const { uid } = req.params;
       const userRef = db!.collection('users').doc(uid);
@@ -2656,7 +2660,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
       const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
       const actorDoc = await db!.collection('users').doc(decoded.uid).get();
-      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+      if (!isCanonicalGlobalRole(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
 
       const { uid } = req.params;
       const { organizationId } = req.body;
@@ -2698,7 +2702,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
       const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
       const actorDoc = await db!.collection('users').doc(decoded.uid).get();
-      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+      if (!isCanonicalGlobalRole(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
 
       const { uid } = req.params;
       const { organizationId } = req.body;
@@ -2748,7 +2752,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
       const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
       const actorDoc = await db!.collection('users').doc(decoded.uid).get();
-      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+      if (!isCanonicalGlobalRole(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
 
       const batchLimit = 300;
       let migratedCount = 0;
@@ -2841,7 +2845,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
       const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
       const actorDoc = await db!.collection('users').doc(decoded.uid).get();
-      if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+      if (!isCanonicalGlobalRole(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
 
       const { uid } = req.params;
       const { organizationId } = req.body;
@@ -2878,7 +2882,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
         const decoded = await admin.auth().verifyIdToken(authHeader.split('Bearer ')[1]);
         const actorDoc = await db!.collection('users').doc(decoded.uid).get();
-        if (!['ceo', 'global_admin'].includes(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
+        if (!isCanonicalGlobalRole(actorDoc.data()?.systemRole)) return res.status(403).json({ error: 'Forbidden' });
 
         const { uid } = req.params;
         const { organizationId: inputOrgId } = req.body;
@@ -3006,7 +3010,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const actorDoc = await db!.collection('users').doc(decoded.uid).get();
       const actorRole = actorDoc.data()?.systemRole;
-      if (!['ceo', 'global_admin'].includes(actorRole)) {
+      if (!isCanonicalGlobalRole(actorRole)) {
         return res.status(403).json({ error: 'Forbidden. Required ceo/global_admin' });
       }
 
@@ -3199,7 +3203,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const userSnap = await db!.collection('users').doc(decoded.uid).get();
       const userData = userSnap.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole || '')) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole || '')) {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3248,7 +3252,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const actorSnap = await db!.collection('users').doc(decoded.uid).get();
       const actorData = actorSnap.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(actorData?.systemRole || '')) {
+      if (!isGlobalPrivilegedRole(actorData?.systemRole || '')) {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3337,7 +3341,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const actorSnap = await db!.collection('users').doc(decoded.uid).get();
       const actorData = actorSnap.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(actorData?.systemRole || '')) {
+      if (!isGlobalPrivilegedRole(actorData?.systemRole || '')) {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3438,7 +3442,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const userRef = await db!.collection('users').doc(decoded.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3488,7 +3492,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const userSnap = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userSnap.data();
-      if (userData?.systemRole !== 'ceo' && userData?.systemRole !== 'admin' && userData?.systemRole !== 'global_admin') {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Acesso restrito' });
       }
 
@@ -3529,7 +3533,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       if (!userRef.exists) return res.status(403).json({ error: 'Forbidden' });
       const userData = userRef.data();
-      const isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(userData?.systemRole);
+      const isSystemAdmin = isGlobalPrivilegedRole(userData?.systemRole);
       if (!isSystemAdmin) {
          return res.status(403).json({ error: 'Acesso restrito' });
       }
@@ -3602,7 +3606,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3625,7 +3629,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3679,7 +3683,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3739,7 +3743,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3784,7 +3788,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3807,7 +3811,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3891,7 +3895,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userRef.data();
-      if (!['ceo', 'admin', 'global_admin'].includes(userData?.systemRole)) {
+      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -3927,7 +3931,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       let hasAccess = false;
       const userSnap = await dbInstance.collection('users').doc(decodedToken.uid).get();
       const userData = userSnap.data();
-      if (userData?.systemRole === 'ceo' || userData?.systemRole === 'admin' || userData?.systemRole === 'global_admin') {
+      if (isGlobalPrivilegedRole(userData?.systemRole)) {
         hasAccess = true;
       } else {
         const memberSnap = await dbInstance.collection('organizations').doc(orgId).collection('members').doc(decodedToken.uid).get();
@@ -4015,7 +4019,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       let hasAccess = false;
       const userSnap = await dbInstance.collection('users').doc(decodedToken.uid).get();
       const userData = userSnap.data();
-      if (userData?.systemRole === 'ceo' || userData?.systemRole === 'admin' || userData?.systemRole === 'global_admin') {
+      if (isGlobalPrivilegedRole(userData?.systemRole)) {
         hasAccess = true;
       } else {
         const memberSnap = await dbInstance.collection('organizations').doc(orgId).collection('members').doc(decodedToken.uid).get();
@@ -4037,7 +4041,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         return res.status(400).json({ error: 'Missing type' });
       }
 
-      const isSystemAdmin = ['ceo', 'admin', 'global_admin'].includes(userData?.systemRole);
+      const isSystemAdmin = isGlobalPrivilegedRole(userData?.systemRole);
       const isSupportMode = decodedToken.supportMode === true;
       const shouldConsumeLibraryImport = !isSystemAdmin && !isSupportMode;
 
@@ -4420,7 +4424,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const syncUserEmail = syncUserDoc.data()?.email;
       const syncSystemRole = syncUserDoc.data()?.systemRole || 'user';
       let isMember = false;
-      let isSystemAdmin = ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(syncSystemRole);
+      let isSystemAdmin = isCanonicalGlobalRole(syncSystemRole);
       
       if (orgContext.organizations) {
          const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
@@ -5088,7 +5092,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const decoded = await admin.auth().verifyIdToken(token);
       
       const actorDoc = await db!.collection('users').doc(decoded.uid).get();
-      if (!actorDoc.exists || !['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(actorDoc.data()?.systemRole)) {
+      if (!actorDoc.exists || !isCanonicalGlobalRole(actorDoc.data()?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -5408,7 +5412,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const userRef = await db!.collection('users').doc(decoded.uid).get();
       const userData = userRef.data();
       
-      if (!userData || !['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(userData.systemRole)) {
+      if (!userData || !isCanonicalGlobalRole(userData.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -5496,7 +5500,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          const userDoc = await db!.collection('users').doc(decodedToken.uid).get();
          if (!userDoc.exists) return res.status(403).json({ error: 'Forbidden. User not found.' });
          const systemRole = userDoc.data()?.systemRole;
-         if (systemRole !== 'ceo' && systemRole !== 'admin' && systemRole !== 'global_admin') {
+         if (!isGlobalPrivilegedRole(systemRole)) {
              return res.status(403).json({ error: 'Forbidden. Admin/CEO only.' });
          }
       } catch (e) {
@@ -5666,7 +5670,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          const membership = orgContext.memberships.find((m: any) => m.organizationId === orgId);
          const hasBillingPerm = membership?.permissions?.['organization.billing.manage'] === true || membership?.role === 'owner' || membership?.role === 'admin';
          const systemRole = userDoc.data()?.systemRole;
-         const isGlobalAdmin = systemRole === 'ceo' || systemRole === 'admin' || systemRole === 'global_admin';
+         const isGlobalAdmin = isGlobalPrivilegedRole(systemRole);
          
          if (!isOwner && !hasBillingPerm && !isGlobalAdmin) {
            return res.status(403).json({ error: 'Você não tem permissão para gerenciar o faturamento desta organização.' });
@@ -5916,7 +5920,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          const membership = orgContext.memberships.find((m: any) => m.organizationId === orgId);
          const hasBillingPerm = membership?.permissions?.['organization.billing.manage'] === true || membership?.role === 'owner' || membership?.role === 'admin';
          const systemRole = userDoc.data()?.systemRole;
-         const isGlobalAdmin = systemRole === 'ceo' || systemRole === 'admin' || systemRole === 'global_admin';
+         const isGlobalAdmin = isGlobalPrivilegedRole(systemRole);
          
          if (!isOwner && !hasBillingPerm && !isGlobalAdmin) {
            return res.status(403).json({ error: 'Você não tem permissão para gerenciar o faturamento desta organização.' });
@@ -6155,7 +6159,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         role === 'admin' ||
         membership?.permissions?.['organization.billing.manage'] === true;
       const systemRole = confirmingUserDoc.exists ? confirmingUserDoc.data()?.systemRole : null;
-      const isGlobalAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole || '');
+      const isGlobalAdmin = isGlobalPrivilegedRole(systemRole || '');
 
       if (!canManageBilling && !isGlobalAdmin) {
         console.warn('[Checkout Confirm] Organization billing authorization rejected.', {
@@ -6409,7 +6413,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         role === 'admin' ||
         membership?.permissions?.['organization.billing.manage'] === true;
       const systemRole = userDoc.exists ? userDoc.data()?.systemRole : null;
-      const isGlobalAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole || '');
+      const isGlobalAdmin = isGlobalPrivilegedRole(systemRole || '');
 
       if (!canManageBilling && !isGlobalAdmin) {
         return res.status(403).json({
@@ -6502,7 +6506,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         role === 'admin' ||
         membership?.permissions?.['organization.billing.manage'] === true;
       const systemRole = userDoc.exists ? userDoc.data()?.systemRole : null;
-      const isGlobalAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole || '');
+      const isGlobalAdmin = isGlobalPrivilegedRole(systemRole || '');
 
       if (!canManageBilling && !isGlobalAdmin) {
         return res.status(403).json({
@@ -6636,7 +6640,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         membership?.permissions?.['organization.billing.manage'] === true;
 
       const systemRole = userDoc.data()?.systemRole || 'user';
-      const isSystemAdmin = ['ceo', 'admin', 'global_admin', 'ecosystem_owner', 'founder'].includes(systemRole);
+      const isSystemAdmin = isGlobalPrivilegedRole(systemRole);
 
       if (!canManageBilling && !isSystemAdmin) {
         return res.status(403).json({
@@ -6784,7 +6788,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         role === 'admin' ||
         membership?.permissions?.['organization.billing.manage'] === true;
       const systemRole = userDoc.exists ? userDoc.data()?.systemRole : null;
-      const isGlobalAdmin = ['ceo', 'admin', 'global_admin'].includes(systemRole || '');
+      const isGlobalAdmin = isGlobalPrivilegedRole(systemRole || '');
 
       if (!canManageBilling && !isGlobalAdmin) {
         return res.status(403).json({
