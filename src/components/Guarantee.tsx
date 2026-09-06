@@ -1,65 +1,40 @@
-import { motion } from "framer-motion";
-import { ShieldCheck, Calendar, RotateCcw } from "lucide-react";
+import { ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useTranslation, Trans } from 'react-i18next';
 
 export function Guarantee() {
   const { t } = useTranslation(['landing']);
+
   return (
-    <section className="py-16 bg-[#050505] border-t border-white/5">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="bg-gradient-to-br from-[#0B0F19] to-[#050505] rounded-[2.5rem] border border-white/5 p-8 md:p-12 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-[#2B85EB]/5 blur-[100px] pointer-events-none" />
-          
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-500 text-xs font-semibold mb-6">
-                <ShieldCheck className="w-3 h-3" />
+    <section className="bg-[#050505] py-20 md:py-28">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="relative overflow-hidden rounded-[30px] border border-white/[0.09] bg-[#0A0E15] px-7 py-10 md:px-12 md:py-14">
+          <div className="absolute -right-20 -top-24 h-80 w-80 rounded-full bg-[#2B85EB]/15 blur-[110px]" />
+          <div className="absolute bottom-0 left-1/3 h-52 w-80 rounded-full bg-[#6E56CF]/10 blur-[100px]" />
+          <div className="relative z-10 grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className="max-w-3xl">
+              <div className="mb-5 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#78B6FF]">
+                <ShieldCheck className="h-4 w-4" />
                 {t('guarantee_tag')}
               </div>
-              <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#F5F7FA] mb-6">
-                <Trans i18nKey="landing:guarantee_title" components={{ 1: <span className="text-[#2B85EB]" /> }} />
+              <h2 className="text-4xl font-semibold leading-[1.03] tracking-[-0.05em] text-white md:text-6xl">
+                <Trans i18nKey="landing:guarantee_title" components={{ 1: <span className="text-[#96A1B0]" /> }} />
               </h2>
-              <p className="text-[#A0A7B5] text-lg leading-relaxed mb-8">
-                {t('guarantee_desc')}
-              </p>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="flex gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
-                    <Calendar className="w-5 h-5 text-[#2B85EB]" />
-                  </div>
-                  <div>
-                    <h4 className="text-[#F5F7FA] font-semibold text-sm">{t('guarantee_sub1_title')}</h4>
-                    <p className="text-[#A0A7B5] text-xs">{t('guarantee_sub1_desc')}</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
-                    <RotateCcw className="w-5 h-5 text-[#2B85EB]" />
-                  </div>
-                  <div>
-                    <h4 className="text-[#F5F7FA] font-semibold text-sm">{t('guarantee_cta')}</h4>
-                    <p className="text-[#A0A7B5] text-xs">{t('guarantee_sub2_desc')}</p>
-                  </div>
-                </div>
+              <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[#8994A4]">{t('guarantee_desc')}</p>
+
+              <div className="mt-8 flex flex-col gap-3 text-sm text-[#B9C1CC] sm:flex-row sm:gap-6">
+                <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-300" /> {t('guarantee_sub1_title')}: {t('guarantee_sub1_desc')}</span>
+                <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-300" /> {t('guarantee_sub2_title')}: {t('guarantee_sub2_desc')}</span>
               </div>
             </div>
-            
-            <div className="flex justify-center md:justify-end">
-              <motion.div 
-                initial={{ rotate: -5, scale: 0.9 }}
-                whileInView={{ rotate: 0, scale: 1 }}
-                viewport={{ once: true }}
-                className="relative"
-              >
-                <div className="absolute inset-0 bg-[#2B85EB]/20 blur-3xl rounded-full" />
-                <div className="w-48 h-48 md:w-64 md:h-64 rounded-full border-[12px] border-[#2B85EB]/20 bg-[#0B0F19] flex flex-col items-center justify-center text-center p-6 relative bg-clip-padding backdrop-blur-xl">
-                  <span className="text-[#2B85EB] font-black text-5xl md:text-7xl leading-none">7</span>
-                  <span className="text-[#F5F7FA] font-bold text-lg md:text-xl uppercase tracking-tighter">{t('guarantee_badge_days')}</span>
-                  <span className="text-[#A0A7B5] font-medium text-xs md:text-sm uppercase tracking-widest">{t('guarantee_badge_title')}</span>
-                  <ShieldCheck className="absolute -top-2 -right-2 w-12 h-12 text-[#2B85EB] fill-[#0B0F19]" />
-                </div>
-              </motion.div>
+
+            <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+              <Link to="/musicscale" className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-black transition hover:-translate-y-0.5">
+                {t('guarantee_cta')} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </Link>
+              <a href="/musicscale#pricing-section" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-6 py-3.5 text-sm font-medium text-[#E4E8EE] transition hover:bg-white/[0.06]">
+                {t('guarantee_secondary')}
+              </a>
             </div>
           </div>
         </div>

@@ -268,7 +268,7 @@ export function Navbar() {
           {!user && (
             <>
               <Link to="/musicscale" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_musicscale', 'MusicScale')}</Link>
-              <a href="/#funcionalidades" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_features', 'Funcionalidades')}</a>
+              <a href="/#principios" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_features', 'Por que MillionsNest')}</a>
               <a href="/#ecossistema" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_ecosystem', 'Ecossistema')}</a>
               <a href="/musicscale#pricing-section" className="text-sm font-medium text-[#A0A7B5] hover:text-white transition-colors">{t('common:nav_pricing', 'Planos')}</a>
             </>
@@ -334,7 +334,7 @@ export function Navbar() {
                 sessionStorage.setItem('purchase_intent', 'musicscale_starter_monthly');
                 navigate('/login');
               }} className="text-sm font-medium px-6 py-2.5 rounded-lg bg-white text-black hover:bg-gray-100 transition-all shadow-md hover:shadow-lg active:scale-95">
-                {t('common:free_trial', 'Teste grátis')}
+                {t('common:nav_try_musicscale', 'Experimentar MusicScale')}
               </button>
             </>
           )}
@@ -391,7 +391,7 @@ export function Navbar() {
             {!user && (
               <>
                 <Link to="/musicscale" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_musicscale', 'MusicScale')}</Link>
-                <a href="/#funcionalidades" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_features', 'Funcionalidades')}</a>
+                <a href="/#principios" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_features', 'Por que MillionsNest')}</a>
                 <a href="/#ecossistema" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_ecosystem', 'Ecossistema')}</a>
                 <a href="/musicscale#pricing-section" className="text-lg font-medium text-[#F5F7FA]" onClick={() => setMobileMenuOpen(false)}>{t('common:nav_pricing', 'Planos')}</a>
                 <hr className="border-white/10 my-2" />
@@ -417,7 +417,7 @@ export function Navbar() {
                   setMobileMenuOpen(false);
                   navigate('/login');
                 }} className="text-lg font-bold w-full bg-white text-black hover:bg-gray-100 text-center py-4 rounded-xl shadow-lg active:scale-95 transition-all">
-                  {t('common:free_trial_full', 'Teste Grátis de 7 Dias')}
+                  {t('common:nav_try_musicscale', 'Experimentar MusicScale')}
                 </button>
                </>
             )}
