@@ -995,7 +995,11 @@ export default {
             "getting_started": {
                   "title": "Primeiros passos no MusicScale",
                   "description": "Vamos preparar sua organização, sua equipe e a primeira configuração. Você pode concluir cada etapa no seu ritmo.",
-                  "operational_notice": "As próximas tarefas acontecem dentro do MusicScale. O MillionsNest não marcará essas etapas como concluídas até receber uma confirmação segura do aplicativo.",
+                  "guidance_title": "Você não precisa decorar o sistema",
+                  "guidance_ready": "Sua organização e sua equipe já estão prontas. Agora comece adicionando as primeiras músicas e siga a ordem abaixo.",
+                  "guidance_org": "Comece conferindo os dados da sua igreja ou organização. Depois, o painel mostra o próximo passo.",
+                  "guidance_team": "Sua organização está pronta. Agora convide as pessoas que usarão o MusicScale com você.",
+                  "operational_notice": "As próximas tarefas acontecem dentro do MusicScale. Abra o aplicativo e siga a ordem indicada no guia.",
                   "sections": {
                         "millionsnest": "Preparação no MillionsNest",
                         "musicscale": "Continue no MusicScale"
@@ -1025,7 +1029,9 @@ export default {
                         "attention": "Precisa de atenção",
                         "pending_invite": "Convite enviado",
                         "pending": "Pendente",
-                        "continue_in_ms": "Continue no MusicScale"
+                        "continue_in_ms": "Continue no MusicScale",
+                        "next_step": "Próxima etapa",
+                        "do_in_ms": "Faça no MusicScale"
                   },
                   "steps": {
                         "team": {
