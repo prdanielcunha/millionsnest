@@ -47,6 +47,7 @@ interface EcosystemWorkspaceHomeProps {
       songCount: number;
       assignmentCount: number;
       bandScaleId?: string | null;
+      responseSummaryAvailable: boolean;
       responseCounts: {
         pending: number;
         accepted: number;
@@ -274,7 +275,7 @@ export function EcosystemWorkspaceHome({
                             path: '/scales',
                             label: t('workspace.next_step.music_scale_action', 'Criar escala de músicas')
                           }
-                        : isReadyToOpen && appSummaryReady && (musicScaleSummary.nextScale?.responseCounts.pending || 0) > 0
+                        : isReadyToOpen && appSummaryReady && musicScaleSummary.nextScale?.responseSummaryAvailable === true && (musicScaleSummary.nextScale?.responseCounts.pending || 0) > 0
                           ? {
                               tone: 'warning',
                               title: t('workspace.next_step.responses_title', 'Há confirmações aguardando resposta'),
@@ -750,16 +751,18 @@ export function EcosystemWorkspaceHome({
                     })}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wider">
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/15">
-                    {musicScaleSummary.nextScale.responseCounts.accepted} {t('musicscale.summary.accepted', 'confirmadas')}
-                  </span>
-                  {musicScaleSummary.nextScale.responseCounts.pending > 0 && (
-                    <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/15">
-                      {musicScaleSummary.nextScale.responseCounts.pending} {t('musicscale.summary.pending', 'aguardando')}
+                {musicScaleSummary.nextScale.responseSummaryAvailable && (
+                  <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wider">
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/15">
+                      {musicScaleSummary.nextScale.responseCounts.accepted} {t('musicscale.summary.accepted', 'confirmadas')}
                     </span>
-                  )}
-                </div>
+                    {musicScaleSummary.nextScale.responseCounts.pending > 0 && (
+                      <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/15">
+                        {musicScaleSummary.nextScale.responseCounts.pending} {t('musicscale.summary.pending', 'aguardando')}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </button>
           ) : musicScaleSummary.updatedAtMs > 0 ? (
