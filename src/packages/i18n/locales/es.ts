@@ -23,7 +23,7 @@ export default {
     nav_musicscale: "MusicScale",
     nav_features: "Por qué MillionsNest",
     nav_ecosystem: "Ecosistema",
-    nav_pricing: "Planes"
+    nav_pricing: "Planes",
     nav_try_musicscale: "Probar MusicScale",
   },
   musicscale: {

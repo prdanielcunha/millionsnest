@@ -14,7 +14,7 @@ export default {
     nav_musicscale: "MusicScale",
     nav_features: "Why MillionsNest",
     nav_ecosystem: "Ecosystem",
-    nav_pricing: "Plans"
+    nav_pricing: "Plans",
     nav_try_musicscale: "Try MusicScale",
   },
   musicscale: {
