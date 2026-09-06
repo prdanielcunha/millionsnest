@@ -65,6 +65,25 @@ const getVisualState = (sub: any) => {
   return status; // fallback
 };
 
+const humanizeAuditAction = (action: unknown) => {
+  const value = String(action || '').toLowerCase();
+
+  if (!value) return 'Atividade registrada';
+  if (value.includes('invite') && (value.includes('create') || value.includes('sent'))) return 'Convite enviado para a equipe';
+  if (value.includes('member') && value.includes('remove')) return 'Pessoa removida da equipe';
+  if (value.includes('member') && (value.includes('role') || value.includes('permission')) && value.includes('update')) return 'Acesso de uma pessoa foi atualizado';
+  if (value.includes('organization') && value.includes('update')) return 'Dados da organização foram atualizados';
+  if (value.includes('subscription') || value.includes('billing')) return 'Assinatura ou pagamento foi atualizado';
+  if (value.includes('join') && value.includes('accept')) return 'Entrada de uma pessoa foi aprovada';
+  if (value.includes('join') && value.includes('reject')) return 'Solicitação de entrada foi recusada';
+  if (value.includes('admin_accessed_organization')) return 'Suporte acessou a organização';
+  if (value.includes('admin_bypassed_app_launch')) return 'Aplicativo aberto pelo suporte';
+  if (value.includes('admin_removed_member')) return 'Pessoa removida da equipe pelo suporte';
+
+  // Never leak internal event names or identifiers to customer-facing activity.
+  return 'Atividade registrada';
+};
+
 const withDashboardTimeout = <T,>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -1588,7 +1607,7 @@ export function Dashboard() {
                   </div>
                   <div className="hidden md:block w-px h-4 bg-white/10" />
                   <p className="text-[#A0A7B5] text-sm">
-                    Painel Central do Sistema
+                    Visão geral da sua organização
                   </p>
                 </div>
               </div>
@@ -1900,10 +1919,10 @@ export function Dashboard() {
                             <div className="w-px h-full bg-white/5 my-1" />
                           </div>
                           <div className="pb-4">
-                            <p className="text-sm text-[#F5F7FA]">{log.action}</p>
+                            <p className="text-sm text-[#F5F7FA]">{humanizeAuditAction(log.action)}</p>
                             <p className="text-[10px] text-[#A0A7B5] mt-0.5">
                               {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('pt-BR') : 'Agora'}
-                              {log.actorUid && ` • Usuario: ${members.find(m => m.id === log.actorUid)?.displayName || log.actorUid.substring(0, 5) + "..."}`}
+                              {log.actorUid && members.find(m => m.id === log.actorUid)?.displayName ? ` • por ${members.find(m => m.id === log.actorUid)?.displayName}` : ''}
                             </p>
                           </div>
                         </div>
@@ -1911,8 +1930,8 @@ export function Dashboard() {
                         <div className="py-2">
                            <PremiumEmptyState 
                              icon={<Check className="w-6 h-6" />}
-                             title="Sem Logs Recentes"
-                             description="Nenhuma atividade operacional registrada."
+                             title="Tudo tranquilo por aqui"
+                             description="As mudanças importantes da sua organização aparecerão aqui."
                            />
                         </div>
                       )}
@@ -2781,17 +2800,17 @@ export function Dashboard() {
                       <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
                     </span>
                     <span className="text-xs font-semibold text-[#A0A7B5] uppercase tracking-wider">
-                      Stripe Gateway (Conexão Segura Ativa)
+                      Verificação do acesso
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-[11px] text-[#A0A7B5]/60 uppercase tracking-widest mb-0.5">Validação em Tempo Real</p>
-                      <p className="text-xs font-semibold text-emerald-400">Verificado com Sucesso</p>
+                      <p className="text-[11px] text-[#A0A7B5]/60 uppercase tracking-widest mb-0.5">Conferência automática</p>
+                      <p className="text-xs font-semibold text-emerald-400">Conta localizada</p>
                     </div>
                     <div>
-                      <p className="text-[11px] text-[#A0A7B5]/60 uppercase tracking-widest mb-0.5">Status da Assinatura</p>
+                      <p className="text-[11px] text-[#A0A7B5]/60 uppercase tracking-widest mb-0.5">Situação da assinatura</p>
                       <p className="text-xs font-semibold text-red-500 flex items-center gap-1.5 uppercase">
                         {subscription?.status === 'canceled' ? 'Cancelada' : 'Pendente / Inativa'}
                       </p>
@@ -2842,7 +2861,7 @@ export function Dashboard() {
                 </div>
 
                 <p className="text-[10px] text-[#A0A7B5]/40 mt-6 max-w-sm">
-                  Se você acabou de realizar o pagamento, clique em "Sincronizar" para liberar instantaneamente o seu acesso ou fale com o nosso suporte.
+                  Se você acabou de pagar, use "Atualizar status". Se ainda precisar de ajuda, fale com o nosso suporte.
                 </p>
               </div>
             </motion.div>
@@ -2914,13 +2933,20 @@ export function Dashboard() {
                   />
                 </div>
 
-                <div>
-                  <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Foto do Membro (URL)</label>
+                <details className="group rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                  <summary className="cursor-pointer list-none flex items-center justify-between gap-3 text-xs font-medium text-[#A0A7B5]">
+                    <span>Foto do membro <span className="text-white/40">(opcional)</span></span>
+                    <span className="text-[10px] text-[#2B85EB] group-open:hidden">Adicionar</span>
+                    <span className="text-[10px] text-[#A0A7B5] hidden group-open:inline">Fechar</span>
+                  </summary>
+                  <p className="text-[11px] text-[#A0A7B5]/70 mt-3 mb-3">
+                    Se quiser, cole o link de uma foto. Você pode deixar isso para depois.
+                  </p>
                   <div className="flex gap-3 items-center">
                     {editingMemberPhoto ? (
-                      <img 
-                        src={editingMemberPhoto} 
-                        alt="Preview" 
+                      <img
+                        src={editingMemberPhoto}
+                        alt="Foto do membro"
                         referrerPolicy="no-referrer"
                         className="w-12 h-12 rounded-full object-cover border border-white/10 bg-white/5"
                         onError={(e) => { (e.target as HTMLImageElement).src = 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'; }}
@@ -2931,14 +2957,15 @@ export function Dashboard() {
                       </div>
                     )}
                     <input
-                      type="text"
+                      type="url"
                       value={editingMemberPhoto}
                       onChange={(e) => setEditingMemberPhoto(e.target.value)}
                       className="flex-1 bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors text-xs"
-                      placeholder="https://exemplo.com/foto.jpg"
+                      placeholder="Cole o link da foto"
+                      aria-label="Link da foto do membro"
                     />
                   </div>
-                </div>
+                </details>
 
                 {(isGlobalAdmin || profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin') && (
                   <div>

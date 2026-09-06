@@ -755,9 +755,30 @@ export default {
       view_subscription: "Ver assinatura",
       view_subscription_desc: "Consulte plano, acesso e situação da assinatura.",
       open_cta: "Abrir",
-      intro: "Sua Central de Gerenciamento",
-      sub_intro: "Gerencie a preparação do seu ministério de louvor e controle os acessos de segurança da sua equipe.",
-      spaces_title: "Seus espaços",
+      intro: "Tudo da sua organização em um só lugar",
+      sub_intro: "Veja o que está funcionando, o que precisa de atenção e qual é o próximo passo.",
+      public_page_label: "Página pública:",
+      next_step: {
+        eyebrow: "Próximo passo",
+        payment_title: "Revise o pagamento do MusicScale",
+        payment_desc: "Precisamos confirmar sua assinatura para liberar o acesso normalmente.",
+        payment_action: "Revisar pagamento",
+        loading_title: "Estamos conferindo seu acesso",
+        loading_desc: "Isso acontece automaticamente. Você pode continuar assim que a verificação terminar.",
+        choose_plan_title: "Escolha o plano que combina com sua equipe",
+        choose_plan_desc: "Depois disso, o MusicScale fica disponível para você começar a organizar o ministério.",
+        choose_plan_action: "Ver planos",
+        invite_title: "Convide sua equipe",
+        invite_desc: "Adicione as primeiras pessoas que vão usar o MusicScale com você.",
+        invite_action: "Convidar equipe",
+        open_title: "Seu MusicScale está pronto",
+        open_desc: "Abra o aplicativo e continue a organização de músicas, integrantes e escalas.",
+        open_action: "Abrir MusicScale",
+        learn_title: "Veja os primeiros passos",
+        learn_desc: "Siga o guia em ordem e veja o que já está pronto e o que ainda falta fazer.",
+        learn_action: "Ver primeiros passos"
+      },
+      spaces_title: "Acesso rápido",
       apps_title: "Seus aplicativos",
       open_app: "Abrir {{appName}}",
       available: "Disponível",
@@ -766,7 +787,7 @@ export default {
       resolve_payment: "Regularizar pagamento",
       no_apps_found: "Nenhum aplicativo habilitado no momento.",
       musicscale_group_title: "MusicScale — Excelência no Louvor",
-      org_group_title: "Organização e Acesso",
+      org_group_title: "Sua igreja e equipe",
       help_group_title: "Ajuda e Suporte",
       organization_unnamed: "Sua Organização",
       org_settings_title: "Ajustes da Organização",
@@ -774,8 +795,8 @@ export default {
       plan_starter: "Starter",
       billing_action: "Gerenciar Assinatura",
       team_title: "Membros e Equipe",
-      team_desc: "Administre quem tem acesso à organização e segurança do painel.",
-      slots_allocated: "Vagas preenchidas",
+      team_desc: "Veja quem já está na equipe, convide novas pessoas e ajuste os acessos quando precisar.",
+      slots_allocated: "Pessoas usando o plano",
       invite_action: "Convidar Membro",
       manage_team_action: "Ver Equipe",
       team: {
@@ -974,7 +995,11 @@ export default {
             "getting_started": {
                   "title": "Primeiros passos no MusicScale",
                   "description": "Vamos preparar sua organização, sua equipe e a primeira configuração. Você pode concluir cada etapa no seu ritmo.",
-                  "operational_notice": "As próximas tarefas acontecem dentro do MusicScale. O MillionsNest não marcará essas etapas como concluídas até receber uma confirmação segura do aplicativo.",
+                  "guidance_title": "Você não precisa decorar o sistema",
+                  "guidance_ready": "Sua organização e sua equipe já estão prontas. Agora comece adicionando as primeiras músicas e siga a ordem abaixo.",
+                  "guidance_org": "Comece conferindo os dados da sua igreja ou organização. Depois, o painel mostra o próximo passo.",
+                  "guidance_team": "Sua organização está pronta. Agora convide as pessoas que usarão o MusicScale com você.",
+                  "operational_notice": "As próximas tarefas acontecem dentro do MusicScale. Abra o aplicativo e siga a ordem indicada no guia.",
                   "sections": {
                         "millionsnest": "Preparação no MillionsNest",
                         "musicscale": "Continue no MusicScale"
@@ -1004,7 +1029,9 @@ export default {
                         "attention": "Precisa de atenção",
                         "pending_invite": "Convite enviado",
                         "pending": "Pendente",
-                        "continue_in_ms": "Continue no MusicScale"
+                        "continue_in_ms": "Continue no MusicScale",
+                        "next_step": "Próxima etapa",
+                        "do_in_ms": "Faça no MusicScale"
                   },
                   "steps": {
                         "team": {
