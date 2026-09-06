@@ -606,6 +606,10 @@ export function OrganizationManager({
                         <input value={organizationDetails.state} onChange={(e) => updateOrganizationDetail('state', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" />
                       </label>
                       <label className="text-xs text-[#A0A7B5]">
+                        País
+                        <input value={organizationDetails.country} onChange={(e) => updateOrganizationDetail('country', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
                         CEP
                         <input value={organizationDetails.postalCode} onChange={(e) => updateOrganizationDetail('postalCode', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" />
                       </label>
