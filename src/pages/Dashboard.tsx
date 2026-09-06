@@ -555,7 +555,12 @@ export function Dashboard() {
       const data = await res.json();
       
       if (data.action === 'checkout_required') {
-         const plan = subscription?.plan || 'pro';
+         const plan = subscription?.plan;
+         if (!plan || !['starter', 'advanced', 'pro'].includes(plan)) {
+           feedback.error('Escolha um plano para continuar.');
+           navigate('/dashboard/billing');
+           return;
+         }
          window.location.href = `/checkout?plan=musicscale_${plan}_monthly`;
          return;
       }
@@ -2010,7 +2015,7 @@ export function Dashboard() {
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
                              <ListMusic className="w-3.5 h-3.5" /> Plano Atual
                           </p>
-                          <p className="text-sm font-semibold text-[#F5F7FA] mt-1 capitalize">{subscription?.plan || subscription?.tier || organization?.subscriptionPlan || 'Gratuito'}</p>
+                          <p className="text-sm font-semibold text-[#F5F7FA] mt-1 capitalize">{subscription?.plan || subscription?.tier || organization?.subscriptionPlan || 'Plano não identificado'}</p>
                         </div>
                         <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
@@ -2471,7 +2476,7 @@ export function Dashboard() {
                       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
                         <div>
                            <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Plano Atual</p>
-                           <h3 className="text-xl font-semibold text-[#F5F7FA] capitalize">{subscription?.plan || 'Mensal'} - MusicScale</h3>
+                           <h3 className="text-xl font-semibold text-[#F5F7FA] capitalize">{subscription?.plan || 'Plano não identificado'} - MusicScale</h3>
                         </div>
                         <div className="text-left md:text-right">
                            <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Status</p>
