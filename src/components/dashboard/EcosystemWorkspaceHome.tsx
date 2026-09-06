@@ -899,8 +899,8 @@ export function EcosystemWorkspaceHome({
         onOpenInviteModal={onOpenInviteModal}
         onManageTeam={onNavigateToOrganizationMembers}
         onReviewOrganization={onNavigateToOrganizationSettings}
-        onOpenMusicScale={() => {
-          if (musicScaleApp) onLaunchApp(musicScaleApp);
+        onOpenMusicScale={(destinationPath?: string) => {
+          if (musicScaleApp) onLaunchApp(musicScaleApp, destinationPath);
         }}
         onNavigateToBilling={onNavigateToBilling}
         heroContent={heroContent}
