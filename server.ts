@@ -1,6 +1,11 @@
 import express from 'express';
 import { bootstrapUserContext, acceptInvitation, setActiveOrganization } from './src/server/services/TenantContextMutationService.js';
 import { createInvitation } from "./src/server/services/InvitationCreationService.js";
+import { deliverInvitationEmail } from './src/server/services/InvitationEmailService.js';
+import { generateInvitationTokenMaterial } from './src/server/services/InvitationTokenService.js';
+import { INVITATION_TTL_MS } from './src/server/services/InvitationCreationPlanner.js';
+import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './src/server/services/InvitationAcceptanceServerPolicy.js';
+import { canInviteOrganizationRole } from './src/lib/organizationRoles.js';
 import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
@@ -738,6 +743,368 @@ async function startServer() {
 
   app.post('/api/v1/onboarding/bootstrap', express.json(), bootstrapUserContext);
   app.post('/api/v1/invitations', express.json(), (req, res) => createInvitation(req, res));
+
+  app.post('/api/v1/invitations/email', express.json({ limit: '16kb' }), async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      const { organizationId, invitationId, inviteUrl } = req.body || {};
+      if (
+        typeof organizationId !== 'string' ||
+        typeof invitationId !== 'string' ||
+        typeof inviteUrl !== 'string' ||
+        !organizationId ||
+        !invitationId
+      ) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_REQUEST' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, reasonCode: 'SERVICE_UNAVAILABLE' });
+      }
+
+      const [orgSnap, actorSnap, memberSnap, inviteSnap] = await Promise.all([
+        dbInstance.collection('organizations').doc(organizationId).get(),
+        dbInstance.collection('users').doc(decoded.uid).get(),
+        dbInstance.collection('organizations').doc(organizationId).collection('members').doc(decoded.uid).get(),
+        dbInstance.collection('organizations').doc(organizationId).collection('invites').doc(invitationId).get()
+      ]);
+
+      if (!orgSnap.exists || !inviteSnap.exists) {
+        return res.status(404).json({ success: false, reasonCode: 'INVITATION_NOT_FOUND' });
+      }
+
+      const orgData = orgSnap.data() || {};
+      const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+      const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+      const inviteData = inviteSnap.data() || {};
+      const membershipRole = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+      const actorIsOwner =
+        orgData.ownerUid === decoded.uid ||
+        orgData.ownerId === decoded.uid ||
+        orgData.ownerUserId === decoded.uid ||
+        orgData.owner_user_id === decoded.uid;
+      const canInvite =
+        isGlobalPrivilegedRole(actorData.systemRole) ||
+        actorIsOwner ||
+        canInviteOrganizationRole(
+          { systemRole: actorData.systemRole, organizationRole: membershipRole },
+          inviteData.role
+        );
+
+      if (!canInvite) {
+        return res.status(403).json({ success: false, reasonCode: 'PERMISSION_DENIED' });
+      }
+
+      if (
+        inviteData.organizationId !== organizationId ||
+        inviteData.status !== 'pending' ||
+        typeof inviteData.emailNormalized !== 'string' ||
+        typeof inviteData.tokenHash !== 'string'
+      ) {
+        return res.status(409).json({ success: false, reasonCode: 'INVITATION_STATE_INVALID' });
+      }
+
+      const expiresAtMs = normalizeInvitationTemporalMs(inviteData.expiresAt);
+      if (!expiresAtMs || expiresAtMs <= Date.now()) {
+        return res.status(409).json({ success: false, reasonCode: 'INVITATION_EXPIRED' });
+      }
+
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(inviteUrl);
+      } catch {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+      }
+
+      const requestHost = String(req.get('host') || '').toLowerCase();
+      const allowedHosts = new Set(['millionsnest.com', 'www.millionsnest.com', requestHost]);
+      if (
+        !allowedHosts.has(parsedUrl.host.toLowerCase()) ||
+        parsedUrl.pathname !== `/join/${organizationId}` ||
+        Array.from(parsedUrl.searchParams.keys()).length !== 1
+      ) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+      }
+
+      const rawToken = parsedUrl.searchParams.get('token') || '';
+      if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken)) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+      }
+
+      const tokenHash = crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex');
+      if (tokenHash !== inviteData.tokenHash) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+      }
+
+      const deliveryState = inviteData.emailDelivery || {};
+      const lastAttemptMs = normalizeInvitationTemporalMs(deliveryState.lastAttemptAt);
+      if (lastAttemptMs && Date.now() - lastAttemptMs < 30000) {
+        return res.status(429).json({ success: false, reasonCode: 'EMAIL_RATE_LIMITED' });
+      }
+      const attemptCount = Number.isInteger(deliveryState.attemptCount) ? deliveryState.attemptCount : 0;
+      if (attemptCount >= 10) {
+        return res.status(429).json({ success: false, reasonCode: 'EMAIL_LIMIT_REACHED' });
+      }
+
+      const roleLabelMap: Record<string, string> = {
+        owner: 'Dono',
+        admin: 'Administrador',
+        manager: 'Gestor',
+        member: 'Membro',
+        viewer: 'Visualizador'
+      };
+
+      await inviteSnap.ref.set({
+        emailDelivery: {
+          attemptCount: attemptCount + 1,
+          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastAttemptBy: decoded.uid
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      const result = await deliverInvitationEmail({
+        recipientEmail: inviteData.emailNormalized,
+        organizationName: String(orgData.name || inviteData.organizationName || 'Sua organização'),
+        inviteUrl,
+        roleLabel: roleLabelMap[inviteData.role] || 'Membro'
+      });
+
+      if (!result.success) {
+        return res.status(result.reasonCode === 'NOT_CONFIGURED' ? 503 : 502).json({
+          success: false,
+          reasonCode: result.reasonCode
+        });
+      }
+
+      await inviteSnap.ref.set({
+        emailDelivery: {
+          attemptCount: attemptCount + 1,
+          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastAttemptBy: decoded.uid,
+          lastSentAt: admin.firestore.FieldValue.serverTimestamp(),
+          provider: result.provider,
+          providerMessageId: result.providerMessageId || null
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      await orgSnap.ref.collection('audit_logs').add({
+        action: 'invitation.email.sent',
+        actorUid: decoded.uid,
+        invitationId,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true, delivery: 'email' });
+    } catch (error) {
+      console.error('[InvitationEmail] Delivery route failed', error);
+      return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
+    }
+  });
+
+  app.post('/api/v1/organizations/:organizationId/invitations/:invitationId/reissue', express.json({ limit: '8kb' }), async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      const organizationId = String(req.params.organizationId || '').trim();
+      const invitationId = String(req.params.invitationId || '').trim();
+      if (!organizationId || !invitationId || organizationId.length > 256 || invitationId.length > 256) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_REQUEST' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, reasonCode: 'SERVICE_UNAVAILABLE' });
+      }
+
+      const nowMs = Date.now();
+      const result = await dbInstance.runTransaction(async transaction => {
+        const orgRef = dbInstance.collection('organizations').doc(organizationId);
+        const actorRef = dbInstance.collection('users').doc(decoded.uid);
+        const memberRef = orgRef.collection('members').doc(decoded.uid);
+        const inviteRef = orgRef.collection('invites').doc(invitationId);
+        const subRef = dbInstance.collection('subscriptions').doc(organizationId);
+
+        const [orgSnap, actorSnap, memberSnap, inviteSnap, subSnap] = await Promise.all([
+          transaction.get(orgRef),
+          transaction.get(actorRef),
+          transaction.get(memberRef),
+          transaction.get(inviteRef),
+          transaction.get(subRef)
+        ]);
+
+        if (!orgSnap.exists || !inviteSnap.exists) {
+          return { status: 404, payload: { success: false, reasonCode: 'INVITATION_NOT_FOUND' } };
+        }
+
+        const orgData = orgSnap.data() || {};
+        const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+        const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+        const inviteData = inviteSnap.data() || {};
+        const membershipRole = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+        const actorIsOwner =
+          orgData.ownerUid === decoded.uid ||
+          orgData.ownerId === decoded.uid ||
+          orgData.ownerUserId === decoded.uid ||
+          orgData.owner_user_id === decoded.uid;
+
+        if (
+          inviteData.organizationId !== organizationId ||
+          inviteData.status !== 'pending' ||
+          typeof inviteData.emailNormalized !== 'string' ||
+          !canInviteOrganizationRole(
+            {
+              systemRole: actorData.systemRole,
+              organizationRole: actorIsOwner ? 'owner' : membershipRole
+            },
+            inviteData.role
+          ) && !isGlobalPrivilegedRole(actorData.systemRole)
+        ) {
+          return { status: 403, payload: { success: false, reasonCode: 'PERMISSION_DENIED' } };
+        }
+
+        const membersQuery = await transaction.get(orgRef.collection('members'));
+        const invitesQuery = await transaction.get(orgRef.collection('invites'));
+        const memberStatuses = membersQuery.docs.map(document => document.data().status);
+        let otherPendingInvites = 0;
+
+        for (const document of invitesQuery.docs) {
+          if (document.id === invitationId) continue;
+          const data = document.data() || {};
+          const expiresAtMs = normalizeInvitationTemporalMs(data.expiresAt);
+          const revokedAtMs = normalizeInvitationTemporalMs(data.revokedAt);
+          if (
+            data.status === 'pending' &&
+            !revokedAtMs &&
+            expiresAtMs &&
+            expiresAtMs > nowMs &&
+            Number.isInteger(data.maxUses) &&
+            Number.isInteger(data.useCount) &&
+            data.maxUses > data.useCount
+          ) {
+            otherPendingInvites += 1;
+          }
+        }
+
+        const subData = subSnap.exists ? subSnap.data() || {} : {};
+        const capacity = resolveCanonicalInvitationCapacity({
+          organizationId,
+          subscription: {
+            exists: subSnap.exists,
+            organizationId: subData.organizationId,
+            app: subData.app,
+            status: subData.status,
+            plan: subData.plan,
+            limitsUsers: subData.limits?.users
+          },
+          organizationApp: {
+            exists: !!orgData.apps?.musicscale,
+            status: orgData.apps?.musicscale?.status,
+            plan: orgData.apps?.musicscale?.plan,
+            limitsUsers: orgData.apps?.musicscale?.limits?.users
+          },
+          memberStatuses
+        });
+
+        if (!capacity.success) {
+          return { status: 503, payload: { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' } };
+        }
+        if (
+          capacity.capacity.mode === 'limited' &&
+          (capacity.capacity.currentActiveMembers || 0) + otherPendingInvites >= (capacity.capacity.maxMembers || 0)
+        ) {
+          return { status: 409, payload: { success: false, reasonCode: 'MEMBER_LIMIT_REACHED' } };
+        }
+
+        const tokenResult = generateInvitationTokenMaterial();
+        if (!tokenResult.success) {
+          return { status: 500, payload: { success: false, reasonCode: tokenResult.reasonCode } };
+        }
+
+        const newInviteRef = orgRef.collection('invites').doc();
+        transaction.set(inviteRef, {
+          status: 'revoked',
+          revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+          revokedBy: decoded.uid,
+          replacedByInvitationId: newInviteRef.id,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        transaction.set(newInviteRef, {
+          schemaVersion: 1,
+          id: newInviteRef.id,
+          organizationId,
+          organizationName: orgData.name || inviteData.organizationName,
+          email: inviteData.emailNormalized,
+          emailNormalized: inviteData.emailNormalized,
+          role: inviteData.role,
+          status: 'pending',
+          tokenHash: tokenResult.material.tokenHash,
+          createdBy: decoded.uid,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + INVITATION_TTL_MS),
+          maxUses: 1,
+          useCount: 0,
+          replacesInvitationId: invitationId
+        });
+
+        transaction.set(orgRef.collection('audit_logs').doc(), {
+          action: 'invitation.reissued',
+          actorUid: decoded.uid,
+          oldInvitationId: invitationId,
+          invitationId: newInviteRef.id,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        return {
+          status: 200,
+          payload: {
+            success: true,
+            invitePath: `/join/${organizationId}?token=${encodeURIComponent(tokenResult.material.rawToken)}`,
+            invitation: {
+              id: newInviteRef.id,
+              organizationId,
+              organizationName: orgData.name || inviteData.organizationName,
+              email: inviteData.emailNormalized,
+              role: inviteData.role,
+              status: 'pending',
+              expiresAtMs: nowMs + INVITATION_TTL_MS
+            }
+          }
+        };
+      });
+
+      return res.status(result.status).json(result.payload);
+    } catch (error) {
+      console.error('[InvitationReissue] Route failed', error);
+      return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
+    }
+  });
+
   app.post('/api/v1/invitations/accept', express.json(), (req, res) => acceptInvitation(req, res));
   app.post('/api/v1/organizations/:organizationId/join-requests', express.json({ limit: '8kb' }), (req, res) => createJoinRequest(req, res));
   app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/approve', express.json({ limit: '8kb' }), (req, res) => approveJoinRequest(req, res));
