@@ -31,14 +31,25 @@ function normalizeRole(value: unknown): CanonicalRole | null {
   return CANONICAL_ROLES.has(normalized as CanonicalRole) ? normalized as CanonicalRole : null;
 }
 
+function normalizeExistingRole(value: unknown): CanonicalRole | null {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'secretary') return 'manager';
+  if (normalized === 'guest') return 'viewer';
+  // "leader" was historically a MusicScale-oriented organization role.
+  // For authorization of an explicit repair it is treated as a non-admin
+  // member; the requested destination role must still be canonical.
+  if (normalized === 'leader') return 'member';
+  return normalizeRole(normalized);
+}
+
 function classifyMembership(data: FirebaseFirestore.DocumentData | undefined): MembershipState {
   if (!data) return { state: 'absent' };
   const status = typeof data.status === 'string' ? data.status.trim().toLowerCase() : '';
   if (INACTIVE_STATUSES.has(status)) return { state: 'inactive' };
   if (status && status !== 'active') return { state: 'inconsistent' };
-  const role = normalizeRole(data.organizationRole ?? data.role);
-  const otherRole = normalizeRole(data.role);
-  const organizationRole = normalizeRole(data.organizationRole);
+  const role = normalizeExistingRole(data.organizationRole ?? data.role);
+  const otherRole = normalizeExistingRole(data.role);
+  const organizationRole = normalizeExistingRole(data.organizationRole);
   if (!role || (otherRole && organizationRole && otherRole !== organizationRole)) return { state: 'inconsistent' };
   return { state: 'active', role };
 }
@@ -210,4 +221,4 @@ export async function updateOrganizationMemberRole(
   }
 }
 
-export { classifyMembership, roleDecision, normalizeRole };
+export { classifyMembership, roleDecision, normalizeRole, normalizeExistingRole };
