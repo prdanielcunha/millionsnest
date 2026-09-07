@@ -155,10 +155,9 @@ service cloud.firestore {
       }
 
       match /invites/{inviteId} {
-        allow read, list: if isAuthenticated() && (
-          checkOrgAccess(orgId) || isSystemAdmin()
-        );
-        allow create, update, delete: if isAuthenticated() && (isOrgAdmin(orgId) || isSystemAdmin());
+        // Invitation documents contain token hashes and delivery metadata.
+        // All reads and mutations go through authenticated backend commands.
+        allow read, create, update, delete: if false;
       }
 
       match /join_requests/{requestId} {
@@ -287,15 +286,35 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageScales') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
     }
 
-    // Aggregated response state in the Hub is restricted to organization admins.
-    // Response documents can include decline reasons, so ordinary members must not read
-    // the full response collection just to render dashboard counts.
+    // Keep response privacy compatible with MusicScale's canonical policy:
+    // a person may read only their own response; team summaries require scale-management authority.
     match /scales/{scaleId}/responses/{responseId} {
-      allow read: if isAuthenticated()
-        && get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', '') is string
-        && isOrgAdmin(get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', ''))
-        && isOrgActive(get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', ''));
-      allow write: if false;
+      allow read: if isAuthenticated() && (
+        isSystemAdmin() ||
+        resource.data.get('userId', '') == request.auth.uid ||
+        (
+          exists(/databases/$(database)/documents/scales/$(scaleId)) &&
+          hasPermission(
+            get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', ''),
+            'canManageScales'
+          )
+        )
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /scales/{scaleId}/responseHistory/{historyId} {
+      allow read: if isAuthenticated() && (
+        isSystemAdmin() ||
+        (
+          exists(/databases/$(database)/documents/scales/$(scaleId)) &&
+          hasPermission(
+            get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', ''),
+            'canManageScales'
+          )
+        )
+      );
+      allow create, update, delete: if false;
     }
 
     match /bandScales/{scaleId} {
