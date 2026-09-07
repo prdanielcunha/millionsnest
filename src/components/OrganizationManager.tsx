@@ -785,7 +785,7 @@ export function OrganizationManager({
                       {(currentUserPerms['organization.roles.manage'] || isGlobalAdmin) ? (
                         <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 sm:w-auto sm:justify-end">
                           {(() => {
-                            const inherited = roleInheritsLiveConduct(member.role);
+                            const inherited = roleInheritsLiveConduct(member.organizationRole ?? member.role);
                             const enabled = inherited || liveConductorByMember[member.id] === true;
                             const isSaving = liveConductorSavingId === member.id;
                             return (
@@ -844,14 +844,12 @@ export function OrganizationManager({
                               >
                                 {!currentIsCanonicalOption && (
                                   <option value={rawRole} disabled={canEditRole}>
-                                    {rawRole === 'owner'
-                                      ? 'Dono (Owner)'
-                                      : getOrganizationRoleLabel(rawRole)}
+                                    {getOrganizationRoleLabel(rawRole, organizationRoleLocale)}
                                   </option>
                                 )}
                                 {options.map((role) => (
                                   <option key={role} value={role}>
-                                    {getOrganizationRoleLabel(role)}
+                                    {getOrganizationRoleLabel(role, organizationRoleLocale)}
                                   </option>
                                 ))}
                               </select>
