@@ -9,7 +9,7 @@ const shell = readFileSync('src/components/EcosystemShell.tsx', 'utf8');
 assert.ok(dashboard.includes('break-all">{user.email}'), 'long account emails must wrap on narrow screens');
 assert.ok(dashboard.includes('min-w-0 flex-1 w-full'), 'profile editing must let the input shrink beside save/cancel actions');
 assert.ok(dashboard.includes('break-words">{profileNameInput'), 'long display names must wrap instead of overflowing');
-assert.ok(dashboard.includes("break-words'>"), false, 'guard against malformed responsive class edits');
+assert.equal(dashboard.includes("break-words'>"), false, 'guard against malformed responsive class edits');
 assert.ok(dashboard.includes('break-words">\n                                 {org.name || \'Organização\'}') || dashboard.includes('break-words">\r\n                                 {org.name || \'Organização\'}'), 'long organization names must wrap in the account switcher');
 assert.ok(dashboard.includes('md:hidden fixed inset-x-0 bottom-0'), 'mobile navigation must remain fixed and independent from desktop tabs');
 
