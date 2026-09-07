@@ -293,7 +293,7 @@ export function InviteModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-0 sm:p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -305,11 +305,13 @@ export function InviteModal({
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-md bg-[#0B0F19] border border-white/10 rounded-3xl shadow-2xl overflow-hidden p-6"
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full sm:max-w-md max-h-[calc(100dvh-env(safe-area-inset-top)-0.5rem)] overflow-y-auto overscroll-contain bg-[#0B0F19] border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6"
           >
-            <div className="flex items-start justify-between gap-4 mb-6">
+            <div className="flex items-start justify-between gap-3 mb-5 sm:mb-6">
               <div>
-                <h2 className="text-xl font-bold text-[#F5F7FA]">{t('dashboard.invite.title', `Convidar para ${organization?.name || 'Organização'}`)}</h2>
+                <h2 className="text-lg sm:text-xl font-bold text-[#F5F7FA]">{t('dashboard.invite.title', `Convidar para ${organization?.name || 'Organização'}`)}</h2>
                 <p className="text-[#A0A7B5] text-sm mt-1">{t('dashboard.invite.subtitle', 'Informe quem vai entrar, escolha o acesso e envie o convite pelo canal que preferir.')}</p>
               </div>
               <button 
@@ -474,12 +476,12 @@ export function InviteModal({
                 
                 <div>
                   <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.share_method', 'Como deseja enviar?')}</label>
-                  <div className="gap-3 grid grid-cols-2">
+                  <div className="gap-2.5 sm:gap-3 grid grid-cols-2">
                     <button
                       type="button"
                       onClick={onEmail}
                       disabled={isLoading}
-                      className="flex flex-col items-center justify-center gap-2 p-4 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 border border-[#2B85EB]/20 rounded-xl transition-colors text-[#2B85EB] disabled:opacity-50"
+                      className="flex flex-col items-center justify-center gap-2 p-3.5 sm:p-4 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 border border-[#2B85EB]/20 rounded-xl transition-colors text-[#2B85EB] disabled:opacity-50"
                     >
                       {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Mail className="w-6 h-6" />}
                       <span className="text-sm font-medium">{t('dashboard.invite.email_send', 'Enviar por e-mail')}</span>
@@ -488,7 +490,7 @@ export function InviteModal({
                       type="button"
                       onClick={onWhatsApp}
                       disabled={isLoading}
-                      className="flex flex-col items-center justify-center gap-2 p-4 bg-[#10B981]/10 hover:bg-[#10B981]/20 border border-[#10B981]/20 rounded-xl transition-colors text-[#10B981] disabled:opacity-50"
+                      className="flex flex-col items-center justify-center gap-2 p-3.5 sm:p-4 bg-[#10B981]/10 hover:bg-[#10B981]/20 border border-[#10B981]/20 rounded-xl transition-colors text-[#10B981] disabled:opacity-50"
                     >
                       {isLoading && !copiedLink ? <Loader2 className="w-6 h-6 animate-spin" /> : <MessageCircle className="w-6 h-6" />}
                       <span className="text-sm font-medium">{t('dashboard.invite.whatsapp', 'Enviar pelo WhatsApp')}</span>
@@ -497,7 +499,7 @@ export function InviteModal({
                       type="button"
                       onClick={onCopy}
                       disabled={isLoading}
-                      className="flex flex-col items-center justify-center gap-2 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-colors text-[#F5F7FA] disabled:opacity-50"
+                      className="flex flex-col items-center justify-center gap-2 p-3.5 sm:p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-colors text-[#F5F7FA] disabled:opacity-50"
                     >
                       {isLoading && !copiedLink ? <Loader2 className="w-6 h-6 animate-spin" /> : copiedLink ? <Check className="w-6 h-6 text-[#10B981]" /> : <Copy className="w-6 h-6" />}
                       <span className="text-sm font-medium">{copiedLink ? t('dashboard.invite.link_copied', 'Link copiado') : t('dashboard.invite.copy_link', 'Copiar link')}</span>
@@ -507,7 +509,7 @@ export function InviteModal({
                         type="button"
                         onClick={onNativeShare}
                         disabled={isLoading}
-                        className="flex flex-col items-center justify-center gap-2 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-colors text-[#F5F7FA] disabled:opacity-50"
+                        className="flex flex-col items-center justify-center gap-2 p-3.5 sm:p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-colors text-[#F5F7FA] disabled:opacity-50"
                       >
                         <Share2 className="w-6 h-6" />
                         <span className="text-sm font-medium">{t('dashboard.invite.share', 'Compartilhar')}</span>
