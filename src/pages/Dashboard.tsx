@@ -978,29 +978,48 @@ export function Dashboard() {
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
     try {
       const targetMember = members.find(m => m.id === memberId);
-      if (!targetMember) return;
-      if (!user) return;
+      if (!targetMember || !user || !activeContextOrgId) return;
 
       const token = await user.getIdToken();
       const orgId = activeContextOrgId;
-      
-      const res = await fetch(`/api/organizations/${orgId}/members/${memberId}/role`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ newRole })
-      });
+      const res = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(memberId)}/role`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ organizationRole: newRole })
+        }
+      );
+      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        feedback.error(errorData.error || 'Não foi possível alterar o nível de acesso.');
+      if (!res.ok || data?.success !== true) {
+        const code = String(data?.reasonCode || data?.error || '');
+        if (code.includes('SELF_ROLE_CHANGE_DENIED')) {
+          feedback.error('Você não pode alterar seu próprio nível de acesso por aqui.');
+        } else if (
+          code.includes('TARGET_ROLE_PROTECTED') ||
+          code.includes('ROLE_ASSIGNMENT_NOT_ALLOWED') ||
+          code.includes('OWNER_ROLE_REQUIRES_TRANSFER')
+        ) {
+          feedback.error('Esse nível de acesso precisa de uma ação administrativa específica.');
+        } else {
+          feedback.error('Não foi possível alterar o nível de acesso dessa pessoa.');
+        }
         return;
       }
 
-      const perms = getDefaultPermissions(newRole);
-      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION } : m));
+      const canonicalRole = String(data?.organizationRole || newRole);
+      const perms = getDefaultPermissions(canonicalRole);
+      setMembers(prev => prev.map(m => m.id === memberId ? {
+        ...m,
+        role: canonicalRole,
+        organizationRole: canonicalRole,
+        permissions: perms,
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION
+      } : m));
     } catch (e) {
       console.error("Erro ao atualizar função", e);
       feedback.error("Não foi possível alterar o nível de acesso dessa pessoa.");
