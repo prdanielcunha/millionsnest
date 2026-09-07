@@ -6,6 +6,7 @@ import { framerTokens } from '../packages/ui/motion.js';
 import { normalizeSlug } from '../lib/slug.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 import { canChangeOrganizationRole } from '../lib/roleResolver.js';
+import { feedback } from '../packages/ui/feedback.js';
 
 type OrgTab = 'settings' | 'members' | 'apps' | 'roles' | 'billing' | 'audit';
 
@@ -541,7 +542,20 @@ export function OrganizationManager({
                             <span>Endereço da página pública</span>
                             {organization?.slug && !isEditingOrg && (
                                <span className="flex items-center gap-2">
-                                   <button onClick={() => { navigator.clipboard.writeText(`https://millionsnest.com/${organization.slug}`); alert('Link copiado!'); }} className="text-[#A0A7B5] hover:text-white flex items-center gap-1.5 font-normal px-2 py-1 rounded-md hover:bg-white/5 transition-colors"><Copy className="w-3.5 h-3.5" /> Copiar</button>
+                                   <button
+                                     type="button"
+                                     onClick={async () => {
+                                       try {
+                                         await navigator.clipboard.writeText(`https://millionsnest.com/${organization.slug}`);
+                                         feedback.success('Link copiado.');
+                                       } catch {
+                                         feedback.error('Não foi possível copiar o link.');
+                                       }
+                                     }}
+                                     className="text-[#A0A7B5] hover:text-white flex items-center gap-1.5 font-normal px-2 py-1 rounded-md hover:bg-white/5 transition-colors"
+                                   >
+                                     <Copy className="w-3.5 h-3.5" /> Copiar
+                                   </button>
                                    <a href={`/${organization.slug}`} target="_blank" rel="noopener noreferrer" className="bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-[10px] font-bold rounded-md px-2.5 py-1 flex items-center gap-1.5 uppercase tracking-widest shadow-sm hover:bg-[#2B85EB]/20 transition-colors"><Link className="w-3.5 h-3.5" /> Ver Página</a>
                                </span>
                             )}
