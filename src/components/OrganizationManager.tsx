@@ -9,6 +9,57 @@ import { canChangeOrganizationRole } from '../lib/roleResolver.js';
 
 type OrgTab = 'settings' | 'members' | 'apps' | 'roles' | 'billing' | 'audit';
 
+const humanizeOrganizationAuditAction = (action: unknown) => {
+  const value = String(action || '').toLowerCase();
+  if (!value) return 'Atividade registrada';
+  if (value.includes('invitation') && value.includes('created')) return 'Convite criado para a equipe';
+  if (value.includes('invite') && value.includes('revok')) return 'Convite revogado';
+  if (value.includes('member') && value.includes('remove')) return 'Pessoa removida da equipe';
+  if (value.includes('member') && (value.includes('role') || value.includes('permission'))) return 'Acesso de uma pessoa foi atualizado';
+  if (value.includes('join') && (value.includes('approve') || value.includes('accept'))) return 'Entrada de uma pessoa foi aprovada';
+  if (value.includes('join') && value.includes('reject')) return 'Solicitação de entrada foi recusada';
+  if (value.includes('organization') && value.includes('update')) return 'Dados da organização foram atualizados';
+  if (value.includes('billing') || value.includes('subscription')) return 'Assinatura ou pagamento foi atualizado';
+  if (value.includes('support.ticket')) return 'Solicitação de suporte criada';
+  if (value.includes('admin_accessed')) return 'Suporte acessou a organização';
+  return 'Atividade administrativa registrada';
+};
+
+const resizeOrganizationLogo = (file: File): Promise<{ base64: string; contentType: string }> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('FILE_READ_FAILED'));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('IMAGE_DECODE_FAILED'));
+      image.onload = () => {
+        const maxDimension = 512;
+        const ratio = Math.min(1, maxDimension / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * ratio));
+        canvas.height = Math.max(1, Math.round(image.height * ratio));
+        const context = canvas.getContext('2d');
+        if (!context) {
+          reject(new Error('CANVAS_UNAVAILABLE'));
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        let dataUrl = canvas.toDataURL('image/webp', 0.82);
+        if (dataUrl.length > 300000) {
+          dataUrl = canvas.toDataURL('image/webp', 0.62);
+        }
+        const base64 = dataUrl.split(',')[1] || '';
+        if (!base64 || base64.length > 340000) {
+          reject(new Error('IMAGE_TOO_LARGE_AFTER_RESIZE'));
+          return;
+        }
+        resolve({ base64, contentType: 'image/webp' });
+      };
+      image.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  });
+
 export function OrganizationManager({ 
   organization, 
   members, 
@@ -39,7 +90,8 @@ export function OrganizationManager({
   initialTab,
   onOpenInviteModal,
   adminSelectedOrgId,
-  setAdminSelectedOrgId
+  setAdminSelectedOrgId,
+  onOpenMusicScale
 }: any) {
   const [activeTab, setActiveTabInternal] = useState<OrgTab>((initialTab as OrgTab) || 'settings');
   const [slugStatus, setSlugStatus] = useState<string | null>(null);
@@ -47,7 +99,132 @@ export function OrganizationManager({
   const [liveConductorByMember, setLiveConductorByMember] = useState<Record<string, boolean>>({});
   const [liveConductorSavingId, setLiveConductorSavingId] = useState<string | null>(null);
   const [liveConductorError, setLiveConductorError] = useState<string | null>(null);
+  const [reissuingInviteId, setReissuingInviteId] = useState<string | null>(null);
+  const [inviteActionMessage, setInviteActionMessage] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [detailsSaving, setDetailsSaving] = useState(false);
+  const [detailsMessage, setDetailsMessage] = useState<string | null>(null);
+  const [organizationDetails, setOrganizationDetails] = useState({
+    addressLine: '',
+    city: '',
+    state: '',
+    country: 'Brasil',
+    postalCode: '',
+    phone: '',
+    whatsapp: '',
+    website: '',
+    instagram: '',
+    locale: 'pt-BR',
+    timeZone: 'America/Sao_Paulo'
+  });
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+
+  useEffect(() => {
+    setOrganizationDetails({
+      addressLine: organization?.addressLine || organization?.address?.street || '',
+      city: organization?.city || organization?.address?.city || '',
+      state: organization?.state || organization?.address?.state || '',
+      country: organization?.country || organization?.address?.country || 'Brasil',
+      postalCode: organization?.postalCode || organization?.address?.zip || '',
+      phone: organization?.phone || '',
+      whatsapp: organization?.whatsapp || '',
+      website: organization?.website || '',
+      instagram: organization?.instagram || '',
+      locale: organization?.locale || 'pt-BR',
+      timeZone: organization?.timeZone || 'America/Sao_Paulo'
+    });
+  }, [
+    organization?.id,
+    organization?.addressLine,
+    organization?.city,
+    organization?.state,
+    organization?.country,
+    organization?.postalCode,
+    organization?.phone,
+    organization?.whatsapp,
+    organization?.website,
+    organization?.instagram,
+    organization?.locale,
+    organization?.timeZone
+  ]);
+
+  const updateOrganizationDetail = (key: string, value: string) => {
+    setOrganizationDetails(previous => ({ ...previous, [key]: value }));
+    setDetailsMessage(null);
+  };
+
+  const handleSaveOrganizationDetails = async () => {
+    if (!user || !organization?.id) return;
+    setDetailsSaving(true);
+    setDetailsMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch('/api/user/organization', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orgId: organization.id,
+          ...organizationDetails
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success !== true) {
+        throw new Error(data?.error || 'Não foi possível salvar os dados.');
+      }
+      setDetailsMessage('Dados atualizados com sucesso.');
+    } catch (error: any) {
+      setDetailsMessage(error?.message || 'Não foi possível salvar os dados.');
+    } finally {
+      setDetailsSaving(false);
+    }
+  };
+
+  const handleLogoUpload = async (file?: File | null) => {
+    if (!file || !user || !organization?.id) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setDetailsMessage('Use uma imagem PNG, JPG ou WebP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setDetailsMessage('A imagem original precisa ter no máximo 5 MB.');
+      return;
+    }
+
+    setLogoUploading(true);
+    setDetailsMessage(null);
+    try {
+      const processed = await resizeOrganizationLogo(file);
+      const base64 = processed.base64;
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(organization.id)}/logo`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: processed.contentType,
+            base64
+          })
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success !== true) {
+        throw new Error(data?.error || 'Não foi possível atualizar a logo.');
+      }
+      setDetailsMessage('Logo atualizada com sucesso.');
+    } catch (error: any) {
+      setDetailsMessage(error?.message || 'Não foi possível atualizar a logo.');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   useEffect(() => {
     const next: Record<string, boolean> = {};
@@ -57,6 +234,57 @@ export function OrganizationManager({
     }
     setLiveConductorByMember(next);
   }, [members]);
+
+  const handleReissueInvite = async (invite: any) => {
+    if (!user || !organization?.id || !invite?.id) return;
+    setReissuingInviteId(invite.id);
+    setInviteActionMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(organization.id)}/invitations/${encodeURIComponent(invite.id)}/reissue`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: '{}'
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success !== true || typeof data?.invitePath !== 'string') {
+        throw new Error(data?.reasonCode || 'REISSUE_FAILED');
+      }
+
+      const inviteUrl = new URL(data.invitePath, window.location.origin).toString();
+      const emailResponse = await fetch('/api/v1/invitations/email', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          organizationId: organization.id,
+          invitationId: data.invitation.id,
+          inviteUrl
+        })
+      });
+      const emailData = await emailResponse.json().catch(() => ({}));
+
+      if (emailResponse.ok && emailData?.success === true) {
+        setInviteActionMessage(`Novo convite enviado para ${data.invitation.email}.`);
+      } else {
+        await navigator.clipboard.writeText(inviteUrl);
+        setInviteActionMessage('Novo convite criado com segurança e link copiado.');
+      }
+    } catch (error: any) {
+      console.error('[OrganizationManager] Invitation reissue failed', error);
+      setInviteActionMessage('Não foi possível reenviar o convite. Tente novamente.');
+    } finally {
+      setReissuingInviteId(null);
+    }
+  };
 
   const roleInheritsLiveConduct = (role: string | null | undefined) =>
     ['owner', 'admin', 'leader'].includes(
@@ -173,9 +401,9 @@ export function OrganizationManager({
     { id: 'settings', label: 'Ajustes', icon: Settings, perms: ['organization.settings.update'] },
     { id: 'members', label: 'Membros & Convites', icon: Users, perms: ['organization.members.manage', 'organization.members.invite'] },
     { id: 'roles', label: 'Cargos e Permissões', icon: ShieldCheck, perms: ['organization.roles.manage'] },
-    { id: 'apps', label: 'Aplicativos & Ad-ons', icon: LayoutGrid, perms: ['organization.apps.manage'] },
+    { id: 'apps', label: 'Aplicativos', icon: LayoutGrid, perms: ['organization.apps.manage'] },
     { id: 'billing', label: 'Assinatura', icon: CreditCard, perms: ['organization.billing.manage'] },
-    { id: 'audit', label: 'Auditoria e Logs', icon: Settings, perms: ['organization.audit.view'] }
+    { id: 'audit', label: 'Atividade e segurança', icon: Settings, perms: ['organization.audit.view'] }
   ];
 
   const visibleTabs = TABS.filter(t => t.perms.some(p => currentUserPerms[p] || isGlobalAdmin));
@@ -217,7 +445,7 @@ export function OrganizationManager({
            <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
             <Building2 className="w-4 h-4 text-[#A0A7B5]" />
           </span>
-          Governança
+          Administração
         </h2>
         
         {visibleTabs.map(tab => {
@@ -252,20 +480,31 @@ export function OrganizationManager({
           
           {activeTab === 'settings' && (
             <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Ajustes da Organização</h3>
+              <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Dados da organização</h3>
               
               <div className="space-y-6 max-w-xl">
                   <div className="bg-transparent p-0 rounded-none border-none">
-                     <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Perfil Principal</p>
+                     <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Dados principais</p>
                      
                      <div className="flex items-start gap-5 bg-[#050505] p-5 rounded-2xl border border-white/5 mb-6">
                         <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-2xl text-[#F5F7FA]">
                           {organization?.logo ? <img src={organization.logo} className="w-full h-full rounded-xl object-cover" /> : organization?.name?.charAt(0) || 'O'}
                         </div>
                         <div className="flex-1">
-                           <p className="text-xs font-semibold text-[#F5F7FA] mb-1.5">Mudar Logotipo</p>
+                           <p className="text-xs font-semibold text-[#F5F7FA] mb-1.5">Logo da organização</p>
                            <div className="flex items-center gap-2">
-                              <input type="file" className="text-xs text-[#A0A7B5] file:mr-4 file:py-1.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/5 file:text-[#F5F7FA] hover:file:bg-white/10 transition-all cursor-pointer" />
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                disabled={logoUploading}
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0];
+                                  void handleLogoUpload(file);
+                                  event.currentTarget.value = '';
+                                }}
+                                className="text-xs text-[#A0A7B5] file:mr-4 file:py-1.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/5 file:text-[#F5F7FA] hover:file:bg-white/10 transition-all cursor-pointer disabled:opacity-50"
+                              />
+                              {logoUploading && <Loader2 className="w-4 h-4 text-[#2B85EB] animate-spin" />}
                            </div>
                         </div>
                      </div>
@@ -299,7 +538,7 @@ export function OrganizationManager({
 
                        <div>
                          <p className="text-xs font-semibold text-[#A0A7B5] mb-1.5 flex justify-between">
-                            <span>Slug (URL Público)</span>
+                            <span>Endereço da página pública</span>
                             {organization?.slug && !isEditingOrg && (
                                <span className="flex items-center gap-2">
                                    <button onClick={() => { navigator.clipboard.writeText(`https://millionsnest.com/${organization.slug}`); alert('Link copiado!'); }} className="text-[#A0A7B5] hover:text-white flex items-center gap-1.5 font-normal px-2 py-1 rounded-md hover:bg-white/5 transition-colors"><Copy className="w-3.5 h-3.5" /> Copiar</button>
@@ -322,7 +561,7 @@ export function OrganizationManager({
                                {slugStatus === 'available' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#10B981] shrink-0 bg-[#10B981]/10 px-2 py-1 rounded">Disponível</span>}
                                {slugStatus === 'taken' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#EF4444] shrink-0 bg-[#EF4444]/10 px-2 py-1 rounded">Em uso</span>}
                                {slugStatus === 'reserved' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#EF4444] shrink-0 bg-[#EF4444]/10 px-2 py-1 rounded">Reservado</span>}
-                               {slugStatus === 'current_org' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#2B85EB] shrink-0 bg-[#2B85EB]/10 px-2 py-1 rounded">Seu Slug</span>}
+                               {slugStatus === 'current_org' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#2B85EB] shrink-0 bg-[#2B85EB]/10 px-2 py-1 rounded">Seu endereço</span>}
                              </>
                            ) : (
                              <input 
@@ -343,12 +582,99 @@ export function OrganizationManager({
                      </div>
                   </div>
                   
-                  <div className="bg-transparent pt-6 border-t border-white/5">
-                     <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Identificador Único</p>
-                     <div className="flex items-center justify-between">
+                  <details className="group bg-[#050505] border border-white/5 rounded-2xl p-5">
+                    <summary className="cursor-pointer list-none flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-[#F5F7FA]">Contato e localização</p>
+                        <p className="text-xs text-[#A0A7B5] mt-1">Complete somente as informações que sua igreja deseja usar.</p>
+                      </div>
+                      <span className="text-xs text-[#2B85EB] group-open:hidden">Editar</span>
+                      <span className="text-xs text-[#A0A7B5] hidden group-open:inline">Fechar</span>
+                    </summary>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+                      <label className="text-xs text-[#A0A7B5]">
+                        Endereço
+                        <input value={organizationDetails.addressLine} onChange={(e) => updateOrganizationDetail('addressLine', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" placeholder="Rua e número" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Cidade
+                        <input value={organizationDetails.city} onChange={(e) => updateOrganizationDetail('city', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Estado
+                        <input value={organizationDetails.state} onChange={(e) => updateOrganizationDetail('state', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        País
+                        <input value={organizationDetails.country} onChange={(e) => updateOrganizationDetail('country', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        CEP
+                        <input value={organizationDetails.postalCode} onChange={(e) => updateOrganizationDetail('postalCode', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Telefone
+                        <input value={organizationDetails.phone} onChange={(e) => updateOrganizationDetail('phone', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" placeholder="(00) 0000-0000" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        WhatsApp
+                        <input value={organizationDetails.whatsapp} onChange={(e) => updateOrganizationDetail('whatsapp', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" placeholder="(00) 00000-0000" />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Site
+                        <input value={organizationDetails.website} onChange={(e) => updateOrganizationDetail('website', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" placeholder="https://..." />
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Instagram
+                        <input value={organizationDetails.instagram} onChange={(e) => updateOrganizationDetail('instagram', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]" placeholder="@suaigreja" />
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/5">
+                      <label className="text-xs text-[#A0A7B5]">
+                        Idioma principal
+                        <select value={organizationDetails.locale} onChange={(e) => updateOrganizationDetail('locale', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]">
+                          <option value="pt-BR">Português (Brasil)</option>
+                          <option value="en">English</option>
+                          <option value="es">Español</option>
+                        </select>
+                      </label>
+                      <label className="text-xs text-[#A0A7B5]">
+                        Fuso horário
+                        <select value={organizationDetails.timeZone} onChange={(e) => updateOrganizationDetail('timeZone', e.target.value)} className="mt-1.5 w-full bg-[#0B0F19] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2B85EB]">
+                          <option value="America/Sao_Paulo">Brasília / São Paulo</option>
+                          <option value="America/Manaus">Manaus</option>
+                          <option value="America/Rio_Branco">Rio Branco</option>
+                          <option value="America/Noronha">Fernando de Noronha</option>
+                          <option value="UTC">UTC</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    {detailsMessage && (
+                      <p className={`mt-4 text-xs ${detailsMessage.includes('sucesso') ? 'text-emerald-400' : 'text-amber-300'}`}>{detailsMessage}</p>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={detailsSaving}
+                      onClick={() => void handleSaveOrganizationDetails()}
+                      className="mt-5 min-h-[44px] px-5 py-2.5 rounded-xl bg-white text-black text-sm font-semibold hover:bg-gray-100 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {detailsSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Salvar informações
+                    </button>
+                  </details>
+
+                  {isGlobalAdmin && (
+                    <details className="bg-transparent pt-4 border-t border-white/5">
+                      <summary className="cursor-pointer text-xs font-semibold text-[#A0A7B5]">Informações técnicas</summary>
+                      <div className="mt-3">
                         <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-3 py-2 rounded-xl border border-white/5 select-all">{organization?.id || user.uid}</span>
-                     </div>
-                  </div>
+                      </div>
+                    </details>
+                  )}
               </div>
             </motion.div>
           )}
@@ -485,6 +811,9 @@ export function OrganizationManager({
                {pendingInvites && pendingInvites.length > 0 && (
                  <div className="mt-8">
                    <h4 className="text-sm font-semibold text-[#A0A7B5] mb-4 uppercase tracking-wider">Convites Pendentes</h4>
+                   {inviteActionMessage && (
+                     <p className="text-xs text-[#A0A7B5] mb-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">{inviteActionMessage}</p>
+                   )}
                    <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
                      {pendingInvites.map((invite: any, i: number) => {
                        const isExpired = invite.status === 'pending' && invite.expiresAt && invite.expiresAt.toMillis && invite.expiresAt.toMillis() < Date.now();
@@ -497,14 +826,26 @@ export function OrganizationManager({
                              <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
                                Status: <span className={showAsExpired ? "text-red-400" : "text-[#10B981]"}>{showAsExpired ? 'Expirado' : 'Aguardando'}</span>
                              </span>
-                             <span className="text-xs text-[#A0A7B5]">Função: {{owner: 'Dono', admin: 'Admin', leader: 'Líder', secretary: 'Operador', member: 'Membro', guest: 'Visitante'}[(invite.role as string) || 'member'] || invite.role || 'Membro'}</span>
+                             <span className="text-xs text-[#A0A7B5]">{invite.email || invite.emailNormalized || 'E-mail protegido'}</span>
+                             <span className="text-xs text-[#A0A7B5]">Acesso: {{owner: 'Dono', admin: 'Administrador', manager: 'Gestor', leader: 'Líder', secretary: 'Operador', member: 'Membro', viewer: 'Visualizador', guest: 'Visitante'}[(invite.role as string) || 'member'] || invite.role || 'Membro'}</span>
                            </div>
                          </div>
                          
                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
-                           <button onClick={() => handleRevokeInvite(invite.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 rounded-lg">
-                             Revogar
-                           </button>
+                           <div className="flex flex-wrap justify-end gap-2">
+                             <button
+                               type="button"
+                               disabled={reissuingInviteId === invite.id}
+                               onClick={() => void handleReissueInvite(invite)}
+                               className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB] transition-colors px-3 py-1.5 bg-[#2B85EB]/10 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                             >
+                               {reissuingInviteId === invite.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                               Reenviar
+                             </button>
+                             <button onClick={() => handleRevokeInvite(invite.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 rounded-lg">
+                               Revogar
+                             </button>
+                           </div>
                          )}
                        </div>
                        );
@@ -553,112 +894,130 @@ export function OrganizationManager({
 
           {activeTab === 'roles' && (
              <motion.div key="roles" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-2">Cargos e Capabilities</h3>
-                <p className="text-sm text-[#A0A7B5] mb-6">MillionsNest usa um sistema hierárquico baseado em capacidades (capabilities). Veja os perfis atuais:</p>
+                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-2">Cargos e permissões</h3>
+                <p className="text-sm text-[#A0A7B5] mb-6">Escolha o nível de acesso que combina com a responsabilidade de cada pessoa. As regras técnicas ficam protegidas nos bastidores.</p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="bg-[#050505] p-5 rounded-2xl border border-[#2B85EB]/20 shadow-[0_0_15px_rgba(43,133,235,0.05)]">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><ShieldCheck className="w-4 h-4 text-[#2B85EB]" /> Dono (Owner) & Admin</h4>
-                      <p className="text-xs text-[#A0A7B5] mb-3">Têm acesso a todas as capacidades de governança e aplicativos habilitados na organização.</p>
-                      <div className="flex flex-wrap gap-1.5">
-                         <span className="px-1.5 py-0.5 bg-white/5 text-[9px] text-[#A0A7B5] rounded border border-white/10 font-mono">*.manage</span>
-                         <span className="px-1.5 py-0.5 bg-white/5 text-[9px] text-[#A0A7B5] rounded border border-white/10 font-mono">*.edit</span>
-                      </div>
+                   <div className="bg-[#050505] p-5 rounded-2xl border border-[#2B85EB]/20">
+                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><ShieldCheck className="w-4 h-4 text-[#2B85EB]" /> Dono</h4>
+                      <p className="text-xs text-[#A0A7B5]">Responsável principal pela organização. Pode administrar equipe, aplicativos, assinatura e configurações críticas.</p>
                    </div>
                    <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Operador (Secretary)</h4>
-                      <p className="text-xs text-[#A0A7B5] mb-3">Pode convidar membros e gerenciar dados nos aplicativos, mas não altera políticas ou pagamentos.</p>
-                      <div className="flex flex-wrap gap-1.5">
-                         <span className="px-1.5 py-0.5 bg-white/5 text-[9px] text-[#A0A7B5] rounded border border-white/10 font-mono">organization.members.invite</span>
-                         <span className="px-1.5 py-0.5 bg-white/5 text-[9px] text-[#A0A7B5] rounded border border-white/10 font-mono">musicscale.*.edit</span>
-                      </div>
+                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><ShieldCheck className="w-4 h-4 text-[#A0A7B5]" /> Administrador</h4>
+                      <p className="text-xs text-[#A0A7B5]">Pode administrar a organização e a equipe, sem assumir a propriedade principal da conta.</p>
                    </div>
                    <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Membro Padrão</h4>
-                      <p className="text-xs text-[#A0A7B5] mb-3">Acesso restrito. Só interage com dados relacionados e delegados a ele na interface pública, sem acesso administrativo aos módulos.</p>
+                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Líder / Operador</h4>
+                      <p className="text-xs text-[#A0A7B5]">Ajuda na rotina da equipe e nos aplicativos conforme as permissões recebidas, sem controlar cobrança ou propriedade.</p>
                    </div>
+                   <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
+                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Membro / Visitante</h4>
+                      <p className="text-xs text-[#A0A7B5]">Usa somente as áreas liberadas para sua participação, sem acesso às configurações administrativas.</p>
+                   </div>
+                </div>
+
+                <div className="mt-6 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+                  <p className="text-xs text-[#A0A7B5] leading-relaxed">Funções ministeriais como músico, vocal, ministro ou instrumento são configuradas no MusicScale. Aqui você controla somente o acesso administrativo à organização.</p>
                 </div>
              </motion.div>
           )}
 
           {activeTab === 'apps' && (
              <motion.div key="apps" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Aplicativos & Ad-ons</h3>
-                <p className="text-sm text-[#A0A7B5] mb-6">Gerencie os módulos ativados na sua organização.</p>
+                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-2">Aplicativos da organização</h3>
+                <p className="text-sm text-[#A0A7B5] mb-6">Abra cada aplicativo ou vá direto para as configurações mais usadas.</p>
                 
-                <div className="bg-[#050505] rounded-2xl border border-white/5 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                   <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB] shadow-[0_0_15px_rgba(43,133,235,0.1)]">
-                         <LayoutGrid className="w-6 h-6" />
+                <div className="bg-[#050505] rounded-2xl border border-white/5 p-5 mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB]">
+                        <LayoutGrid className="w-6 h-6" />
                       </div>
                       <div>
-                         <p className="font-semibold text-[#F5F7FA]">MusicScale <span className="text-[10px] ml-2 font-bold uppercase tracking-widest bg-[#10B981]/10 text-[#10B981] rounded px-1.5 py-0.5 border border-[#10B981]/20">Instalado</span></p>
-                         <p className="text-sm text-[#A0A7B5]">Módulo original do ecossistema</p>
+                        <p className="font-semibold text-[#F5F7FA]">MusicScale <span className="text-[10px] ml-2 font-bold uppercase tracking-widest bg-[#10B981]/10 text-[#10B981] rounded px-1.5 py-0.5 border border-[#10B981]/20">Ativo</span></p>
+                        <p className="text-sm text-[#A0A7B5]">Louvor, repertório, equipe e escalas.</p>
                       </div>
-                   </div>
-                   <div className="flex items-center gap-3">
-                      <button onClick={() => {
-                        import('../packages/events/index.js').then(({ eventBus }) => {
-                          eventBus.publish('action.contextual.open_musicscale', {
-                             organizationId: organization?.id || '',
-                             userId: user?.uid || '',
-                             appSource: 'core'
-                          } as any);
-                        });
-                      }} className="px-5 py-2 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold text-sm hover:bg-white transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)]">
-                         Abrir App
-                      </button>
-                      <button className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/5 text-[#A0A7B5] hover:bg-white/10 transition-colors border border-white/10">
-                         <Settings className="w-4 h-4" />
-                      </button>
-                   </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onOpenMusicScale?.('/')}
+                      className="px-5 py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold text-sm hover:bg-white transition-all"
+                    >
+                      Abrir MusicScale
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-5 pt-5 border-t border-white/5">
+                    <button type="button" onClick={() => onOpenMusicScale?.('/users')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                      <p className="text-sm font-semibold text-white">Equipe no MusicScale</p>
+                      <p className="text-xs text-[#A0A7B5] mt-1">Músicos, vocais e funções ministeriais.</p>
+                    </button>
+                    <button type="button" onClick={() => onOpenMusicScale?.('/scales')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                      <p className="text-sm font-semibold text-white">Escalas</p>
+                      <p className="text-xs text-[#A0A7B5] mt-1">Cultos, músicas e confirmações.</p>
+                    </button>
+                    <button type="button" onClick={() => onOpenMusicScale?.('/profile')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                      <p className="text-sm font-semibold text-white">Preferências do aplicativo</p>
+                      <p className="text-xs text-[#A0A7B5] mt-1">Perfil e opções pessoais do MusicScale.</p>
+                    </button>
+                    <button type="button" onClick={() => onOpenMusicScale?.('/plan-usage')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                      <p className="text-sm font-semibold text-white">Uso do plano</p>
+                      <p className="text-xs text-[#A0A7B5] mt-1">Veja limites e utilização dos recursos.</p>
+                    </button>
+                  </div>
                 </div>
                 
                 {organization?.enabledApps?.filter((a: string) => a !== 'musicscale').map((appId: string) => (
-                   <div key={appId} className="bg-[#050505] rounded-2xl border border-white/5 p-4 flex items-center justify-between mb-4">
-                   <div className="flex items-center gap-3">
+                  <div key={appId} className="bg-[#050505] rounded-2xl border border-white/5 p-4 flex items-center justify-between mb-4 gap-4">
+                    <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-[#F5F7FA]">
-                         <LayoutGrid className="w-5 h-5" />
+                        <LayoutGrid className="w-5 h-5" />
                       </div>
                       <div>
-                         <p className="text-sm font-semibold text-[#F5F7FA] uppercase">{appId}</p>
-                         <p className="text-xs text-[#A0A7B5]">Módulo terceirizado instalado via plano</p>
+                        <p className="text-sm font-semibold text-[#F5F7FA]">{appId}</p>
+                        <p className="text-xs text-[#A0A7B5]">A disponibilidade deste aplicativo é controlada pelo seu plano.</p>
                       </div>
-                   </div>
-                   <div className="flex items-center gap-3">
-                      <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest bg-white/5 text-[#A0A7B5] rounded-md border border-white/10">Habilitado</span>
-                      <button className="text-xs text-[#EF4444] font-medium ml-2">Desativar</button>
-                   </div>
-                </div>
+                    </div>
+                    <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest bg-white/5 text-[#A0A7B5] rounded-md border border-white/10">Habilitado</span>
+                  </div>
                 ))}
              </motion.div>
           )}
 
           {activeTab === 'audit' && (
              <motion.div key="audit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-6">Registro de Auditoria</h3>
+                <h3 className="text-lg font-semibold text-[#F5F7FA] mb-2">Atividade da organização</h3>
+                <p className="text-sm text-[#A0A7B5] mb-6">Acompanhe mudanças importantes sem precisar interpretar códigos técnicos.</p>
                 
                 <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
-                   {auditLogs.length > 0 ? auditLogs.map((log: any, index: number) => (
-                      <div key={log.id} className={`p-4 flex gap-4 ${index !== auditLogs.length -1 ? 'border-b border-white/5' : ''}`}>
-                         <div className="w-8 h-8 shrink-0 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mt-0.5">
-                            <Settings className="w-4 h-4 text-[#A0A7B5]" />
-                         </div>
-                         <div>
-                            <p className="text-sm text-[#F5F7FA] mb-1">{log.action}</p>
-                            <div className="flex flex-wrap items-center gap-3 text-[10px] text-[#A0A7B5] font-mono">
-                               <span>{log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('pt-BR') : 'Sem data'}</span>
-                               <span>Actor: {log.actorUid || 'Sistema'}</span>
-                               {log.metadata && <span>Target: {JSON.stringify(log.metadata)}</span>}
-                            </div>
-                         </div>
-                      </div>
-                   )) : (
+                   {auditLogs.length > 0 ? auditLogs.map((log: any, index: number) => {
+                      const actor = members.find((member: any) => member.id === log.actorUid || member.uid === log.actorUid);
+                      return (
+                        <div key={log.id} className={`p-4 flex gap-4 ${index !== auditLogs.length -1 ? 'border-b border-white/5' : ''}`}>
+                           <div className="w-8 h-8 shrink-0 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mt-0.5">
+                              <Settings className="w-4 h-4 text-[#A0A7B5]" />
+                           </div>
+                           <div className="min-w-0">
+                              <p className="text-sm text-[#F5F7FA] mb-1">{humanizeOrganizationAuditAction(log.action)}</p>
+                              <p className="text-xs text-[#A0A7B5]">
+                                {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('pt-BR') : 'Data não disponível'}
+                                {actor?.displayName ? ` · por ${actor.displayName}` : ''}
+                              </p>
+                              {isGlobalAdmin && (
+                                <details className="mt-2">
+                                  <summary className="cursor-pointer text-[10px] text-[#A0A7B5]">Detalhes técnicos</summary>
+                                  <pre className="mt-2 text-[10px] text-[#A0A7B5] whitespace-pre-wrap break-all bg-black/20 p-2 rounded-lg">{JSON.stringify({ action: log.action, actorUid: log.actorUid, metadata: log.metadata }, null, 2)}</pre>
+                                </details>
+                              )}
+                           </div>
+                        </div>
+                      );
+                   }) : (
                       <div className="py-2">
                         <PremiumEmptyState 
                           icon={<ShieldCheck className="w-6 h-6" />}
-                          title="Auditoria Limpa"
-                          description="Nenhuma atividade administrativa recente na organização."
+                          title="Tudo tranquilo por aqui"
+                          description="As mudanças administrativas importantes aparecerão nesta área."
                         />
                       </div>
                    )}

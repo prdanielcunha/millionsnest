@@ -685,6 +685,9 @@ export async function acceptInvitation(
       }
       
       t.update(inviteDoc.ref, inviteUpdates);
+      t.set(orgRef, {
+        invitesUpdatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
 
       const auditRef = db.collection(`organizations/${orgId}/audit_logs`).doc();
       t.set(auditRef, {

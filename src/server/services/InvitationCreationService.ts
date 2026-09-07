@@ -244,7 +244,11 @@ export async function createInvitation(
         useCount: planResult.useCount
       });
 
-      const auditLogRef = db.collection('organizations').doc(organizationId).collection('audit_logs').doc();
+      t.set(orgRef, {
+        invitesUpdatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+
+            const auditLogRef = db.collection('organizations').doc(organizationId).collection('audit_logs').doc();
       t.set(auditLogRef, {
         action: 'invitation.created',
         actorUid: uid,

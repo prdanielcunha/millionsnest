@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Copy, Check, MessageCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Copy, Check, MessageCircle, AlertCircle, Loader2, Mail, Share2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { useTranslation } from 'react-i18next';
 import { useOrganization } from '../contexts/OrganizationContext.js';
@@ -81,6 +81,7 @@ export function InviteModal({
   const [overrideOrgId, setOverrideOrgId] = useState<string>('');
   
   const [createdInviteUrl, setCreatedInviteUrl] = useState('');
+  const [createdInviteId, setCreatedInviteId] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [fallbackLink, setFallbackLink] = useState(false);
@@ -97,6 +98,7 @@ export function InviteModal({
       setCopiedLink(false);
       setIsLoading(false);
       setCreatedInviteUrl('');
+      setCreatedInviteId('');
       setErrorMsg('');
       setSuccessMsg('');
       setFallbackLink(false);
@@ -147,8 +149,10 @@ export function InviteModal({
     }
   };
 
-  const ensureInvite = async (): Promise<string | null> => {
-    if (createdInviteUrl) return createdInviteUrl;
+  const ensureInvite = async (): Promise<{ url: string; invitationId: string } | null> => {
+    if (createdInviteUrl && createdInviteId) {
+      return { url: createdInviteUrl, invitationId: createdInviteId };
+    }
     
     if (!email || !email.trim()) {
       setErrorMsg(t('dashboard.invite.email_required', 'Informe o e-mail da pessoa.'));
@@ -162,7 +166,8 @@ export function InviteModal({
     try {
       const res = await handleCreateInvite(role, email, overrideOrgId);
       setCreatedInviteUrl(res.inviteUrl);
-      return res.inviteUrl;
+      setCreatedInviteId(res.invitation.id);
+      return { url: res.inviteUrl, invitationId: res.invitation.id };
     } catch (err: any) {
       setErrorMsg(mapErrorCode(err.message));
       return null;
@@ -173,11 +178,11 @@ export function InviteModal({
 
   const onCopy = async () => {
     if (isLoading) return;
-    const url = await ensureInvite();
-    if (!url) return;
+    const invite = await ensureInvite();
+    if (!invite) return;
     
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(invite.url);
       setCopiedLink(true);
       setSuccessMsg(t('dashboard.invite.link_copied', 'Link copiado.'));
       setTimeout(() => setCopiedLink(false), 3000);
@@ -199,14 +204,14 @@ export function InviteModal({
     
     const popup = window.open('about:blank', '_blank');
     
-    const url = await ensureInvite();
-    if (!url) {
+    const invite = await ensureInvite();
+    if (!invite) {
       if (popup) popup.close();
       return;
     }
     
     const orgName = overrideOrgId && adminOrgs ? (adminOrgs.find((o:any)=>o.id === overrideOrgId)?.name || 'Nossa Organização') : (organization?.name || 'Nossa Organização');
-    const text = encodeURIComponent(`Você foi convidado para entrar na organização ${orgName} na MillionsNest.\n\nAcesse: ${url}`);
+    const text = encodeURIComponent(`Você foi convidado para entrar na organização ${orgName} na MillionsNest.\n\nAcesse: ${invite.url}`);
     
     if (popup) {
       popup.location.href = `https://wa.me/?text=${text}`;
@@ -214,6 +219,72 @@ export function InviteModal({
     } else {
       setFallbackLink(true);
       setErrorMsg(t('dashboard.invite.popup_blocked', 'O convite foi criado. Copie o link abaixo ou permita pop-ups para abrir o WhatsApp.'));
+    }
+  };
+
+  const onEmail = async () => {
+    if (isLoading || !user) return;
+    const invite = await ensureInvite();
+    if (!invite) return;
+
+    setIsLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    try {
+      const token = await user.getIdToken();
+      const organizationId = overrideOrgId || organization?.id;
+      const response = await fetch('/api/v1/invitations/email', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          organizationId,
+          invitationId: invite.invitationId,
+          inviteUrl: invite.url
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok && data?.success === true) {
+        setSuccessMsg(t('dashboard.invite.email_sent', 'Convite enviado por e-mail.'));
+        return;
+      }
+
+      if (data?.reasonCode === 'NOT_CONFIGURED') {
+        const orgName = organization?.name || 'sua organização';
+        const subject = encodeURIComponent(`Convite para ${orgName} no MillionsNest`);
+        const body = encodeURIComponent(`Você foi convidado para entrar em ${orgName} no MillionsNest.\n\nAcesse: ${invite.url}`);
+        window.location.href = `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`;
+        setSuccessMsg(t('dashboard.invite.email_app_opened', 'Abrimos seu aplicativo de e-mail com o convite pronto para enviar.'));
+        return;
+      }
+
+      throw new Error(data?.reasonCode || 'EMAIL_DELIVERY_FAILED');
+    } catch {
+      setErrorMsg(t('dashboard.invite.email_failed', 'Não foi possível enviar por e-mail. Use o WhatsApp ou copie o link.'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onNativeShare = async () => {
+    if (isLoading || typeof navigator.share !== 'function') return;
+    const invite = await ensureInvite();
+    if (!invite) return;
+
+    try {
+      await navigator.share({
+        title: t('dashboard.invite.share_title', 'Convite MillionsNest'),
+        text: t('dashboard.invite.share_text', 'Você recebeu um convite para entrar na organização no MillionsNest.'),
+        url: invite.url
+      });
+      setSuccessMsg(t('dashboard.invite.share_opened', 'Opções de compartilhamento abertas.'));
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') {
+        setErrorMsg(t('dashboard.invite.share_failed', 'Não foi possível abrir o compartilhamento. Copie o link para enviar manualmente.'));
+      }
     }
   };
 
@@ -239,7 +310,7 @@ export function InviteModal({
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
                 <h2 className="text-xl font-bold text-[#F5F7FA]">{t('dashboard.invite.title', `Convidar para ${organization?.name || 'Organização'}`)}</h2>
-                <p className="text-[#A0A7B5] text-sm mt-1">{t('dashboard.invite.subtitle', 'Escolha o nível de acesso à organização e como deseja compartilhar o convite.')}</p>
+                <p className="text-[#A0A7B5] text-sm mt-1">{t('dashboard.invite.subtitle', 'Informe quem vai entrar, escolha o acesso e envie o convite pelo canal que preferir.')}</p>
               </div>
               <button 
                 type="button"
@@ -406,6 +477,15 @@ export function InviteModal({
                   <div className="gap-3 grid grid-cols-2">
                     <button
                       type="button"
+                      onClick={onEmail}
+                      disabled={isLoading}
+                      className="flex flex-col items-center justify-center gap-2 p-4 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 border border-[#2B85EB]/20 rounded-xl transition-colors text-[#2B85EB] disabled:opacity-50"
+                    >
+                      {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Mail className="w-6 h-6" />}
+                      <span className="text-sm font-medium">{t('dashboard.invite.email_send', 'Enviar por e-mail')}</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={onWhatsApp}
                       disabled={isLoading}
                       className="flex flex-col items-center justify-center gap-2 p-4 bg-[#10B981]/10 hover:bg-[#10B981]/20 border border-[#10B981]/20 rounded-xl transition-colors text-[#10B981] disabled:opacity-50"
@@ -422,6 +502,17 @@ export function InviteModal({
                       {isLoading && !copiedLink ? <Loader2 className="w-6 h-6 animate-spin" /> : copiedLink ? <Check className="w-6 h-6 text-[#10B981]" /> : <Copy className="w-6 h-6" />}
                       <span className="text-sm font-medium">{copiedLink ? t('dashboard.invite.link_copied', 'Link copiado') : t('dashboard.invite.copy_link', 'Copiar link')}</span>
                     </button>
+                    {typeof navigator.share === 'function' && (
+                      <button
+                        type="button"
+                        onClick={onNativeShare}
+                        disabled={isLoading}
+                        className="flex flex-col items-center justify-center gap-2 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-colors text-[#F5F7FA] disabled:opacity-50"
+                      >
+                        <Share2 className="w-6 h-6" />
+                        <span className="text-sm font-medium">{t('dashboard.invite.share', 'Compartilhar')}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

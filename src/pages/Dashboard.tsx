@@ -9,7 +9,7 @@ import {
   Star, Zap, Headphones, Video, ListMusic, Check, Users, Link, Mail, Plus, X, Loader2, Copy, Wallet
 } from "lucide-react";
 import { Navbar } from "../components/Navbar.js";
-import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc, limit, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, collection, getDocs, query, where, addDoc, deleteDoc, limit, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { auth } from "../lib/firebase.js";
 import { sendPasswordResetEmail } from "firebase/auth";
@@ -84,6 +84,48 @@ const humanizeAuditAction = (action: unknown) => {
   return 'Atividade registrada';
 };
 
+type MusicScaleHubSummary = {
+  songsCount: number;
+  songsWithContentCount: number;
+  configuredMembersCount: number;
+  scalesCount: number;
+  bandScalesCount: number;
+  nextScale: null | {
+    id: string;
+    date: string;
+    time?: string | null;
+    status?: string | null;
+    songCount: number;
+    assignmentCount: number;
+    bandScaleId?: string | null;
+    responseSummaryAvailable: boolean;
+    responseCounts: {
+      pending: number;
+      accepted: number;
+      maybe: number;
+      declined: number;
+    };
+  };
+  updatedAtMs: number;
+};
+
+const EMPTY_MUSICSCALE_SUMMARY: MusicScaleHubSummary = {
+  songsCount: 0,
+  songsWithContentCount: 0,
+  configuredMembersCount: 0,
+  scalesCount: 0,
+  bandScalesCount: 0,
+  nextScale: null,
+  updatedAtMs: 0,
+};
+
+const toEventEpoch = (scale: any): number => {
+  const date = typeof scale?.date === 'string' ? scale.date : '';
+  const time = typeof scale?.time === 'string' && /^\d{2}:\d{2}$/.test(scale.time) ? scale.time : '23:59';
+  const parsed = Date.parse(`${date}T${time}:00`);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+};
+
 const withDashboardTimeout = <T,>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -145,6 +187,7 @@ export function Dashboard() {
   }, [tab]);
 
   const [subscription, setSubscription] = useState<any>(null);
+  const [musicScaleHubSummary, setMusicScaleHubSummary] = useState<MusicScaleHubSummary>(EMPTY_MUSICSCALE_SUMMARY);
   const [organization, setOrganization] = useState<any>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -235,7 +278,11 @@ export function Dashboard() {
   const [subscriptionBlockedReason, setSubscriptionBlockedReason] = useState<string | null>(null);
   const [verifyingStripe, setVerifyingStripe] = useState(false);
 
-  const handleLaunchEcosystemApp = async (app: EcosystemApp, permsMap: Record<string, boolean>) => {
+  const handleLaunchEcosystemApp = async (
+    app: EcosystemApp,
+    permsMap: Record<string, boolean>,
+    destinationPath?: string
+  ) => {
     analytics.track('app_usage', { userId: user?.uid, organizationId: profile?.organizationId, app: app.id });
     if (!profile || !organization) {
       feedback.error('Erro de Sessão: Sessão do ecossistema inválida ou expirada.');
@@ -272,7 +319,7 @@ export function Dashboard() {
            source: 'global_admin'
          });
       }
-      await openEcosystemModule(app.id, user, profile, organization, permsMap);
+      await openEcosystemModule(app.id, user, profile, organization, permsMap, undefined, destinationPath);
       feedback.dismiss(toastId);
     } catch (e: any) {
       feedback.dismiss(toastId);
@@ -508,7 +555,12 @@ export function Dashboard() {
       const data = await res.json();
       
       if (data.action === 'checkout_required') {
-         const plan = subscription?.plan || 'pro';
+         const plan = subscription?.plan;
+         if (!plan || !['starter', 'advanced', 'pro'].includes(plan)) {
+           feedback.error('Escolha um plano para continuar.');
+           navigate('/dashboard/billing');
+           return;
+         }
          window.location.href = `/checkout?plan=musicscale_${plan}_monthly`;
          return;
       }
@@ -535,6 +587,43 @@ export function Dashboard() {
   const requestSequenceRef = useRef<number>(0);
   const currentActiveOrgIdRef = useRef<string | null>(null);
 
+  const refreshPendingInvites = async (orgId: string) => {
+    if (!user || !orgId) return;
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(orgId)}/invitations`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+            'Cache-Control': 'no-store'
+          }
+        }
+      );
+
+      if (response.status === 403) {
+        if (currentActiveOrgIdRef.current === orgId) {
+          setPendingInvites([]);
+        }
+        return;
+      }
+      if (!response.ok) {
+        throw new Error('INVITATIONS_LOAD_FAILED');
+      }
+
+      const data = await response.json();
+      if (
+        currentActiveOrgIdRef.current === orgId &&
+        Array.isArray(data?.invitations)
+      ) {
+        setPendingInvites(data.invitations);
+      }
+    } catch (error) {
+      console.warn('[Dashboard] Failed to refresh pending invitations:', error);
+    }
+  };
+
   const loadOrganizationData = async (orgId: string, requestId: number) => {
     if (!user || !orgId) return;
     let coreReleased = false;
@@ -555,17 +644,6 @@ export function Dashboard() {
         getDocs(collection(db, `organizations/${orgId}/members`)),
         8000,
         'Dashboard timeout loading memberships'
-      );
-
-      const invitesPromise = withDashboardTimeout(
-        getDocs(
-          query(
-            collection(db, `organizations/${orgId}/invites`),
-            where('status', '==', 'pending')
-          )
-        ),
-        6000,
-        'Dashboard timeout loading invitations'
       );
 
       const joinRequestsPromise = withDashboardTimeout(
@@ -591,10 +669,10 @@ export function Dashboard() {
       );
 
       const secondaryResultsPromise = Promise.allSettled([
-        invitesPromise,
         joinRequestsPromise,
         auditLogsPromise
       ]);
+      void refreshPendingInvites(orgId);
 
       const [
         subscriptionResult,
@@ -746,19 +824,11 @@ export function Dashboard() {
       }
 
       const [
-        invitesResult,
         joinRequestsResult,
         auditLogsResult
       ] = await secondaryResultsPromise;
 
       if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
-        if (invitesResult.status === 'fulfilled') {
-          setPendingInvites(invitesResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
-        } else {
-          setPendingInvites([]);
-          console.warn("Failed to load invites");
-        }
-
         if (joinRequestsResult.status === 'fulfilled') {
           setJoinRequests(joinRequestsResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
         } else {
@@ -1170,16 +1240,29 @@ export function Dashboard() {
   const handleRevokeInvite = async (inviteId: string) => {
     try {
       const orgId = activeContextOrgId;
-      const inviteRef = doc(db, `organizations/${orgId}/invites`, inviteId);
-      await updateDoc(inviteRef, {
-        status: 'revoked',
-        revokedAt: serverTimestamp(),
-        revokedBy: user?.uid
-      });
-      setPendingInvites(prev => prev.filter(i => i.id !== inviteId));
+      if (!orgId || !user) return;
+
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(inviteId)}/revoke`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: '{}'
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('INVITATION_REVOKE_FAILED');
+      }
+
+      setPendingInvites(prev => prev.filter(invite => invite.id !== inviteId));
     } catch (e) {
       console.error(e);
-      alert("Erro ao revogar convite.");
+      feedback.error("Não foi possível revogar o convite. Tente novamente.");
     }
   };
 
@@ -1260,6 +1343,7 @@ export function Dashboard() {
       setPendingInvites([]);
       setJoinRequests([]);
       setAuditLogs([]);
+      setMusicScaleHubSummary(EMPTY_MUSICSCALE_SUMMARY);
       
       if (musicScaleProjectionAbortControllerRef.current) {
         musicScaleProjectionAbortControllerRef.current.abort();
@@ -1284,23 +1368,91 @@ export function Dashboard() {
     
     const requestId = ++requestSequenceRef.current;
     currentActiveOrgIdRef.current = activeContextOrgId;
-    loadOrganizationData(activeContextOrgId, requestId);
-    refreshMusicScaleAccessProjection(activeContextOrgId);
-    // Subscribe to real-time organization updates for immediate database sync
+    void loadOrganizationData(activeContextOrgId, requestId);
+    void refreshMusicScaleAccessProjection(activeContextOrgId);
+
     const orgId = activeContextOrgId;
+    const unsubscribers: Array<() => void> = [];
+
     const orgRef = doc(db, "organizations", orgId);
-    
-    const unsubscribeOrg = onSnapshot(orgRef, (snap) => {
-      if (snap.exists()) {
-        const orgData = { id: snap.id, ...snap.data() };
-        setOrganization(orgData);
+    unsubscribers.push(onSnapshot(orgRef, (snap) => {
+      if (snap.exists() && currentActiveOrgIdRef.current === orgId) {
+        setOrganization({ id: snap.id, ...snap.data() });
+        void refreshPendingInvites(orgId);
       }
     }, (err) => {
       console.warn("[Dashboard] Real-time organization update failed, falling back to manual fetches:", err);
-    });
+    }));
+
+    const subscriptionRef = doc(db, "subscriptions", orgId);
+    unsubscribers.push(onSnapshot(subscriptionRef, (snap) => {
+      if (currentActiveOrgIdRef.current !== orgId) return;
+      setSubscription(snap.exists() ? snap.data() : null);
+      setLoadingSub(false);
+      void refreshMusicScaleAccessProjection(orgId);
+    }, (err) => {
+      console.warn("[Dashboard] Real-time subscription update failed:", err);
+    }));
+
+    const membersRef = collection(db, `organizations/${orgId}/members`);
+    unsubscribers.push(onSnapshot(membersRef, async (snap) => {
+      const baseMembers = snap.docs.map(memberDoc => ({
+        id: memberDoc.id,
+        uid: memberDoc.id,
+        ...memberDoc.data()
+      })) as any[];
+
+      const enrichedMembers = await Promise.all(baseMembers.map(async (member) => {
+        if (member.displayName && member.email) return member;
+        try {
+          const profileSnap = await getDoc(doc(db, "users", member.id));
+          if (!profileSnap.exists()) return member;
+          const profileData = profileSnap.data() as any;
+          return {
+            ...profileData,
+            ...member,
+            displayName: member.displayName || profileData.displayName || profileData.name || "Usuário",
+            email: member.email || profileData.email || "",
+            photoURL: member.photoURL || profileData.photoURL || ""
+          };
+        } catch {
+          return member;
+        }
+      }));
+
+      if (currentActiveOrgIdRef.current === orgId) {
+        setMembers(enrichedMembers);
+      }
+    }, (err) => {
+      console.warn("[Dashboard] Real-time member update failed:", err);
+    }));
+
+    const joinRequestQuery = query(
+      collection(db, `organizations/${orgId}/join_requests`),
+      where("status", "==", "pending")
+    );
+    unsubscribers.push(onSnapshot(joinRequestQuery, (snap) => {
+      if (currentActiveOrgIdRef.current !== orgId) return;
+      setJoinRequests(snap.docs.map(requestDoc => ({ id: requestDoc.id, ...requestDoc.data() })));
+    }, (err) => {
+      console.warn("[Dashboard] Real-time join request update failed:", err);
+    }));
+
+    const auditQuery = query(
+      collection(db, `organizations/${orgId}/audit_logs`),
+      limit(5)
+    );
+    unsubscribers.push(onSnapshot(auditQuery, (snap) => {
+      if (currentActiveOrgIdRef.current !== orgId) return;
+      const audits = snap.docs.map(auditDoc => ({ id: auditDoc.id, ...auditDoc.data() })) as any[];
+      audits.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+      setAuditLogs(audits.slice(0, 5));
+    }, (err) => {
+      console.warn("[Dashboard] Real-time audit update failed:", err);
+    }));
 
     return () => {
-      unsubscribeOrg();
+      unsubscribers.forEach(unsubscribe => unsubscribe());
       if (musicScaleProjectionAbortControllerRef.current) {
         musicScaleProjectionAbortControllerRef.current.abort();
       }
@@ -1310,6 +1462,159 @@ export function Dashboard() {
       }
     };
   }, [user, activeContextOrgId]);
+
+  useEffect(() => {
+    if (!user || !activeContextOrgId || musicScaleProjection?.accessible !== true) {
+      setMusicScaleHubSummary(EMPTY_MUSICSCALE_SUMMARY);
+      return;
+    }
+
+    const orgId = activeContextOrgId;
+    const live = {
+      songs: [] as any[],
+      scales: [] as any[],
+      bandScales: [] as any[],
+      configuredMembersCount: 0,
+      responseCounts: { pending: 0, accepted: 0, maybe: 0, declined: 0 }
+    };
+    let responsesUnsubscribe: (() => void) | null = null;
+    let responseScaleId: string | null = null;
+    const currentMember = members.find(member => member.id === user.uid || member.uid === user.uid);
+    const currentRole = String(currentMember?.role || currentMember?.organizationRole || '').toLowerCase();
+    const canReadResponseSummary = isGlobalAdmin || currentRole === 'owner' || currentRole === 'admin';
+
+    const publishSummary = () => {
+      if (currentActiveOrgIdRef.current !== orgId) return;
+
+      const now = Date.now();
+      const candidateScales = live.scales
+        .filter(scale => !['cancelled', 'completed'].includes(String(scale.status || '').toLowerCase()))
+        .filter(scale => toEventEpoch(scale) >= now - 6 * 60 * 60 * 1000)
+        .sort((a, b) => toEventEpoch(a) - toEventEpoch(b));
+
+      const nextScale = candidateScales[0] || null;
+      const activeAssignments = Array.isArray(nextScale?.eventAssignments)
+        ? nextScale.eventAssignments.filter((assignment: any) => assignment?.active !== false)
+        : [];
+
+      if (nextScale?.id !== responseScaleId) {
+        responsesUnsubscribe?.();
+        responsesUnsubscribe = null;
+        responseScaleId = nextScale?.id || null;
+        live.responseCounts = {
+          pending: activeAssignments.length,
+          accepted: 0,
+          maybe: 0,
+          declined: 0
+        };
+
+        if (nextScale?.id && canReadResponseSummary) {
+          responsesUnsubscribe = onSnapshot(
+            collection(db, `scales/${nextScale.id}/responses`),
+            (responseSnapshot) => {
+              const counts = { pending: 0, accepted: 0, maybe: 0, declined: 0 };
+              const respondedAssignmentIds = new Set<string>();
+
+              responseSnapshot.docs.forEach(responseDoc => {
+                const data = responseDoc.data() as any;
+                if (data?.active === false) return;
+                respondedAssignmentIds.add(data.eventAssignmentId || responseDoc.id);
+                const status = String(data.status || 'pending').toLowerCase();
+                if (status === 'accepted') counts.accepted += 1;
+                else if (status === 'maybe') counts.maybe += 1;
+                else if (status === 'declined') counts.declined += 1;
+                else counts.pending += 1;
+              });
+
+              counts.pending += activeAssignments.filter((assignment: any) =>
+                !respondedAssignmentIds.has(assignment.eventAssignmentId)
+              ).length;
+
+              live.responseCounts = counts;
+              publishSummary();
+            },
+            (error) => {
+              console.warn('[Dashboard] MusicScale response summary listener failed:', error);
+            }
+          );
+        }
+      }
+
+      setMusicScaleHubSummary({
+        songsCount: live.songs.length,
+        songsWithContentCount: live.songs.filter(song =>
+          Boolean(String(song?.lyrics || '').trim()) || Boolean(String(song?.chords || '').trim())
+        ).length,
+        configuredMembersCount: live.configuredMembersCount,
+        scalesCount: live.scales.length,
+        bandScalesCount: live.bandScales.length,
+        nextScale: nextScale ? {
+          id: nextScale.id,
+          date: nextScale.date,
+          time: nextScale.time || null,
+          status: nextScale.status || null,
+          songCount: Array.isArray(nextScale.songIds) ? nextScale.songIds.length : 0,
+          assignmentCount: activeAssignments.length,
+          bandScaleId: nextScale.bandScaleId || null,
+          responseSummaryAvailable: canReadResponseSummary,
+          responseCounts: { ...live.responseCounts }
+        } : null,
+        updatedAtMs: Date.now()
+      });
+    };
+
+    const unsubscribers: Array<() => void> = [];
+
+    unsubscribers.push(onSnapshot(
+      query(collection(db, 'songs'), where('organizationId', '==', orgId)),
+      snapshot => {
+        live.songs = snapshot.docs.map(songDoc => ({ id: songDoc.id, ...songDoc.data() }));
+        publishSummary();
+      },
+      error => console.warn('[Dashboard] MusicScale songs summary listener failed:', error)
+    ));
+
+    unsubscribers.push(onSnapshot(
+      query(collection(db, 'scales'), where('organizationId', '==', orgId)),
+      snapshot => {
+        live.scales = snapshot.docs.map(scaleDoc => ({ id: scaleDoc.id, ...scaleDoc.data() }));
+        publishSummary();
+      },
+      error => console.warn('[Dashboard] MusicScale scales summary listener failed:', error)
+    ));
+
+    unsubscribers.push(onSnapshot(
+      query(collection(db, 'bandScales'), where('organizationId', '==', orgId)),
+      snapshot => {
+        live.bandScales = snapshot.docs.map(scaleDoc => ({ id: scaleDoc.id, ...scaleDoc.data() }));
+        publishSummary();
+      },
+      error => console.warn('[Dashboard] MusicScale band-scale summary listener failed:', error)
+    ));
+
+    unsubscribers.push(onSnapshot(
+      collection(db, `organizations/${orgId}/musicscale_members`),
+      snapshot => {
+        live.configuredMembersCount = snapshot.docs.filter(memberDoc => {
+          const data = memberDoc.data() as any;
+          return Boolean(
+            data.musicscaleRole ||
+            data.ministryFunction ||
+            data.roleId ||
+            data.internalRoleId ||
+            (Array.isArray(data.specialtyIds) && data.specialtyIds.length > 0)
+          );
+        }).length;
+        publishSummary();
+      },
+      error => console.warn('[Dashboard] MusicScale member summary listener failed:', error)
+    ));
+
+    return () => {
+      unsubscribers.forEach(unsubscribe => unsubscribe());
+      responsesUnsubscribe?.();
+    };
+  }, [user, activeContextOrgId, musicScaleProjection?.accessible, isGlobalAdmin, members]);
 
   useEffect(() => {
     fetch('/api/v1/billing/products')
@@ -1641,7 +1946,8 @@ export function Dashboard() {
                 occupiedSlots={occupiedSlots}
                 maxUsersLimit={maxUsersLimit}
                 onSelectWorkspace={handleSelectWorkspace}
-                onLaunchApp={(app) => handleLaunchEcosystemApp(app, currentUserPerms)}
+                onLaunchApp={(app, destinationPath) => handleLaunchEcosystemApp(app, currentUserPerms, destinationPath)}
+                musicScaleSummary={musicScaleHubSummary}
                 onOpenInviteModal={() => setIsInviteModalOpen(true)}
                 onNavigateToOrganizationMembers={() => navigate('/dashboard/organization/members')}
                 onNavigateToBilling={() => setActiveTab('billing')}
@@ -1730,7 +2036,7 @@ export function Dashboard() {
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
                              <ListMusic className="w-3.5 h-3.5" /> Plano Atual
                           </p>
-                          <p className="text-sm font-semibold text-[#F5F7FA] mt-1 capitalize">{subscription?.plan || subscription?.tier || organization?.subscriptionPlan || 'Gratuito'}</p>
+                          <p className="text-sm font-semibold text-[#F5F7FA] mt-1 capitalize">{subscription?.plan || subscription?.tier || organization?.subscriptionPlan || 'Plano não identificado'}</p>
                         </div>
                         <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
                           <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
@@ -2030,6 +2336,11 @@ export function Dashboard() {
                 auditLogs={auditLogs}
                 setActiveDashboardTab={setActiveTab}
                 initialTab={tab === 'team' ? 'members' : subTab}
+                onOpenMusicScale={(destinationPath?: string) => {
+                  if (musicScaleApp) {
+                    void handleLaunchEcosystemApp(musicScaleApp, currentUserPerms, destinationPath);
+                  }
+                }}
               />
             </motion.section>
           )}
@@ -2186,7 +2497,7 @@ export function Dashboard() {
                       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
                         <div>
                            <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Plano Atual</p>
-                           <h3 className="text-xl font-semibold text-[#F5F7FA] capitalize">{subscription?.plan || 'Mensal'} - MusicScale</h3>
+                           <h3 className="text-xl font-semibold text-[#F5F7FA] capitalize">{subscription?.plan || 'Plano não identificado'} - MusicScale</h3>
                         </div>
                         <div className="text-left md:text-right">
                            <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Status</p>

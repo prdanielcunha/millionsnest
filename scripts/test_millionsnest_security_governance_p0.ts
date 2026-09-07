@@ -117,7 +117,10 @@ function runTests() {
     const invitesRule = invitesMatch[1];
     assert(!invitesRule.includes('allow read: if isAuthenticated();'), "invites does not allow broad read");
     assert(!invitesRule.includes('allow list: if isAuthenticated();'), "invites does not allow broad list");
-    assert(invitesRule.includes('allow read, list: if isAuthenticated() && (') && (invitesRule.includes('checkOrgAccess(orgId)') || invitesRule.includes('isSystemAdmin()')), "invites requires checkOrgAccess or isSystemAdmin for read/list");
+    assert(
+      invitesRule.includes('allow read, create, update, delete: if false;'),
+      "invitation secrets are backend-only and cannot be read or mutated from Firestore clients"
+    );
   } else {
     assert(false, "match /invites/{inviteId} not found in organizations");
   }

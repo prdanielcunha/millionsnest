@@ -33,10 +33,34 @@ interface EcosystemWorkspaceHomeProps {
       | 'error';
   } | null;
   musicScaleApp?: EcosystemApp;
+  musicScaleSummary: {
+    songsCount: number;
+    songsWithContentCount: number;
+    configuredMembersCount: number;
+    scalesCount: number;
+    bandScalesCount: number;
+    nextScale: null | {
+      id: string;
+      date: string;
+      time?: string | null;
+      status?: string | null;
+      songCount: number;
+      assignmentCount: number;
+      bandScaleId?: string | null;
+      responseSummaryAvailable: boolean;
+      responseCounts: {
+        pending: number;
+        accepted: number;
+        maybe: number;
+        declined: number;
+      };
+    };
+    updatedAtMs: number;
+  };
   occupiedSlots: number;
   maxUsersLimit: number;
   onSelectWorkspace: (workspaceId: string) => void;
-  onLaunchApp: (app: EcosystemApp) => void;
+  onLaunchApp: (app: EcosystemApp, destinationPath?: string) => void;
   onOpenInviteModal: () => void;
   onNavigateToOrganizationMembers: () => void;
   onNavigateToBilling: () => void;
@@ -57,6 +81,7 @@ export function EcosystemWorkspaceHome({
   isGlobalAdmin,
   musicScaleAccess,
   musicScaleApp,
+  musicScaleSummary,
   occupiedSlots,
   maxUsersLimit,
   onSelectWorkspace,
@@ -145,6 +170,7 @@ export function EcosystemWorkspaceHome({
         const progressPercent = maxUsersLimit > 0 ? Math.min(100, (occupiedSlots / maxUsersLimit) * 100) : 0;
     const canInviteMembers = Boolean(currentUserPerms['organization.members.invite'] || isGlobalAdmin);
     const teamStarted = members.length > 1 || pendingInvites.length > 0;
+    const appSummaryReady = musicScaleSummary.updatedAtMs > 0;
 
     type MusicScaleDisplayStatus =
       | 'available'
@@ -204,21 +230,75 @@ export function EcosystemWorkspaceHome({
                   action: 'invite' as const,
                   label: t('workspace.next_step.invite_action', 'Convidar equipe')
                 }
-              : isReadyToOpen
+              : isReadyToOpen && appSummaryReady && musicScaleSummary.songsCount === 0
                 ? {
-                    tone: 'success',
-                    title: t('workspace.next_step.open_title', 'Seu MusicScale está pronto'),
-                    description: t('workspace.next_step.open_desc', 'Abra o aplicativo e continue a organização de músicas, integrantes e escalas.'),
-                    action: 'open' as const,
-                    label: t('workspace.next_step.open_action', 'Abrir MusicScale')
+                    tone: 'primary',
+                    title: t('workspace.next_step.songs_title', 'Adicione as primeiras músicas'),
+                    description: t('workspace.next_step.songs_desc', 'Comece seu repertório para depois montar as escalas dos cultos.'),
+                    action: 'app' as const,
+                    path: '/songs',
+                    label: t('workspace.next_step.songs_action', 'Adicionar músicas')
                   }
-                : {
-                    tone: 'neutral',
-                    title: t('workspace.next_step.learn_title', 'Veja os primeiros passos'),
-                    description: t('workspace.next_step.learn_desc', 'Siga o guia em ordem e veja o que já está pronto e o que ainda falta fazer.'),
-                    action: 'guide' as const,
-                    label: t('workspace.next_step.learn_action', 'Ver primeiros passos')
-                  };
+                : isReadyToOpen && appSummaryReady && musicScaleSummary.songsWithContentCount === 0
+                  ? {
+                      tone: 'primary',
+                      title: t('workspace.next_step.content_title', 'Complete o conteúdo das músicas'),
+                      description: t('workspace.next_step.content_desc', 'Confira letras e cifras das primeiras músicas antes de preparar a equipe.'),
+                      action: 'app' as const,
+                      path: '/songs',
+                      label: t('workspace.next_step.content_action', 'Revisar músicas')
+                    }
+                  : isReadyToOpen && appSummaryReady && musicScaleSummary.configuredMembersCount === 0
+                    ? {
+                        tone: 'primary',
+                        title: t('workspace.next_step.members_title', 'Configure quem faz o quê na equipe'),
+                        description: t('workspace.next_step.members_desc', 'Defina músicos, vocais e funções ministeriais no MusicScale.'),
+                        action: 'app' as const,
+                        path: '/users',
+                        label: t('workspace.next_step.members_action', 'Configurar equipe')
+                      }
+                    : isReadyToOpen && appSummaryReady && musicScaleSummary.bandScalesCount === 0
+                      ? {
+                          tone: 'primary',
+                          title: t('workspace.next_step.band_scale_title', 'Monte sua primeira equipe para um culto'),
+                          description: t('workspace.next_step.band_scale_desc', 'Crie a primeira escala da banda com músicos, vocais e funções.'),
+                          action: 'app' as const,
+                          path: '/band-scales',
+                          label: t('workspace.next_step.band_scale_action', 'Criar escala da banda')
+                        }
+                      : isReadyToOpen && appSummaryReady && musicScaleSummary.scalesCount === 0
+                        ? {
+                            tone: 'primary',
+                            title: t('workspace.next_step.music_scale_title', 'Monte sua primeira escala de músicas'),
+                            description: t('workspace.next_step.music_scale_desc', 'Escolha as músicas do culto e conecte a equipe que participará.'),
+                            action: 'app' as const,
+                            path: '/scales',
+                            label: t('workspace.next_step.music_scale_action', 'Criar escala de músicas')
+                          }
+                        : isReadyToOpen && appSummaryReady && musicScaleSummary.nextScale?.responseSummaryAvailable === true && (musicScaleSummary.nextScale?.responseCounts.pending || 0) > 0
+                          ? {
+                              tone: 'warning',
+                              title: t('workspace.next_step.responses_title', 'Há confirmações aguardando resposta'),
+                              description: t('workspace.next_step.responses_desc', '{{count}} participação(ões) da próxima escala ainda não foram confirmadas.', { count: musicScaleSummary.nextScale?.responseCounts.pending || 0 }),
+                              action: 'app' as const,
+                              path: musicScaleSummary.nextScale ? `/scales/${musicScaleSummary.nextScale.id}` : '/scales',
+                              label: t('workspace.next_step.responses_action', 'Ver próxima escala')
+                            }
+                          : isReadyToOpen
+                            ? {
+                                tone: 'success',
+                                title: t('workspace.next_step.open_title', 'Seu MusicScale está pronto'),
+                                description: t('workspace.next_step.open_desc', 'Abra o aplicativo e continue a organização de músicas, integrantes e escalas.'),
+                                action: 'open' as const,
+                                label: t('workspace.next_step.open_action', 'Abrir MusicScale')
+                              }
+                            : {
+                                tone: 'neutral',
+                                title: t('workspace.next_step.learn_title', 'Veja os primeiros passos'),
+                                description: t('workspace.next_step.learn_desc', 'Siga o guia em ordem e veja o que já está pronto e o que ainda falta fazer.'),
+                                action: 'guide' as const,
+                                label: t('workspace.next_step.learn_action', 'Ver primeiros passos')
+                              };
 
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-12">
@@ -254,6 +334,7 @@ export function EcosystemWorkspaceHome({
                 if (nextStep.action === 'billing') onNavigateToBilling();
                 if (nextStep.action === 'invite') onOpenInviteModal();
                 if (nextStep.action === 'open' && musicScaleApp) onLaunchApp(musicScaleApp);
+                if (nextStep.action === 'app' && musicScaleApp) onLaunchApp(musicScaleApp, 'path' in nextStep ? nextStep.path : undefined);
                 if (nextStep.action === 'guide') {
                   onSelectWorkspace('musicscale');
                   onSelectMusicScaleSection('getting-started');
@@ -398,7 +479,7 @@ export function EcosystemWorkspaceHome({
               <div className="border-t border-white/5 pt-4 flex items-center justify-between text-sm">
                 <span className="text-[#A0A7B5]">{t('workspace.plan_label', 'Plano atual:')}</span>
                 <span className="font-semibold text-purple-400 capitalize bg-purple-500/10 px-2.5 py-1 rounded-lg border border-purple-500/20 text-xs">
-                  {organization?.apps?.musicscale?.plan || subscription?.planId || t('workspace.plan_starter', 'Starter')}
+                  {organization?.apps?.musicscale?.plan || subscription?.plan || subscription?.planId || t('workspace.plan_unknown', 'Plano não identificado')}
                 </span>
               </div>
 
@@ -614,6 +695,83 @@ export function EcosystemWorkspaceHome({
 
     const overviewContent = (
       <div className="space-y-6">
+        <div className="bg-[#050505] border border-white/5 rounded-2xl p-5 md:p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400 mb-1">
+                {t('musicscale.summary.live_label', 'Dados ao vivo')}
+              </p>
+              <h3 className="text-lg font-bold text-white">
+                {t('musicscale.summary.title', 'Como está o MusicScale agora')}
+              </h3>
+            </div>
+            <p className="text-xs text-[#A0A7B5]">
+              {musicScaleSummary.updatedAtMs
+                ? t('musicscale.summary.synced', 'Atualizado automaticamente')
+                : t('musicscale.summary.loading', 'Carregando dados do aplicativo...')}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <button type="button" onClick={() => musicScaleApp && onLaunchApp(musicScaleApp, '/songs')} className="text-left rounded-xl bg-white/[0.03] border border-white/5 p-4 hover:bg-white/[0.05] transition-colors">
+              <p className="text-2xl font-bold text-white">{musicScaleSummary.songsCount}</p>
+              <p className="text-xs text-[#A0A7B5] mt-1">{t('musicscale.summary.repertoire', 'músicas no repertório')}</p>
+            </button>
+            <button type="button" onClick={() => musicScaleApp && onLaunchApp(musicScaleApp, '/users')} className="text-left rounded-xl bg-white/[0.03] border border-white/5 p-4 hover:bg-white/[0.05] transition-colors">
+              <p className="text-2xl font-bold text-white">{musicScaleSummary.configuredMembersCount}</p>
+              <p className="text-xs text-[#A0A7B5] mt-1">{t('musicscale.summary.configured_members', 'integrantes configurados')}</p>
+            </button>
+            <button type="button" onClick={() => musicScaleApp && onLaunchApp(musicScaleApp, '/scales')} className="text-left rounded-xl bg-white/[0.03] border border-white/5 p-4 hover:bg-white/[0.05] transition-colors">
+              <p className="text-2xl font-bold text-white">{musicScaleSummary.scalesCount}</p>
+              <p className="text-xs text-[#A0A7B5] mt-1">{t('musicscale.summary.music_scales', 'escalas de músicas')}</p>
+            </button>
+            <button type="button" onClick={() => musicScaleApp && onLaunchApp(musicScaleApp, '/band-scales')} className="text-left rounded-xl bg-white/[0.03] border border-white/5 p-4 hover:bg-white/[0.05] transition-colors">
+              <p className="text-2xl font-bold text-white">{musicScaleSummary.bandScalesCount}</p>
+              <p className="text-xs text-[#A0A7B5] mt-1">{t('musicscale.summary.band_scales', 'escalas da banda')}</p>
+            </button>
+          </div>
+
+          {musicScaleSummary.nextScale ? (
+            <button
+              type="button"
+              onClick={() => musicScaleApp && onLaunchApp(musicScaleApp, `/scales/${musicScaleSummary.nextScale?.id}`)}
+              className="mt-4 w-full rounded-xl border border-[#2B85EB]/20 bg-[#2B85EB]/[0.07] p-4 text-left hover:bg-[#2B85EB]/10 transition-colors"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-[#2B85EB] uppercase tracking-wider">{t('musicscale.summary.next_scale', 'Próxima escala')}</p>
+                  <p className="text-sm font-semibold text-white mt-1">
+                    {new Date(`${musicScaleSummary.nextScale.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: '2-digit', month: 'short' })}
+                    {musicScaleSummary.nextScale.time ? ` · ${musicScaleSummary.nextScale.time}` : ''}
+                  </p>
+                  <p className="text-xs text-[#A0A7B5] mt-1">
+                    {t('musicscale.summary.next_scale_details', '{{songs}} músicas · {{people}} participações', {
+                      songs: musicScaleSummary.nextScale.songCount,
+                      people: musicScaleSummary.nextScale.assignmentCount
+                    })}
+                  </p>
+                </div>
+                {musicScaleSummary.nextScale.responseSummaryAvailable && (
+                  <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wider">
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/15">
+                      {musicScaleSummary.nextScale.responseCounts.accepted} {t('musicscale.summary.accepted', 'confirmadas')}
+                    </span>
+                    {musicScaleSummary.nextScale.responseCounts.pending > 0 && (
+                      <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/15">
+                        {musicScaleSummary.nextScale.responseCounts.pending} {t('musicscale.summary.pending', 'aguardando')}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </button>
+          ) : musicScaleSummary.updatedAtMs > 0 ? (
+            <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.02] p-4">
+              <p className="text-sm font-semibold text-white">{t('musicscale.summary.no_upcoming', 'Nenhuma próxima escala encontrada')}</p>
+              <p className="text-xs text-[#A0A7B5] mt-1">{t('musicscale.summary.no_upcoming_desc', 'Quando uma nova escala for criada, ela aparecerá aqui automaticamente.')}</p>
+            </div>
+          ) : null}
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Column (Recursos do MusicScale) */}
           <div className="lg:col-span-2 space-y-6">
@@ -744,14 +902,15 @@ export function EcosystemWorkspaceHome({
         onOpenInviteModal={onOpenInviteModal}
         onManageTeam={onNavigateToOrganizationMembers}
         onReviewOrganization={onNavigateToOrganizationSettings}
-        onOpenMusicScale={() => {
-          if (musicScaleApp) onLaunchApp(musicScaleApp);
+        onOpenMusicScale={(destinationPath?: string) => {
+          if (musicScaleApp) onLaunchApp(musicScaleApp, destinationPath);
         }}
         onNavigateToBilling={onNavigateToBilling}
         heroContent={heroContent}
         overviewContent={overviewContent}
         memberCount={members.length}
         pendingInviteCount={pendingInvites.length}
+        musicScaleSummary={musicScaleSummary}
       />
     );
   };

@@ -32,12 +32,26 @@ export interface MusicScaleGuideCenterProps {
   onOpenInviteModal: () => void;
   onManageTeam: () => void;
   onReviewOrganization: () => void;
-  onOpenMusicScale: () => void;
+  onOpenMusicScale: (destinationPath?: string) => void;
   onNavigateToBilling: () => void;
   heroContent?: React.ReactNode;
   overviewContent?: React.ReactNode;
   memberCount: number;
   pendingInviteCount: number;
+  musicScaleSummary: {
+    songsCount: number;
+    songsWithContentCount: number;
+    configuredMembersCount: number;
+    scalesCount: number;
+    bandScalesCount: number;
+    nextScale: null | {
+      id: string;
+      songCount: number;
+      assignmentCount: number;
+      responseCounts: { pending: number; accepted: number; maybe: number; declined: number };
+    };
+    updatedAtMs: number;
+  };
 }
 
 export function MusicScaleGuideCenter({ 
@@ -59,7 +73,8 @@ export function MusicScaleGuideCenter({
   heroContent: externalHeroContent,
   overviewContent: externalOverviewContent,
   memberCount,
-  pendingInviteCount
+  pendingInviteCount,
+  musicScaleSummary
 }: MusicScaleGuideCenterProps) {
   const { t } = useTranslation('dashboard');
 
@@ -347,6 +362,33 @@ export function MusicScaleGuideCenter({
       { id: 'review', key: 'review', titleKey: 'musicscale.center.getting_started.steps.review.title' }
     ];
 
+    const appSummaryReady = musicScaleSummary.updatedAtMs > 0;
+    const completedByStep: Record<string, boolean> = {
+      organization: organizationReady,
+      team: memberCount > 1,
+      songs: appSummaryReady && musicScaleSummary.songsCount > 0,
+      content: appSummaryReady && musicScaleSummary.songsWithContentCount > 0,
+      members: appSummaryReady && musicScaleSummary.configuredMembersCount > 0,
+      band_scale: appSummaryReady && musicScaleSummary.bandScalesCount > 0,
+      music_scale: appSummaryReady && musicScaleSummary.scalesCount > 0,
+      review:
+        appSummaryReady &&
+        musicScaleSummary.scalesCount > 0 &&
+        (!musicScaleSummary.nextScale ||
+          (musicScaleSummary.nextScale.songCount > 0 && musicScaleSummary.nextScale.assignmentCount > 0))
+    };
+    const nextStepId = steps.find(step => !completedByStep[step.id])?.id || null;
+
+    const pathForStep = (stepId: string): string => {
+      if (stepId === 'songs' || stepId === 'content') return '/songs';
+      if (stepId === 'members') return '/users';
+      if (stepId === 'band_scale') return '/band-scales';
+      if (stepId === 'review' && musicScaleSummary.nextScale?.id) {
+        return `/scales/${musicScaleSummary.nextScale.id}`;
+      }
+      return '/scales';
+    };
+
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
         <div className="max-w-3xl mb-12">
@@ -415,11 +457,16 @@ export function MusicScaleGuideCenter({
               }
             } else {
               title = t(step.titleKey, t('musicscale.center.fallback.guide_step', 'Etapa do guia'));
-              stepStatus = 'pending';
-              statusText =
-                step.id === 'songs' && organizationReady && teamStarted
-                  ? t('musicscale.center.getting_started.statuses.next_step', 'Próxima etapa')
-                  : t('musicscale.center.getting_started.statuses.do_in_ms', 'Faça no MusicScale');
+              if (completedByStep[step.id]) {
+                stepStatus = 'completed';
+                statusText = t('musicscale.center.getting_started.statuses.completed', 'Concluído');
+              } else {
+                stepStatus = 'pending';
+                statusText =
+                  nextStepId === step.id
+                    ? t('musicscale.center.getting_started.statuses.next_step', 'Próxima etapa')
+                    : t('musicscale.center.getting_started.statuses.do_in_ms', 'Faça no MusicScale');
+              }
             }
 
             const what = t(`musicscale.center.getting_started.steps.${step.key}.what`, '');
@@ -562,7 +609,7 @@ export function MusicScaleGuideCenter({
                   ) : (
                     <button 
                       type="button" 
-                      onClick={onOpenMusicScale} 
+                      onClick={() => onOpenMusicScale(pathForStep(step.id))} 
                       disabled={!musicScaleReady} 
                       className="px-5 py-2.5 bg-[#2B85EB] hover:bg-[#3B95FB] disabled:bg-white/5 disabled:text-[#A0A7B5] disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-2 min-h-[44px] w-fit"
                     >

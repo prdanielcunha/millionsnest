@@ -1,6 +1,11 @@
 import express from 'express';
 import { bootstrapUserContext, acceptInvitation, setActiveOrganization } from './src/server/services/TenantContextMutationService.js';
 import { createInvitation } from "./src/server/services/InvitationCreationService.js";
+import { deliverInvitationEmail } from './src/server/services/InvitationEmailService.js';
+import { generateInvitationTokenMaterial } from './src/server/services/InvitationTokenService.js';
+import { INVITATION_TTL_MS } from './src/server/services/InvitationCreationPlanner.js';
+import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './src/server/services/InvitationAcceptanceServerPolicy.js';
+import { canInviteOrganizationRole } from './src/lib/organizationRoles.js';
 import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
@@ -738,6 +743,568 @@ async function startServer() {
 
   app.post('/api/v1/onboarding/bootstrap', express.json(), bootstrapUserContext);
   app.post('/api/v1/invitations', express.json(), (req, res) => createInvitation(req, res));
+
+  app.get('/api/v1/organizations/:organizationId/invitations', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      const organizationId = String(req.params.organizationId || '').trim();
+      if (!organizationId || organizationId.length > 256 || organizationId.includes('/') || organizationId.includes('\\')) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_REQUEST' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, reasonCode: 'SERVICE_UNAVAILABLE' });
+      }
+
+      const [orgSnap, actorSnap, memberSnap] = await Promise.all([
+        dbInstance.collection('organizations').doc(organizationId).get(),
+        dbInstance.collection('users').doc(decoded.uid).get(),
+        dbInstance.collection('organizations').doc(organizationId).collection('members').doc(decoded.uid).get()
+      ]);
+
+      if (!orgSnap.exists) {
+        return res.status(404).json({ success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' });
+      }
+
+      const orgData = orgSnap.data() || {};
+      const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+      const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+      const role = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+      const actorIsOwner =
+        orgData.ownerUid === decoded.uid ||
+        orgData.ownerId === decoded.uid ||
+        orgData.ownerUserId === decoded.uid ||
+        orgData.owner_user_id === decoded.uid;
+      const canReadInvites =
+        isGlobalPrivilegedRole(actorData.systemRole) ||
+        actorIsOwner ||
+        role === 'owner' ||
+        role === 'admin' ||
+        memberData.permissions?.['organization.members.invite'] === true ||
+        memberData.permissions?.['organization.members.manage'] === true;
+
+      if (!canReadInvites) {
+        return res.status(403).json({ success: false, reasonCode: 'PERMISSION_DENIED' });
+      }
+
+      const snapshot = await dbInstance
+        .collection('organizations')
+        .doc(organizationId)
+        .collection('invites')
+        .where('status', '==', 'pending')
+        .limit(100)
+        .get();
+
+      const invitations = snapshot.docs
+        .map(document => {
+          const data = document.data() || {};
+          const expiresAtMs = normalizeInvitationTemporalMs(data.expiresAt) || null;
+          const createdAtMs = normalizeInvitationTemporalMs(data.createdAt) || null;
+          const lastSentAtMs = normalizeInvitationTemporalMs(data.emailDelivery?.lastSentAt) || null;
+          return {
+            id: document.id,
+            organizationId,
+            organizationName: data.organizationName || orgData.name || '',
+            email: data.emailNormalized || data.email || '',
+            role: data.role || 'member',
+            status: 'pending',
+            expiresAtMs,
+            createdAtMs,
+            lastSentAtMs
+          };
+        })
+        .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.json({ success: true, invitations });
+    } catch (error) {
+      console.error('[Invitations] Pending invitation read failed', error);
+      return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
+    }
+  });
+
+  app.post('/api/v1/organizations/:organizationId/invitations/:invitationId/revoke', express.json({ limit: '8kb' }), async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      const organizationId = String(req.params.organizationId || '').trim();
+      const invitationId = String(req.params.invitationId || '').trim();
+      if (!organizationId || !invitationId || organizationId.length > 256 || invitationId.length > 256) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_REQUEST' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, reasonCode: 'SERVICE_UNAVAILABLE' });
+      }
+
+      const result = await dbInstance.runTransaction(async transaction => {
+        const orgRef = dbInstance.collection('organizations').doc(organizationId);
+        const actorRef = dbInstance.collection('users').doc(decoded.uid);
+        const memberRef = orgRef.collection('members').doc(decoded.uid);
+        const inviteRef = orgRef.collection('invites').doc(invitationId);
+
+        const [orgSnap, actorSnap, memberSnap, inviteSnap] = await Promise.all([
+          transaction.get(orgRef),
+          transaction.get(actorRef),
+          transaction.get(memberRef),
+          transaction.get(inviteRef)
+        ]);
+
+        if (!orgSnap.exists || !inviteSnap.exists) {
+          return { status: 404, payload: { success: false, reasonCode: 'INVITATION_NOT_FOUND' } };
+        }
+
+        const orgData = orgSnap.data() || {};
+        const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+        const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+        const inviteData = inviteSnap.data() || {};
+        const role = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+        const actorIsOwner =
+          orgData.ownerUid === decoded.uid ||
+          orgData.ownerId === decoded.uid ||
+          orgData.ownerUserId === decoded.uid ||
+          orgData.owner_user_id === decoded.uid;
+        const canRevoke =
+          isGlobalPrivilegedRole(actorData.systemRole) ||
+          actorIsOwner ||
+          role === 'owner' ||
+          role === 'admin' ||
+          memberData.permissions?.['organization.members.invite'] === true ||
+          memberData.permissions?.['organization.members.manage'] === true;
+
+        if (!canRevoke) {
+          return { status: 403, payload: { success: false, reasonCode: 'PERMISSION_DENIED' } };
+        }
+        if (inviteData.status !== 'pending') {
+          return { status: 409, payload: { success: false, reasonCode: 'INVITATION_NOT_PENDING' } };
+        }
+
+        transaction.set(inviteRef, {
+          status: 'revoked',
+          revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+          revokedBy: decoded.uid,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        transaction.set(orgRef, {
+          invitesUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        transaction.set(orgRef.collection('audit_logs').doc(), {
+          action: 'invitation.revoked',
+          actorUid: decoded.uid,
+          invitationId,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        return { status: 200, payload: { success: true } };
+      });
+
+      return res.status(result.status).json(result.payload);
+    } catch (error) {
+      console.error('[Invitations] Revoke failed', error);
+      return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
+    }
+  });
+
+  app.post('/api/v1/invitations/email', express.json({ limit: '16kb' }), async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      const { organizationId, invitationId, inviteUrl } = req.body || {};
+      if (
+        typeof organizationId !== 'string' ||
+        typeof invitationId !== 'string' ||
+        typeof inviteUrl !== 'string' ||
+        !organizationId ||
+        !invitationId
+      ) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_REQUEST' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, reasonCode: 'SERVICE_UNAVAILABLE' });
+      }
+
+      const [orgSnap, actorSnap, memberSnap, inviteSnap] = await Promise.all([
+        dbInstance.collection('organizations').doc(organizationId).get(),
+        dbInstance.collection('users').doc(decoded.uid).get(),
+        dbInstance.collection('organizations').doc(organizationId).collection('members').doc(decoded.uid).get(),
+        dbInstance.collection('organizations').doc(organizationId).collection('invites').doc(invitationId).get()
+      ]);
+
+      if (!orgSnap.exists || !inviteSnap.exists) {
+        return res.status(404).json({ success: false, reasonCode: 'INVITATION_NOT_FOUND' });
+      }
+
+      const orgData = orgSnap.data() || {};
+      const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+      const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+      const inviteData = inviteSnap.data() || {};
+      const membershipRole = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+      const actorIsOwner =
+        orgData.ownerUid === decoded.uid ||
+        orgData.ownerId === decoded.uid ||
+        orgData.ownerUserId === decoded.uid ||
+        orgData.owner_user_id === decoded.uid;
+      const canInvite =
+        isGlobalPrivilegedRole(actorData.systemRole) ||
+        actorIsOwner ||
+        canInviteOrganizationRole(
+          { systemRole: actorData.systemRole, organizationRole: membershipRole },
+          inviteData.role
+        );
+
+      if (!canInvite) {
+        return res.status(403).json({ success: false, reasonCode: 'PERMISSION_DENIED' });
+      }
+
+      if (
+        inviteData.organizationId !== organizationId ||
+        inviteData.status !== 'pending' ||
+        typeof inviteData.emailNormalized !== 'string' ||
+        typeof inviteData.tokenHash !== 'string'
+      ) {
+        return res.status(409).json({ success: false, reasonCode: 'INVITATION_STATE_INVALID' });
+      }
+
+      const expiresAtMs = normalizeInvitationTemporalMs(inviteData.expiresAt);
+      if (!expiresAtMs || expiresAtMs <= Date.now()) {
+        return res.status(409).json({ success: false, reasonCode: 'INVITATION_EXPIRED' });
+      }
+
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(inviteUrl);
+      } catch {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+      }
+
+      const requestHost = String(req.get('host') || '').toLowerCase();
+      const allowedHosts = new Set(['millionsnest.com', 'www.millionsnest.com', requestHost]);
+      const isLocalDevelopmentHost =
+        parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
+      if (
+        (!isLocalDevelopmentHost && parsedUrl.protocol !== 'https:') ||
+        !allowedHosts.has(parsedUrl.host.toLowerCase()) ||
+        parsedUrl.pathname !== `/join/${organizationId}` ||
+        Array.from(parsedUrl.searchParams.keys()).length !== 1
+      ) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+      }
+
+      const rawToken = parsedUrl.searchParams.get('token') || '';
+      if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken)) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+      }
+
+      const tokenHash = crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex');
+      if (tokenHash !== inviteData.tokenHash) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+      }
+
+      const deliveryState = inviteData.emailDelivery || {};
+      const lastAttemptMs = normalizeInvitationTemporalMs(deliveryState.lastAttemptAt);
+      if (lastAttemptMs && Date.now() - lastAttemptMs < 30000) {
+        return res.status(429).json({ success: false, reasonCode: 'EMAIL_RATE_LIMITED' });
+      }
+      const attemptCount = Number.isInteger(deliveryState.attemptCount) ? deliveryState.attemptCount : 0;
+      if (attemptCount >= 10) {
+        return res.status(429).json({ success: false, reasonCode: 'EMAIL_LIMIT_REACHED' });
+      }
+
+      const roleLabelMap: Record<string, string> = {
+        owner: 'Dono',
+        admin: 'Administrador',
+        manager: 'Gestor',
+        member: 'Membro',
+        viewer: 'Visualizador'
+      };
+
+      await inviteSnap.ref.set({
+        emailDelivery: {
+          attemptCount: attemptCount + 1,
+          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastAttemptBy: decoded.uid
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      const result = await deliverInvitationEmail({
+        recipientEmail: inviteData.emailNormalized,
+        organizationName: String(orgData.name || inviteData.organizationName || 'Sua organização'),
+        inviteUrl,
+        roleLabel: roleLabelMap[inviteData.role] || 'Membro'
+      });
+
+      if (!result.success) {
+        const reasonCode = 'reasonCode' in result ? result.reasonCode : 'DELIVERY_FAILED';
+        return res.status(reasonCode === 'NOT_CONFIGURED' ? 503 : 502).json({
+          success: false,
+          reasonCode
+        });
+      }
+
+      await inviteSnap.ref.set({
+        emailDelivery: {
+          attemptCount: attemptCount + 1,
+          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastAttemptBy: decoded.uid,
+          lastSentAt: admin.firestore.FieldValue.serverTimestamp(),
+          provider: result.provider,
+          providerMessageId: result.providerMessageId || null
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      await orgSnap.ref.collection('audit_logs').add({
+        action: 'invitation.email.sent',
+        actorUid: decoded.uid,
+        invitationId,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true, delivery: 'email' });
+    } catch (error) {
+      console.error('[InvitationEmail] Delivery route failed', error);
+      return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
+    }
+  });
+
+  app.post('/api/v1/organizations/:organizationId/invitations/:invitationId/reissue', express.json({ limit: '8kb' }), async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      const organizationId = String(req.params.organizationId || '').trim();
+      const invitationId = String(req.params.invitationId || '').trim();
+      if (!organizationId || !invitationId || organizationId.length > 256 || invitationId.length > 256) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_REQUEST' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, reasonCode: 'SERVICE_UNAVAILABLE' });
+      }
+
+      const nowMs = Date.now();
+      const result = await dbInstance.runTransaction(async transaction => {
+        const orgRef = dbInstance.collection('organizations').doc(organizationId);
+        const actorRef = dbInstance.collection('users').doc(decoded.uid);
+        const memberRef = orgRef.collection('members').doc(decoded.uid);
+        const inviteRef = orgRef.collection('invites').doc(invitationId);
+        const subRef = dbInstance.collection('subscriptions').doc(organizationId);
+
+        const [orgSnap, actorSnap, memberSnap, inviteSnap, subSnap] = await Promise.all([
+          transaction.get(orgRef),
+          transaction.get(actorRef),
+          transaction.get(memberRef),
+          transaction.get(inviteRef),
+          transaction.get(subRef)
+        ]);
+
+        if (!orgSnap.exists || !inviteSnap.exists) {
+          return { status: 404, payload: { success: false, reasonCode: 'INVITATION_NOT_FOUND' } };
+        }
+
+        const orgData = orgSnap.data() || {};
+        const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+        const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+        const inviteData = inviteSnap.data() || {};
+        const membershipRole = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+        const actorIsOwner =
+          orgData.ownerUid === decoded.uid ||
+          orgData.ownerId === decoded.uid ||
+          orgData.ownerUserId === decoded.uid ||
+          orgData.owner_user_id === decoded.uid;
+
+        if (
+          inviteData.organizationId !== organizationId ||
+          inviteData.status !== 'pending' ||
+          typeof inviteData.emailNormalized !== 'string' ||
+          !canInviteOrganizationRole(
+            {
+              systemRole: actorData.systemRole,
+              organizationRole: actorIsOwner ? 'owner' : membershipRole
+            },
+            inviteData.role
+          ) && !isGlobalPrivilegedRole(actorData.systemRole)
+        ) {
+          return { status: 403, payload: { success: false, reasonCode: 'PERMISSION_DENIED' } };
+        }
+
+        const membersQuery = await transaction.get(orgRef.collection('members'));
+        const invitesQuery = await transaction.get(orgRef.collection('invites'));
+        const memberStatuses = membersQuery.docs.map(document => document.data().status);
+        let otherPendingInvites = 0;
+
+        for (const document of invitesQuery.docs) {
+          if (document.id === invitationId) continue;
+          const data = document.data() || {};
+          const expiresAtMs = normalizeInvitationTemporalMs(data.expiresAt);
+          const revokedAtMs = normalizeInvitationTemporalMs(data.revokedAt);
+          if (
+            data.status === 'pending' &&
+            !revokedAtMs &&
+            expiresAtMs &&
+            expiresAtMs > nowMs &&
+            Number.isInteger(data.maxUses) &&
+            Number.isInteger(data.useCount) &&
+            data.maxUses > data.useCount
+          ) {
+            otherPendingInvites += 1;
+          }
+        }
+
+        const subData = subSnap.exists ? subSnap.data() || {} : {};
+        const capacity = resolveCanonicalInvitationCapacity({
+          organizationId,
+          subscription: {
+            exists: subSnap.exists,
+            organizationId: subData.organizationId,
+            app: subData.app,
+            status: subData.status,
+            plan: subData.plan,
+            limitsUsers: subData.limits?.users
+          },
+          organizationApp: {
+            exists: !!orgData.apps?.musicscale,
+            status: orgData.apps?.musicscale?.status,
+            plan: orgData.apps?.musicscale?.plan,
+            limitsUsers: orgData.apps?.musicscale?.limits?.users
+          },
+          memberStatuses
+        });
+
+        if (!capacity.success) {
+          return { status: 503, payload: { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' } };
+        }
+        if (
+          capacity.capacity.mode === 'limited' &&
+          (capacity.capacity.currentActiveMembers || 0) + otherPendingInvites >= (capacity.capacity.maxMembers || 0)
+        ) {
+          return { status: 409, payload: { success: false, reasonCode: 'MEMBER_LIMIT_REACHED' } };
+        }
+
+        const tokenResult = generateInvitationTokenMaterial();
+        if (!tokenResult.success) {
+          const reasonCode = 'reasonCode' in tokenResult ? tokenResult.reasonCode : 'TOKEN_GENERATION_FAILED';
+          return { status: 500, payload: { success: false, reasonCode } };
+        }
+
+        const collisionQuery = await transaction.get(
+          dbInstance.collectionGroup('invites').where('tokenHash', '==', tokenResult.material.tokenHash)
+        );
+        if (!collisionQuery.empty) {
+          return { status: 500, payload: { success: false, reasonCode: 'TOKEN_STATE_INCONSISTENT' } };
+        }
+
+        const newInviteRef = orgRef.collection('invites').doc();
+        transaction.set(inviteRef, {
+          status: 'revoked',
+          revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+          revokedBy: decoded.uid,
+          replacedByInvitationId: newInviteRef.id,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        transaction.set(newInviteRef, {
+          schemaVersion: 1,
+          id: newInviteRef.id,
+          organizationId,
+          organizationName: orgData.name || inviteData.organizationName,
+          email: inviteData.emailNormalized,
+          emailNormalized: inviteData.emailNormalized,
+          role: inviteData.role,
+          status: 'pending',
+          tokenHash: tokenResult.material.tokenHash,
+          createdBy: decoded.uid,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + INVITATION_TTL_MS),
+          maxUses: 1,
+          useCount: 0,
+          replacesInvitationId: invitationId
+        });
+
+        transaction.set(orgRef, {
+          invitesUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        transaction.set(orgRef.collection('audit_logs').doc(), {
+          action: 'invitation.reissued',
+          actorUid: decoded.uid,
+          oldInvitationId: invitationId,
+          invitationId: newInviteRef.id,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        return {
+          status: 200,
+          payload: {
+            success: true,
+            invitePath: `/join/${organizationId}?token=${encodeURIComponent(tokenResult.material.rawToken)}`,
+            invitation: {
+              id: newInviteRef.id,
+              organizationId,
+              organizationName: orgData.name || inviteData.organizationName,
+              email: inviteData.emailNormalized,
+              role: inviteData.role,
+              status: 'pending',
+              expiresAtMs: nowMs + INVITATION_TTL_MS
+            }
+          }
+        };
+      });
+
+      return res.status(result.status).json(result.payload);
+    } catch (error) {
+      console.error('[InvitationReissue] Route failed', error);
+      return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
+    }
+  });
+
   app.post('/api/v1/invitations/accept', express.json(), (req, res) => acceptInvitation(req, res));
   app.post('/api/v1/organizations/:organizationId/join-requests', express.json({ limit: '8kb' }), (req, res) => createJoinRequest(req, res));
   app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/approve', express.json({ limit: '8kb' }), (req, res) => approveJoinRequest(req, res));
@@ -5406,134 +5973,347 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
-  app.post('/api/user/organization', express.json(), async (req, res) => {
+  app.post('/api/user/organization', express.json({ limit: '32kb' }), async (req, res) => {
     try {
-      const { orgId, name, slug } = req.body;
-      if (!orgId) {
-        res.status(400).json({ error: 'Missing orgId' });
-        return;
+      const {
+        orgId,
+        name,
+        slug,
+        addressLine,
+        city,
+        state,
+        country,
+        postalCode,
+        phone,
+        whatsapp,
+        website,
+        instagram,
+        locale,
+        timeZone
+      } = req.body || {};
+
+      if (typeof orgId !== 'string' || !orgId.trim() || orgId.length > 256) {
+        return res.status(400).json({ error: 'Organização inválida.' });
       }
+
       const authHeader = req.headers.authorization;
       if (!authHeader?.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
-      
-      const token = authHeader.split('Bearer ')[1];
+
       let decodedToken;
       try {
-        decodedToken = await admin.auth().verifyIdToken(token);
-      } catch (err) {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
         return res.status(401).json({ error: 'Invalid token' });
       }
 
       const uid = decodedToken.uid;
-      const batch = admin.firestore().batch();
-      
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ error: 'Database not initialized' });
+      }
+
+      const [orgDocRes, actorDoc, membershipDoc] = await Promise.all([
+        dbInstance.collection('organizations').doc(orgId).get(),
+        dbInstance.collection('users').doc(uid).get(),
+        dbInstance.collection('organizations').doc(orgId).collection('members').doc(uid).get()
+      ]);
+
+      if (!orgDocRes.exists) {
+        return res.status(404).json({ error: 'Organização não encontrada.' });
+      }
+
+      const currentOrgData = orgDocRes.data() || {};
+      const actorData = actorDoc.exists ? actorDoc.data() || {} : {};
+      const membershipData = membershipDoc.exists ? membershipDoc.data() || {} : {};
+      const actorIsOwner =
+        currentOrgData.ownerUid === uid ||
+        currentOrgData.ownerId === uid ||
+        currentOrgData.ownerUserId === uid ||
+        currentOrgData.owner_user_id === uid;
+      const membershipRole = String(membershipData.role || membershipData.organizationRole || '').toLowerCase();
+      const canUpdateSettings =
+        isGlobalPrivilegedRole(actorData.systemRole) ||
+        actorIsOwner ||
+        membershipRole === 'owner' ||
+        membershipRole === 'admin' ||
+        membershipData.permissions?.['organization.settings.update'] === true;
+
+      if (!canUpdateSettings) {
+        return res.status(403).json({ error: 'Você não possui permissão para alterar esta organização.' });
+      }
+
       const updateData: any = {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
 
-      if (name) {
-        updateData.name = name;
-        updateData.ownerUid = uid;
-        updateData.ownerId = uid;
+      const normalizeText = (value: unknown, maxLength: number): string | null => {
+        if (value === undefined) return null;
+        if (typeof value !== 'string') throw new Error('INVALID_FIELD');
+        return value.trim().slice(0, maxLength);
+      };
+
+      if (name !== undefined) {
+        if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 120) {
+          return res.status(400).json({ error: 'Informe um nome válido para a organização.' });
+        }
+        updateData.name = name.trim();
+        updateData.displayName = name.trim();
       }
 
-      let oldSlug: string | null = null;
+      let oldSlug: string | null = currentOrgData.slug || null;
       if (slug !== undefined) {
-         const orgDocRes = await admin.firestore().collection('organizations').doc(orgId).get();
-         if (orgDocRes.exists) {
-            oldSlug = orgDocRes.data()?.slug || null;
-         }
+        if (typeof slug !== 'string') {
+          return res.status(400).json({ error: 'Endereço público inválido.' });
+        }
 
-         if (!slug || slug.trim() === '') {
-            updateData.slug = null;
-         } else {
-            const slugRegex = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
-            if (!slugRegex.test(slug) || slug.includes('--')) {
-                return res.status(400).json({ error: 'Formato de link inválido.' });
+        const cleanSlug = slug.trim().toLowerCase();
+        if (!cleanSlug) {
+          updateData.slug = null;
+        } else {
+          const slugRegex = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+          if (!slugRegex.test(cleanSlug) || cleanSlug.includes('--')) {
+            return res.status(400).json({ error: 'Formato de link inválido.' });
+          }
+
+          const RESERVED_PUBLIC_ROUTES = [
+            'login', 'dashboard', 'pricing', 'checkout', 'invite', 'join',
+            'start', 'admin', 'api', 'support', 'billing', 'apps', 'settings',
+            'termos-de-uso', 'politica-de-privacidade', 'politicas-de-reembolso',
+            'politicas-de-cancelamento', 'upgrade', 'org', 'organizations',
+            'musicscale', 'millionsnest'
+          ];
+          if (RESERVED_PUBLIC_ROUTES.includes(cleanSlug)) {
+            return res.status(400).json({ error: 'Este endereço é reservado. Escolha outro.' });
+          }
+
+          const indexRef = dbInstance.collection('organizationSlugs').doc(cleanSlug);
+          const indexDoc = await indexRef.get();
+          if (indexDoc.exists && indexDoc.data()?.organizationId !== orgId) {
+            return res.status(409).json({ error: 'Este endereço já está em uso.' });
+          }
+
+          if (!indexDoc.exists) {
+            const slugQuery = await dbInstance.collection('organizations').where('slug', '==', cleanSlug).limit(2).get();
+            const collision = slugQuery.docs.find(existingDoc => existingDoc.id !== orgId);
+            if (collision) {
+              return res.status(409).json({ error: 'Este endereço já está em uso.' });
             }
+          }
 
-            const RESERVED_PUBLIC_ROUTES = [
-              'login', 'dashboard', 'pricing', 'checkout', 'invite', 'join', 
-              'start', 'admin', 'api', 'support', 'billing', 'apps', 'settings',
-              'termos-de-uso', 'politica-de-privacidade', 'politicas-de-reembolso', 'politicas-de-cancelamento',
-              'upgrade', 'org', 'organizations', 'musicscale', 'millionsnest', 'api'
-            ];
-
-            if (RESERVED_PUBLIC_ROUTES.includes(slug)) {
-               return res.status(400).json({ error: 'Palavra reservada, escolha outra.' });
-            }
-
-            // Transaction-like constraint using a dedicated collection index
-            const indexRef = admin.firestore().collection('organizationSlugs').doc(slug);
-            const indexDoc = await indexRef.get();
-            if (indexDoc.exists) {
-                const existingData = indexDoc.data();
-                if (existingData?.organizationId !== orgId) {
-                    return res.status(400).json({ error: 'Este link já está em uso.' });
-                }
-            } else {
-                // Not in index, double check organizations just in case legacy data exists
-                const slugQuery = await admin.firestore().collection('organizations').where('slug', '==', slug).get();
-                if (!slugQuery.empty) {
-                   const existingDoc = slugQuery.docs[0];
-                   if (existingDoc.id !== orgId) {
-                      return res.status(400).json({ error: 'Este link já está em uso (legado).' });
-                   }
-                }
-            }
-            updateData.slug = slug;
-         }
+          updateData.slug = cleanSlug;
+        }
       }
 
-      batch.set(admin.firestore().collection('organizations').doc(orgId), updateData, { merge: true });
-      
+      try {
+        const normalizedAddressLine = normalizeText(addressLine, 160);
+        const normalizedCity = normalizeText(city, 80);
+        const normalizedState = normalizeText(state, 80);
+        const normalizedCountry = normalizeText(country, 80);
+        const normalizedPostalCode = normalizeText(postalCode, 24);
+        const normalizedPhone = normalizeText(phone, 40);
+        const normalizedWhatsapp = normalizeText(whatsapp, 40);
+        const normalizedInstagram = normalizeText(instagram, 120);
+        let normalizedWebsite = normalizeText(website, 240);
+
+        if (normalizedWebsite) {
+          if (!/^https?:\/\//i.test(normalizedWebsite)) normalizedWebsite = `https://${normalizedWebsite}`;
+          let parsedWebsite: URL;
+          try {
+            parsedWebsite = new URL(normalizedWebsite);
+          } catch {
+            return res.status(400).json({ error: 'Informe um site válido.' });
+          }
+          if (!['http:', 'https:'].includes(parsedWebsite.protocol)) {
+            return res.status(400).json({ error: 'Informe um site válido.' });
+          }
+          normalizedWebsite = parsedWebsite.toString();
+        }
+
+        if (locale !== undefined) {
+          if (!['pt-BR', 'en', 'es'].includes(locale)) {
+            return res.status(400).json({ error: 'Idioma inválido.' });
+          }
+          updateData.locale = locale;
+        }
+
+        if (timeZone !== undefined) {
+          if (typeof timeZone !== 'string' || timeZone.length > 80) {
+            return res.status(400).json({ error: 'Fuso horário inválido.' });
+          }
+          try {
+            new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+          } catch {
+            return res.status(400).json({ error: 'Fuso horário inválido.' });
+          }
+          updateData.timeZone = timeZone;
+        }
+
+        const optionalFields: Array<[string, string | null]> = [
+          ['addressLine', normalizedAddressLine],
+          ['city', normalizedCity],
+          ['state', normalizedState],
+          ['country', normalizedCountry],
+          ['postalCode', normalizedPostalCode],
+          ['phone', normalizedPhone],
+          ['whatsapp', normalizedWhatsapp],
+          ['website', normalizedWebsite],
+          ['instagram', normalizedInstagram]
+        ];
+        optionalFields.forEach(([key, value]) => {
+          if (value !== null) updateData[key] = value;
+        });
+
+        const anyAddressFieldChanged =
+          addressLine !== undefined ||
+          city !== undefined ||
+          state !== undefined ||
+          country !== undefined ||
+          postalCode !== undefined;
+        if (anyAddressFieldChanged) {
+          updateData.address = {
+            street: normalizedAddressLine ?? currentOrgData.address?.street ?? '',
+            city: normalizedCity ?? currentOrgData.address?.city ?? '',
+            state: normalizedState ?? currentOrgData.address?.state ?? '',
+            country: normalizedCountry ?? currentOrgData.address?.country ?? '',
+            zip: normalizedPostalCode ?? currentOrgData.address?.zip ?? ''
+          };
+        }
+      } catch (error: any) {
+        if (error?.message === 'INVALID_FIELD') {
+          return res.status(400).json({ error: 'Um dos campos informados é inválido.' });
+        }
+        throw error;
+      }
+
+      const batch = dbInstance.batch();
+      const orgRef = dbInstance.collection('organizations').doc(orgId);
+      batch.set(orgRef, updateData, { merge: true });
+
       if (slug !== undefined && updateData.slug) {
-          batch.set(admin.firestore().collection('organizationSlugs').doc(updateData.slug), {
-              organizationId: orgId,
-              createdAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-      }
-
-      if (oldSlug && slug !== undefined && updateData.slug !== oldSlug) {
-         batch.set(admin.firestore().collection('organizationSlugRedirects').doc(oldSlug), {
-             organizationId: orgId,
-             currentSlug: updateData.slug,
-             createdAt: admin.firestore.FieldValue.serverTimestamp()
-         });
-         // Also we should free up the old slug in the organizationSlugs index, or keep it reserved.
-         // Let's delete the old index document so another org can use it, but keeping the redirect.
-         batch.delete(admin.firestore().collection('organizationSlugs').doc(oldSlug));
-      }
-
-      if (name) {
-        batch.set(admin.firestore().collection('organization_members').doc(`${uid}_${orgId}`), {
-          uid: uid,
+        batch.set(dbInstance.collection('organizationSlugs').doc(updateData.slug), {
           organizationId: orgId,
-          role: 'owner',
-          permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-          permissions: getDefaultPermissions('owner')
-        }, { merge: true });
-
-        batch.set(admin.firestore().collection('users').doc(uid), {
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
       }
 
-      await batch.commit();
+      if (oldSlug && slug !== undefined && updateData.slug !== oldSlug) {
+        batch.set(dbInstance.collection('organizationSlugRedirects').doc(oldSlug), {
+          organizationId: orgId,
+          currentSlug: updateData.slug || null,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        batch.delete(dbInstance.collection('organizationSlugs').doc(oldSlug));
+      }
 
-      console.log('[OWNERSHIP_SYNC]', {
-        uid: uid,
-        organizationId: orgId,
-        role_anterior: 'unknown',
-        role_nova: 'owner',
-        motivo: 'criação/edição da organização'
+      const auditRef = orgRef.collection('audit_logs').doc();
+      batch.set(auditRef, {
+        action: 'organization.updated',
+        actorUid: uid,
+        changedFields: Object.keys(updateData).filter(key => key !== 'updatedAt'),
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      res.json({ success: true });
+      await batch.commit();
+
+      return res.json({ success: true, organizationId: orgId });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error('[OrganizationProfile] Update failed', e);
+      return res.status(500).json({ error: 'Não foi possível atualizar a organização.' });
+    }
+  });
+
+  app.post('/api/v1/organizations/:organizationId/logo', express.json({ limit: '512kb' }), async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+      }
+
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+      }
+
+      const organizationId = String(req.params.organizationId || '').trim();
+      if (!organizationId || organizationId.length > 256 || organizationId.includes('/') || organizationId.includes('\\')) {
+        return res.status(400).json({ success: false, error: 'Organização inválida.' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, error: 'Database not initialized' });
+      }
+
+      const [orgSnap, actorSnap, memberSnap] = await Promise.all([
+        dbInstance.collection('organizations').doc(organizationId).get(),
+        dbInstance.collection('users').doc(decodedToken.uid).get(),
+        dbInstance.collection('organizations').doc(organizationId).collection('members').doc(decodedToken.uid).get()
+      ]);
+
+      if (!orgSnap.exists) {
+        return res.status(404).json({ success: false, error: 'Organização não encontrada.' });
+      }
+
+      const orgData = orgSnap.data() || {};
+      const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+      const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+      const actorIsOwner =
+        orgData.ownerUid === decodedToken.uid ||
+        orgData.ownerId === decodedToken.uid ||
+        orgData.ownerUserId === decodedToken.uid ||
+        orgData.owner_user_id === decodedToken.uid;
+      const role = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+      const allowed =
+        isGlobalPrivilegedRole(actorData.systemRole) ||
+        actorIsOwner ||
+        role === 'owner' ||
+        role === 'admin' ||
+        memberData.permissions?.['organization.settings.update'] === true;
+
+      if (!allowed) {
+        return res.status(403).json({ success: false, error: 'Você não possui permissão para alterar a logo.' });
+      }
+
+      const { base64, contentType } = req.body || {};
+      if (typeof base64 !== 'string' || typeof contentType !== 'string') {
+        return res.status(400).json({ success: false, error: 'Imagem inválida.' });
+      }
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(contentType)) {
+        return res.status(400).json({ success: false, error: 'Use uma imagem PNG, JPG ou WebP.' });
+      }
+      if (!/^[A-Za-z0-9+/=\r\n]+$/.test(base64)) {
+        return res.status(400).json({ success: false, error: 'Imagem inválida.' });
+      }
+
+      const buffer = Buffer.from(base64, 'base64');
+      if (!buffer.length || buffer.length > 260 * 1024) {
+        return res.status(413).json({ success: false, error: 'A imagem ficou muito grande. Escolha uma imagem mais simples.' });
+      }
+
+      const dataUrl = `data:${contentType};base64,${buffer.toString('base64')}`;
+      const orgRef = dbInstance.collection('organizations').doc(organizationId);
+      const batch = dbInstance.batch();
+      batch.set(orgRef, {
+        logo: dataUrl,
+        logoStoragePath: admin.firestore.FieldValue.delete(),
+        logoUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      batch.set(orgRef.collection('audit_logs').doc(), {
+        action: 'organization.logo.updated',
+        actorUid: decodedToken.uid,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      await batch.commit();
+
+      return res.json({ success: true, logo: dataUrl });
+    } catch (error: any) {
+      console.error('[OrganizationLogo] Upload failed', error);
+      return res.status(500).json({ success: false, error: 'Não foi possível atualizar a logo.' });
     }
   });
 
