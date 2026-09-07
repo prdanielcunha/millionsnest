@@ -796,6 +796,7 @@ export default {
       plan_label: "Current plan:",
       plan_starter: "Starter",
       plan_unknown: "Plan not identified",
+      plan_administrative: "Administrative access · Pro",
       billing_action: "Manage Subscription",
       team_title: "Members & Team",
       team_desc: "See who is already on the team, invite people, and adjust access when needed.",
@@ -1121,8 +1122,12 @@ export default {
       status: {
         available: "Available",
         trialing: "Trial period",
+        active: "Active",
+        cancel_scheduled: "Cancellation scheduled",
         payment_issue: "Payment pending",
+        administrative: "Administrative access",
         loading: "Loading",
+        error: "Unable to verify",
         unavailable: "Unavailable"
       },
       checklist: {

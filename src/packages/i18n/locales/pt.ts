@@ -812,6 +812,7 @@ export default {
       plan_label: "Plano atual:",
       plan_starter: "Starter",
       plan_unknown: "Plano não identificado",
+      plan_administrative: "Acesso administrativo · Pro",
       billing_action: "Gerenciar Assinatura",
       team_title: "Membros e Equipe",
       team_desc: "Veja quem já está na equipe, convide novas pessoas e ajuste os acessos quando precisar.",
@@ -1136,8 +1137,12 @@ export default {
       status: {
         available: "Disponível",
         trialing: "Período de teste",
+        active: "Ativo",
+        cancel_scheduled: "Cancelamento agendado",
         payment_issue: "Pagamento pendente",
+        administrative: "Acesso administrativo",
         loading: "Carregando",
+        error: "Erro ao verificar",
         unavailable: "Indisponível"
       },
       checklist: {

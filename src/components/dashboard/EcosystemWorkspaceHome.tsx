@@ -171,6 +171,12 @@ export function EcosystemWorkspaceHome({
     const canInviteMembers = Boolean(currentUserPerms['organization.members.invite'] || isGlobalAdmin);
     const teamStarted = members.length > 1 || pendingInvites.length > 0;
     const appSummaryReady = musicScaleSummary.updatedAtMs > 0;
+    const planDisplayLabel = isGlobalAdmin
+      ? t('workspace.plan_administrative', 'Acesso administrativo · Pro')
+      : organization?.apps?.musicscale?.plan
+        || subscription?.plan
+        || subscription?.planId
+        || t('workspace.plan_unknown', 'Plano não identificado');
 
     type MusicScaleDisplayStatus =
       | 'available'
@@ -479,7 +485,7 @@ export function EcosystemWorkspaceHome({
               <div className="border-t border-white/5 pt-4 flex items-center justify-between text-sm">
                 <span className="text-[#A0A7B5]">{t('workspace.plan_label', 'Plano atual:')}</span>
                 <span className="font-semibold text-purple-400 capitalize bg-purple-500/10 px-2.5 py-1 rounded-lg border border-purple-500/20 text-xs">
-                  {organization?.apps?.musicscale?.plan || subscription?.plan || subscription?.planId || t('workspace.plan_unknown', 'Plano não identificado')}
+                  {planDisplayLabel}
                 </span>
               </div>
 
