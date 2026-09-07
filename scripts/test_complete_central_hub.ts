@@ -28,6 +28,9 @@ for (const collectionName of ["collection(db, 'songs')", "collection(db, 'scales
 }
 assert.match(dashboard, /musicscale_members/, 'MusicScale configured-member summary must be live');
 assert.match(dashboard, /responseSummaryAvailable/, 'response privacy state must be explicit');
+assert.match(dashboard, /responseSummaryAvailable: false/, 'response summary must default to unavailable');
+assert.match(dashboard, /live\.responseSummaryAvailable = true;/, 'response summary becomes available only after a valid snapshot');
+assert.match(dashboard, /live\.responseSummaryAvailable = false;[\s\S]*MusicScale response summary listener failed/, 'response listener errors must fail closed');
 assert.match(dashboard, /refreshPendingInvites/, 'pending invites must refresh through the protected backend');
 assert.match(dashboard, /\/api\/v1\/organizations\/.*\/invitations/, 'Hub must use protected invitation APIs');
 assert.equal(dashboard.includes('onSnapshot(pendingInviteQuery'), false, 'Hub must not subscribe directly to secret invitation documents');
