@@ -1121,8 +1121,12 @@ export default {
       status: {
         available: "Available",
         trialing: "Trial period",
+        active: "Active",
+        cancel_scheduled: "Cancellation scheduled",
         payment_issue: "Payment pending",
+        administrative: "Administrative access",
         loading: "Loading",
+        error: "Unable to verify",
         unavailable: "Unavailable"
       },
       checklist: {
