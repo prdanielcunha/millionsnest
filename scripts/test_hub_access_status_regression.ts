@@ -17,7 +17,7 @@ for (const [lang, locale] of Object.entries(locales)) {
   assert.match(locale, /plan_administrative:\s*["']/, lang + ' must translate administrative Pro plan');
 }
 
-assert.match(workspace, /const planDisplayLabel = isGlobalAdmin/, 'global users must have a dedicated plan label');
+assert.match(workspace, /const planLabelFor = \(experience: HubAppExperience\)[\s\S]*isGlobalAdmin[\s\S]*plan_administrative/, 'global users must have a dedicated per-app administrative plan label');
 assert.match(workspace, /plan_administrative/, 'global plan label must not fall back to an unknown subscription');
 assert.match(workspace, /administrative'[\s\S]*isReadyToOpen/, 'administrative access must remain ready to open');
 
