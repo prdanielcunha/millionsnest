@@ -186,6 +186,12 @@ export function Dashboard() {
     
   }, [tab]);
 
+  useEffect(() => {
+    if (!loading && user && !tab) {
+      navigate('/dashboard/overview', { replace: true });
+    }
+  }, [loading, user, tab, navigate]);
+
   const [subscription, setSubscription] = useState<any>(null);
   const [musicScaleHubSummary, setMusicScaleHubSummary] = useState<MusicScaleHubSummary>(EMPTY_MUSICSCALE_SUMMARY);
   const [organization, setOrganization] = useState<any>(null);
@@ -266,10 +272,8 @@ export function Dashboard() {
   const [editingMemberName, setEditingMemberName] = useState("");
   const [editingMemberPhoto, setEditingMemberPhoto] = useState("");
   const [editingMemberRole, setEditingMemberRole] = useState("");
-  const [editingMemberAppRole, setEditingMemberAppRole] = useState("");
   const [editingMemberSaving, setEditingMemberSaving] = useState(false);
 
-  const [configAppModal, setConfigAppModal] = useState<EcosystemApp | null>(null);
 
   const [repairing, setRepairing] = useState(false);
   const [subscriptionRepairAvailable, setSubscriptionRepairAvailable] = useState(false);
@@ -949,7 +953,7 @@ export function Dashboard() {
       }
     } catch (e: any) {
       console.error(e);
-      alert(`Erro ao salvar organização: ${e.message}`);
+      feedback.error(e?.message ? `Não foi possível salvar a organização: ${e.message}` : 'Não foi possível salvar a organização.');
     } finally {
       setSavingOrg(false);
     }
@@ -964,7 +968,7 @@ export function Dashboard() {
       setIsEditingProfile(false);
     } catch (e) {
       console.error(e);
-      alert("Erro ao salvar perfil.");
+      feedback.error("Não foi possível salvar seu perfil.");
     } finally {
       setSavingProfile(false);
     }
@@ -990,7 +994,7 @@ export function Dashboard() {
 
       if (!res.ok) {
         const errorData = await res.json();
-        alert(`Erro: ${errorData.error}`);
+        feedback.error(errorData.error || 'Não foi possível alterar o nível de acesso.');
         return;
       }
 
@@ -998,117 +1002,135 @@ export function Dashboard() {
       setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION } : m));
     } catch (e) {
       console.error("Erro ao atualizar função", e);
-      alert("Houve um problema ao tentar atualizar a função do membro. Verifique suas permissões.");
+      feedback.error("Não foi possível alterar o nível de acesso dessa pessoa.");
     }
   };
 
   const handleRemoveMember = async (memberId: string) => {
     try {
-      const targetMember = members.find(m => m.id === memberId);
-      if (!targetMember) return;
+      const targetMember = members.find(member => member.id === memberId);
+      if (!targetMember || !user || !activeContextOrgId) return;
 
       if (targetMember.role === 'owner') {
-         if (profile?.organizationRole !== 'owner' && !isGlobalAdmin) {
-            alert("Ação negada: Somente o dono ou o suporte global pode remover um dono da organização.");
-            return;
-         }
-
-         const ownersCount = members.filter(m => m.role === 'owner').length;
-         if (ownersCount <= 1) {
-            alert("Ação negada: Não é possível remover o único dono da organização. Transfira a posse antes.");
-            return;
-         }
+        if (profile?.organizationRole !== 'owner' && !isGlobalAdmin) {
+          feedback.error("Somente o dono ou o suporte autorizado pode remover outro dono.");
+          return;
+        }
+        const ownersCount = members.filter(member => member.role === 'owner').length;
+        if (ownersCount <= 1) {
+          feedback.error("Transfira a propriedade antes de remover o único dono da organização.");
+          return;
+        }
       }
 
-      if (memberId === user?.uid) {
-         if (!confirm("Tem certeza que deseja sair desta organização? Você perderá acesso aos módulos.")) {
-            return;
-         }
+      const message = memberId === user.uid
+        ? "Tem certeza que deseja sair desta organização? Você perderá o acesso aos aplicativos dela."
+        : `Remover ${targetMember.displayName || 'esta pessoa'} da organização?`;
+      if (!window.confirm(message)) return;
+
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(activeContextOrgId)}/members/${encodeURIComponent(memberId)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success !== true) {
+        throw new Error(data?.reasonCode || 'MEMBER_REMOVE_FAILED');
+      }
+
+      setMembers(prev => prev.filter(member => member.id !== memberId));
+      feedback.success(memberId === user.uid ? "Você saiu da organização." : "Pessoa removida da equipe.");
+
+      if (memberId === user.uid) {
+        window.location.assign('/dashboard/overview');
+      }
+    } catch (error: any) {
+      console.error("[Dashboard] Failed to remove member", error);
+      const code = String(error?.message || '');
+      if (code.includes('LAST_OWNER')) {
+        feedback.error("Transfira a propriedade antes de remover o único dono.");
       } else {
-         if (!confirm(`Remover ${targetMember.displayName || 'este usuário'} da organização?`)) {
-            return;
-         }
+        feedback.error("Não foi possível remover essa pessoa. Verifique seu acesso e tente novamente.");
       }
-
-      const orgId = activeContextOrgId;
-      
-      // Remove from new architecture
-      await deleteDoc(doc(db, `organizations/${orgId}/members`, memberId));
-      
-      // Also clean legacy
-      await deleteDoc(doc(db, "organization_members", `${memberId}_${orgId}`));
-
-      // Also remove org from user's array
-      const userRef = doc(db, "users", memberId);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-         const userData = userSnap.data();
-         if (userData.organizations) {
-            const orgs = userData.organizations.filter((id: string) => id !== orgId);
-            await updateDoc(userRef, { organizations: orgs });
-         }
-      }
-
-      setMembers(prev => prev.filter(m => m.id !== memberId));
-
-      if (isGlobalAdmin && profile?.organizationRole !== 'owner') {
-        createAuditLog({
-           actorUid: user!.uid,
-           actorEmail: user!.email || '',
-           actorSystemRole: profile?.systemRole,
-           action: 'admin_removed_member',
-           targetOrganizationId: orgId,
-           targetUserId: memberId,
-           metadata: { removedRole: targetMember.role },
-           source: 'global_admin'
-        });
-      }
-      
-      if (memberId === user?.uid) {
-         // User removed themselves, redirect or clear org
-         window.location.href = '/dashboard';
-      }
-    } catch (e) {
-      console.error("Erro ao remover membro", e);
-      alert("Houve um problema ao remover o membro. Verifique suas permissões.");
     }
   };
 
   const handleSaveMemberEdit = async () => {
-    if (!editingMember || !user) return;
+    if (!editingMember || !user || !activeContextOrgId) return;
     setEditingMemberSaving(true);
     try {
       const orgId = activeContextOrgId;
       const token = await user.getIdToken();
-      const res = await fetch(`/api/organizations/${orgId}/members/${editingMember.id}/profile`, {
-         method: 'PUT',
-         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-         body: JSON.stringify({ 
-           displayName: editingMemberName,
-           photoURL: editingMemberPhoto,
-           role: editingMemberRole,
-           appRole: editingMemberAppRole
-         })
-      });
+      const originalRole = editingMember.role || editingMember.organizationRole || 'member';
 
-      if (!res.ok) {
-         const errorData = await res.json();
-         alert(`Erro: ${errorData.error}`);
-         return;
+      if (
+        editingMember.id !== user.uid &&
+        editingMemberRole &&
+        editingMemberRole !== originalRole &&
+        editingMember.role !== 'owner'
+      ) {
+        const roleResponse = await fetch(
+          `/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(editingMember.id)}/role`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ organizationRole: editingMemberRole })
+          }
+        );
+        const roleData = await roleResponse.json().catch(() => ({}));
+        if (!roleResponse.ok || roleData?.success !== true) {
+          throw new Error(roleData?.reasonCode || 'ROLE_UPDATE_FAILED');
+        }
       }
-      
-      setMembers(prev => prev.map(m => m.id === editingMember.id ? { 
-        ...m, 
-        displayName: editingMemberName, 
-        photoURL: editingMemberPhoto,
-        role: editingMemberRole,
-        appRole: editingMemberAppRole
-      } : m));
+
+      const profileResponse = await fetch(
+        `/api/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(editingMember.id)}/profile`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            displayName: editingMemberName.trim(),
+            photoURL: editingMemberPhoto.trim()
+          })
+        }
+      );
+      const profileData = await profileResponse.json().catch(() => ({}));
+      if (!profileResponse.ok || profileData?.success !== true) {
+        throw new Error(profileData?.error || profileData?.reasonCode || 'PROFILE_UPDATE_FAILED');
+      }
+
+      setMembers(prev => prev.map(member => member.id === editingMember.id ? {
+        ...member,
+        displayName: editingMemberName.trim(),
+        photoURL: editingMemberPhoto.trim(),
+        role: editingMember.role === 'owner' ? 'owner' : editingMemberRole,
+        organizationRole: editingMember.role === 'owner' ? 'owner' : editingMemberRole
+      } : member));
       setEditingMember(null);
       feedback.success("Dados do membro atualizados.");
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao atualizar o membro.");
+    } catch (error: any) {
+      console.error('[Dashboard] Failed to update member', error);
+      const code = String(error?.message || '');
+      if (code.includes('SELF_ROLE_CHANGE_DENIED')) {
+        feedback.error('Você não pode alterar seu próprio nível de acesso por aqui.');
+      } else if (
+        code.includes('TARGET_ROLE_PROTECTED') ||
+        code.includes('ROLE_ASSIGNMENT_NOT_ALLOWED') ||
+        code.includes('OWNER_ROLE_REQUIRES_TRANSFER')
+      ) {
+        feedback.error('Esse nível de acesso precisa de uma ação administrativa específica.');
+      } else {
+        feedback.error('Não foi possível salvar as alterações do membro.');
+      }
     } finally {
       setEditingMemberSaving(false);
     }
@@ -1121,7 +1143,7 @@ export function Dashboard() {
       feedback.success(`E-mail de redefinição de senha enviado para ${editingMember.email}.`);
     } catch (e: any) {
       console.error(e);
-      alert("Erro ao enviar e-mail de redefinição de senha.");
+      feedback.error("Não foi possível enviar o e-mail de redefinição de senha.");
     }
   };
 
@@ -1218,7 +1240,7 @@ export function Dashboard() {
       }
     } catch (e) {
       console.error(e);
-      alert("Erro ao aceitar solicitação.");
+      feedback.error("Não foi possível aprovar a solicitação.");
     }
   };
 
@@ -1233,7 +1255,7 @@ export function Dashboard() {
       setJoinRequests(prev => prev.filter(r => r.id !== requestId));
     } catch (e) {
       console.error(e);
-      alert("Erro ao rejeitar solicitação.");
+      feedback.error("Não foi possível recusar a solicitação.");
     }
   };
 
@@ -1301,7 +1323,7 @@ export function Dashboard() {
         description: addonSuccess.replace(/_/g, ' ')
       });
       
-      alert(`Compra de ${addonSuccess.replace(/_/g, ' ')} concluída com sucesso! Obrigado!`);
+      feedback.success(`Compra de ${addonSuccess.replace(/_/g, ' ')} concluída com sucesso.`);
       setLoadingSub(true);
       if(activeContextOrgId) syncSubscriptionWithStripe(activeContextOrgId);
       return;
@@ -1326,8 +1348,7 @@ export function Dashboard() {
         description: 'Nova configuração de plano ativada'
       });
       
-      // TODO: Criar suporte visual futuro no MillionsNest: "Cupom aplicado com sucesso"
-      // Aqui podemos checar se houve desconto na session e exibir uma notificação.
+      feedback.success('Assinatura atualizada com sucesso.');
       setLoadingSub(true);
       if(activeContextOrgId) syncSubscriptionWithStripe(activeContextOrgId, sessionId); // Forçar sync total ao voltar do Stripe
     }
@@ -1698,12 +1719,7 @@ export function Dashboard() {
            }
          }
          return installedApps.some(a => a.id === subTab) ? subTab : "home"; 
-      } else if (tab === "overview") {
-         return "home";
       } else {
-         if (installedApps.length === 1) {
-            return installedApps[0].id;
-         }
          return "home";
       }
     }
@@ -2196,10 +2212,13 @@ export function Dashboard() {
                                   {app.requiredPlan !== 'free' ? `Requer plano ${app.requiredPlan}` : 'Em breve'}
                                 </button>
                               )}
-                              {((isInstalled && !isMusicScale && app.id !== 'nestfinance') || (isMusicScale && msIsInstalled)) && (isGlobalAdmin || currentUserPerms['organization.billing.manage']) && (
+                              {isMusicScale && msIsInstalled && (
                                 <button
-                                   onClick={() => setConfigAppModal(app)}
+                                   type="button"
+                                   onClick={() => handleLaunchEcosystemApp(app, currentUserPerms, '/profile')}
                                    className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/10 transition-colors shrink-0"
+                                   title="Preferências do MusicScale"
+                                   aria-label="Abrir preferências do MusicScale"
                                 >
                                    <Settings className="w-4 h-4" />
                                 </button>
@@ -2318,8 +2337,7 @@ export function Dashboard() {
                   setEditingMember(member);
                   setEditingMemberName(member.displayName || "");
                   setEditingMemberPhoto(member.photoURL || "");
-                  setEditingMemberRole(member.role || "member");
-                  setEditingMemberAppRole(member.appRole || "Membro");
+                  setEditingMemberRole(member.role || member.organizationRole || "member");
                 }}
                 isEditingOrg={isEditingOrg}
                 setIsEditingOrg={setIsEditingOrg}
@@ -2992,72 +3010,6 @@ export function Dashboard() {
         </AnimatePresence>
       </main>
 
-      {/* App Config Modal */}
-      <AnimatePresence>
-        {configAppModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md bg-[#050505] border border-white/10 rounded-2xl p-6 shadow-2xl relative"
-            >
-              <button
-                onClick={() => setConfigAppModal(null)}
-                className="absolute top-4 right-4 text-[#A0A7B5] hover:text-white transition-colors"
-                title="Fechar"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] flex items-center justify-center">
-                  <LayoutGrid className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-white">{configAppModal.name}</h3>
-                  <p className="text-sm text-[#A0A7B5]">Módulo Instalado</p>
-                </div>
-              </div>
-              
-              <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-[#A0A7B5]">Status</span>
-                  <span className="text-sm font-semibold text-emerald-400">Ativo</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-[#A0A7B5]">Plano</span>
-                  <span className="text-sm font-semibold text-white uppercase">{subscription?.plan || 'Free'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-[#A0A7B5]">Organização</span>
-                  <span className="text-sm font-semibold text-white">{organization?.name}</span>
-                </div>
-              </div>
-              
-              <p className="text-xs text-[#A0A7B5] mb-6 text-center">
-                Painel de configurações avançadas estará disponível em breve.
-              </p>
-              
-              <button
-                onClick={() => {
-                  setConfigAppModal(null);
-                  handleLaunchEcosystemApp(configAppModal, currentUserPerms);
-                }}
-                className="w-full py-3 bg-[#F5F7FA] text-[#050505] rounded-xl text-sm font-semibold hover:bg-white transition-colors"
-              >
-                Abrir {configAppModal.name}
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Premium Subscription Blocked Modal */}
       <AnimatePresence>
         {subscriptionBlockedApp && (
@@ -3310,36 +3262,24 @@ export function Dashboard() {
                   </div>
                 )}
 
-                <div>
-                  <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Função no App MusicScale</label>
-                  <select
-                    value={["Membro", "Administrador", "Ministro / Líder", "Cantor", "Instrumentista", "Operador de Som", "Operador de Projeção"].includes(editingMemberAppRole) ? editingMemberAppRole : "Custom"}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "Custom") {
-                        setEditingMemberAppRole("Outro");
-                      } else {
-                        setEditingMemberAppRole(val);
-                      }
-                    }}
-                    className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
-                  >
-                    {["Membro", "Administrador", "Ministro / Líder", "Cantor", "Instrumentista", "Operador de Som", "Operador de Projeção"].map(r => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                    <option value="Custom">Outra (Personalizada)...</option>
-                  </select>
-                  
-                  {(!["Membro", "Administrador", "Ministro / Líder", "Cantor", "Instrumentista", "Operador de Som", "Operador de Projeção"].includes(editingMemberAppRole) || editingMemberAppRole === "Outro") && (
-                    <input
-                      type="text"
-                      value={editingMemberAppRole === "Outro" ? "" : editingMemberAppRole}
-                      onChange={(e) => setEditingMemberAppRole(e.target.value)}
-                      className="w-full mt-2 bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-[#2B85EB] text-sm outline-none border-[#2B85EB]/30 focus:border-[#2B85EB] transition-colors"
-                      placeholder="Digite a função personalizada no MusicScale"
-                    />
-                  )}
-                </div>
+                {msIsInstalled && musicScaleApp && (
+                  <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                    <p className="text-xs font-medium text-[#F5F7FA]">Função ministerial no MusicScale</p>
+                    <p className="text-[11px] text-[#A0A7B5] mt-1 mb-3">
+                      Instrumento, vocal, ministro e outras funções são administrados no próprio MusicScale.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingMember(null);
+                        void handleLaunchEcosystemApp(musicScaleApp, currentUserPerms, '/users');
+                      }}
+                      className="text-xs font-semibold text-[#2B85EB] hover:text-[#6EAFFF] transition-colors"
+                    >
+                      Configurar equipe no MusicScale
+                    </button>
+                  </div>
+                )}
 
                 <div className="pt-2 border-t border-white/5 mt-4">
                   <button
