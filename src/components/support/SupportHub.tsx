@@ -181,7 +181,7 @@ export function SupportHub() {
   return (
     <div 
       ref={hubRootRef} 
-      className="fixed z-[999] bottom-[calc(env(safe-area-inset-bottom)+12px)] md:bottom-6 right-3 md:right-6 flex flex-col items-end"
+      className="fixed z-[999] bottom-[calc(env(safe-area-inset-bottom)+76px)] md:bottom-6 right-3 md:right-6 flex flex-col items-end"
     >
       
       {hubOpen && (
