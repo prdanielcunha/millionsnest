@@ -70,6 +70,9 @@ jobs:
       - name: Premium multi-app Hub responsive contract
         run: npx tsx scripts/test_premium_multi_app_hub.ts
 
+      - name: Hub narrow viewport polish
+        run: npx tsx scripts/test_hub_narrow_viewports.ts
+
       - name: Public home conversion funnel and analytics security
         run: npx tsx scripts/test_public_home_funnel.ts
 
