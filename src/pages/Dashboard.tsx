@@ -2154,34 +2154,34 @@ export function Dashboard() {
                     <div className="flex-1">
                       <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Nome de Exibição</p>
                       {isEditingProfile ? (
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 min-w-0">
                           <input 
                             title="Nome de Exibição"
                             type="text" 
                             value={profileNameInput} 
                             onChange={(e) => setProfileNameInput(e.target.value)} 
-                            className="bg-[#050505] border border-white/10 rounded-xl px-4 py-2 text-sm text-[#F5F7FA] outline-none focus:border-[#2B85EB] transition-colors w-full max-w-[250px]"
+                            className="bg-[#050505] border border-white/10 rounded-xl px-4 py-2 text-sm text-[#F5F7FA] outline-none focus:border-[#2B85EB] transition-colors min-w-0 flex-1 w-full"
                           />
-                          <button disabled={savingProfile} onClick={handleSaveProfile} className="p-2 bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl hover:bg-[#2B85EB]/20 transition-colors">
+                          <button disabled={savingProfile} onClick={handleSaveProfile} className="p-2 bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl hover:bg-[#2B85EB]/20 transition-colors shrink-0">
                             {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                           </button>
-                          <button disabled={savingProfile} onClick={() => { setIsEditingProfile(false); setProfileNameInput(profile?.displayName || ""); }} className="p-2 bg-white/5 text-[#A0A7B5] rounded-xl hover:bg-white/10 transition-colors">
+                          <button disabled={savingProfile} onClick={() => { setIsEditingProfile(false); setProfileNameInput(profile?.displayName || ""); }} className="p-2 bg-white/5 text-[#A0A7B5] rounded-xl hover:bg-white/10 transition-colors shrink-0">
                             <X className="w-4 h-4" />
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between">
-                          <p className="text-base font-semibold text-[#F5F7FA]">{profileNameInput || profile?.displayName || "Não informado"}</p>
+                        <div className="flex items-center justify-between gap-3 min-w-0">
+                          <p className="text-base font-semibold text-[#F5F7FA] min-w-0 break-words">{profileNameInput || profile?.displayName || "Não informado"}</p>
                           <button onClick={() => setIsEditingProfile(true)} className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB]">Editar</button>
                         </div>
                       )}
                     </div>
                   </div>
                   
-                  <div className="flex items-center justify-between pb-6 border-b border-white/5">
-                    <div>
+                  <div className="flex items-center justify-between pb-6 border-b border-white/5 min-w-0">
+                    <div className="min-w-0">
                       <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Email</p>
-                      <p className="text-base font-semibold text-[#F5F7FA]">{user.email}</p>
+                      <p className="text-base font-semibold text-[#F5F7FA] break-all">{user.email}</p>
                     </div>
                   </div>
 
@@ -2208,16 +2208,16 @@ export function Dashboard() {
                                  feedback.error(`Não foi possível alterar a organização: ${err.message || "Erro desconhecido"}`);
                                }
                              }}
-                             className={`flex items-center justify-between p-4 rounded-xl border transition-all text-left ${activeOrgId === org.id ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 cursor-default' : 'bg-[#050505] border-white/5 hover:border-white/10 cursor-pointer'}`}
+                             className={`flex items-center justify-between gap-3 p-4 rounded-xl border transition-all text-left min-w-0 ${activeOrgId === org.id ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 cursor-default' : 'bg-[#050505] border-white/5 hover:border-white/10 cursor-pointer'}`}
                            >
-                             <div>
-                               <p className="text-sm font-semibold text-[#F5F7FA]">
+                             <div className="min-w-0 flex-1">
+                               <p className="text-sm font-semibold text-[#F5F7FA] break-words">
                                  {org.name || 'Organização'}
                                  {activeOrgId === org.id && <span className="ml-2 text-[10px] bg-[#2B85EB]/20 text-[#2B85EB] uppercase tracking-widest px-2 py-0.5 rounded font-bold">Ativa</span>}
                                </p>
                              </div>
                              {activeOrgId !== org.id && (
-                                <span className="text-xs text-[#A0A7B5] group-hover:text-white transition-colors flex items-center gap-1 font-medium bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">Acessar</span>
+                                <span className="text-xs text-[#A0A7B5] group-hover:text-white transition-colors flex items-center gap-1 font-medium bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 shrink-0">Acessar</span>
                              )}
                            </button>
                         ))}
