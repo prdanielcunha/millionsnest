@@ -58,6 +58,9 @@ jobs:
       - name: Complete central Hub realtime and admin contract
         run: npx tsx scripts/test_complete_central_hub.ts
 
+      - name: Hub entry and final pending cleanup
+        run: npx tsx scripts/test_hub_entry_and_final_pending.ts
+
       - name: Public home conversion funnel and analytics security
         run: npx tsx scripts/test_public_home_funnel.ts
 
