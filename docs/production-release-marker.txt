@@ -1,3 +1,3 @@
 MillionsNest production release marker
-Premium multi-app Hub release requested after QA green.
-Base merge: 02c61a33842266843de666a600321fdce70e1839
+Premium multi-app Hub final narrow-screen polish release requested after QA green.
+Base merge: a84e0dd42582dfc90a99392f8980bbe8f977cbce
