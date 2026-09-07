@@ -429,7 +429,7 @@ export function OrganizationManager({
                   setAdminSelectedOrgId(e.target.value);
                }
             }}
-            className="bg-[#050505] text-[#F5F7FA] text-sm rounded-xl px-4 py-2.5 border border-white/10 outline-none w-full sm:w-auto min-w-[250px]"
+            className="bg-[#050505] text-[#F5F7FA] text-sm rounded-xl px-4 py-2.5 border border-white/10 outline-none w-full sm:w-auto sm:min-w-[250px]"
           >
              <option value={profile?.organizationId || ''}>Sua Organização ({organization?.name})</option>
              {adminOrgs.filter(o => o.id !== profile?.organizationId).map(org => (
@@ -439,10 +439,10 @@ export function OrganizationManager({
         </div>
       )}
 
-      <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 lg:p-8 border border-white/5 shadow-2xl flex flex-col md:flex-row gap-8">
+      <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[1.5rem] md:rounded-[2rem] p-4 sm:p-6 lg:p-8 border border-white/5 shadow-2xl flex flex-col md:flex-row gap-5 md:gap-8">
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 shrink-0 flex flex-col gap-2">
-        <h2 className="text-xl font-semibold text-[#F5F7FA] flex items-center gap-3 mb-6 px-4">
+      <aside className="w-full md:w-64 shrink-0 flex md:flex-col gap-2 overflow-x-auto md:overflow-visible no-scrollbar pb-1 md:pb-0">
+        <h2 className="hidden md:flex text-xl font-semibold text-[#F5F7FA] items-center gap-3 mb-6 px-4">
            <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
             <Building2 className="w-4 h-4 text-[#A0A7B5]" />
           </span>
@@ -463,7 +463,7 @@ export function OrganizationManager({
                 }
                 setActiveTab(tab.id as OrgTab);
               }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm border relative ${isActive ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20 shadow-sm' : 'bg-transparent text-[#A0A7B5] border-transparent hover:bg-white/5 hover:text-[#F5F7FA]'}`}
+              className={`shrink-0 min-h-[44px] flex items-center gap-2 md:gap-3 px-3.5 md:px-4 py-2.5 md:py-3 rounded-xl transition-all font-medium text-xs md:text-sm border relative ${isActive ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20 shadow-sm' : 'bg-transparent text-[#A0A7B5] border-white/5 md:border-transparent hover:bg-white/5 hover:text-[#F5F7FA]'}`}
             >
               <div className="relative">
                  <Icon className="w-4 h-4" />
