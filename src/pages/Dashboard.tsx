@@ -1922,7 +1922,7 @@ export function Dashboard() {
           >
             {t('dashboard.navigation.overview', 'Início')}
           </button>
-          {(currentUserPerms['organization.settings.update'] || isGlobalAdmin) && (
+          {(currentUserPerms['organization.settings.update'] || currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
             <button 
               onClick={() => setActiveTab("organization")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "organization" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
@@ -1930,12 +1930,12 @@ export function Dashboard() {
               Organização
             </button>
           )}
-          {currentUserPerms['organization.billing.manage'] && (
+          {(currentUserPerms['organization.billing.manage'] || isGlobalAdmin) && (
             <button 
               onClick={() => setActiveTab("billing")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
             >
-              Valores e Assinatura
+              Planos e assinatura
             </button>
           )}
           <button 
@@ -2251,17 +2251,17 @@ export function Dashboard() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
-              className="max-w-4xl"
+              className="max-w-5xl"
             >
-              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-10 border border-white/5 shadow-2xl">
-                <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-6">
+              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-5 sm:p-7 md:p-10 border border-white/5 shadow-2xl">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 border-b border-white/5 pb-6">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-[#050505] rounded-xl flex items-center justify-center border border-white/10 shadow-inner">
                       <CreditCard className="w-6 h-6 text-[#2B85EB]" />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-semibold text-[#F5F7FA]">Plano e Assinatura</h2>
-                      <p className="text-[#A0A7B5] text-sm font-normal">Gerencie seu faturamento centralizado.</p>
+                      <h2 className="text-2xl font-semibold text-[#F5F7FA]">Planos e assinaturas</h2>
+                      <p className="text-[#A0A7B5] text-sm font-normal">Veja o plano e a situação de cada aplicativo da organização.</p>
                     </div>
                   </div>
                   {loadingSub && (
@@ -2271,14 +2271,62 @@ export function Dashboard() {
                     </div>
                   )}
                 </div>
+
+                <div className="mb-8">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#A0A7B5] mb-3">Por aplicativo</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {hubAppCatalog
+                      .filter(experience => experience.isOperational && (experience.installed || experience.app.id === 'musicscale'))
+                      .map(experience => {
+                        const planLabel = experience.app.id === 'musicscale' && isGlobalAdmin && experience.installed
+                          ? 'Pro · acesso administrativo'
+                          : experience.plan
+                            ? String(experience.plan).replace(/[_-]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+                            : 'Sem plano ativo';
+                        const stateLabel: Record<string, string> = {
+                          active: 'Ativo',
+                          trialing: 'Em teste',
+                          cancel_scheduled: 'Cancelamento agendado',
+                          payment_issue: 'Pagamento pendente',
+                          administrative: 'Acesso administrativo',
+                          loading: 'Verificando',
+                          error: 'Precisa de atenção',
+                          available: 'Disponível',
+                          unavailable: 'Indisponível'
+                        };
+                        return (
+                          <div key={experience.app.id} className="rounded-2xl border border-white/8 bg-[#050505] p-4 flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center shrink-0">
+                              {experience.app.id === 'musicscale' ? (
+                                <img src="/LogoIconMusicScale-1.png" alt="" className="w-6 h-6 object-contain" />
+                              ) : (
+                                <EcosystemAppIcon app={experience.app} iconClassName="w-5 h-5" assetClassName="w-8 h-8" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-white truncate">{experience.app.name}</p>
+                                <span className={`text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                                  experience.needsAttention ? 'text-red-300' : experience.state === 'administrative' ? 'text-purple-300' : 'text-emerald-300'
+                                }`}>
+                                  {stateLabel[experience.state] || 'Ativo'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-[#A0A7B5] mt-1 truncate">{planLabel}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
                 
                 {subscription && subscription.status !== 'none' ? (
                   <div className="space-y-6">
                     <div className="bg-[#050505] rounded-2xl p-6 border border-white/5 shadow-inner">
                       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
                         <div>
-                           <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Plano Atual</p>
-                           <h3 className="text-xl font-semibold text-[#F5F7FA] capitalize">{subscription?.plan || 'Plano não identificado'} - MusicScale</h3>
+                           <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Plano do MusicScale</p>
+                           <h3 className="text-xl font-semibold text-[#F5F7FA] capitalize">{subscription?.plan || 'Plano não identificado'} · MusicScale</h3>
                         </div>
                         <div className="text-left md:text-right">
                            <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Status</p>
@@ -2419,8 +2467,8 @@ export function Dashboard() {
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-8">
                        <div>
-                         <h3 className="text-xl font-semibold text-[#F5F7FA]">Escolha seu Plano</h3>
-                         <p className="text-[#A0A7B5] text-sm">Assinatura unificada para todo o ministério.</p>
+                         <h3 className="text-xl font-semibold text-[#F5F7FA]">Escolha o plano do MusicScale</h3>
+                         <p className="text-[#A0A7B5] text-sm">Cada aplicativo do ecossistema possui seu próprio plano e recursos.</p>
                          {subscription && subscription.status !== 'none' && getVisualState(subscription) === 'canceled_expired' && (
                            <button onClick={openBillingPortal} className="mt-2 text-xs text-[#2B85EB] hover:text-[#3B95FB] underline flex items-center gap-1">
                              <Settings className="w-3.5 h-3.5" /> Ver histórico de faturas
@@ -2632,7 +2680,7 @@ export function Dashboard() {
                 {/* --- MARKETPLACE / SERVIÇOS PREMIUM --- */}
                 <div className="mt-16 pt-12 border-t border-white/5">
                   <div className="mb-10 text-center md:text-left">
-                     <h3 className="text-xl font-semibold text-[#F5F7FA] mb-2">Serviços e Adicionais</h3>
+                     <h3 className="text-xl font-semibold text-[#F5F7FA] mb-2">Serviços e adicionais do MusicScale</h3>
                      <p className="text-[#A0A7B5] text-sm">Complemente sua assinatura com ferramentas e serviços premium estruturados para o seu ministério.</p>
                   </div>
 
@@ -3082,7 +3130,7 @@ export function Dashboard() {
       aria-label="Navegação principal"
       className="md:hidden fixed inset-x-0 bottom-0 z-[70] border-t border-white/10 bg-[#050505]/95 backdrop-blur-2xl px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
     >
-      <div className="mx-auto grid max-w-lg grid-cols-4 gap-1">
+      <div className="mx-auto grid max-w-lg grid-flow-col auto-cols-fr gap-1">
         <button
           type="button"
           onClick={() => setActiveTab('overview')}
@@ -3094,7 +3142,8 @@ export function Dashboard() {
           <LayoutGrid className="w-5 h-5" />
           <span>Início</span>
         </button>
-        <button
+        {(currentUserPerms['organization.settings.update'] || currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
+                  <button
           type="button"
           onClick={() => setActiveTab('organization')}
           aria-current={activeTab === 'organization' ? 'page' : undefined}
@@ -3105,7 +3154,9 @@ export function Dashboard() {
           <Building2 className="w-5 h-5" />
           <span>Organização</span>
         </button>
-        <button
+        )}
+        {(currentUserPerms['organization.billing.manage'] || isGlobalAdmin) && (
+                  <button
           type="button"
           onClick={() => setActiveTab('billing')}
           aria-current={activeTab === 'billing' ? 'page' : undefined}
@@ -3116,6 +3167,7 @@ export function Dashboard() {
           <CreditCard className="w-5 h-5" />
           <span>Assinatura</span>
         </button>
+        )}
         <button
           type="button"
           onClick={() => setActiveTab('account')}
