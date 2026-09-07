@@ -109,31 +109,27 @@ export function EcosystemWorkspaceHome({
 
   // Selector UI
   const renderWorkspaceSelector = () => {
-    // A single-app customer does not need an extra navigation layer on the home screen.
-    // Keep the selector when they are inside an app or when the organization has multiple apps.
     if (selectedWorkspace === 'home' && installedApps.length <= 1) return null;
 
     return (
-      <div className="mb-8 border-b border-white/5 pb-4 overflow-x-auto no-scrollbar">
-        <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('workspace.spaces_title', 'Acesso rápido')}</h3>
-        <div className="flex items-center gap-4 min-w-max">
+      <div className="mb-6 md:mb-8 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto no-scrollbar">
+        <p className="hidden sm:block text-[10px] font-bold text-[#A0A7B5] uppercase tracking-[0.18em] mb-3">
+          {t('workspace.spaces_title', 'Acesso rápido')}
+        </p>
+        <div className="flex items-center gap-2 min-w-max" role="tablist" aria-label={t('workspace.spaces_title', 'Acesso rápido')}>
           <button
             type="button"
             onClick={() => onSelectWorkspace('home')}
             role="tab"
             aria-selected={selectedWorkspace === 'home'}
-            className={`flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-200 border ${
-              selectedWorkspace === 'home' 
-                ? 'bg-white/10 border-white/10 text-white shadow-lg' 
-                : 'bg-transparent border-transparent text-[#A0A7B5] hover:bg-white/5'
+            className={`min-h-[42px] flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all border ${
+              selectedWorkspace === 'home'
+                ? 'bg-white/10 border-white/10 text-white'
+                : 'bg-transparent border-white/5 text-[#A0A7B5] hover:bg-white/5'
             }`}
           >
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${selectedWorkspace === 'home' ? 'bg-[#2B85EB]/20 text-[#2B85EB]' : 'bg-white/5'}`}>
-              <LayoutGrid className="w-4 h-4" />
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold">{t('navigation.home', 'Início')}</p>
-            </div>
+            <LayoutGrid className={`w-4 h-4 ${selectedWorkspace === 'home' ? 'text-[#2B85EB]' : ''}`} />
+            <span className="text-xs font-semibold">{t('navigation.home', 'Início')}</span>
           </button>
 
           {installedApps.map(app => {
@@ -145,26 +141,20 @@ export function EcosystemWorkspaceHome({
                 onClick={() => onSelectWorkspace(app.id)}
                 role="tab"
                 aria-selected={isSelected}
-                className={`flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-200 border ${
+                className={`min-h-[42px] flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all border ${
                   isSelected
-                    ? 'bg-gradient-to-br from-[#2B85EB]/10 to-[#1e5b9f]/10 border-[#2B85EB]/30 text-white shadow-[0_0_20px_rgba(43,133,235,0.15)]' 
-                    : 'bg-transparent border-transparent text-[#A0A7B5] hover:bg-white/5'
+                    ? 'bg-[#2B85EB]/10 border-[#2B85EB]/25 text-white'
+                    : 'bg-transparent border-white/5 text-[#A0A7B5] hover:bg-white/5'
                 }`}
               >
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#2B85EB] text-white shadow-md' : 'bg-white/5'}`}>
-                   {app.id === 'musicscale' ? (
-                     <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-5 h-5 object-contain" />
-                   ) : (
-                     <EcosystemAppIcon
-                       app={app}
-                       iconClassName="w-4 h-4"
-                       assetClassName="w-8 h-8"
-                     />
-                   )}
+                <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#2B85EB] text-white' : 'bg-white/5'}`}>
+                  {app.id === 'musicscale' ? (
+                    <img src="/LogoIconMusicScale-1.png" alt="" className="w-4 h-4 object-contain" />
+                  ) : (
+                    <EcosystemAppIcon app={app} iconClassName="w-3.5 h-3.5" assetClassName="w-5 h-5" />
+                  )}
                 </div>
-                <div className="text-left pr-2">
-                  <p className="text-sm font-semibold">{app.name}</p>
-                </div>
+                <span className="text-xs font-semibold">{app.name}</span>
               </button>
             );
           })}
@@ -1074,42 +1064,161 @@ export function EcosystemWorkspaceHome({
       />
     );
   };
-const renderGenericAppWorkspace = (app: EcosystemApp) => {
+  const renderGenericAppWorkspace = (experience: HubAppExperience) => {
+    const app = experience.app;
+    const appRecord = organization?.apps?.[app.id] || {};
+    const hubSummary = appRecord?.hubSummary || {};
+    const metrics = Array.isArray(hubSummary?.metrics)
+      ? hubSummary.metrics
+          .filter((metric: any) => metric && typeof metric.label === 'string' && ['string', 'number'].includes(typeof metric.value))
+          .slice(0, 4)
+      : [];
+    const planLabel = experience.plan
+      ? String(experience.plan).replace(/[_-]/g, ' ').replace(/\b\w/g, character => character.toUpperCase())
+      : t('workspace.plan_included', 'Incluído');
+    const statusLabel: Record<string, string> = {
+      active: t('workspace.app_state.active', 'Ativo'),
+      trialing: t('workspace.app_state.trialing', 'Em teste'),
+      cancel_scheduled: t('workspace.app_state.cancel_scheduled', 'Cancelamento agendado'),
+      payment_issue: t('workspace.app_state.payment_issue', 'Pagamento pendente'),
+      administrative: t('workspace.app_state.administrative', 'Acesso administrativo'),
+      error: t('workspace.app_state.error', 'Precisa de atenção')
+    };
+
     return (
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-2xl">
-        <div className="bg-[#050505] border border-white/5 rounded-2xl p-8">
-           <div className="w-16 h-16 rounded-xl bg-white/5 flex items-center justify-center mb-6">
-             <EcosystemAppIcon
-               app={app}
-               iconClassName="w-6 h-6 text-[#A0A7B5]"
-               assetClassName="w-12 h-12"
-             />
-           </div>
-           <h2 className="text-2xl font-bold text-white mb-2">{app.name}</h2>
-           <p className="text-[#A0A7B5] mb-8">{app.description}</p>
-           
-           <div className="flex items-center gap-4">
-             {app.primaryAction === 'open' && (
-               <button 
-                 type="button"
-                 onClick={() => onLaunchApp(app)}
-                 className="px-6 py-3 bg-[#2B85EB] text-white font-semibold rounded-xl hover:bg-[#3B95FB] transition-all"
-               >
-                 {t('genericApp.open', 'Abrir App')}
-               </button>
-             )}
-             {app.status === 'coming_soon' && (
-               <span className="px-4 py-2 bg-white/5 text-[#A0A7B5] rounded-xl text-sm font-medium border border-white/5">
-                 Em breve
-               </span>
-             )}
-           </div>
-        </div>
+      <div className="animate-in fade-in slide-in-from-bottom-3 duration-300 space-y-6">
+        <section className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#07090D] p-5 sm:p-7 md:p-8">
+          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_90%_0%,rgba(43,133,235,.10),transparent_40%)]" />
+          <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="flex items-start gap-4 min-w-0">
+              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                <EcosystemAppIcon app={app} iconClassName="w-6 h-6" assetClassName="w-11 h-11" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-white">{app.name}</h2>
+                  <span className={`px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wider ${
+                    experience.needsAttention
+                      ? 'bg-red-500/10 text-red-300 border-red-500/20'
+                      : experience.state === 'administrative'
+                        ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
+                        : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                  }`}>
+                    {statusLabel[experience.state] || t('workspace.app_state.active', 'Ativo')}
+                  </span>
+                </div>
+                <p className="text-sm text-[#A0A7B5] leading-relaxed max-w-2xl mt-2">{app.description}</p>
+                <div className="flex flex-wrap items-center gap-3 mt-4 text-xs">
+                  <span className="text-[#A0A7B5]">{t('workspace.plan_label', 'Plano atual:')} <strong className="text-white font-semibold">{planLabel}</strong></span>
+                  <span className="w-1 h-1 rounded-full bg-white/20" />
+                  <span className="text-[#A0A7B5]">{organization?.name}</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (experience.state === 'payment_issue') onNavigateToBilling();
+                else if (experience.canOpen) onLaunchApp(app);
+              }}
+              disabled={!experience.canOpen && experience.state !== 'payment_issue'}
+              className="min-h-[46px] w-full lg:w-auto px-5 py-3 rounded-xl bg-white text-[#050505] disabled:bg-white/5 disabled:text-[#A0A7B5] disabled:cursor-not-allowed text-sm font-semibold shrink-0"
+            >
+              {experience.state === 'payment_issue'
+                ? t('workspace.resolve_payment', 'Regularizar pagamento')
+                : t('workspace.open_app', 'Abrir {{appName}}', { appName: app.name })}
+            </button>
+          </div>
+        </section>
+
+        {hubSummary?.nextAction?.title && (
+          <section className="rounded-2xl border border-[#2B85EB]/20 bg-[#2B85EB]/[0.06] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#2B85EB]">{t('workspace.next_step.eyebrow', 'Próximo passo')}</p>
+              <h3 className="text-base font-semibold text-white mt-1">{hubSummary.nextAction.title}</h3>
+              {hubSummary.nextAction.description && <p className="text-xs text-[#A0A7B5] mt-1">{hubSummary.nextAction.description}</p>}
+            </div>
+            {experience.canOpen && (
+              <button
+                type="button"
+                onClick={() => onLaunchApp(app, typeof hubSummary.nextAction.destinationPath === 'string' ? hubSummary.nextAction.destinationPath : undefined)}
+                className="min-h-[42px] px-4 rounded-xl bg-white text-[#050505] text-xs font-semibold"
+              >
+                {hubSummary.nextAction.label || t('workspace.continue_action', 'Continuar')}
+              </button>
+            )}
+          </section>
+        )}
+
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {metrics.length > 0 ? metrics.map((metric: any, index: number) => (
+            <div key={index} className="rounded-2xl border border-white/8 bg-white/[0.025] p-4 min-w-0">
+              <p className="text-xl font-semibold text-white truncate">{String(metric.value)}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1 line-clamp-2">{metric.label}</p>
+            </div>
+          )) : (
+            <>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+                <p className="text-xl font-semibold text-white">{members.length}</p>
+                <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.summary.people', 'Pessoas')}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+                <p className="text-xl font-semibold text-white">{pendingInvites.length}</p>
+                <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.summary.invites', 'Convites')}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4 col-span-2">
+                <p className="text-sm font-semibold text-white">{t('workspace.app_connected_title', 'Conectado ao MillionsNest')}</p>
+                <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.generic_summary_desc', 'Acessos, organização, plano e equipe estão centralizados aqui.')}</p>
+              </div>
+            </>
+          )}
+        </section>
+
+        <section>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#A0A7B5]">{t('workspace.management_kicker', 'Administração')}</p>
+          <h3 className="text-xl font-semibold text-white mt-1 mb-4">{t('workspace.manage_this_app', 'Gerenciar este aplicativo')}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <button type="button" onClick={onNavigateToOrganizationMembers} className="min-h-[104px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] p-4 text-left">
+              <Users className="w-5 h-5 text-emerald-300" />
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.people', 'Pessoas e acessos')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.manage_people_app_desc', 'Controle quem usa a organização e o acesso administrativo.')}</p>
+            </button>
+            <button type="button" onClick={onOpenInviteModal} className="min-h-[104px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] p-4 text-left">
+              <UserPlus className="w-5 h-5 text-amber-300" />
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.invites', 'Convites')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.manage_invites_app_desc', 'Convide novas pessoas e acompanhe convites pendentes.')}</p>
+            </button>
+            <button type="button" onClick={onNavigateToOrganizationSettings} className="min-h-[104px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] p-4 text-left">
+              <Settings className="w-5 h-5 text-[#2B85EB]" />
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.organization', 'Dados da organização')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.manage_org_app_desc', 'Atualize os dados compartilhados por todo o ecossistema.')}</p>
+            </button>
+            <button type="button" onClick={onNavigateToBilling} className="min-h-[104px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] p-4 text-left">
+              <CreditCard className="w-5 h-5 text-purple-300" />
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.billing', 'Planos e assinatura')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.manage_billing_app_desc', 'Veja o plano e a situação de cobrança deste produto.')}</p>
+            </button>
+          </div>
+        </section>
+
+        <button
+          type="button"
+          onClick={openHub}
+          className="w-full rounded-2xl border border-white/8 bg-white/[0.02] hover:bg-white/[0.04] p-4 flex items-center gap-3 text-left"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center shrink-0"><CircleHelp className="w-5 h-5" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-white">{t('support.hub.central_action.title', 'Central de Ajuda & Suporte')}</p>
+            <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.app_support_desc', 'Ajuda sobre acesso, configuração e uso deste aplicativo.')}</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-[#A0A7B5] shrink-0" />
+        </button>
       </div>
     );
   };
 
-  const currentApp = installedApps.find(a => a.id === selectedWorkspace);
+  const currentExperience = appExperiences.find(experience => experience.app.id === selectedWorkspace && experience.installed);
 
   return (
     <div className="w-full">
@@ -1117,7 +1226,7 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
       
       {selectedWorkspace === 'home' && renderHomeWorkspace()}
       {selectedWorkspace === 'musicscale' && renderMusicScaleWorkspace()}
-      {selectedWorkspace !== 'home' && selectedWorkspace !== 'musicscale' && currentApp && renderGenericAppWorkspace(currentApp)}
+      {selectedWorkspace !== 'home' && selectedWorkspace !== 'musicscale' && currentExperience && renderGenericAppWorkspace(currentExperience)}
     </div>
   );
 }
