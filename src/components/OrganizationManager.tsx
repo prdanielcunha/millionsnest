@@ -863,7 +863,7 @@ export function OrganizationManager({
                               )}
                               <button
                                  onClick={() => handleRemoveMember(member.id)}
-                                 disabled={member.role === 'owner' && (currentUserRole !== 'owner' && !isGlobalAdmin)}
+                                 disabled={String(member?.organizationRole ?? member?.role ?? '').toLowerCase() === 'owner'}
                                  className="text-xs text-red-500/70 hover:text-red-500 font-medium px-2 py-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                               >
                                  {member.id === user?.uid ? 'Sair' : 'Remover'}
@@ -873,7 +873,7 @@ export function OrganizationManager({
                         </div>
                       ) : (
                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
-                            {{owner: 'Dono', admin: 'Admin', leader: 'Líder', secretary: 'Operador', member: 'Membro', guest: 'Visitante'}[(member.role as string) || 'member'] || member.role || 'Membro'}
+                            {getOrganizationRoleLabel(String(member?.organizationRole ?? member?.role ?? 'member'))}
                          </span>
                       )}
                     </div>
@@ -892,19 +892,19 @@ export function OrganizationManager({
                        const isOld = invite.status === 'pending' && invite.createdAt && invite.createdAt.toMillis && (Date.now() - invite.createdAt.toMillis() > 7 * 24 * 60 * 60 * 1000);
                        const showAsExpired = isExpired || isOld;
                        return (
-                       <div key={invite.id} className={`flex items-center justify-between p-4 ${i !== pendingInvites.length - 1 ? 'border-b border-white/5' : ''}`}>
-                         <div className="flex items-center gap-3">
-                           <div className="flex flex-col">
+                       <div key={invite.id} className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${i !== pendingInvites.length - 1 ? 'border-b border-white/5' : ''}`}>
+                         <div className="flex min-w-0 flex-1 items-center gap-3">
+                           <div className="flex min-w-0 flex-1 flex-col">
                              <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
                                Status: <span className={showAsExpired ? "text-red-400" : "text-[#10B981]"}>{showAsExpired ? 'Expirado' : 'Aguardando'}</span>
                              </span>
-                             <span className="text-xs text-[#A0A7B5]">{invite.email || invite.emailNormalized || 'E-mail protegido'}</span>
+                             <span className="text-xs text-[#A0A7B5] break-all">{invite.email || invite.emailNormalized || 'E-mail protegido'}</span>
                              <span className="text-xs text-[#A0A7B5]">Acesso: {{owner: 'Dono', admin: 'Administrador', manager: 'Gestor', leader: 'Líder', secretary: 'Operador', member: 'Membro', viewer: 'Visualizador', guest: 'Visitante'}[(invite.role as string) || 'member'] || invite.role || 'Membro'}</span>
                            </div>
                          </div>
                          
                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
-                           <div className="flex flex-wrap justify-end gap-2">
+                           <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
                              <button
                                type="button"
                                disabled={reissuingInviteId === invite.id}
@@ -935,19 +935,19 @@ export function OrganizationManager({
                    <p className="text-xs text-[#A0A7B5] mb-4">Usuários aguardando aprovação para ingressar na organização como membro padrão.</p>
                    <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
                      {joinRequests.map((req: any, i: number) => (
-                       <div key={req.id} className={`flex items-center justify-between p-4 ${i !== joinRequests.length - 1 ? 'border-b border-white/5' : ''}`}>
-                         <div className="flex items-center gap-3">
-                           <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
+                       <div key={req.id} className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${i !== joinRequests.length - 1 ? 'border-b border-white/5' : ''}`}>
+                         <div className="flex min-w-0 flex-1 items-center gap-3">
+                           <div className="w-10 h-10 shrink-0 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
                              {req.photoURL ? <img src={req.photoURL} alt="" className="w-full h-full rounded-xl object-cover" /> : req.displayName?.charAt(0) || req.email?.charAt(0) || '?'}
                            </div>
-                           <div className="flex flex-col">
-                             <span className="text-sm font-semibold text-[#F5F7FA]">{req.displayName || 'Usuário Indefinido'}</span>
-                             <span className="text-xs text-[#A0A7B5]">{req.email || req.id}</span>
+                           <div className="flex min-w-0 flex-1 flex-col">
+                             <span className="text-sm font-semibold text-[#F5F7FA] break-words">{req.displayName || 'Usuário Indefinido'}</span>
+                             <span className="text-xs text-[#A0A7B5] break-all">{req.email || req.id}</span>
                            </div>
                          </div>
                          
                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
-                           <div className="flex gap-2">
+                           <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
                               <button onClick={() => handleRejectJoinRequest && handleRejectJoinRequest(req.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 rounded-lg">
                                 Recusar
                               </button>
