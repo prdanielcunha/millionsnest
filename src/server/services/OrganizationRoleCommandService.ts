@@ -82,7 +82,13 @@ function roleDecision(options: {
   newRole: AssignableRole;
 }): { allowed: true } | { allowed: false; reasonCode: string } {
   const { actorGlobal, actorMetadataOwner, actorMembership, targetRole, newRole } = options;
-  if (targetRole === 'owner') return { allowed: false, reasonCode: 'OWNER_ROLE_REQUIRES_TRANSFER' };
+  if (targetRole === 'owner') {
+    // A canonical membership can carry a stale legacy owner role even when the
+    // organization metadata points to a different authoritative owner. Only
+    // that authoritative owner (or a global privileged actor) may repair it.
+    if (actorGlobal || actorMetadataOwner) return { allowed: true };
+    return { allowed: false, reasonCode: 'TARGET_ROLE_PROTECTED' };
+  }
   if (actorGlobal || actorMetadataOwner || (actorMembership.state === 'active' && actorMembership.role === 'owner')) {
     return { allowed: true };
   }
@@ -141,7 +147,11 @@ export async function updateOrganizationMemberRole(
       if (targetMembership.state === 'absent') return { success: false as const, reasonCode: 'MEMBERSHIP_NOT_FOUND' };
       if (targetMembership.state === 'inactive') return { success: false as const, reasonCode: 'MEMBERSHIP_INACTIVE' };
       if (targetMembership.state === 'inconsistent') return { success: false as const, reasonCode: 'MEMBERSHIP_STATE_INCONSISTENT' };
-      if (organizationOwnerMatches(organization, memberId) || targetMembership.role === 'owner') {
+      // The authoritative owner is defined by organization metadata and must
+      // only change through the dedicated ownership-transfer flow. A member
+      // document that says "owner" but is not the metadata owner is treated as
+      // a repairable legacy mismatch and is handled by roleDecision below.
+      if (organizationOwnerMatches(organization, memberId)) {
         return { success: false as const, reasonCode: 'OWNER_ROLE_REQUIRES_TRANSFER' };
       }
       const actorGlobal = isCanonicalGlobalRole(actorUserSnap.data()?.systemRole);
