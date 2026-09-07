@@ -9,7 +9,7 @@ import {
   Star, Zap, Headphones, Video, ListMusic, Check, Users, Link, Mail, Plus, X, Loader2, Copy, Wallet
 } from "lucide-react";
 import { Navbar } from "../components/Navbar.js";
-import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, getDocs, query, where, addDoc, deleteDoc, limit, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, collection, getDocs, query, where, addDoc, deleteDoc, limit, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { auth } from "../lib/firebase.js";
 import { sendPasswordResetEmail } from "firebase/auth";
@@ -587,6 +587,43 @@ export function Dashboard() {
   const requestSequenceRef = useRef<number>(0);
   const currentActiveOrgIdRef = useRef<string | null>(null);
 
+  const refreshPendingInvites = async (orgId: string) => {
+    if (!user || !orgId) return;
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(orgId)}/invitations`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+            'Cache-Control': 'no-store'
+          }
+        }
+      );
+
+      if (response.status === 403) {
+        if (currentActiveOrgIdRef.current === orgId) {
+          setPendingInvites([]);
+        }
+        return;
+      }
+      if (!response.ok) {
+        throw new Error('INVITATIONS_LOAD_FAILED');
+      }
+
+      const data = await response.json();
+      if (
+        currentActiveOrgIdRef.current === orgId &&
+        Array.isArray(data?.invitations)
+      ) {
+        setPendingInvites(data.invitations);
+      }
+    } catch (error) {
+      console.warn('[Dashboard] Failed to refresh pending invitations:', error);
+    }
+  };
+
   const loadOrganizationData = async (orgId: string, requestId: number) => {
     if (!user || !orgId) return;
     let coreReleased = false;
@@ -607,17 +644,6 @@ export function Dashboard() {
         getDocs(collection(db, `organizations/${orgId}/members`)),
         8000,
         'Dashboard timeout loading memberships'
-      );
-
-      const invitesPromise = withDashboardTimeout(
-        getDocs(
-          query(
-            collection(db, `organizations/${orgId}/invites`),
-            where('status', '==', 'pending')
-          )
-        ),
-        6000,
-        'Dashboard timeout loading invitations'
       );
 
       const joinRequestsPromise = withDashboardTimeout(
@@ -643,10 +669,10 @@ export function Dashboard() {
       );
 
       const secondaryResultsPromise = Promise.allSettled([
-        invitesPromise,
         joinRequestsPromise,
         auditLogsPromise
       ]);
+      void refreshPendingInvites(orgId);
 
       const [
         subscriptionResult,
@@ -798,19 +824,11 @@ export function Dashboard() {
       }
 
       const [
-        invitesResult,
         joinRequestsResult,
         auditLogsResult
       ] = await secondaryResultsPromise;
 
       if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
-        if (invitesResult.status === 'fulfilled') {
-          setPendingInvites(invitesResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
-        } else {
-          setPendingInvites([]);
-          console.warn("Failed to load invites");
-        }
-
         if (joinRequestsResult.status === 'fulfilled') {
           setJoinRequests(joinRequestsResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
         } else {
@@ -1222,16 +1240,29 @@ export function Dashboard() {
   const handleRevokeInvite = async (inviteId: string) => {
     try {
       const orgId = activeContextOrgId;
-      const inviteRef = doc(db, `organizations/${orgId}/invites`, inviteId);
-      await updateDoc(inviteRef, {
-        status: 'revoked',
-        revokedAt: serverTimestamp(),
-        revokedBy: user?.uid
-      });
-      setPendingInvites(prev => prev.filter(i => i.id !== inviteId));
+      if (!orgId || !user) return;
+
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(inviteId)}/revoke`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: '{}'
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('INVITATION_REVOKE_FAILED');
+      }
+
+      setPendingInvites(prev => prev.filter(invite => invite.id !== inviteId));
     } catch (e) {
       console.error(e);
-      alert("Erro ao revogar convite.");
+      feedback.error("Não foi possível revogar o convite. Tente novamente.");
     }
   };
 
@@ -1347,6 +1378,7 @@ export function Dashboard() {
     unsubscribers.push(onSnapshot(orgRef, (snap) => {
       if (snap.exists() && currentActiveOrgIdRef.current === orgId) {
         setOrganization({ id: snap.id, ...snap.data() });
+        void refreshPendingInvites(orgId);
       }
     }, (err) => {
       console.warn("[Dashboard] Real-time organization update failed, falling back to manual fetches:", err);
@@ -1393,17 +1425,6 @@ export function Dashboard() {
       }
     }, (err) => {
       console.warn("[Dashboard] Real-time member update failed:", err);
-    }));
-
-    const pendingInviteQuery = query(
-      collection(db, `organizations/${orgId}/invites`),
-      where("status", "==", "pending")
-    );
-    unsubscribers.push(onSnapshot(pendingInviteQuery, (snap) => {
-      if (currentActiveOrgIdRef.current !== orgId) return;
-      setPendingInvites(snap.docs.map(inviteDoc => ({ id: inviteDoc.id, ...inviteDoc.data() })));
-    }, (err) => {
-      console.warn("[Dashboard] Real-time invitation update failed:", err);
     }));
 
     const joinRequestQuery = query(
