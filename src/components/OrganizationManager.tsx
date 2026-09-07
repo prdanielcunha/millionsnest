@@ -7,6 +7,7 @@ import { normalizeSlug } from '../lib/slug.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 import {
   getInviteableOrganizationRolesForActor,
+  getOrganizationRoleDescription,
   getOrganizationRoleLabel,
   normalizeExistingOrganizationRole
 } from '../lib/organizationRoles.js';
@@ -127,6 +128,12 @@ export function OrganizationManager({
     timeZone: 'America/Sao_Paulo'
   });
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+  const organizationRoleLocale: 'pt' | 'en' | 'es' =
+    String(organizationDetails.locale || organization?.locale || 'pt-BR').toLowerCase().startsWith('en')
+      ? 'en'
+      : String(organizationDetails.locale || organization?.locale || 'pt-BR').toLowerCase().startsWith('es')
+        ? 'es'
+        : 'pt';
 
   useEffect(() => {
     setOrganizationDetails({
@@ -873,7 +880,7 @@ export function OrganizationManager({
                         </div>
                       ) : (
                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
-                            {getOrganizationRoleLabel(String(member?.organizationRole ?? member?.role ?? 'member'))}
+                            {getOrganizationRoleLabel(String(member?.organizationRole ?? member?.role ?? 'member'), organizationRoleLocale)}
                          </span>
                       )}
                     </div>
@@ -899,7 +906,7 @@ export function OrganizationManager({
                                Status: <span className={showAsExpired ? "text-red-400" : "text-[#10B981]"}>{showAsExpired ? 'Expirado' : 'Aguardando'}</span>
                              </span>
                              <span className="text-xs text-[#A0A7B5] break-all">{invite.email || invite.emailNormalized || 'E-mail protegido'}</span>
-                             <span className="text-xs text-[#A0A7B5]">Acesso: {{owner: 'Dono', admin: 'Administrador', manager: 'Gestor', leader: 'Líder', secretary: 'Operador', member: 'Membro', viewer: 'Visualizador', guest: 'Visitante'}[(invite.role as string) || 'member'] || invite.role || 'Membro'}</span>
+                             <span className="text-xs text-[#A0A7B5]">Acesso: {getOrganizationRoleLabel(String(invite.role || 'member'), organizationRoleLocale)}</span>
                            </div>
                          </div>
                          
@@ -970,22 +977,24 @@ export function OrganizationManager({
                 <p className="text-sm text-[#A0A7B5] mb-6">Escolha o nível de acesso que combina com a responsabilidade de cada pessoa. As regras técnicas ficam protegidas nos bastidores.</p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="bg-[#050505] p-5 rounded-2xl border border-[#2B85EB]/20">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><ShieldCheck className="w-4 h-4 text-[#2B85EB]" /> Dono</h4>
-                      <p className="text-xs text-[#A0A7B5]">Responsável principal pela organização. Pode administrar equipe, aplicativos, assinatura e configurações críticas.</p>
-                   </div>
-                   <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><ShieldCheck className="w-4 h-4 text-[#A0A7B5]" /> Administrador</h4>
-                      <p className="text-xs text-[#A0A7B5]">Pode administrar a organização e a equipe, sem assumir a propriedade principal da conta.</p>
-                   </div>
-                   <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Líder / Operador</h4>
-                      <p className="text-xs text-[#A0A7B5]">Ajuda na rotina da equipe e nos aplicativos conforme as permissões recebidas, sem controlar cobrança ou propriedade.</p>
-                   </div>
-                   <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Membro / Visitante</h4>
-                      <p className="text-xs text-[#A0A7B5]">Usa somente as áreas liberadas para sua participação, sem acesso às configurações administrativas.</p>
-                   </div>
+                  {(['owner', 'admin', 'manager', 'member', 'viewer'] as const).map((role) => (
+                    <div
+                      key={role}
+                      className={`bg-[#050505] p-5 rounded-2xl border ${role === 'owner' ? 'border-[#2B85EB]/20' : 'border-white/5'}`}
+                    >
+                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2">
+                        {role === 'owner' || role === 'admin' ? (
+                          <ShieldCheck className={`w-4 h-4 ${role === 'owner' ? 'text-[#2B85EB]' : 'text-[#A0A7B5]'}`} />
+                        ) : (
+                          <Users className="w-4 h-4 text-[#A0A7B5]" />
+                        )}
+                        {getOrganizationRoleLabel(role, organizationRoleLocale)}
+                      </h4>
+                      <p className="text-xs text-[#A0A7B5]">
+                        {getOrganizationRoleDescription(role, organizationRoleLocale)}
+                      </p>
+                    </div>
+                  ))}
                 </div>
 
                 <div className="mt-6 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
