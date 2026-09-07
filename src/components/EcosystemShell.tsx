@@ -10,6 +10,7 @@ import { eventBus } from '../packages/events/index.js';
 import { Link, useNavigate } from 'react-router-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
+import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
@@ -17,11 +18,12 @@ import { feedback } from '../packages/ui/feedback.js';
 
 interface EcosystemShellProps {
   children: ReactNode;
-  activeAppId?: string; // e.g., 'core', 'musicscale'
+  activeAppId?: string;
   breadcrumbList?: { label: string; path?: string }[];
+  installedAppIds?: string[];
 }
 
-export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList }: EcosystemShellProps) {
+export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList, installedAppIds }: EcosystemShellProps) {
   const { user, profile, canonicalContext, logout, switchOrganization, switchingOrganizationId } = useAuth();
   
   let organization: any = null;
@@ -67,6 +69,9 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
       if (!target.closest('#profile-menu-container')) {
         setProfileMenuOpen(false);
       }
+      if (!target.closest('#app-launcher-container')) {
+        setLauncherOpen(false);
+      }
     };
     window.addEventListener('mousedown', handleClickOutside);
 
@@ -96,7 +101,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
     
     // Core is local route
     if (app.id === 'core') {
-       navigate('/dashboard');
+       navigate('/dashboard/overview');
        return;
     }
 
@@ -118,6 +123,24 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
     { id: 'core', name: 'Painel Central', icon: 'LayoutDashboard' },
     ...ECOSYSTEM_APPS
   ].find(a => a.id === activeAppId) || { id: 'core', name: 'Painel Central' };
+
+  const fallbackInstalledAppIds = ECOSYSTEM_APPS
+    .filter(app => {
+      if (app.status !== 'active') return false;
+      if (app.id === 'musicscale') {
+        return (
+          isGlobalPrivilegedUser(profile) ||
+          profile?.products?.includes('musicscale') ||
+          isSubscriptionValid(subscription) ||
+          organization?.enabledApps?.includes('musicscale')
+        );
+      }
+      return organization?.enabledApps?.includes(app.id) || organization?.apps?.[app.id]?.enabled === true;
+    })
+    .map(app => app.id);
+
+  const effectiveInstalledAppIds = installedAppIds ?? fallbackInstalledAppIds;
+  const launcherApps = ECOSYSTEM_APPS.filter(app => effectiveInstalledAppIds.includes(app.id));
 
   let supportModeObj: any = null;
   try {
@@ -158,11 +181,11 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
       )}
       
       {/* Ecosystem Topbar - Persistent & OS-like */}
-      <header className="h-14 border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between px-4 lg:px-6 gap-2 md:gap-4 w-full">
+      <header className="h-14 border-b border-white/5 bg-[#050505]/90 backdrop-blur-2xl sticky top-0 z-50 flex items-center justify-between px-2.5 sm:px-4 lg:px-6 gap-1.5 sm:gap-3 w-full">
         
         {/* Left: Ecosystem Identity & Context */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0 min-w-0">
-          <Link to="/" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors shrink-0">
+          <Link to="/dashboard/overview" aria-label="Ir para o início do MillionsNest" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors shrink-0">
             <svg className="w-5 h-5 text-[#F5F7FA]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
               <polyline points="9 22 9 12 15 12 15 22"></polyline>
@@ -174,6 +197,8 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
           <div className="relative group shrink-0 min-w-0" id="org-switcher-container">
             <button 
               onClick={() => {
+                setLauncherOpen(false);
+                setProfileMenuOpen(false);
                 if (canonicalContext?.organizations && canonicalContext.organizations.length > 1) {
                    setOrgMenuOpen(!orgMenuOpen);
                 }
@@ -184,7 +209,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
               <div className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center border border-white/10 shrink-0">
                 <Building2 className="w-3.5 h-3.5 text-[#F5F7FA]" />
               </div>
-              <span className="text-sm font-semibold truncate max-w-[120px] md:max-w-[200px]">
+              <span className="text-sm font-semibold truncate max-w-[92px] min-[390px]:max-w-[128px] md:max-w-[200px]">
                 {organization?.name || 'Carregando...'}
               </span>
               {canonicalContext?.organizations && canonicalContext.organizations.length > 1 && (
@@ -200,7 +225,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 5 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute top-full mt-2 left-0 w-64 bg-[#0B0F19] border border-white/10 shadow-2xl rounded-xl p-1 z-50 origin-top-left"
+                  className="absolute top-full mt-2 left-0 w-[min(18rem,calc(100vw-1rem))] bg-[#0B0F19]/98 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-2xl p-1 z-50 origin-top-left"
                 >
                   <div className="px-3 py-2 text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest mb-1">
                     Selecionar Organização
@@ -273,9 +298,9 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
           <div className="hidden md:flex border-l border-white/10 h-4 mx-1" />
           
           <div className="hidden md:flex items-center gap-1.5 text-xs font-semibold px-2">
-            <span className="text-[#A0A7B5] hover:text-[#F5F7FA] cursor-pointer transition-colors" onClick={() => navigate('/dashboard')}>MillionsNest</span>
+            <span className="text-[#A0A7B5] hover:text-[#F5F7FA] cursor-pointer transition-colors" onClick={() => navigate('/dashboard/overview')}>MillionsNest</span>
             <span className="text-[#A0A7B5]">/</span>
-            <span className={`px-2 py-0.5 rounded-md border text-[#F5F7FA] ${!breadcrumbList || breadcrumbList.length === 0 ? 'bg-white/5 border-white/10' : 'bg-transparent border-transparent cursor-pointer hover:bg-white/5 transition-colors'} `} onClick={() => (!breadcrumbList || breadcrumbList.length === 0) ? null : navigate('/dashboard')}>
+            <span className={`px-2 py-0.5 rounded-md border text-[#F5F7FA] ${!breadcrumbList || breadcrumbList.length === 0 ? 'bg-white/5 border-white/10' : 'bg-transparent border-transparent cursor-pointer hover:bg-white/5 transition-colors'} `} onClick={() => (!breadcrumbList || breadcrumbList.length === 0) ? null : navigate('/dashboard/overview')}>
               {activeApp.name}
             </span>
             {breadcrumbList && breadcrumbList.map((crumb, idx) => (
@@ -301,106 +326,136 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
         </div>
 
         {/* Center: Search / OS Commands */}
-        <div className="flex-1 flex justify-center max-w-md w-full min-w-0">
-          <button 
+        <div className="hidden sm:flex flex-1 justify-center max-w-md w-full min-w-0">
+          <button
+            type="button"
             onClick={openSearch}
-            className="w-full flex items-center gap-2 px-3 py-1.5 bg-[#0B0F19] border border-white/10 hover:border-white/20 hover:bg-white/[0.02] rounded-lg transition-all text-[#A0A7B5] shadow-sm group min-w-0"
+            aria-label="Buscar no MillionsNest"
+            className="w-full min-h-[38px] flex items-center gap-2 px-3 py-1.5 bg-[#0B0F19] border border-white/10 hover:border-white/20 hover:bg-white/[0.02] rounded-xl transition-all text-[#A0A7B5] shadow-sm group min-w-0"
           >
-            <Search className="w-3.5 h-3.5 group-hover:text-[#F5F7FA] transition-colors shrink-0" />
+            <Search className="w-4 h-4 group-hover:text-[#F5F7FA] transition-colors shrink-0" />
             <span className="text-sm font-medium flex-1 text-left truncate">Buscar...</span>
             <kbd className="hidden lg:inline-flex items-center gap-1 text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md font-mono font-bold tracking-wider shrink-0">⌘K</kbd>
           </button>
         </div>
 
-        {/* Right: Actions, Launcher, Profile */}
-        <div className="flex items-center justify-end gap-1 md:gap-2 shrink-0">
-          
+        {/* Right: Search, apps and account */}
+        <div className="flex items-center justify-end gap-0.5 sm:gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={openSearch}
+            aria-label="Buscar no MillionsNest"
+            className="sm:hidden w-9 h-9 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <Search className="w-4.5 h-4.5" />
+          </button>
+
           {/* Main App Launcher */}
           <Tooltip.Provider delayDuration={200}>
             <Tooltip.Root>
-               <Tooltip.Trigger asChild>
-                 <div className="relative">
-                   <button 
-                     onClick={() => setLauncherOpen(!launcherOpen)}
-                     className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${launcherOpen ? 'bg-white/10 text-[#F5F7FA] shadow-inner' : 'bg-transparent text-[#A0A7B5] hover:bg-white/5 hover:text-[#F5F7FA]'}`}
-                   >
-                     <LayoutGrid className="w-4 h-4" />
-                   </button>
-                   
-                   <AnimatePresence>
-                     {launcherOpen && (
-                       <motion.div
-                         {...framerTokens.scale}
-                         className="absolute top-full mt-3 right-0 w-[340px] bg-[#050505]/95 backdrop-blur-2xl border border-white/10 shadow-[0_0_40px_rgba(0,0,0,1)] rounded-2xl p-2 origin-top-right z-50"
-                       >
-                         <div className="px-3 py-2 text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest border-b border-white/5 mb-2">
-                           Seus aplicativos
-                         </div>
-                         
-                         <div className="grid grid-cols-3 gap-2">
-                            {/* Central App */}
-                            <button
-                               onClick={() => handleLaunch({ id: 'core', name: 'Painel', description: '', icon: 'Dashboard', url: '', requiredPlan: 'free', category: 'core' } as EcosystemApp)}
-                               className={`flex flex-col items-center justify-center p-3 rounded-xl gap-2 transition-all ${activeAppId === 'core' ? 'bg-[#2B85EB]/10' : 'hover:bg-white/5'}`}
-                            >
-                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${activeAppId === 'core' ? 'bg-transparent border-transparent text-[#2B85EB]' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
-                                 <LayoutDashboard className="w-5 h-5" />
-                               </div>
-                               <span className={`text-[10px] font-semibold text-center ${activeAppId === 'core' ? 'text-[#2B85EB]' : 'text-[#F5F7FA]'}`}>Painel</span>
-                            </button>
+              <Tooltip.Trigger asChild>
+                <div className="relative" id="app-launcher-container">
+                  <button
+                    type="button"
+                    aria-label="Abrir aplicativos"
+                    aria-expanded={launcherOpen}
+                    onClick={() => {
+                      setOrgMenuOpen(false);
+                      setProfileMenuOpen(false);
+                      setLauncherOpen(!launcherOpen);
+                    }}
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${launcherOpen ? 'bg-white/10 text-[#F5F7FA] shadow-inner' : 'text-[#A0A7B5] hover:bg-white/5 hover:text-[#F5F7FA]'}`}
+                  >
+                    <LayoutGrid className="w-4.5 h-4.5" />
+                  </button>
 
-                            {ECOSYSTEM_APPS.map(app => {
-                               // Safe check in case organization is not loaded yet
-                               const isGlobalAdmin = isGlobalPrivilegedUser(profile);
-                                                              const hasMusicScalePlan = isSubscriptionValid(subscription) || (organization?.subscriptionPlan && organization?.subscriptionPlan !== 'free');
-                               const hasAccess = profile?.products?.includes('musicscale') || isGlobalAdmin || hasMusicScalePlan;
-                               
-                               const isSoon = app.category === 'beta' || app.url === '#';
-                               const isInstalled = !isSoon && (app.id === 'musicscale' ? hasAccess : organization?.enabledApps?.includes(app.id));
-                               const isActiveApp = activeAppId === app.id;
-                               
-                               return (
-                                 <button
-                                   key={app.id}
-                                   disabled={(!isInstalled && !isActiveApp) || isSoon}
-                                   onClick={() => !isSoon && handleLaunch(app)}
-                                   className={`flex flex-col items-center justify-center p-3 rounded-xl gap-2 transition-all relative ${(!isInstalled && !isActiveApp) || isSoon ? 'opacity-40 cursor-not-allowed group' : 'hover:bg-white/5'} ${isActiveApp ? 'bg-white/5' : ''}`}
-                                 >
-                                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isActiveApp ? 'bg-transparent border-transparent text-[#F5F7FA]' : isInstalled ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 text-[#2B85EB]' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
-                                     {app.icon === 'Music' && <Music className="w-5 h-5" />}
-                                     {app.icon === 'Calendar' && <Calendar className="w-5 h-5" />}
-                                     {app.icon === 'Users' && <Users className="w-5 h-5" />}
-                                     {app.icon === 'QrCode' && <QrCode className="w-5 h-5" />}
-                                     {!['Music', 'Calendar', 'Users', 'QrCode'].includes(app.icon) && <LayoutGrid className="w-5 h-5" />}
-                                   </div>
-                                   <span className={`text-[10px] font-semibold text-center ${isActiveApp ? 'text-[#F5F7FA]' : 'text-[#A0A7B5]'}`}>{app.name}</span>
-                                   
-                                   {isSoon && (
-                                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[#050505]/80 rounded-xl">
-                                       <span className="text-[9px] font-bold uppercase tracking-widest text-white">Soon</span>
-                                     </div>
-                                   )}
-                                 </button>
-                               );
-                            })}
-                         </div>
-                       </motion.div>
-                     )}
-                   </AnimatePresence>
-                 </div>
-               </Tooltip.Trigger>
-               <Tooltip.Portal>
-                  <Tooltip.Content sideOffset={5} className="bg-[#0B0F19] border border-white/10 px-2 py-1 rounded-md text-[10px] font-bold text-[#F5F7FA] uppercase tracking-widest shadow-xl">
-                    Aplicativos
-                  </Tooltip.Content>
-               </Tooltip.Portal>
+                  <AnimatePresence>
+                    {launcherOpen && (
+                      <motion.div
+                        {...framerTokens.scale}
+                        role="dialog"
+                        aria-label="Seus aplicativos"
+                        className="absolute top-full mt-3 right-0 w-[min(22rem,calc(100vw-1rem))] bg-[#050505]/98 backdrop-blur-2xl border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,.65)] rounded-2xl p-2 origin-top-right z-50"
+                      >
+                        <div className="px-3 py-2 flex items-center justify-between border-b border-white/5 mb-2">
+                          <div>
+                            <p className="text-[10px] font-bold text-[#A0A7B5] uppercase tracking-widest">Seus aplicativos</p>
+                            <p className="text-[11px] text-white/40 mt-0.5">Abra uma ferramenta sem perder o contexto da organização.</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleLaunch({ id: 'core', name: 'Início', description: '', icon: 'Dashboard', url: '', requiredPlan: 'free', category: 'core' } as EcosystemApp)}
+                            className={`min-h-[92px] flex flex-col items-center justify-center p-3 rounded-xl gap-2 transition-all ${activeAppId === 'core' ? 'bg-[#2B85EB]/10 border border-[#2B85EB]/20' : 'border border-transparent hover:bg-white/5'}`}
+                          >
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${activeAppId === 'core' ? 'bg-[#2B85EB] text-white' : 'bg-white/5 text-[#A0A7B5]'}`}>
+                              <LayoutDashboard className="w-5 h-5" />
+                            </div>
+                            <span className={`text-[10px] font-semibold text-center ${activeAppId === 'core' ? 'text-white' : 'text-[#F5F7FA]'}`}>Início</span>
+                          </button>
+
+                          {launcherApps.map(app => {
+                            const isActiveApp = activeAppId === app.id;
+                            return (
+                              <button
+                                key={app.id}
+                                type="button"
+                                onClick={() => handleLaunch(app)}
+                                className={`min-h-[92px] flex flex-col items-center justify-center p-3 rounded-xl gap-2 transition-all border ${isActiveApp ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20' : 'border-transparent hover:bg-white/5'}`}
+                              >
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isActiveApp ? 'bg-[#2B85EB] text-white' : 'bg-white/5 text-[#A0A7B5]'}`}>
+                                  {app.id === 'musicscale' ? (
+                                    <img src="/LogoIconMusicScale-1.png" alt="" className="w-6 h-6 object-contain" />
+                                  ) : (
+                                    <EcosystemAppIcon app={app} iconClassName="w-5 h-5" assetClassName="w-8 h-8" />
+                                  )}
+                                </div>
+                                <span className="text-[10px] font-semibold text-center text-[#F5F7FA] line-clamp-2">{app.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {launcherApps.length === 0 && (
+                          <div className="px-3 py-5 text-center">
+                            <p className="text-sm font-semibold text-white">Nenhum aplicativo ativo</p>
+                            <p className="text-xs text-[#A0A7B5] mt-1">Os aplicativos liberados para esta organização aparecerão aqui.</p>
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLauncherOpen(false);
+                            navigate('/dashboard/overview');
+                          }}
+                          className="mt-2 w-full min-h-[42px] rounded-xl border border-white/5 bg-white/[0.025] hover:bg-white/5 text-xs font-semibold text-[#A0A7B5] hover:text-white transition-colors"
+                        >
+                          Gerenciar no MillionsNest
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content sideOffset={5} className="bg-[#0B0F19] border border-white/10 px-2 py-1 rounded-md text-[10px] font-bold text-[#F5F7FA] uppercase tracking-widest shadow-xl">
+                  Aplicativos
+                </Tooltip.Content>
+              </Tooltip.Portal>
             </Tooltip.Root>
           </Tooltip.Provider>
 
           {/* User Profile */}
           <div className="relative" id="profile-menu-container">
             <button 
-              onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+              onClick={() => {
+                setOrgMenuOpen(false);
+                setLauncherOpen(false);
+                setProfileMenuOpen(!profileMenuOpen);
+              }}
               className="w-8 h-8 rounded-full border border-white/10 overflow-hidden ml-1 hover:border-white/30 transition-colors"
             >
               {profile?.photoURL ? (
@@ -419,7 +474,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
                    animate={{ opacity: 1, scale: 1, y: 0 }}
                    exit={{ opacity: 0, scale: 0.95, y: 5 }}
                    transition={{ duration: 0.15, ease: "easeOut" }}
-                   className="absolute top-full mt-3 right-0 w-[240px] bg-[#050505]/95 backdrop-blur-2xl border border-white/10 shadow-[0_0_40px_rgba(0,0,0,1)] rounded-xl p-1 origin-top-right z-50"
+                   className="absolute top-full mt-3 right-0 w-[min(18rem,calc(100vw-1rem))] bg-[#050505]/98 backdrop-blur-2xl border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,.65)] rounded-2xl p-1 origin-top-right z-50"
                  >
                    <div className="p-3 border-b border-white/5 mb-1 flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs font-bold shrink-0">

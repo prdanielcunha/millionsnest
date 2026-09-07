@@ -4,11 +4,13 @@ import { SupportWhatsAppModal } from './SupportWhatsAppModal.js';
 import { SupportGuideModal } from './SupportGuideModal.js';
 import { useLocation } from 'react-router-dom';
 import { resolveSupportGuide, SupportGuideDefinition } from '../../lib/supportGuideRegistry.js';
+import { ECOSYSTEM_APPS } from '../../lib/apps.js';
 
 export function resolveSupportAppId(pathname: string): string {
-  if (pathname.startsWith('/dashboard/apps/musicscale')) return 'musicscale';
-  if (pathname.startsWith('/dashboard/apps/nestfinance')) return 'nestfinance';
-  return 'core';
+  const match = pathname.match(/^\/dashboard\/apps\/([^/?#]+)/);
+  if (!match) return 'core';
+  const appId = decodeURIComponent(match[1]);
+  return ECOSYSTEM_APPS.some(app => app.id === appId) ? appId : 'core';
 }
 
 interface SupportHubContextValue {

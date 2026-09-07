@@ -7,6 +7,8 @@ import { normalizeSlug } from '../lib/slug.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
 import { canChangeOrganizationRole } from '../lib/roleResolver.js';
 import { feedback } from '../packages/ui/feedback.js';
+import type { HubAppExperience } from '../lib/hubAppExperience.js';
+import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
 
 type OrgTab = 'settings' | 'members' | 'apps' | 'roles' | 'billing' | 'audit';
 
@@ -92,7 +94,9 @@ export function OrganizationManager({
   onOpenInviteModal,
   adminSelectedOrgId,
   setAdminSelectedOrgId,
-  onOpenMusicScale
+  onOpenMusicScale,
+  appExperiences = [],
+  onOpenApp
 }: any) {
   const [activeTab, setActiveTabInternal] = useState<OrgTab>((initialTab as OrgTab) || 'settings');
   const [slugStatus, setSlugStatus] = useState<string | null>(null);
@@ -429,7 +433,7 @@ export function OrganizationManager({
                   setAdminSelectedOrgId(e.target.value);
                }
             }}
-            className="bg-[#050505] text-[#F5F7FA] text-sm rounded-xl px-4 py-2.5 border border-white/10 outline-none w-full sm:w-auto min-w-[250px]"
+            className="bg-[#050505] text-[#F5F7FA] text-sm rounded-xl px-4 py-2.5 border border-white/10 outline-none w-full sm:w-auto sm:min-w-[250px]"
           >
              <option value={profile?.organizationId || ''}>Sua Organização ({organization?.name})</option>
              {adminOrgs.filter(o => o.id !== profile?.organizationId).map(org => (
@@ -439,10 +443,10 @@ export function OrganizationManager({
         </div>
       )}
 
-      <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 lg:p-8 border border-white/5 shadow-2xl flex flex-col md:flex-row gap-8">
+      <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[1.5rem] md:rounded-[2rem] p-4 sm:p-6 lg:p-8 border border-white/5 shadow-2xl flex flex-col md:flex-row gap-5 md:gap-8">
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 shrink-0 flex flex-col gap-2">
-        <h2 className="text-xl font-semibold text-[#F5F7FA] flex items-center gap-3 mb-6 px-4">
+      <aside className="w-full md:w-64 shrink-0 flex md:flex-col gap-2 overflow-x-auto md:overflow-visible no-scrollbar pb-1 md:pb-0">
+        <h2 className="hidden md:flex text-xl font-semibold text-[#F5F7FA] items-center gap-3 mb-6 px-4">
            <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
             <Building2 className="w-4 h-4 text-[#A0A7B5]" />
           </span>
@@ -463,7 +467,7 @@ export function OrganizationManager({
                 }
                 setActiveTab(tab.id as OrgTab);
               }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm border relative ${isActive ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20 shadow-sm' : 'bg-transparent text-[#A0A7B5] border-transparent hover:bg-white/5 hover:text-[#F5F7FA]'}`}
+              className={`shrink-0 min-h-[44px] flex items-center gap-2 md:gap-3 px-3.5 md:px-4 py-2.5 md:py-3 rounded-xl transition-all font-medium text-xs md:text-sm border relative ${isActive ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20 shadow-sm' : 'bg-transparent text-[#A0A7B5] border-white/5 md:border-transparent hover:bg-white/5 hover:text-[#F5F7FA]'}`}
             >
               <div className="relative">
                  <Icon className="w-4 h-4" />
@@ -939,62 +943,141 @@ export function OrganizationManager({
           {activeTab === 'apps' && (
              <motion.div key="apps" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <h3 className="text-lg font-semibold text-[#F5F7FA] mb-2">Aplicativos da organização</h3>
-                <p className="text-sm text-[#A0A7B5] mb-6">Abra cada aplicativo ou vá direto para as configurações mais usadas.</p>
-                
-                <div className="bg-[#050505] rounded-2xl border border-white/5 p-5 mb-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 border border-[#2B85EB]/20 flex items-center justify-center text-[#2B85EB]">
-                        <LayoutGrid className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-[#F5F7FA]">MusicScale <span className="text-[10px] ml-2 font-bold uppercase tracking-widest bg-[#10B981]/10 text-[#10B981] rounded px-1.5 py-0.5 border border-[#10B981]/20">Ativo</span></p>
-                        <p className="text-sm text-[#A0A7B5]">Louvor, repertório, equipe e escalas.</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onOpenMusicScale?.('/')}
-                      className="px-5 py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold text-sm hover:bg-white transition-all"
-                    >
-                      Abrir MusicScale
-                    </button>
-                  </div>
+                <p className="text-sm text-[#A0A7B5] mb-6">Veja o que está ativo, o plano de cada produto e abra as configurações certas sem precisar entender a estrutura técnica do ecossistema.</p>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-5 pt-5 border-t border-white/5">
-                    <button type="button" onClick={() => onOpenMusicScale?.('/users')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
-                      <p className="text-sm font-semibold text-white">Equipe no MusicScale</p>
-                      <p className="text-xs text-[#A0A7B5] mt-1">Músicos, vocais e funções ministeriais.</p>
-                    </button>
-                    <button type="button" onClick={() => onOpenMusicScale?.('/scales')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
-                      <p className="text-sm font-semibold text-white">Escalas</p>
-                      <p className="text-xs text-[#A0A7B5] mt-1">Cultos, músicas e confirmações.</p>
-                    </button>
-                    <button type="button" onClick={() => onOpenMusicScale?.('/profile')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
-                      <p className="text-sm font-semibold text-white">Preferências do aplicativo</p>
-                      <p className="text-xs text-[#A0A7B5] mt-1">Perfil e opções pessoais do MusicScale.</p>
-                    </button>
-                    <button type="button" onClick={() => onOpenMusicScale?.('/plan-usage')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
-                      <p className="text-sm font-semibold text-white">Uso do plano</p>
-                      <p className="text-xs text-[#A0A7B5] mt-1">Veja limites e utilização dos recursos.</p>
-                    </button>
-                  </div>
+                <div className="space-y-3">
+                  {(appExperiences as HubAppExperience[])
+                    .filter(experience => experience.installed)
+                    .map(experience => {
+                      const app = experience.app;
+                      const planLabel = experience.plan
+                        ? String(experience.plan).replace(/[_-]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+                        : experience.state === 'administrative'
+                          ? 'Pro · acesso administrativo'
+                          : 'Incluído';
+                      const statusLabel: Record<string, string> = {
+                        active: 'Ativo',
+                        trialing: 'Em teste',
+                        cancel_scheduled: 'Cancelamento agendado',
+                        payment_issue: 'Pagamento pendente',
+                        administrative: 'Acesso administrativo',
+                        loading: 'Verificando',
+                        error: 'Precisa de atenção'
+                      };
+
+                      return (
+                        <div key={app.id} className="bg-[#050505] rounded-2xl border border-white/5 p-4 sm:p-5">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                                {app.id === 'musicscale' ? (
+                                  <img src="/LogoIconMusicScale-1.png" alt="" className="w-7 h-7 object-contain" />
+                                ) : (
+                                  <EcosystemAppIcon app={app} iconClassName="w-5 h-5" assetClassName="w-9 h-9" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-semibold text-[#F5F7FA]">{app.name}</p>
+                                  <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                    experience.needsAttention
+                                      ? 'bg-red-500/10 text-red-300 border-red-500/20'
+                                      : experience.state === 'administrative'
+                                        ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
+                                        : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                                  }`}>
+                                    {statusLabel[experience.state] || 'Ativo'}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-[#A0A7B5] mt-1 line-clamp-2">{app.shortDescription || app.description}</p>
+                                <p className="text-[11px] text-white/50 mt-1.5">Plano: <span className="text-white/80 font-medium">{planLabel}</span></p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                              {experience.needsAttention ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveDashboardTab('billing')}
+                                  className="min-h-[42px] px-4 rounded-xl bg-red-500/10 text-red-300 border border-red-500/20 text-xs font-semibold hover:bg-red-500/15"
+                                >
+                                  Revisar assinatura
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenApp?.(app)}
+                                  className="min-h-[42px] px-4 rounded-xl bg-white text-[#050505] text-xs font-semibold hover:bg-[#F5F7FA]"
+                                >
+                                  Abrir {app.name}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setActiveDashboardTab('billing')}
+                                className="min-h-[42px] px-4 rounded-xl border border-white/10 bg-white/5 text-white text-xs font-semibold hover:bg-white/10"
+                              >
+                                Plano e cobrança
+                              </button>
+                            </div>
+                          </div>
+
+                          {app.id === 'musicscale' && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-5 pt-5 border-t border-white/5">
+                              <button type="button" onClick={() => onOpenMusicScale?.('/users')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                                <p className="text-sm font-semibold text-white">Equipe no MusicScale</p>
+                                <p className="text-xs text-[#A0A7B5] mt-1">Músicos, vocais e funções ministeriais.</p>
+                              </button>
+                              <button type="button" onClick={() => onOpenMusicScale?.('/scales')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                                <p className="text-sm font-semibold text-white">Escalas</p>
+                                <p className="text-xs text-[#A0A7B5] mt-1">Cultos, músicas e confirmações.</p>
+                              </button>
+                              <button type="button" onClick={() => onOpenMusicScale?.('/profile')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                                <p className="text-sm font-semibold text-white">Preferências do aplicativo</p>
+                                <p className="text-xs text-[#A0A7B5] mt-1">Perfil e opções pessoais do MusicScale.</p>
+                              </button>
+                              <button type="button" onClick={() => onOpenMusicScale?.('/plan-usage')} className="text-left p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
+                                <p className="text-sm font-semibold text-white">Uso do plano</p>
+                                <p className="text-xs text-[#A0A7B5] mt-1">Veja limites e utilização dos recursos.</p>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
-                
-                {organization?.enabledApps?.filter((a: string) => a !== 'musicscale').map((appId: string) => (
-                  <div key={appId} className="bg-[#050505] rounded-2xl border border-white/5 p-4 flex items-center justify-between mb-4 gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-[#F5F7FA]">
-                        <LayoutGrid className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-[#F5F7FA]">{appId}</p>
-                        <p className="text-xs text-[#A0A7B5]">A disponibilidade deste aplicativo é controlada pelo seu plano.</p>
-                      </div>
+
+                {(appExperiences as HubAppExperience[]).filter(experience => !experience.installed).length > 0 && (
+                  <div className="mt-7 pt-6 border-t border-white/5">
+                    <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-[#A0A7B5] mb-3">Outros produtos do ecossistema</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {(appExperiences as HubAppExperience[])
+                        .filter(experience => !experience.installed)
+                        .map(experience => (
+                          <div key={experience.app.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-3.5 flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                              <EcosystemAppIcon app={experience.app} iconClassName="w-4 h-4 text-[#A0A7B5]" assetClassName="w-7 h-7" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-white truncate">{experience.app.name}</p>
+                              <p className="text-[11px] text-[#A0A7B5] mt-0.5">
+                                {experience.state === 'coming_soon' ? 'Em breve' : experience.state === 'development' ? 'Em desenvolvimento' : 'Disponível para contratação'}
+                              </p>
+                            </div>
+                            {experience.state === 'available' && (
+                              <button type="button" onClick={() => setActiveDashboardTab('billing')} className="text-xs font-semibold text-[#2B85EB]">Ver planos</button>
+                            )}
+                          </div>
+                        ))}
                     </div>
-                    <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest bg-white/5 text-[#A0A7B5] rounded-md border border-white/10">Habilitado</span>
                   </div>
-                ))}
+                )}
+
+                <div className="mt-6 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+                  <p className="text-xs text-[#A0A7B5] leading-relaxed">
+                    A organização, os convites, os cargos administrativos e a cobrança ficam centralizados no MillionsNest. Configurações operacionais específicas — como instrumentos, categorias ou fluxos internos — continuam dentro de cada aplicativo.
+                  </p>
+                </div>
              </motion.div>
           )}
 

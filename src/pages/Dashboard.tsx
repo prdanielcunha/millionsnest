@@ -37,6 +37,7 @@ import { EcosystemAppIcon } from "../components/apps/EcosystemAppIcon.js";
 import { SupportHubProvider } from "../components/support/SupportHubContext.js";
 import { SupportHub } from "../components/support/SupportHub.js";
 import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js";
+import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -160,8 +161,8 @@ export function Dashboard() {
   const { tab, subTab } = useParams();
   
   const activeOrgId = canonicalContext?.activeOrganizationId || profile?.organizationId;
-  const userOrgs = canonicalContext?.organizations || 
-     (profile?.organizations ? profile.organizations.map((id: string) => ({ id, name: `Org ID: ${id.substring(0,8)}` })) : []);
+  const userOrgs = canonicalContext?.organizations ||
+     (profile?.organizations ? profile.organizations.map((id: string) => ({ id, name: 'Organização' })) : []);
   
   // Mapping specific routes to internal tabs
   let initialTab: Tab = "overview";
@@ -1758,11 +1759,21 @@ export function Dashboard() {
 
   const msIsInstalled = musicScaleProjection?.accessible === true;
 
-  const installedApps = ECOSYSTEM_APPS.filter(app => {
-    if (app.id === 'nestfinance') return false;
-    if (app.id === 'musicscale') return msIsInstalled;
-    return organization?.enabledApps?.includes(app.id);
+  const hubAppCatalog = resolveHubAppCatalog(ECOSYSTEM_APPS, {
+    organization,
+    subscription,
+    musicScaleAccess: {
+      accessible: musicScaleProjection?.accessible === true,
+      catalogState: musicScaleProjectionError
+        ? 'error'
+        : musicScaleProjectionLoading
+          ? 'loading'
+          : musicScaleProjection?.catalogState || 'unavailable'
+    },
+    isGlobalAdmin
   });
+  const installedAppExperiences = hubAppCatalog.filter(experience => experience.installed);
+  const installedApps = installedAppExperiences.map(experience => experience.app);
   const musicScaleApp = ECOSYSTEM_APPS.find(a => a.id === 'musicscale');
   const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
   const maxUsersLimit = entitlements?.limits?.users ?? 10;
@@ -1895,11 +1906,15 @@ export function Dashboard() {
 
   return (
     <SupportHubProvider organizationId={activeContextOrgId || null} organizationName={organization?.name || null} appId="core">
-    <EcosystemShell activeAppId="core" breadcrumbList={breadcrumbs}>
+    <EcosystemShell
+      activeAppId="core"
+      breadcrumbList={breadcrumbs}
+      installedAppIds={installedAppExperiences.map(experience => experience.app.id)}
+    >
       <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-[#2B85EB]/5 blur-[150px] rounded-full pointer-events-none" />
       
       {/* Secondary Navigation */}
-      <div className="bg-[#050505]/80 backdrop-blur-xl border-b border-white/5 pt-4 md:pt-6 px-6 sticky top-14 z-40">
+      <div className="hidden md:block bg-[#050505]/80 backdrop-blur-xl border-b border-white/5 pt-5 px-6 sticky top-14 z-40">
         <div className="max-w-7xl mx-auto flex items-center gap-8 overflow-x-auto no-scrollbar">
           <button 
             onClick={() => setActiveTab("overview")}
@@ -1907,7 +1922,7 @@ export function Dashboard() {
           >
             {t('dashboard.navigation.overview', 'Início')}
           </button>
-          {(currentUserPerms['organization.settings.update'] || isGlobalAdmin) && (
+          {(currentUserPerms['organization.settings.update'] || currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
             <button 
               onClick={() => setActiveTab("organization")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "organization" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
@@ -1915,12 +1930,12 @@ export function Dashboard() {
               Organização
             </button>
           )}
-          {currentUserPerms['organization.billing.manage'] && (
+          {(currentUserPerms['organization.billing.manage'] || isGlobalAdmin) && (
             <button 
               onClick={() => setActiveTab("billing")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "billing" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
             >
-              Valores e Assinatura
+              Planos e assinatura
             </button>
           )}
           <button 
@@ -1942,24 +1957,24 @@ export function Dashboard() {
         </div>
       </div>
       
-      <main className="py-12 max-w-7xl mx-auto px-6 relative z-10">
-        <header className="mb-12">
+      <main className="py-6 md:py-10 max-w-7xl mx-auto px-4 sm:px-6 relative z-10 pb-28 md:pb-10">
+        <header className="mb-8 md:mb-10">
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-5 mb-2"
+            className="flex items-center gap-3 sm:gap-5 mb-2"
           >
             {profile?.photoURL ? (
-              <img src={profile.photoURL} alt="Profile" loading="lazy" decoding="async" className="w-16 h-16 rounded-2xl border border-white/10 shadow-sm" />
+              <img src={profile.photoURL} alt="Profile" loading="lazy" decoding="async" className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl border border-white/10 shadow-sm" />
             ) : (
-              <div className="w-16 h-16 bg-[#0B0F19] rounded-2xl flex items-center justify-center text-[#F5F7FA] font-bold text-2xl border border-white/10 shadow-sm">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-[#0B0F19] rounded-2xl flex items-center justify-center text-[#F5F7FA] font-bold text-lg sm:text-2xl border border-white/10 shadow-sm">
                 {profile?.displayName?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
               </div>
             )}
             <div className="flex-1 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-3 flex-wrap mb-1">
-                  <h1 className="text-2xl md:text-3xl font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
                     Olá, {profile?.displayName?.split(' ')[0] || user.email?.split('@')[0]}
                   </h1>
                 </div>
@@ -1993,7 +2008,7 @@ export function Dashboard() {
                      })}
                   </div>
                   <div className="hidden md:block w-px h-4 bg-white/10" />
-                  <p className="text-[#A0A7B5] text-sm">
+                  <p className="hidden sm:block text-[#A0A7B5] text-sm">
                     Visão geral da sua organização
                   </p>
                 </div>
@@ -2014,6 +2029,7 @@ export function Dashboard() {
               <EcosystemWorkspaceHome 
                 selectedWorkspace={selectedWorkspace}
                 installedApps={installedApps}
+                appExperiences={hubAppCatalog}
                 organization={organization}
                 subscription={subscription}
                 members={members}
@@ -2041,339 +2057,22 @@ export function Dashboard() {
                     refreshMusicScaleAccessProjection(activeContextOrgId);
                   }
                 }}
+                recentActivity={auditLogs.slice(0, 5).map(log => ({
+                  id: log.id,
+                  label: humanizeAuditAction(log.action),
+                  timestampMs: log.timestamp?.seconds
+                    ? log.timestamp.seconds * 1000
+                    : typeof log.timestamp?.toMillis === 'function'
+                      ? log.timestamp.toMillis()
+                      : null,
+                  actorName: log.actorUid
+                    ? members.find(member => member.id === log.actorUid)?.displayName || null
+                    : null
+                }))}
               />
-
-              {selectedWorkspace === 'home' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left Column: Main Content */}
-                <div className="col-span-1 lg:col-span-2 space-y-6">
-                  
-                  {/* Organization Current Status */}
-                  <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 lg:p-8 border border-white/5 shadow-2xl relative overflow-hidden group">
-                     {/* Ambient decoration */}
-                     <div className="absolute top-0 right-0 w-64 h-64 bg-[#2B85EB]/5 rounded-full blur-[80px] -z-10 group-hover:scale-110 transition-transform duration-700" />
-                     
-                     <div className="flex items-start justify-between mb-8">
-                       <div className="flex items-center gap-4">
-                         <div className="w-14 h-14 rounded-2xl bg-[#050505] flex items-center justify-center border border-white/10 shadow-inner">
-                           <Building2 className="w-6 h-6 text-[#F5F7FA]" />
-                         </div>
-                         <div>
-                           <p className="text-[#A0A7B5] text-xs font-bold uppercase tracking-widest mb-1">Organização Ativa</p>
-                           <h2 className="text-xl md:text-2xl font-semibold text-[#F5F7FA] tracking-tight">{organization?.name || "Carregando..."}</h2>
-                         </div>
-                       </div>
-                       
-                       <div className="flex items-center gap-3">
-                         {organization?.slug && (
-                            <a 
-                               href={`/${organization.slug}`} 
-                               target="_blank" 
-                               rel="noopener noreferrer"
-                               className="px-3 py-1.5 bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-[10px] font-bold rounded-full flex items-center gap-1.5 uppercase tracking-widest shadow-sm hover:bg-[#2B85EB]/20 transition-colors"
-                            >
-                               <Link className="w-3.5 h-3.5" /> Site
-                            </a>
-                         )}
-                         {getVisualState(subscription) === 'trialing' ? (
-                           <span className="px-3 py-1 bg-[#F59E0B]/10 text-[#F59E0B] text-[10px] font-bold rounded-full border border-[#F59E0B]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
-                             <Clock className="w-3.5 h-3.5" /> Trial Ativo
-                           </span>
-                         ) : getVisualState(subscription) === 'active' || getVisualState(subscription) === 'cancel_scheduled' ? (
-                           <span className="px-3 py-1 bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold rounded-full border border-[#10B981]/20 flex items-center gap-1.5 uppercase tracking-widest shadow-sm">
-                             <ShieldCheck className="w-3.5 h-3.5" /> Ativo
-                           </span>
-                         ) : (
-                           <span className="px-3 py-1 bg-white/5 text-[#A0A7B5] text-[10px] font-bold rounded-full border border-white/10 uppercase tracking-widest shadow-sm">
-                             Sem Assinatura
-                           </span>
-                         )}
-                       </div>
-                     </div>
-
-                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
-                          <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
-                             <Users className="w-3.5 h-3.5" /> Membros
-                          </p>
-                          {(() => {
-                            const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
-                            const maxUsersLimit = entitlements?.limits?.users ?? 10;
-                            const occupiedSlots = calculateOccupiedSlots(members, pendingInvites);
-                            const limitStr = maxUsersLimit === -1 ? 'Ilimitado' : maxUsersLimit;
-                            return (
-                              <p className="text-2xl font-semibold text-[#F5F7FA]">
-                                {occupiedSlots}<span className="text-xs text-[#A0A7B5] ml-1">/ {limitStr}</span>
-                              </p>
-                            );
-                          })()}
-                        </div>
-                        <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
-                          <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
-                             <LayoutGrid className="w-3.5 h-3.5" /> Apps Ativos
-                          </p>
-                          <p className="text-2xl font-semibold text-[#F5F7FA]">{organization?.enabledApps?.length || (msIsInstalled ? 1 : 0)}</p>
-                        </div>
-                        <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
-                          <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
-                             <ListMusic className="w-3.5 h-3.5" /> Plano Atual
-                          </p>
-                          <p className="text-sm font-semibold text-[#F5F7FA] mt-1 capitalize">{subscription?.plan || subscription?.tier || organization?.subscriptionPlan || 'Plano não identificado'}</p>
-                        </div>
-                        <div className="bg-[#050505] rounded-2xl p-4 border border-white/5 shadow-inner">
-                          <p className="text-[#A0A7B5] text-[10px] uppercase font-bold tracking-widest mb-2 flex items-center gap-2">
-                             <CreditCard className="w-3.5 h-3.5" /> Vencimento
-                          </p>
-                          <p className="text-sm font-semibold text-[#F5F7FA] mt-1">{formattedRenewal || "---"}</p>
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* Timeline Ministerial */}
-                  <UnifiedTimeline />
-
-                  {/* Active Ecosystem Apps */}
-                  <div id="apps-catalog">
-                    <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-lg font-semibold text-[#F5F7FA] flex items-center gap-2">
-                        <LayoutGrid className="w-5 h-5 text-[#A0A7B5]" />
-                        Catálogo de Aplicativos
-                      </h3>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {ECOSYSTEM_APPS.map(app => {
-                        const isMusicScale = app.id === 'musicscale';
-                        const isNestFinance = app.id === 'nestfinance';
-                        const isInstalled = isNestFinance ? false : isMusicScale ? msIsInstalled : organization?.enabledApps?.includes(app.id);
-
-                        let cardStatusText = t('dashboard.apps.available', 'Disponível');
-                        let isWarningState = false;
-
-                        if (isMusicScale) {
-                           if (musicScaleProjectionError) {
-                               cardStatusText = t('error', 'Erro');
-                               isWarningState = true;
-                           } else if (musicScaleProjectionLoading) {
-                               cardStatusText = t('loading', 'Carregando...');
-                           } else {
-                               switch (musicScaleProjection?.catalogState) {
-                                  case 'trialing': cardStatusText = t('dashboard.apps.trialing', 'Em teste'); break;
-                                  case 'active': cardStatusText = t('dashboard.apps.active', 'Ativo'); break;
-                                  case 'cancel_scheduled': cardStatusText = t('dashboard.apps.cancel_scheduled', 'Cancelamento agendado'); break;
-                                  case 'payment_issue': 
-                                     cardStatusText = t('dashboard.apps.payment_issue', 'Pagamento pendente'); 
-                                     isWarningState = true;
-                                     break;
-                                  case 'administrative': cardStatusText = t('dashboard.apps.administrative', 'Acesso administrativo'); break;
-                                  case 'available': cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
-                                  case 'unavailable': cardStatusText = t('dashboard.apps.unavailable', 'Acesso indisponível'); break;
-                                  default: cardStatusText = t('dashboard.apps.available', 'Disponível'); break;
-                               }
-                           }
-                        } else if (isNestFinance) {
-                           cardStatusText = 'Em breve';
-                        } else {
-                           cardStatusText = isInstalled ? 'Instalado' : 
-                                            
-                                            app.category === 'beta' ? 'Em Breve' : 'Disponível';
-                        }
-
-                        return (
-                          <div key={app.id} className="bg-[#050505] rounded-3xl p-5 border border-white/10 shadow-lg flex flex-col transition-all hover:border-white/20 relative overflow-hidden group">
-                            {isInstalled && <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-0" />}
-                            <div className="relative z-10 flex items-start justify-between mb-4">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${isInstalled ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20 text-[#2B85EB]' : isWarningState ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-white/5 border-white/10 text-[#A0A7B5]'}`}>
-                                {app.id === 'musicscale' ? (
-                                  <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-7 h-7 object-contain" />
-                                ) : (
-                                  <EcosystemAppIcon
-                                    app={app}
-                                    iconClassName="w-5 h-5"
-                                    assetClassName="w-10 h-10"
-                                  />
-                                )}
-                              </div>
-                              <span className={`px-2 py-1 text-[9px] font-bold rounded-md border uppercase tracking-widest shadow-sm ${
-                                isInstalled ? 'bg-[#2B85EB]/10 text-[#2B85EB] border-[#2B85EB]/20' : 
-                                isWarningState ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                
-                                'bg-white/5 text-[#A0A7B5] border-white/10'
-                              }`}>
-                                {cardStatusText}
-                              </span>
-                            </div>
-                            <h4 className="text-lg font-semibold text-[#F5F7FA] mb-1">{app.name}</h4>
-                            <p className="text-[#A0A7B5] text-xs leading-relaxed mb-6 flex-1">
-                              {app.description}
-                              {isMusicScale && musicScaleProjection?.catalogState === 'cancel_scheduled' && formattedRenewal && (
-                                <span className="block mt-2 text-white/40">Acesso até {formattedRenewal}</span>
-                              )}
-                            </p>
-                            
-                            <div className="relative z-10 flex items-center gap-3">
-                              {app.id === 'nestfinance' ? (
-                                <button
-                                  disabled
-                                  className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed border border-white/5"
-                                >
-                                  Em breve
-                                </button>
-                              ) : isMusicScale ? (
-                                musicScaleProjectionError ? (
-                                  <button
-                                    onClick={() => refreshMusicScaleAccessProjection(activeContextOrgId!)}
-                                    className="flex-1 w-full py-2.5 bg-white/5 text-[#A0A7B5] border border-white/5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white/10 transition-all shadow-sm active:scale-95"
-                                  >
-                                    Tentar novamente
-                                  </button>
-                                ) : musicScaleProjectionLoading ? (
-                                  <button
-                                    disabled
-                                    className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-wait border border-white/5"
-                                  >
-                                    <div className="w-3.5 h-3.5 border border-[#A0A7B5]/30 border-t-[#A0A7B5] rounded-full animate-spin" />
-                                    {t('loading', 'Carregando...')}
-                                  </button>
-                                ) : musicScaleProjection?.catalogState === 'payment_issue' ? (
-                                  <button
-                                    onClick={() => navigate('/dashboard/billing')}
-                                    className="flex-1 w-full py-2.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-red-500/20 transition-all shadow-sm active:scale-95"
-                                  >
-                                    {t('dashboard.apps.resolve_payment', 'Regularizar pagamento')}
-                                  </button>
-                                ) : isInstalled ? (
-                                  <button
-                                    onClick={() => handleLaunchEcosystemApp(app, currentUserPerms)}
-                                    className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95"
-                                  >
-                                    Abrir App <ArrowRight className="w-3.5 h-3.5" />
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => navigate('/checkout')}
-                                    className="flex-1 py-2.5 bg-[#2B85EB]/10 text-[#2B85EB] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-[#2B85EB]/20 hover:bg-[#2B85EB]/20 transition-colors"
-                                  >
-                                    Ver planos
-                                  </button>
-                                )
-                              ) : isInstalled ? (
-                                <button
-                                  onClick={() => handleLaunchEcosystemApp(app, currentUserPerms)}
-                                  className="flex-1 w-full py-2.5 bg-[#F5F7FA] text-[#050505] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white transition-all shadow-sm active:scale-95"
-                                >
-                                  Abrir App <ArrowRight className="w-3.5 h-3.5" />
-                                </button>
-                              ) : (
-                                <button
-                                  disabled
-                                  className="flex-1 py-2.5 bg-white/5 text-[#A0A7B5] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed border border-white/5"
-                                >
-                                  {app.requiredPlan !== 'free' ? `Requer plano ${app.requiredPlan}` : 'Em breve'}
-                                </button>
-                              )}
-                              {isMusicScale && msIsInstalled && (
-                                <button
-                                   type="button"
-                                   onClick={() => handleLaunchEcosystemApp(app, currentUserPerms, '/profile')}
-                                   className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/10 transition-colors shrink-0"
-                                   title="Preferências do MusicScale"
-                                   aria-label="Abrir preferências do MusicScale"
-                                >
-                                   <Settings className="w-4 h-4" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Right Column: Activity & Team summary */}
-                <div className="space-y-6">
-                  {/* Recent Activity */}
-                  <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 shadow-2xl h-fit">
-                    <h3 className="text-base font-semibold text-[#F5F7FA] flex items-center justify-between mb-6">
-                      <span className="flex items-center gap-2">
-                        <Zap className="w-4 h-4 text-[#2B85EB]" /> Atividade Recente
-                      </span>
-                    </h3>
-                    
-                    <div className="space-y-4">
-                      {auditLogs.length > 0 ? auditLogs.map(log => (
-                        <div key={log.id} className="flex gap-3">
-                          <div className="flex flex-col items-center">
-                            <div className="w-2 h-2 rounded-full bg-[#2B85EB]" />
-                            <div className="w-px h-full bg-white/5 my-1" />
-                          </div>
-                          <div className="pb-4">
-                            <p className="text-sm text-[#F5F7FA]">{humanizeAuditAction(log.action)}</p>
-                            <p className="text-[10px] text-[#A0A7B5] mt-0.5">
-                              {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('pt-BR') : 'Agora'}
-                              {log.actorUid && members.find(m => m.id === log.actorUid)?.displayName ? ` • por ${members.find(m => m.id === log.actorUid)?.displayName}` : ''}
-                            </p>
-                          </div>
-                        </div>
-                      )) : (
-                        <div className="py-2">
-                           <PremiumEmptyState 
-                             icon={<Check className="w-6 h-6" />}
-                             title="Tudo tranquilo por aqui"
-                             description="As mudanças importantes da sua organização aparecerão aqui."
-                           />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Team Members Short summary */}
-                  <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-6 border border-white/5 shadow-2xl">
-                    <h3 className="text-base font-semibold text-[#F5F7FA] flex items-center justify-between mb-6">
-                      <span className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-[#A0A7B5]" /> Equipe
-                      </span>
-                      {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
-                        <button onClick={() => setActiveTab('organization')} className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB]">
-                          Gerenciar
-                        </button>
-                      )}
-                    </h3>
-                    <div className="space-y-3">
-                      {members.slice(0, 5).map(m => (
-                        <div key={m.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition-colors cursor-default">
-                          <div className="flex items-center gap-3">
-                            {m.photoURL ? (
-                              <img src={m.photoURL} className="w-8 h-8 rounded-lg border border-white/10" alt="" />
-                            ) : (
-                              <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center text-[#F5F7FA] text-xs font-bold border border-white/10">
-                                {m.displayName?.charAt(0) || m.email?.charAt(0)}
-                              </div>
-                            )}
-                            <div>
-                              <p className="text-xs font-semibold text-[#F5F7FA]">{m.displayName || "Usuário"}</p>
-                              <p className="text-[10px] text-[#A0A7B5] truncate max-w-[120px]">{m.email}</p>
-                            </div>
-                          </div>
-                          <span className="px-2 py-0.5 bg-white/5 text-[#A0A7B5] text-[9px] font-bold rounded-md border border-white/10 uppercase tracking-widest">
-                            {m.role || 'Membro'}
-                          </span>
-                        </div>
-                      ))}
-                      {members.length > 5 && (
-                        <button onClick={() => setActiveTab('organization')} className="w-full py-2 mt-2 bg-white/5 text-[#A0A7B5] text-xs font-semibold rounded-xl hover:bg-white/10 transition-colors border border-white/5">
-                          Ver Todos ({members.length})
-                        </button>
-                      )}
-                  </div>
-                </div>
-                  </div>
-                </div>
-              )}
             </motion.section>
           )}
+
           {activeTab === "organization" && (
             <motion.section
               key="organization"
@@ -2425,6 +2124,10 @@ export function Dashboard() {
                     void handleLaunchEcosystemApp(musicScaleApp, currentUserPerms, destinationPath);
                   }
                 }}
+                appExperiences={hubAppCatalog}
+                onOpenApp={(app: EcosystemApp, destinationPath?: string) => {
+                  void handleLaunchEcosystemApp(app, currentUserPerms, destinationPath);
+                }}
               />
             </motion.section>
           )}
@@ -2438,7 +2141,7 @@ export function Dashboard() {
               transition={{ duration: 0.2 }}
               className="max-w-2xl"
             >
-              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-8 border border-white/5 shadow-2xl">
+              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[1.5rem] md:rounded-[2rem] p-5 sm:p-7 md:p-8 border border-white/5 shadow-2xl">
                 <h2 className="text-xl font-semibold text-[#F5F7FA] flex items-center gap-3 mb-8 border-b border-white/5 pb-6">
                    <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
                     <User className="w-4 h-4 text-[#A0A7B5]" />
@@ -2509,10 +2212,9 @@ export function Dashboard() {
                            >
                              <div>
                                <p className="text-sm font-semibold text-[#F5F7FA]">
-                                 {org.name || `ID: ${org.id}`}
+                                 {org.name || 'Organização'}
                                  {activeOrgId === org.id && <span className="ml-2 text-[10px] bg-[#2B85EB]/20 text-[#2B85EB] uppercase tracking-widest px-2 py-0.5 rounded font-bold">Ativa</span>}
                                </p>
-                               {org.name && <p className="text-xs text-[#A0A7B5] mt-1 font-mono">{org.id}</p>}
                              </div>
                              {activeOrgId !== org.id && (
                                 <span className="text-xs text-[#A0A7B5] group-hover:text-white transition-colors flex items-center gap-1 font-medium bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">Acessar</span>
@@ -2525,14 +2227,15 @@ export function Dashboard() {
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between pb-6 border-b border-white/5">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">ID Central</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-2 py-1 rounded-md border border-white/5">{user.uid}</span>
+                  {isGlobalAdmin && (
+                    <details className="pb-6 border-b border-white/5">
+                      <summary className="cursor-pointer text-xs font-semibold text-[#A0A7B5]">Detalhes técnicos da conta</summary>
+                      <div className="mt-3">
+                        <p className="text-[10px] uppercase tracking-widest text-[#A0A7B5] mb-1">Identificador técnico</p>
+                        <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-2 py-1 rounded-md border border-white/5 break-all">{user.uid}</span>
                       </div>
-                    </div>
-                  </div>
+                    </details>
+                  )}
 
                   <div className="pt-6">
                     <button 
@@ -2554,17 +2257,17 @@ export function Dashboard() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
-              className="max-w-4xl"
+              className="max-w-5xl"
             >
-              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-10 border border-white/5 shadow-2xl">
-                <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-6">
+              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-5 sm:p-7 md:p-10 border border-white/5 shadow-2xl">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 border-b border-white/5 pb-6">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-[#050505] rounded-xl flex items-center justify-center border border-white/10 shadow-inner">
                       <CreditCard className="w-6 h-6 text-[#2B85EB]" />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-semibold text-[#F5F7FA]">Plano e Assinatura</h2>
-                      <p className="text-[#A0A7B5] text-sm font-normal">Gerencie seu faturamento centralizado.</p>
+                      <h2 className="text-2xl font-semibold text-[#F5F7FA]">Planos e assinaturas</h2>
+                      <p className="text-[#A0A7B5] text-sm font-normal">Veja o plano e a situação de cada aplicativo da organização.</p>
                     </div>
                   </div>
                   {loadingSub && (
@@ -2574,14 +2277,62 @@ export function Dashboard() {
                     </div>
                   )}
                 </div>
+
+                <div className="mb-8">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#A0A7B5] mb-3">Por aplicativo</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {hubAppCatalog
+                      .filter(experience => experience.isOperational && (experience.installed || experience.app.id === 'musicscale'))
+                      .map(experience => {
+                        const planLabel = experience.app.id === 'musicscale' && isGlobalAdmin && experience.installed
+                          ? 'Pro · acesso administrativo'
+                          : experience.plan
+                            ? String(experience.plan).replace(/[_-]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+                            : 'Sem plano ativo';
+                        const stateLabel: Record<string, string> = {
+                          active: 'Ativo',
+                          trialing: 'Em teste',
+                          cancel_scheduled: 'Cancelamento agendado',
+                          payment_issue: 'Pagamento pendente',
+                          administrative: 'Acesso administrativo',
+                          loading: 'Verificando',
+                          error: 'Precisa de atenção',
+                          available: 'Disponível',
+                          unavailable: 'Indisponível'
+                        };
+                        return (
+                          <div key={experience.app.id} className="rounded-2xl border border-white/8 bg-[#050505] p-4 flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center shrink-0">
+                              {experience.app.id === 'musicscale' ? (
+                                <img src="/LogoIconMusicScale-1.png" alt="" className="w-6 h-6 object-contain" />
+                              ) : (
+                                <EcosystemAppIcon app={experience.app} iconClassName="w-5 h-5" assetClassName="w-8 h-8" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-white truncate">{experience.app.name}</p>
+                                <span className={`text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                                  experience.needsAttention ? 'text-red-300' : experience.state === 'administrative' ? 'text-purple-300' : 'text-emerald-300'
+                                }`}>
+                                  {stateLabel[experience.state] || 'Ativo'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-[#A0A7B5] mt-1 truncate">{planLabel}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
                 
                 {subscription && subscription.status !== 'none' ? (
                   <div className="space-y-6">
                     <div className="bg-[#050505] rounded-2xl p-6 border border-white/5 shadow-inner">
                       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
                         <div>
-                           <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Plano Atual</p>
-                           <h3 className="text-xl font-semibold text-[#F5F7FA] capitalize">{subscription?.plan || 'Plano não identificado'} - MusicScale</h3>
+                           <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Plano do MusicScale</p>
+                           <h3 className="text-xl font-semibold text-[#F5F7FA] capitalize">{subscription?.plan || 'Plano não identificado'} · MusicScale</h3>
                         </div>
                         <div className="text-left md:text-right">
                            <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Status</p>
@@ -2722,8 +2473,8 @@ export function Dashboard() {
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-8">
                        <div>
-                         <h3 className="text-xl font-semibold text-[#F5F7FA]">Escolha seu Plano</h3>
-                         <p className="text-[#A0A7B5] text-sm">Assinatura unificada para todo o ministério.</p>
+                         <h3 className="text-xl font-semibold text-[#F5F7FA]">Escolha o plano do MusicScale</h3>
+                         <p className="text-[#A0A7B5] text-sm">Cada aplicativo do ecossistema possui seu próprio plano e recursos.</p>
                          {subscription && subscription.status !== 'none' && getVisualState(subscription) === 'canceled_expired' && (
                            <button onClick={openBillingPortal} className="mt-2 text-xs text-[#2B85EB] hover:text-[#3B95FB] underline flex items-center gap-1">
                              <Settings className="w-3.5 h-3.5" /> Ver histórico de faturas
@@ -2935,7 +2686,7 @@ export function Dashboard() {
                 {/* --- MARKETPLACE / SERVIÇOS PREMIUM --- */}
                 <div className="mt-16 pt-12 border-t border-white/5">
                   <div className="mb-10 text-center md:text-left">
-                     <h3 className="text-xl font-semibold text-[#F5F7FA] mb-2">Serviços e Adicionais</h3>
+                     <h3 className="text-xl font-semibold text-[#F5F7FA] mb-2">Serviços e adicionais do MusicScale</h3>
                      <p className="text-[#A0A7B5] text-sm">Complemente sua assinatura com ferramentas e serviços premium estruturados para o seu ministério.</p>
                   </div>
 
@@ -3101,7 +2852,7 @@ export function Dashboard() {
               </button>
 
               <div className="flex flex-col items-center text-center mt-4">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#2B85EB]/20 to-[#2B85EB]/5 border border-[#2B85EB]/30 text-[#2B85EB] flex items-center justify-center mb-6 shadow-lg shadow-[#2B85EB]/5">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-[#2B85EB]/20 to-[#2B85EB]/5 border border-[#2B85EB]/30 text-[#2B85EB] flex items-center justify-center mb-6 shadow-lg shadow-[#2B85EB]/5">
                   <Music className="w-8 h-8 animate-pulse" />
                 </div>
 
@@ -3380,6 +3131,62 @@ export function Dashboard() {
       </AnimatePresence>
 
     </EcosystemShell>
+
+    <nav
+      aria-label="Navegação principal"
+      className="md:hidden fixed inset-x-0 bottom-0 z-[70] border-t border-white/10 bg-[#050505]/95 backdrop-blur-2xl px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+    >
+      <div className="mx-auto grid max-w-lg grid-flow-col auto-cols-fr gap-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab('overview')}
+          aria-current={activeTab === 'overview' ? 'page' : undefined}
+          className={`min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors ${
+            activeTab === 'overview' ? 'bg-[#2B85EB]/12 text-white' : 'text-[#A0A7B5]'
+          }`}
+        >
+          <LayoutGrid className="w-5 h-5" />
+          <span>Início</span>
+        </button>
+        {(currentUserPerms['organization.settings.update'] || currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
+                  <button
+          type="button"
+          onClick={() => setActiveTab('organization')}
+          aria-current={activeTab === 'organization' ? 'page' : undefined}
+          className={`min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors ${
+            activeTab === 'organization' ? 'bg-[#2B85EB]/12 text-white' : 'text-[#A0A7B5]'
+          }`}
+        >
+          <Building2 className="w-5 h-5" />
+          <span>Organização</span>
+        </button>
+        )}
+        {(currentUserPerms['organization.billing.manage'] || isGlobalAdmin) && (
+                  <button
+          type="button"
+          onClick={() => setActiveTab('billing')}
+          aria-current={activeTab === 'billing' ? 'page' : undefined}
+          className={`min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors ${
+            activeTab === 'billing' ? 'bg-[#2B85EB]/12 text-white' : 'text-[#A0A7B5]'
+          }`}
+        >
+          <CreditCard className="w-5 h-5" />
+          <span>Assinatura</span>
+        </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setActiveTab('account')}
+          aria-current={activeTab === 'account' ? 'page' : undefined}
+          className={`min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors ${
+            activeTab === 'account' ? 'bg-[#2B85EB]/12 text-white' : 'text-[#A0A7B5]'
+          }`}
+        >
+          <User className="w-5 h-5" />
+          <span>Conta</span>
+        </button>
+      </div>
+    </nav>
     <SupportHub />
     </SupportHubProvider>
   );

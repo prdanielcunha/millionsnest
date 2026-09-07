@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemApp } from '../../lib/apps.js';
+import type { HubAppExperience } from '../../lib/hubAppExperience.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -13,6 +14,7 @@ import { useSupportHub } from '../support/SupportHubContext.js';
 interface EcosystemWorkspaceHomeProps {
   selectedWorkspace: string;
   installedApps: EcosystemApp[];
+  appExperiences: HubAppExperience[];
   organization: any;
   subscription: any;
   members: any[];
@@ -68,11 +70,18 @@ interface EcosystemWorkspaceHomeProps {
   activeSection: 'overview' | 'resources' | 'getting-started';
   onSelectMusicScaleSection: (section: 'overview' | 'resources' | 'getting-started') => void;
   onRetryMusicScaleAccess: () => void;
+  recentActivity: Array<{
+    id: string;
+    label: string;
+    timestampMs: number | null;
+    actorName: string | null;
+  }>;
 }
 
 export function EcosystemWorkspaceHome({
   selectedWorkspace,
   installedApps,
+  appExperiences,
   organization,
   subscription,
   members,
@@ -92,38 +101,35 @@ export function EcosystemWorkspaceHome({
   onNavigateToOrganizationSettings,
   activeSection,
   onSelectMusicScaleSection,
-  onRetryMusicScaleAccess
+  onRetryMusicScaleAccess,
+  recentActivity
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
   const { openHub } = useSupportHub();
 
   // Selector UI
   const renderWorkspaceSelector = () => {
-    // A single-app customer does not need an extra navigation layer on the home screen.
-    // Keep the selector when they are inside an app or when the organization has multiple apps.
     if (selectedWorkspace === 'home' && installedApps.length <= 1) return null;
 
     return (
-      <div className="mb-8 border-b border-white/5 pb-4 overflow-x-auto no-scrollbar">
-        <h3 className="text-sm font-bold text-[#A0A7B5] uppercase tracking-wider mb-4">{t('workspace.spaces_title', 'Acesso rápido')}</h3>
-        <div className="flex items-center gap-4 min-w-max">
+      <div className="mb-6 md:mb-8 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto no-scrollbar">
+        <p className="hidden sm:block text-[10px] font-bold text-[#A0A7B5] uppercase tracking-[0.18em] mb-3">
+          {t('workspace.spaces_title', 'Acesso rápido')}
+        </p>
+        <div className="flex items-center gap-2 min-w-max" role="tablist" aria-label={t('workspace.spaces_title', 'Acesso rápido')}>
           <button
             type="button"
             onClick={() => onSelectWorkspace('home')}
             role="tab"
             aria-selected={selectedWorkspace === 'home'}
-            className={`flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-200 border ${
-              selectedWorkspace === 'home' 
-                ? 'bg-white/10 border-white/10 text-white shadow-lg' 
-                : 'bg-transparent border-transparent text-[#A0A7B5] hover:bg-white/5'
+            className={`min-h-[42px] flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all border ${
+              selectedWorkspace === 'home'
+                ? 'bg-white/10 border-white/10 text-white'
+                : 'bg-transparent border-white/5 text-[#A0A7B5] hover:bg-white/5'
             }`}
           >
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${selectedWorkspace === 'home' ? 'bg-[#2B85EB]/20 text-[#2B85EB]' : 'bg-white/5'}`}>
-              <LayoutGrid className="w-4 h-4" />
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold">{t('navigation.home', 'Início')}</p>
-            </div>
+            <LayoutGrid className={`w-4 h-4 ${selectedWorkspace === 'home' ? 'text-[#2B85EB]' : ''}`} />
+            <span className="text-xs font-semibold">{t('navigation.home', 'Início')}</span>
           </button>
 
           {installedApps.map(app => {
@@ -135,26 +141,20 @@ export function EcosystemWorkspaceHome({
                 onClick={() => onSelectWorkspace(app.id)}
                 role="tab"
                 aria-selected={isSelected}
-                className={`flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-200 border ${
+                className={`min-h-[42px] flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all border ${
                   isSelected
-                    ? 'bg-gradient-to-br from-[#2B85EB]/10 to-[#1e5b9f]/10 border-[#2B85EB]/30 text-white shadow-[0_0_20px_rgba(43,133,235,0.15)]' 
-                    : 'bg-transparent border-transparent text-[#A0A7B5] hover:bg-white/5'
+                    ? 'bg-[#2B85EB]/10 border-[#2B85EB]/25 text-white'
+                    : 'bg-transparent border-white/5 text-[#A0A7B5] hover:bg-white/5'
                 }`}
               >
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#2B85EB] text-white shadow-md' : 'bg-white/5'}`}>
-                   {app.id === 'musicscale' ? (
-                     <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-5 h-5 object-contain" />
-                   ) : (
-                     <EcosystemAppIcon
-                       app={app}
-                       iconClassName="w-4 h-4"
-                       assetClassName="w-8 h-8"
-                     />
-                   )}
+                <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${isSelected ? 'bg-[#2B85EB] text-white' : 'bg-white/5'}`}>
+                  {app.id === 'musicscale' ? (
+                    <img src="/LogoIconMusicScale-1.png" alt="" className="w-4 h-4 object-contain" />
+                  ) : (
+                    <EcosystemAppIcon app={app} iconClassName="w-3.5 h-3.5" assetClassName="w-5 h-5" />
+                  )}
                 </div>
-                <div className="text-left pr-2">
-                  <p className="text-sm font-semibold">{app.name}</p>
-                </div>
+                <span className="text-xs font-semibold">{app.name}</span>
               </button>
             );
           })}
@@ -164,20 +164,6 @@ export function EcosystemWorkspaceHome({
   };
 
   const renderHomeWorkspace = () => {
-    const isLoading = musicScaleAccess?.catalogState === "loading";
-    const isError = musicScaleAccess?.catalogState === "error";
-    const hasPaymentIssue = musicScaleAccess?.catalogState === "payment_issue";
-        const progressPercent = maxUsersLimit > 0 ? Math.min(100, (occupiedSlots / maxUsersLimit) * 100) : 0;
-    const canInviteMembers = Boolean(currentUserPerms['organization.members.invite'] || isGlobalAdmin);
-    const teamStarted = members.length > 1 || pendingInvites.length > 0;
-    const appSummaryReady = musicScaleSummary.updatedAtMs > 0;
-    const planDisplayLabel = isGlobalAdmin
-      ? t('workspace.plan_administrative', 'Acesso administrativo · Pro')
-      : organization?.apps?.musicscale?.plan
-        || subscription?.plan
-        || subscription?.planId
-        || t('workspace.plan_unknown', 'Plano não identificado');
-
     type MusicScaleDisplayStatus =
       | 'available'
       | 'trialing'
@@ -191,391 +177,549 @@ export function EcosystemWorkspaceHome({
 
     const musicScaleDisplayStatus: MusicScaleDisplayStatus =
       (musicScaleAccess?.catalogState as MusicScaleDisplayStatus) ?? 'unavailable';
-      
-    const isReadyToOpen = [
+    const musicScaleExperience = appExperiences.find(experience => experience.app.id === 'musicscale');
+    const operationalApps = appExperiences.filter(experience => experience.installed);
+    const discoveryApps = appExperiences.filter(experience =>
+      !experience.installed &&
+      (experience.state === 'coming_soon' || experience.state === 'development')
+    );
+    const canInviteMembers = Boolean(currentUserPerms['organization.members.invite'] || isGlobalAdmin);
+    const canManageMembers = Boolean(currentUserPerms['organization.members.manage'] || isGlobalAdmin);
+    const canManageBilling = Boolean(currentUserPerms['organization.billing.manage'] || isGlobalAdmin);
+    const canManageOrganization = Boolean(currentUserPerms['organization.settings.update'] || isGlobalAdmin);
+    const teamStarted = members.length > 1 || pendingInvites.length > 0;
+    const appSummaryReady = musicScaleSummary.updatedAtMs > 0;
+    const isMusicScaleReady = [
       'active',
       'trialing',
       'cancel_scheduled',
       'administrative'
     ].includes(musicScaleDisplayStatus);
-    const isPrimaryActionDisabled = [
-      'loading',
-      'unavailable'
-    ].includes(musicScaleDisplayStatus);
 
-    const nextStep =
-      hasPaymentIssue
+    const appStateLabel = (experience: HubAppExperience) => {
+      const labels: Record<string, string> = {
+        active: t('workspace.app_state.active', 'Ativo'),
+        trialing: t('workspace.app_state.trialing', 'Em teste'),
+        cancel_scheduled: t('workspace.app_state.cancel_scheduled', 'Cancelamento agendado'),
+        payment_issue: t('workspace.app_state.payment_issue', 'Pagamento pendente'),
+        administrative: t('workspace.app_state.administrative', 'Acesso administrativo'),
+        loading: t('workspace.app_state.loading', 'Verificando'),
+        error: t('workspace.app_state.error', 'Precisa de atenção'),
+        available: t('workspace.app_state.available', 'Disponível'),
+        unavailable: t('workspace.app_state.unavailable', 'Indisponível'),
+        coming_soon: t('workspace.app_state.coming_soon', 'Em breve'),
+        development: t('workspace.app_state.development', 'Em desenvolvimento')
+      };
+      return labels[experience.state] || t('workspace.app_state.available', 'Disponível');
+    };
+
+    const appStateClass = (experience: HubAppExperience) => {
+      if (experience.state === 'payment_issue' || experience.state === 'error') {
+        return 'bg-red-500/10 text-red-300 border-red-500/20';
+      }
+      if (experience.state === 'trialing' || experience.state === 'cancel_scheduled') {
+        return 'bg-amber-500/10 text-amber-300 border-amber-500/20';
+      }
+      if (experience.state === 'administrative') {
+        return 'bg-purple-500/10 text-purple-300 border-purple-500/20';
+      }
+      if (experience.installed) {
+        return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
+      }
+      return 'bg-white/5 text-[#A0A7B5] border-white/10';
+    };
+
+    const planLabelFor = (experience: HubAppExperience) => {
+      if (experience.app.id === 'musicscale' && isGlobalAdmin && experience.installed) {
+        return t('workspace.plan_administrative', 'Acesso administrativo · Pro');
+      }
+      if (!experience.plan) return null;
+      return String(experience.plan)
+        .replace(/^musicscale[_-]?/i, '')
+        .replace(/[_-]/g, ' ')
+        .replace(/\b\w/g, character => character.toUpperCase());
+    };
+
+    const attentionApp = operationalApps.find(experience => experience.needsAttention);
+
+    const nextStep = attentionApp?.state === 'payment_issue'
+      ? {
+          tone: 'warning',
+          appName: attentionApp.app.name,
+          title: t('workspace.next_step.app_payment_title', '{{app}} precisa de atenção no pagamento', { app: attentionApp.app.name }),
+          description: t('workspace.next_step.app_payment_desc', 'Revise a assinatura para manter o acesso da equipe funcionando normalmente.'),
+          action: 'billing' as const,
+          label: t('workspace.next_step.payment_action', 'Revisar pagamento')
+        }
+      : attentionApp?.state === 'error'
         ? {
             tone: 'warning',
-            title: t('workspace.next_step.payment_title', 'Revise o pagamento do MusicScale'),
-            description: t('workspace.next_step.payment_desc', 'Precisamos confirmar sua assinatura para liberar o acesso normalmente.'),
-            action: 'billing' as const,
-            label: t('workspace.next_step.payment_action', 'Revisar pagamento')
+            appName: attentionApp.app.name,
+            title: t('workspace.next_step.app_error_title', 'Não conseguimos verificar {{app}}', { app: attentionApp.app.name }),
+            description: t('workspace.next_step.app_error_desc', 'Abra o aplicativo no Hub para tentar novamente e ver o que precisa de atenção.'),
+            action: 'workspace' as const,
+            workspaceId: attentionApp.app.id,
+            label: t('workspace.next_step.review_app_action', 'Ver aplicativo')
           }
-        : isLoading
+        : !organization?.name || !organization?.slug
           ? {
-              tone: 'neutral',
-              title: t('workspace.next_step.loading_title', 'Estamos conferindo seu acesso'),
-              description: t('workspace.next_step.loading_desc', 'Isso acontece automaticamente. Você pode continuar assim que a verificação terminar.'),
-              action: 'none' as const,
-              label: ''
+              tone: 'primary',
+              appName: null,
+              title: t('workspace.next_step.organization_title', 'Complete os dados da sua organização'),
+              description: t('workspace.next_step.organization_desc', 'Nome e página pública ajudam a manter o ecossistema organizado para toda a equipe.'),
+              action: 'organization' as const,
+              label: t('workspace.next_step.organization_action', 'Conferir organização')
             }
-          : musicScaleDisplayStatus === 'available'
+          : !teamStarted && canInviteMembers
             ? {
                 tone: 'primary',
-                title: t('workspace.next_step.choose_plan_title', 'Escolha o plano que combina com sua equipe'),
-                description: t('workspace.next_step.choose_plan_desc', 'Depois disso, o MusicScale fica disponível para você começar a organizar o ministério.'),
-                action: 'billing' as const,
-                label: t('workspace.next_step.choose_plan_action', 'Ver planos')
+                appName: null,
+                title: t('workspace.next_step.invite_title', 'Convide sua equipe'),
+                description: t('workspace.next_step.invite_global_desc', 'Adicione as pessoas que vão usar os aplicativos com você e defina o acesso de cada uma.'),
+                action: 'invite' as const,
+                label: t('workspace.next_step.invite_action', 'Convidar equipe')
               }
-            : !teamStarted && canInviteMembers
+            : musicScaleDisplayStatus === 'loading'
               ? {
-                  tone: 'primary',
-                  title: t('workspace.next_step.invite_title', 'Convide sua equipe'),
-                  description: t('workspace.next_step.invite_desc', 'Adicione as primeiras pessoas que vão usar o MusicScale com você.'),
-                  action: 'invite' as const,
-                  label: t('workspace.next_step.invite_action', 'Convidar equipe')
+                  tone: 'neutral',
+                  appName: 'MusicScale',
+                  title: t('workspace.next_step.loading_title', 'Estamos conferindo seu acesso'),
+                  description: t('workspace.next_step.loading_desc', 'Isso acontece automaticamente. Você pode continuar assim que a verificação terminar.'),
+                  action: 'none' as const,
+                  label: ''
                 }
-              : isReadyToOpen && appSummaryReady && musicScaleSummary.songsCount === 0
+              : musicScaleDisplayStatus === 'available'
                 ? {
                     tone: 'primary',
-                    title: t('workspace.next_step.songs_title', 'Adicione as primeiras músicas'),
-                    description: t('workspace.next_step.songs_desc', 'Comece seu repertório para depois montar as escalas dos cultos.'),
-                    action: 'app' as const,
-                    path: '/songs',
-                    label: t('workspace.next_step.songs_action', 'Adicionar músicas')
+                    appName: 'MusicScale',
+                    title: t('workspace.next_step.choose_plan_title', 'Escolha o plano que combina com sua equipe'),
+                    description: t('workspace.next_step.choose_plan_desc', 'Depois disso, o MusicScale fica disponível para você começar a organizar o ministério.'),
+                    action: 'billing' as const,
+                    label: t('workspace.next_step.choose_plan_action', 'Ver planos')
                   }
-                : isReadyToOpen && appSummaryReady && musicScaleSummary.songsWithContentCount === 0
+                : isMusicScaleReady && appSummaryReady && musicScaleSummary.songsCount === 0
                   ? {
                       tone: 'primary',
-                      title: t('workspace.next_step.content_title', 'Complete o conteúdo das músicas'),
-                      description: t('workspace.next_step.content_desc', 'Confira letras e cifras das primeiras músicas antes de preparar a equipe.'),
+                      appName: 'MusicScale',
+                      title: t('workspace.next_step.songs_title', 'Adicione as primeiras músicas'),
+                      description: t('workspace.next_step.songs_desc', 'Comece seu repertório para depois montar as escalas dos cultos.'),
                       action: 'app' as const,
+                      workspaceId: 'musicscale',
                       path: '/songs',
-                      label: t('workspace.next_step.content_action', 'Revisar músicas')
+                      label: t('workspace.next_step.songs_action', 'Adicionar músicas')
                     }
-                  : isReadyToOpen && appSummaryReady && musicScaleSummary.configuredMembersCount === 0
+                  : isMusicScaleReady && appSummaryReady && musicScaleSummary.songsWithContentCount === 0
                     ? {
                         tone: 'primary',
-                        title: t('workspace.next_step.members_title', 'Configure quem faz o quê na equipe'),
-                        description: t('workspace.next_step.members_desc', 'Defina músicos, vocais e funções ministeriais no MusicScale.'),
+                        appName: 'MusicScale',
+                        title: t('workspace.next_step.content_title', 'Complete o conteúdo das músicas'),
+                        description: t('workspace.next_step.content_desc', 'Confira letras e cifras das primeiras músicas antes de preparar a equipe.'),
                         action: 'app' as const,
-                        path: '/users',
-                        label: t('workspace.next_step.members_action', 'Configurar equipe')
+                        workspaceId: 'musicscale',
+                        path: '/songs',
+                        label: t('workspace.next_step.content_action', 'Revisar músicas')
                       }
-                    : isReadyToOpen && appSummaryReady && musicScaleSummary.bandScalesCount === 0
+                    : isMusicScaleReady && appSummaryReady && musicScaleSummary.configuredMembersCount === 0
                       ? {
                           tone: 'primary',
-                          title: t('workspace.next_step.band_scale_title', 'Monte sua primeira equipe para um culto'),
-                          description: t('workspace.next_step.band_scale_desc', 'Crie a primeira escala da banda com músicos, vocais e funções.'),
+                          appName: 'MusicScale',
+                          title: t('workspace.next_step.members_title', 'Configure quem faz o quê na equipe'),
+                          description: t('workspace.next_step.members_desc', 'Defina músicos, vocais e funções ministeriais no MusicScale.'),
                           action: 'app' as const,
-                          path: '/band-scales',
-                          label: t('workspace.next_step.band_scale_action', 'Criar escala da banda')
+                          workspaceId: 'musicscale',
+                          path: '/users',
+                          label: t('workspace.next_step.members_action', 'Configurar equipe')
                         }
-                      : isReadyToOpen && appSummaryReady && musicScaleSummary.scalesCount === 0
+                      : isMusicScaleReady && appSummaryReady && musicScaleSummary.bandScalesCount === 0
                         ? {
                             tone: 'primary',
-                            title: t('workspace.next_step.music_scale_title', 'Monte sua primeira escala de músicas'),
-                            description: t('workspace.next_step.music_scale_desc', 'Escolha as músicas do culto e conecte a equipe que participará.'),
+                            appName: 'MusicScale',
+                            title: t('workspace.next_step.band_scale_title', 'Monte sua primeira equipe para um culto'),
+                            description: t('workspace.next_step.band_scale_desc', 'Crie a primeira escala da banda com músicos, vocais e funções.'),
                             action: 'app' as const,
-                            path: '/scales',
-                            label: t('workspace.next_step.music_scale_action', 'Criar escala de músicas')
+                            workspaceId: 'musicscale',
+                            path: '/band-scales',
+                            label: t('workspace.next_step.band_scale_action', 'Criar escala da banda')
                           }
-                        : isReadyToOpen && appSummaryReady && musicScaleSummary.nextScale?.responseSummaryAvailable === true && (musicScaleSummary.nextScale?.responseCounts.pending || 0) > 0
+                        : isMusicScaleReady && appSummaryReady && musicScaleSummary.scalesCount === 0
                           ? {
-                              tone: 'warning',
-                              title: t('workspace.next_step.responses_title', 'Há confirmações aguardando resposta'),
-                              description: t('workspace.next_step.responses_desc', '{{count}} participação(ões) da próxima escala ainda não foram confirmadas.', { count: musicScaleSummary.nextScale?.responseCounts.pending || 0 }),
+                              tone: 'primary',
+                              appName: 'MusicScale',
+                              title: t('workspace.next_step.music_scale_title', 'Monte sua primeira escala de músicas'),
+                              description: t('workspace.next_step.music_scale_desc', 'Escolha as músicas do culto e conecte a equipe que participará.'),
                               action: 'app' as const,
-                              path: musicScaleSummary.nextScale ? `/scales/${musicScaleSummary.nextScale.id}` : '/scales',
-                              label: t('workspace.next_step.responses_action', 'Ver próxima escala')
+                              workspaceId: 'musicscale',
+                              path: '/scales',
+                              label: t('workspace.next_step.music_scale_action', 'Criar escala de músicas')
                             }
-                          : isReadyToOpen
+                          : isMusicScaleReady && appSummaryReady && musicScaleSummary.nextScale?.responseSummaryAvailable === true && (musicScaleSummary.nextScale?.responseCounts.pending || 0) > 0
                             ? {
-                                tone: 'success',
-                                title: t('workspace.next_step.open_title', 'Seu MusicScale está pronto'),
-                                description: t('workspace.next_step.open_desc', 'Abra o aplicativo e continue a organização de músicas, integrantes e escalas.'),
-                                action: 'open' as const,
-                                label: t('workspace.next_step.open_action', 'Abrir MusicScale')
+                                tone: 'warning',
+                                appName: 'MusicScale',
+                                title: t('workspace.next_step.responses_title', 'Há confirmações aguardando resposta'),
+                                description: t('workspace.next_step.responses_desc', '{{count}} participação(ões) da próxima escala ainda não foram confirmadas.', { count: musicScaleSummary.nextScale?.responseCounts.pending || 0 }),
+                                action: 'app' as const,
+                                workspaceId: 'musicscale',
+                                path: musicScaleSummary.nextScale ? `/scales/${musicScaleSummary.nextScale.id}` : '/scales',
+                                label: t('workspace.next_step.responses_action', 'Ver próxima escala')
                               }
-                            : {
-                                tone: 'neutral',
-                                title: t('workspace.next_step.learn_title', 'Veja os primeiros passos'),
-                                description: t('workspace.next_step.learn_desc', 'Siga o guia em ordem e veja o que já está pronto e o que ainda falta fazer.'),
-                                action: 'guide' as const,
-                                label: t('workspace.next_step.learn_action', 'Ver primeiros passos')
-                              };
+                            : operationalApps.length > 0
+                              ? {
+                                  tone: 'success',
+                                  appName: null,
+                                  title: t('workspace.next_step.all_good_title', 'Sua operação está em dia'),
+                                  description: t('workspace.next_step.all_good_desc', 'Os aplicativos ativos e os acessos principais estão funcionando. Continue pelo aplicativo que precisa usar agora.'),
+                                  action: 'none' as const,
+                                  label: ''
+                                }
+                              : {
+                                  tone: 'neutral',
+                                  appName: null,
+                                  title: t('workspace.next_step.no_apps_title', 'Escolha o primeiro aplicativo'),
+                                  description: t('workspace.next_step.no_apps_desc', 'Quando um produto for ativado para sua organização, ele aparecerá aqui com o passo a passo completo.'),
+                                  action: 'billing' as const,
+                                  label: t('workspace.next_step.view_products_action', 'Ver produtos')
+                                };
+
+    const handleNextStep = () => {
+      if (nextStep.action === 'billing') onNavigateToBilling();
+      if (nextStep.action === 'invite') onOpenInviteModal();
+      if (nextStep.action === 'organization') onNavigateToOrganizationSettings();
+      if (nextStep.action === 'workspace' && 'workspaceId' in nextStep) onSelectWorkspace(nextStep.workspaceId);
+      if (nextStep.action === 'app' && 'workspaceId' in nextStep) {
+        const experience = appExperiences.find(item => item.app.id === nextStep.workspaceId);
+        if (experience?.app) onLaunchApp(experience.app, 'path' in nextStep ? nextStep.path : undefined);
+      }
+    };
 
     return (
-      <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-12">
-        {/* Welcome Section */}
-        <div>
-          <h2 className="text-2xl font-bold text-white mb-1">{t('workspace.intro', 'Tudo da sua organização em um só lugar')}</h2>
-          <p className="text-[#A0A7B5] text-sm leading-relaxed max-w-2xl">
-            {t('workspace.sub_intro', 'Veja o que está funcionando, o que precisa de atenção e qual é o próximo passo.')}
-          </p>
-        </div>
+      <div className="mb-8 animate-in fade-in slide-in-from-bottom-3 duration-300 space-y-8 md:space-y-10">
+        <section aria-labelledby="hub-home-title">
+          <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#2B85EB] mb-2">
+                {t('workspace.home_eyebrow', 'Central da organização')}
+              </p>
+              <h2 id="hub-home-title" className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-[-0.03em] text-white max-w-3xl">
+                {t('workspace.intro', 'Tudo da sua organização em um só lugar')}
+              </h2>
+              <p className="text-[#A0A7B5] text-sm md:text-base leading-relaxed max-w-2xl mt-3">
+                {t('workspace.sub_intro', 'Veja o que está funcionando, o que precisa de atenção e qual é o próximo passo.')}
+              </p>
+            </div>
 
-        {/* Context-aware next action: the dashboard interprets the state for the customer. */}
-        <div className={`rounded-3xl border p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 ${
-          nextStep.tone === 'warning'
-            ? 'bg-amber-500/10 border-amber-500/20'
-            : nextStep.tone === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/20'
-              : nextStep.tone === 'primary'
-                ? 'bg-[#2B85EB]/10 border-[#2B85EB]/20'
-                : 'bg-white/[0.03] border-white/10'
-        }`}>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#A0A7B5] mb-2">
-              {t('workspace.next_step.eyebrow', 'Próximo passo')}
-            </p>
-            <h3 className="text-lg md:text-xl font-bold text-white mb-1">{nextStep.title}</h3>
-            <p className="text-sm text-[#A0A7B5] leading-relaxed max-w-2xl">{nextStep.description}</p>
+            <div className="grid grid-cols-3 gap-2 w-full xl:w-auto">
+              <div className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.025] px-3.5 py-3">
+                <p className="text-xl font-semibold text-white">{operationalApps.length}</p>
+                <p className="text-[10px] uppercase tracking-wider text-[#A0A7B5] mt-1">{t('workspace.summary.active_apps', 'Apps ativos')}</p>
+              </div>
+              <div className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.025] px-3.5 py-3">
+                <p className="text-xl font-semibold text-white">{members.length}</p>
+                <p className="text-[10px] uppercase tracking-wider text-[#A0A7B5] mt-1">{t('workspace.summary.people', 'Pessoas')}</p>
+              </div>
+              <div className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.025] px-3.5 py-3">
+                <p className="text-xl font-semibold text-white">{pendingInvites.length}</p>
+                <p className="text-[10px] uppercase tracking-wider text-[#A0A7B5] mt-1">{t('workspace.summary.invites', 'Convites')}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          aria-label={t('workspace.next_step.eyebrow', 'Próximo passo')}
+          className={`relative overflow-hidden rounded-[1.75rem] border p-5 sm:p-6 md:p-7 flex flex-col md:flex-row md:items-center justify-between gap-5 ${
+            nextStep.tone === 'warning'
+              ? 'bg-amber-500/[0.08] border-amber-500/20'
+              : nextStep.tone === 'success'
+                ? 'bg-emerald-500/[0.06] border-emerald-500/15'
+                : nextStep.tone === 'primary'
+                  ? 'bg-[#2B85EB]/[0.08] border-[#2B85EB]/20'
+                  : 'bg-white/[0.025] border-white/10'
+          }`}
+        >
+          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_85%_0%,rgba(43,133,235,.10),transparent_36%)]" />
+          <div className="relative min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#A0A7B5]">
+                {t('workspace.next_step.eyebrow', 'Próximo passo')}
+              </p>
+              {nextStep.appName && (
+                <span className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-semibold text-white/70">
+                  {nextStep.appName}
+                </span>
+              )}
+            </div>
+            <h3 className="text-xl md:text-2xl font-semibold tracking-[-0.02em] text-white">{nextStep.title}</h3>
+            <p className="text-sm text-[#A0A7B5] leading-relaxed max-w-2xl mt-2">{nextStep.description}</p>
           </div>
           {nextStep.action !== 'none' && (
             <button
               type="button"
-              onClick={() => {
-                if (nextStep.action === 'billing') onNavigateToBilling();
-                if (nextStep.action === 'invite') onOpenInviteModal();
-                if (nextStep.action === 'open' && musicScaleApp) onLaunchApp(musicScaleApp);
-                if (nextStep.action === 'app' && musicScaleApp) onLaunchApp(musicScaleApp, 'path' in nextStep ? nextStep.path : undefined);
-                if (nextStep.action === 'guide') {
-                  onSelectWorkspace('musicscale');
-                  onSelectMusicScaleSection('getting-started');
-                }
-              }}
-              className="shrink-0 min-h-[44px] px-5 py-3 rounded-xl bg-white text-[#050505] hover:bg-[#F5F7FA] text-sm font-semibold transition-all active:scale-[0.98]"
+              onClick={handleNextStep}
+              className="relative shrink-0 min-h-[46px] w-full md:w-auto px-5 py-3 rounded-xl bg-white text-[#050505] hover:bg-[#F5F7FA] text-sm font-semibold transition-all active:scale-[0.98]"
             >
               {nextStep.label}
             </button>
           )}
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* LEFT/MAIN COLUMN: MusicScale (Louvor e Ministério) */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-1.5 h-6 bg-[#2B85EB] rounded-full"></span>
-              <h3 className="text-lg font-bold text-white tracking-tight">{t('workspace.musicscale_group_title', 'MusicScale — Excelência no Louvor')}</h3>
+        </section>
+
+        <section id="apps-overview" aria-labelledby="active-apps-title">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#A0A7B5]">{t('workspace.apps_kicker', 'Ecossistema')}</p>
+              <h3 id="active-apps-title" className="text-xl md:text-2xl font-semibold tracking-tight text-white mt-1">
+                {t('workspace.apps_title', 'Seus aplicativos')}
+              </h3>
+            </div>
+            <p className="text-xs text-[#A0A7B5]">{t('workspace.apps_hint', 'Entre para ver dados, acessos e configurações de cada produto.')}</p>
+          </div>
+
+          {operationalApps.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {operationalApps.map(experience => {
+                const app = experience.app;
+                const planLabel = planLabelFor(experience);
+                const isMusicScale = app.id === 'musicscale';
+                const genericSummary = organization?.apps?.[app.id]?.hubSummary;
+                const genericMetrics = Array.isArray(genericSummary?.metrics)
+                  ? genericSummary.metrics
+                      .filter((metric: any) => metric && typeof metric.label === 'string' && ['string', 'number'].includes(typeof metric.value))
+                      .slice(0, 3)
+                  : [];
+
+                return (
+                  <article
+                    key={app.id}
+                    className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#07090D] p-5 sm:p-6 transition-colors hover:border-white/20"
+                  >
+                    <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_90%_0%,rgba(43,133,235,.08),transparent_38%)]" />
+                    <div className="relative">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                            {app.id === 'musicscale' ? (
+                              <img src="/LogoIconMusicScale-1.png" alt="" className="w-7 h-7 object-contain" />
+                            ) : (
+                              <EcosystemAppIcon app={app} iconClassName="w-5 h-5" assetClassName="w-9 h-9" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-lg font-semibold text-white truncate">{app.name}</h4>
+                            <p className="text-xs text-[#A0A7B5] mt-0.5 truncate">{app.shortDescription || app.description}</p>
+                          </div>
+                        </div>
+                        <span className={`shrink-0 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wider ${appStateClass(experience)}`}>
+                          {appStateLabel(experience)}
+                        </span>
+                      </div>
+
+                      {planLabel && (
+                        <div className="mt-4 flex items-center gap-2 text-xs">
+                          <span className="text-[#A0A7B5]">{t('workspace.plan_label', 'Plano atual:')}</span>
+                          <span className="font-semibold text-white">{planLabel}</span>
+                        </div>
+                      )}
+
+                      {isMusicScale && appSummaryReady ? (
+                        <div className="grid grid-cols-3 gap-2 mt-5">
+                          <div className="rounded-xl border border-white/5 bg-white/[0.025] p-3">
+                            <p className="text-lg font-semibold text-white">{musicScaleSummary.songsCount}</p>
+                            <p className="text-[10px] text-[#A0A7B5] mt-1">{t('musicscale.summary.repertoire', 'músicas')}</p>
+                          </div>
+                          <div className="rounded-xl border border-white/5 bg-white/[0.025] p-3">
+                            <p className="text-lg font-semibold text-white">{musicScaleSummary.configuredMembersCount}</p>
+                            <p className="text-[10px] text-[#A0A7B5] mt-1">{t('musicscale.summary.configured_members', 'integrantes')}</p>
+                          </div>
+                          <div className="rounded-xl border border-white/5 bg-white/[0.025] p-3">
+                            <p className="text-lg font-semibold text-white">{musicScaleSummary.scalesCount}</p>
+                            <p className="text-[10px] text-[#A0A7B5] mt-1">{t('musicscale.summary.music_scales', 'escalas')}</p>
+                          </div>
+                        </div>
+                      ) : genericMetrics.length > 0 ? (
+                        <div className="grid grid-cols-3 gap-2 mt-5">
+                          {genericMetrics.map((metric: any, index: number) => (
+                            <div key={index} className="rounded-xl border border-white/5 bg-white/[0.025] p-3 min-w-0">
+                              <p className="text-lg font-semibold text-white truncate">{String(metric.value)}</p>
+                              <p className="text-[10px] text-[#A0A7B5] mt-1 line-clamp-2">{metric.label}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-5 rounded-xl border border-white/5 bg-white/[0.02] p-3.5">
+                          <p className="text-xs font-semibold text-white">{t('workspace.app_connected_title', 'Conectado ao MillionsNest')}</p>
+                          <p className="text-[11px] text-[#A0A7B5] mt-1 leading-relaxed">
+                            {t('workspace.app_connected_desc', 'A organização, os acessos e a assinatura são administrados por aqui.')}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-5">
+                        <button
+                          type="button"
+                          onClick={() => onSelectWorkspace(app.id)}
+                          className="min-h-[44px] rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold text-white transition-colors"
+                        >
+                          {t('workspace.manage_app', 'Ver e gerenciar')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (experience.state === 'payment_issue') {
+                              onNavigateToBilling();
+                            } else if (experience.state === 'error' && app.id === 'musicscale') {
+                              onRetryMusicScaleAccess();
+                            } else if (experience.canOpen) {
+                              onLaunchApp(app);
+                            }
+                          }}
+                          disabled={!experience.canOpen && experience.state !== 'payment_issue' && experience.state !== 'error'}
+                          className="min-h-[44px] rounded-xl bg-white text-[#050505] disabled:bg-white/5 disabled:text-[#A0A7B5] disabled:cursor-not-allowed text-sm font-semibold transition-colors"
+                        >
+                          {experience.state === 'payment_issue'
+                            ? t('workspace.resolve_payment', 'Regularizar pagamento')
+                            : experience.state === 'error'
+                              ? t('workspace.retry', 'Tentar novamente')
+                              : t('workspace.open_app', 'Abrir {{appName}}', { appName: app.name })}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-[1.75rem] border border-dashed border-white/10 bg-white/[0.02] p-7 text-center">
+              <LayoutGrid className="w-8 h-8 text-white/20 mx-auto" />
+              <h4 className="text-base font-semibold text-white mt-3">{t('workspace.no_active_apps_title', 'Nenhum aplicativo ativo ainda')}</h4>
+              <p className="text-sm text-[#A0A7B5] mt-1">{t('workspace.no_apps_found', 'Os aplicativos liberados para sua organização aparecerão aqui.')}</p>
+            </div>
+          )}
+
+          {discoveryApps.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#A0A7B5] mr-1">{t('workspace.coming_next', 'Em breve no ecossistema')}</span>
+              {discoveryApps.slice(0, 4).map(experience => (
+                <span key={experience.app.id} className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.025] px-3 py-1.5 text-[11px] text-white/70">
+                  <EcosystemAppIcon app={experience.app} iconClassName="w-3.5 h-3.5" assetClassName="w-4 h-4" />
+                  {experience.app.name}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section aria-labelledby="management-title">
+          <div className="mb-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#A0A7B5]">{t('workspace.management_kicker', 'Administração')}</p>
+            <h3 id="management-title" className="text-xl md:text-2xl font-semibold tracking-tight text-white mt-1">
+              {t('workspace.management_title', 'Central de gestão')}
+            </h3>
+            <p className="text-xs text-[#A0A7B5] mt-1">{t('workspace.management_desc', 'As tarefas administrativas ficam no MillionsNest, independentemente do aplicativo que sua equipe usa.')}</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <button
+              type="button"
+              onClick={onNavigateToOrganizationSettings}
+              className="min-h-[118px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] p-4 text-left transition-colors"
+            >
+              <div className="w-9 h-9 rounded-xl bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center"><Settings className="w-4.5 h-4.5" /></div>
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.organization', 'Dados da organização')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{organization?.name || t('workspace.organization_unnamed', 'Sua organização')}</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={onNavigateToOrganizationMembers}
+              className="min-h-[118px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] p-4 text-left transition-colors"
+            >
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-300 flex items-center justify-center"><Users className="w-4.5 h-4.5" /></div>
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.people', 'Pessoas e acessos')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.management.people_count', '{{count}} pessoa(s) na organização', { count: members.length })}</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={onOpenInviteModal}
+              disabled={!canInviteMembers}
+              className="min-h-[118px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] disabled:opacity-45 disabled:cursor-not-allowed p-4 text-left transition-colors"
+            >
+              <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-300 flex items-center justify-center"><UserPlus className="w-4.5 h-4.5" /></div>
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.invites', 'Convites')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{pendingInvites.length > 0 ? t('workspace.management.pending_invites', '{{count}} pendente(s)', { count: pendingInvites.length }) : t('workspace.management.no_pending_invites', 'Nenhum convite pendente')}</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={onNavigateToBilling}
+              disabled={!canManageBilling}
+              className="min-h-[118px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] disabled:opacity-45 disabled:cursor-not-allowed p-4 text-left transition-colors"
+            >
+              <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-300 flex items-center justify-center"><CreditCard className="w-4.5 h-4.5" /></div>
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.billing', 'Planos e assinatura')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.management.billing_desc', 'Veja o plano de cada aplicativo e os pagamentos.')}</p>
+            </button>
+          </div>
+
+          {(!canManageOrganization || !canManageMembers) && (
+            <p className="text-[11px] text-[#A0A7B5] mt-3">
+              {t('workspace.management.permission_note', 'Algumas ações dependem do seu nível de acesso na organização.')}
+            </p>
+          )}
+        </section>
+
+        <section className="grid grid-cols-1 lg:grid-cols-[1.4fr_.8fr] gap-4">
+          <div className="rounded-[1.75rem] border border-white/8 bg-white/[0.02] p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#A0A7B5]">{t('workspace.activity_kicker', 'Organização')}</p>
+                <h3 className="text-lg font-semibold text-white mt-1">{t('workspace.activity_title', 'Atividade recente')}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={onNavigateToOrganizationSettings}
+                className="text-xs font-semibold text-[#2B85EB] hover:text-[#6EAFFF]"
+              >
+                {t('workspace.activity_view_all', 'Ver gestão')}
+              </button>
             </div>
 
-            {musicScaleApp ? (
-              <div className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-3xl p-6 md:p-8 flex flex-col justify-between relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-[#2B85EB]/5 blur-[80px] rounded-full pointer-events-none group-hover:bg-[#2B85EB]/10 transition-colors" />
-                
-                <div className="relative z-10">
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center shrink-0 border border-white/10 shadow-sm">
-                      <img src="/LogoIconMusicScale-1.png" alt="MusicScale" className="w-8 h-8 object-contain" />
+            {recentActivity.length > 0 ? (
+              <div className="divide-y divide-white/5">
+                {recentActivity.map(activity => (
+                  <div key={activity.id} className="py-3 first:pt-0 last:pb-0 flex items-start gap-3">
+                    <div className="mt-1.5 w-2 h-2 rounded-full bg-[#2B85EB] shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-white">{activity.label}</p>
+                      <p className="text-[11px] text-[#A0A7B5] mt-1">
+                        {activity.timestampMs ? new Date(activity.timestampMs).toLocaleString() : t('workspace.activity_now', 'Agora')}
+                        {activity.actorName ? ` · ${activity.actorName}` : ''}
+                      </p>
                     </div>
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      musicScaleDisplayStatus === 'available' || musicScaleDisplayStatus === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                      musicScaleDisplayStatus === 'trialing' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                      musicScaleDisplayStatus === 'payment_issue' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                      musicScaleDisplayStatus === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                      musicScaleDisplayStatus === 'cancel_scheduled' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                      musicScaleDisplayStatus === 'administrative' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
-                      musicScaleDisplayStatus === 'loading' ? 'bg-white/10 text-white border border-white/20' :
-                      'bg-white/10 text-[#A0A7B5]'
-                    }`}>
-                      {t(`musicscale.status.${musicScaleDisplayStatus}`, t('musicscale.status.unavailable'))}
-                    </span>
                   </div>
-
-                  <h4 className="text-xl font-bold text-white mb-2">MusicScale</h4>
-                  <p className="text-sm text-[#A0A7B5] mb-8 leading-relaxed">
-                    {musicScaleApp.shortDescription || musicScaleApp.description || t('musicscale.description_default', 'A ferramenta definitiva para organização de repertórios, escalas de músicos e preparação fluida do ministério.')}
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-[#A0A7B5] mb-8"> 
-                    <span className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-2.5 py-1 rounded-lg"><Music className="w-3.5 h-3.5 text-[#2B85EB]"/> {t('musicscale.features.repertoire', 'Repertórios')}</span> 
-                    <span className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-2.5 py-1 rounded-lg"><Clock className="w-3.5 h-3.5 text-[#2B85EB]"/> {t('musicscale.features.scales', 'Escalas')}</span> 
-                    <span className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-2.5 py-1 rounded-lg"><Users className="w-3.5 h-3.5 text-[#2B85EB]"/> {t('musicscale.features.musicians', 'Músicos')}</span> 
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (musicScaleDisplayStatus === 'error') {
-                        onRetryMusicScaleAccess();
-                      } else if (
-                        musicScaleDisplayStatus === 'payment_issue' ||
-                        musicScaleDisplayStatus === 'available'
-                      ) {
-                        onNavigateToBilling();
-                      } else if (isReadyToOpen && musicScaleApp) {
-                        onLaunchApp(musicScaleApp);
-                      }
-                    }}
-                    disabled={isPrimaryActionDisabled}
-                    className={`flex-1 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 text-sm ${
-                      (musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'error') ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' :
-                      (musicScaleDisplayStatus === 'loading' || musicScaleDisplayStatus === 'unavailable') ? 'bg-white/5 text-[#A0A7B5] cursor-not-allowed' :
-                      'bg-[#2B85EB] hover:bg-[#3B95FB] text-white shadow-lg shadow-[#2B85EB]/20'
-                    }`}
-                  >
-                    {musicScaleDisplayStatus === 'loading' ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : ((musicScaleDisplayStatus === 'payment_issue' || musicScaleDisplayStatus === 'error') ? <Settings className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />)}
-                    {musicScaleDisplayStatus === 'error' ? 'Tentar novamente' : musicScaleDisplayStatus === 'payment_issue' ? t('workspace.resolve_payment', 'Regularizar pagamento') : musicScaleDisplayStatus === 'available' ? t('workspace.view_plans', 'Ver planos') : musicScaleDisplayStatus === 'loading' ? t('workspace.loading', 'Carregando') : musicScaleDisplayStatus === 'unavailable' ? t('workspace.unavailable', 'Indisponível') : t('workspace.open_app', `Abrir ${musicScaleApp.name}`, { appName: musicScaleApp.name })}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelectWorkspace('musicscale');
-                      onSelectMusicScaleSection('getting-started');
-                    }}
-                    className="py-3.5 px-5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-sm"
-                  >
-                    <Info className="w-4 h-4" />
-                    {t('musicscale.hero.getting_started', 'Primeiros passos')}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelectWorkspace('musicscale');
-                      onSelectMusicScaleSection('resources');
-                    }}
-                    className="py-3.5 px-5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 duration-200 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-sm"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    {t('musicscale.hero.learn_more', 'Conhecer recursos')}
-                  </button>
-                </div>
+                ))}
               </div>
             ) : (
-              <div className="bg-[#050505] border border-white/5 rounded-3xl p-8 text-center">
-                <Music className="w-10 h-10 text-white/20 mx-auto mb-4" />
-                <p className="text-sm text-[#A0A7B5]">{t('workspace.no_apps_found', 'Nenhum aplicativo habilitado no momento.')}</p>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                <div className="flex items-center gap-2 text-emerald-300"><Check className="w-4 h-4" /><span className="text-sm font-semibold">{t('workspace.activity_empty_title', 'Tudo tranquilo por aqui')}</span></div>
+                <p className="text-xs text-[#A0A7B5] mt-1">{t('workspace.activity_empty_desc', 'As mudanças importantes aparecerão aqui.')}</p>
               </div>
             )}
           </div>
 
-          {/* RIGHT COLUMN: Organization, Team, Access and Limits */}
-          <div className="space-y-6">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-1.5 h-6 bg-purple-500 rounded-full"></span>
-              <h3 className="text-lg font-bold text-white tracking-tight">{t('workspace.org_group_title', 'Sua igreja e equipe')}</h3>
-            </div>
-
-            {/* ORGANIZATION CARD */}
-            <div className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-3xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-white text-base">{organization?.name || t('workspace.organization_unnamed', 'Sua Organização')}</h4>
-                  <p className="text-xs text-[#A0A7B5] mt-1">
-                    {t('workspace.public_page_label', 'Página pública:')} <span className="text-white/80">/{organization?.slug || '...'}</span>
-                  </p>
-                </div>
-                {(currentUserPerms['organization.settings.update'] || isGlobalAdmin) && (
-                  <button 
-                    onClick={onNavigateToOrganizationSettings}
-                    className="p-2 hover:bg-white/5 rounded-xl text-[#A0A7B5] hover:text-white transition-all border border-transparent hover:border-white/5"
-                    title={t('workspace.org_settings_title', 'Ajustes da Organização')}
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              <div className="border-t border-white/5 pt-4 flex items-center justify-between text-sm">
-                <span className="text-[#A0A7B5]">{t('workspace.plan_label', 'Plano atual:')}</span>
-                <span className="font-semibold text-purple-400 capitalize bg-purple-500/10 px-2.5 py-1 rounded-lg border border-purple-500/20 text-xs">
-                  {planDisplayLabel}
-                </span>
-              </div>
-
-              {(currentUserPerms['organization.billing.manage'] || isGlobalAdmin) && (
-                <button
-                  type="button"
-                  onClick={onNavigateToBilling}
-                  className="w-full py-2.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all"
-                >
-                  {t('workspace.billing_action', 'Gerenciar Assinatura')}
-                </button>
-              )}
-            </div>
-
-            {/* TEAM AND MEMBERSHIP CARD */}
-            <div className="bg-[#050505] border border-white/10 hover:border-white/20 transition-all rounded-3xl p-6 space-y-6">
-              <div>
-                <h4 className="font-bold text-white text-base flex items-center gap-2">
-                  <Users className="w-4 h-4 text-[#A0A7B5]" />
-                  {t('workspace.team_title', 'Membros e Equipe')}
-                </h4>
-                <p className="text-xs text-[#A0A7B5] mt-1">
-                  {t('workspace.team_desc', 'Veja quem já está na equipe, convide novas pessoas e ajuste os acessos quando precisar.')}
-                </p>
-              </div>
-
-              {/* Slots progress bar */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-[#A0A7B5]">{t('workspace.slots_allocated', 'Pessoas usando o plano')}</span>
-                  <span className="text-white">
-                    {maxUsersLimit === -1 ? `${occupiedSlots} / ∞` : `${occupiedSlots} / ${maxUsersLimit}`}
-                  </span>
-                </div>
-                <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden border border-white/5">
-                  <div 
-                    className="h-full bg-gradient-to-r from-[#2B85EB] to-purple-500 rounded-full transition-all duration-500"
-                    style={{ width: `${maxUsersLimit === -1 ? 100 : progressPercent}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
-                {(currentUserPerms['organization.members.invite'] || isGlobalAdmin) && (
-                  <button
-                    type="button"
-                    onClick={onOpenInviteModal}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-[#2B85EB] hover:bg-[#3B95FB] text-white transition-all"
-                  >
-                    {t('workspace.invite_action', 'Convidar Membro')}
-                  </button>
-                )}
-                {(currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
-                  <button
-                    type="button"
-                    onClick={onNavigateToOrganizationMembers}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all"
-                  >
-                    {t('workspace.manage_team_action', 'Ver Equipe')}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Support Section */}
-        <div className="pt-6 border-t border-white/5">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="w-1.5 h-6 bg-green-500 rounded-full"></span>
-            <h3 className="text-lg font-bold text-white tracking-tight">{t('workspace.help_group_title', 'Ajuda e Suporte')}</h3>
-          </div>
           <button
             type="button"
             onClick={openHub}
-            aria-label={t('support.hub.central_action.aria', 'Abrir a Central de Ajuda e suporte')}
-            className="w-full md:max-w-xl min-h-[44px] flex items-center gap-4 bg-[#050505] border border-white/10 hover:border-[#2B85EB]/50 rounded-3xl p-5 text-left transition-colors group focus:outline-none focus:ring-2 focus:ring-[#2B85EB]"
+            className="rounded-[1.75rem] border border-white/8 bg-white/[0.02] hover:bg-white/[0.04] p-5 sm:p-6 text-left transition-colors group min-h-[180px]"
           >
-            <div className="w-12 h-12 rounded-xl bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center shrink-0 group-hover:bg-[#2B85EB]/20 transition-colors">
-              <CircleHelp className="w-6 h-6" />
-            </div>
-            <div className="flex-1">
-              <h4 className="text-base font-bold text-white group-hover:text-[#2B85EB] transition-colors">{t('support.hub.central_action.title', 'Central de Ajuda & Suporte')}</h4>
-              <p className="text-xs text-[#A0A7B5] mt-1 leading-relaxed">{t('support.hub.central_action.description', 'Envie uma solicitação, fale pelo WhatsApp ou consulte guias rápidos do ecossistema.')}</p>
-            </div>
-            <div className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-white/5 text-white/50 group-hover:bg-[#2B85EB] group-hover:text-white transition-colors">
-              <ArrowRight className="w-4 h-4" />
+            <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center"><CircleHelp className="w-5 h-5" /></div>
+            <h3 className="text-lg font-semibold text-white mt-5">{t('support.hub.central_action.title', 'Central de Ajuda & Suporte')}</h3>
+            <p className="text-xs text-[#A0A7B5] mt-2 leading-relaxed">{t('support.hub.central_action.description', 'Envie uma solicitação, fale pelo WhatsApp ou consulte guias rápidos do ecossistema.')}</p>
+            <div className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[#2B85EB] group-hover:gap-3 transition-all">
+              {t('workspace.support_open', 'Abrir suporte')} <ArrowRight className="w-4 h-4" />
             </div>
           </button>
-        </div>
+        </section>
       </div>
     );
   };
@@ -920,42 +1064,161 @@ export function EcosystemWorkspaceHome({
       />
     );
   };
-const renderGenericAppWorkspace = (app: EcosystemApp) => {
+  const renderGenericAppWorkspace = (experience: HubAppExperience) => {
+    const app = experience.app;
+    const appRecord = organization?.apps?.[app.id] || {};
+    const hubSummary = appRecord?.hubSummary || {};
+    const metrics = Array.isArray(hubSummary?.metrics)
+      ? hubSummary.metrics
+          .filter((metric: any) => metric && typeof metric.label === 'string' && ['string', 'number'].includes(typeof metric.value))
+          .slice(0, 4)
+      : [];
+    const planLabel = experience.plan
+      ? String(experience.plan).replace(/[_-]/g, ' ').replace(/\b\w/g, character => character.toUpperCase())
+      : t('workspace.plan_included', 'Incluído');
+    const statusLabel: Record<string, string> = {
+      active: t('workspace.app_state.active', 'Ativo'),
+      trialing: t('workspace.app_state.trialing', 'Em teste'),
+      cancel_scheduled: t('workspace.app_state.cancel_scheduled', 'Cancelamento agendado'),
+      payment_issue: t('workspace.app_state.payment_issue', 'Pagamento pendente'),
+      administrative: t('workspace.app_state.administrative', 'Acesso administrativo'),
+      error: t('workspace.app_state.error', 'Precisa de atenção')
+    };
+
     return (
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-2xl">
-        <div className="bg-[#050505] border border-white/5 rounded-2xl p-8">
-           <div className="w-16 h-16 rounded-xl bg-white/5 flex items-center justify-center mb-6">
-             <EcosystemAppIcon
-               app={app}
-               iconClassName="w-6 h-6 text-[#A0A7B5]"
-               assetClassName="w-12 h-12"
-             />
-           </div>
-           <h2 className="text-2xl font-bold text-white mb-2">{app.name}</h2>
-           <p className="text-[#A0A7B5] mb-8">{app.description}</p>
-           
-           <div className="flex items-center gap-4">
-             {app.primaryAction === 'open' && (
-               <button 
-                 type="button"
-                 onClick={() => onLaunchApp(app)}
-                 className="px-6 py-3 bg-[#2B85EB] text-white font-semibold rounded-xl hover:bg-[#3B95FB] transition-all"
-               >
-                 {t('genericApp.open', 'Abrir App')}
-               </button>
-             )}
-             {app.status === 'coming_soon' && (
-               <span className="px-4 py-2 bg-white/5 text-[#A0A7B5] rounded-xl text-sm font-medium border border-white/5">
-                 Em breve
-               </span>
-             )}
-           </div>
-        </div>
+      <div className="animate-in fade-in slide-in-from-bottom-3 duration-300 space-y-6">
+        <section className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#07090D] p-5 sm:p-7 md:p-8">
+          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_90%_0%,rgba(43,133,235,.10),transparent_40%)]" />
+          <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="flex items-start gap-4 min-w-0">
+              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                <EcosystemAppIcon app={app} iconClassName="w-6 h-6" assetClassName="w-11 h-11" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-white">{app.name}</h2>
+                  <span className={`px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wider ${
+                    experience.needsAttention
+                      ? 'bg-red-500/10 text-red-300 border-red-500/20'
+                      : experience.state === 'administrative'
+                        ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
+                        : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                  }`}>
+                    {statusLabel[experience.state] || t('workspace.app_state.active', 'Ativo')}
+                  </span>
+                </div>
+                <p className="text-sm text-[#A0A7B5] leading-relaxed max-w-2xl mt-2">{app.description}</p>
+                <div className="flex flex-wrap items-center gap-3 mt-4 text-xs">
+                  <span className="text-[#A0A7B5]">{t('workspace.plan_label', 'Plano atual:')} <strong className="text-white font-semibold">{planLabel}</strong></span>
+                  <span className="w-1 h-1 rounded-full bg-white/20" />
+                  <span className="text-[#A0A7B5]">{organization?.name}</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (experience.state === 'payment_issue') onNavigateToBilling();
+                else if (experience.canOpen) onLaunchApp(app);
+              }}
+              disabled={!experience.canOpen && experience.state !== 'payment_issue'}
+              className="min-h-[46px] w-full lg:w-auto px-5 py-3 rounded-xl bg-white text-[#050505] disabled:bg-white/5 disabled:text-[#A0A7B5] disabled:cursor-not-allowed text-sm font-semibold shrink-0"
+            >
+              {experience.state === 'payment_issue'
+                ? t('workspace.resolve_payment', 'Regularizar pagamento')
+                : t('workspace.open_app', 'Abrir {{appName}}', { appName: app.name })}
+            </button>
+          </div>
+        </section>
+
+        {hubSummary?.nextAction?.title && (
+          <section className="rounded-2xl border border-[#2B85EB]/20 bg-[#2B85EB]/[0.06] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#2B85EB]">{t('workspace.next_step.eyebrow', 'Próximo passo')}</p>
+              <h3 className="text-base font-semibold text-white mt-1">{hubSummary.nextAction.title}</h3>
+              {hubSummary.nextAction.description && <p className="text-xs text-[#A0A7B5] mt-1">{hubSummary.nextAction.description}</p>}
+            </div>
+            {experience.canOpen && (
+              <button
+                type="button"
+                onClick={() => onLaunchApp(app, typeof hubSummary.nextAction.destinationPath === 'string' ? hubSummary.nextAction.destinationPath : undefined)}
+                className="min-h-[42px] px-4 rounded-xl bg-white text-[#050505] text-xs font-semibold"
+              >
+                {hubSummary.nextAction.label || t('workspace.continue_action', 'Continuar')}
+              </button>
+            )}
+          </section>
+        )}
+
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {metrics.length > 0 ? metrics.map((metric: any, index: number) => (
+            <div key={index} className="rounded-2xl border border-white/8 bg-white/[0.025] p-4 min-w-0">
+              <p className="text-xl font-semibold text-white truncate">{String(metric.value)}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1 line-clamp-2">{metric.label}</p>
+            </div>
+          )) : (
+            <>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+                <p className="text-xl font-semibold text-white">{members.length}</p>
+                <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.summary.people', 'Pessoas')}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+                <p className="text-xl font-semibold text-white">{pendingInvites.length}</p>
+                <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.summary.invites', 'Convites')}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4 col-span-2">
+                <p className="text-sm font-semibold text-white">{t('workspace.app_connected_title', 'Conectado ao MillionsNest')}</p>
+                <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.generic_summary_desc', 'Acessos, organização, plano e equipe estão centralizados aqui.')}</p>
+              </div>
+            </>
+          )}
+        </section>
+
+        <section>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#A0A7B5]">{t('workspace.management_kicker', 'Administração')}</p>
+          <h3 className="text-xl font-semibold text-white mt-1 mb-4">{t('workspace.manage_this_app', 'Gerenciar este aplicativo')}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <button type="button" onClick={onNavigateToOrganizationMembers} className="min-h-[104px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] p-4 text-left">
+              <Users className="w-5 h-5 text-emerald-300" />
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.people', 'Pessoas e acessos')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.manage_people_app_desc', 'Controle quem usa a organização e o acesso administrativo.')}</p>
+            </button>
+            <button type="button" onClick={onOpenInviteModal} className="min-h-[104px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] p-4 text-left">
+              <UserPlus className="w-5 h-5 text-amber-300" />
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.invites', 'Convites')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.manage_invites_app_desc', 'Convide novas pessoas e acompanhe convites pendentes.')}</p>
+            </button>
+            <button type="button" onClick={onNavigateToOrganizationSettings} className="min-h-[104px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] p-4 text-left">
+              <Settings className="w-5 h-5 text-[#2B85EB]" />
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.organization', 'Dados da organização')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.manage_org_app_desc', 'Atualize os dados compartilhados por todo o ecossistema.')}</p>
+            </button>
+            <button type="button" onClick={onNavigateToBilling} className="min-h-[104px] rounded-2xl border border-white/8 bg-white/[0.025] hover:bg-white/[0.045] p-4 text-left">
+              <CreditCard className="w-5 h-5 text-purple-300" />
+              <p className="text-sm font-semibold text-white mt-3">{t('workspace.management.billing', 'Planos e assinatura')}</p>
+              <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.manage_billing_app_desc', 'Veja o plano e a situação de cobrança deste produto.')}</p>
+            </button>
+          </div>
+        </section>
+
+        <button
+          type="button"
+          onClick={openHub}
+          className="w-full rounded-2xl border border-white/8 bg-white/[0.02] hover:bg-white/[0.04] p-4 flex items-center gap-3 text-left"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center shrink-0"><CircleHelp className="w-5 h-5" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-white">{t('support.hub.central_action.title', 'Central de Ajuda & Suporte')}</p>
+            <p className="text-[11px] text-[#A0A7B5] mt-1">{t('workspace.app_support_desc', 'Ajuda sobre acesso, configuração e uso deste aplicativo.')}</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-[#A0A7B5] shrink-0" />
+        </button>
       </div>
     );
   };
 
-  const currentApp = installedApps.find(a => a.id === selectedWorkspace);
+  const currentExperience = appExperiences.find(experience => experience.app.id === selectedWorkspace && experience.installed);
 
   return (
     <div className="w-full">
@@ -963,7 +1226,7 @@ const renderGenericAppWorkspace = (app: EcosystemApp) => {
       
       {selectedWorkspace === 'home' && renderHomeWorkspace()}
       {selectedWorkspace === 'musicscale' && renderMusicScaleWorkspace()}
-      {selectedWorkspace !== 'home' && selectedWorkspace !== 'musicscale' && currentApp && renderGenericAppWorkspace(currentApp)}
+      {selectedWorkspace !== 'home' && selectedWorkspace !== 'musicscale' && currentExperience && renderGenericAppWorkspace(currentExperience)}
     </div>
   );
 }

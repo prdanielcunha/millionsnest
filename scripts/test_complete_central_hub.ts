@@ -37,7 +37,7 @@ assert.equal(dashboard.includes('onSnapshot(pendingInviteQuery'), false, 'Hub mu
 
 assert.match(workspace, /musicScaleSummary/, 'app workspace must consume real MusicScale summary');
 assert.match(workspace, /Dados ao vivo/, 'MusicScale workspace must label live operational data');
-assert.match(workspace, /Plano não identificado/, 'unknown billing state must not pretend to be Starter');
+assert.match(workspace, /if \(!experience\.plan\) return null;/, 'unknown app plan must remain unresolved instead of being invented');
 assert.equal(workspace.includes("t('workspace.plan_starter', 'Starter')"), false, 'unknown plan fallback must not be Starter');
 
 for (const route of ['/songs', '/scales', '/band-scales', '/users', '/profile', '/plan-usage']) {
