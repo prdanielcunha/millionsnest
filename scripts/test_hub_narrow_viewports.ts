@@ -32,6 +32,10 @@ assert.ok(organization.includes('getMemberRoleManagementOptions'), 'member role 
 assert.equal(organization.includes('<option value="leader">'), false, 'member role selector must not submit legacy leader as an organization role');
 assert.equal(organization.includes('<option value="secretary">'), false, 'member role selector must not submit legacy secretary as an organization role');
 assert.equal(organization.includes('<option value="guest">'), false, 'member role selector must not submit legacy guest as an organization role');
+assert.ok(organization.includes("['owner', 'admin', 'manager', 'member', 'viewer']"), 'role guidance must present every canonical organization role');
+assert.ok(organization.includes('getOrganizationRoleDescription(role, organizationRoleLocale)'), 'role guidance must use the shared localized canonical descriptions');
+assert.equal(organization.includes('Líder / Operador'), false, 'role guidance must not advertise removed legacy organization roles');
+assert.equal(organization.includes('Membro / Visitante'), false, 'role guidance must distinguish canonical member and viewer roles');
 assert.ok(dashboard.includes('/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(memberId)}/role'), 'inline role changes must use the canonical v1 endpoint');
 assert.ok(dashboard.includes("method: 'PATCH'"), 'inline role changes must use the canonical PATCH mutation');
 assert.ok(dashboard.includes('canEditOrganizationRoleForMember'), 'member edit modal must share the stale-owner protection model');
