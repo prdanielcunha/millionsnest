@@ -45,7 +45,7 @@ export function Login() {
             sessionStorage.removeItem('purchase_intent');
             navigate(`/checkout?plan=${purchaseIntent}`);
           } else {
-            navigate('/dashboard');
+            navigate('/dashboard/overview');
           }
       }
     }
