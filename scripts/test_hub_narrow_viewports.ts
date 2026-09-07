@@ -24,6 +24,9 @@ assert.ok(organization.includes('flex w-full min-w-0 items-start gap-3 sm:flex-1
 assert.ok(organization.includes('text-xs text-[#A0A7B5] break-all">{member.email}'), 'member emails must wrap instead of forcing horizontal overflow');
 assert.ok(organization.includes('flex w-full min-w-0 flex-wrap items-center gap-2.5 sm:w-auto sm:justify-end'), 'member controls must wrap within the card on narrow screens');
 assert.ok(organization.includes('min-w-0 max-w-full flex-1 sm:flex-none'), 'member role selector must remain viewport-bounded');
+assert.ok(organization.includes('flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between'), 'pending invite/access-request rows must stack on narrow screens');
+assert.ok(organization.includes('text-xs text-[#A0A7B5] break-all">{invite.email'), 'pending invitation email must wrap on narrow screens');
+assert.ok(organization.includes('text-xs text-[#A0A7B5] break-all">{req.email || req.id}'), 'join-request identity must wrap on narrow screens');
 assert.ok(organization.includes('authoritativeOwnerUid'), 'member role management must distinguish the authoritative owner from stale owner memberships');
 assert.ok(organization.includes('getMemberRoleManagementOptions'), 'member role selector must use the canonical management policy');
 assert.equal(organization.includes('<option value="leader">'), false, 'member role selector must not submit legacy leader as an organization role');
@@ -31,6 +34,9 @@ assert.equal(organization.includes('<option value="secretary">'), false, 'member
 assert.equal(organization.includes('<option value="guest">'), false, 'member role selector must not submit legacy guest as an organization role');
 assert.ok(dashboard.includes('/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(memberId)}/role'), 'inline role changes must use the canonical v1 endpoint');
 assert.ok(dashboard.includes("method: 'PATCH'"), 'inline role changes must use the canonical PATCH mutation');
+assert.ok(dashboard.includes('canEditOrganizationRoleForMember'), 'member edit modal must share the stale-owner protection model');
+assert.ok(dashboard.includes('targetIsAuthoritativeOwner'), 'member edit save must never demote the authoritative owner');
+assert.ok(dashboard.includes('member.organizationRole || member.role || "member"'), 'member edit must prefer the canonical organizationRole projection');
 
 assert.ok(invite.includes('max-h-[calc(100dvh'), 'invite bottom sheet must remain bounded by the dynamic viewport');
 assert.ok(shell.includes('w-[min(22rem,calc(100vw-1rem))]'), 'app launcher must remain viewport-bounded');
