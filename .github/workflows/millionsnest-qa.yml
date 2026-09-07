@@ -61,6 +61,9 @@ jobs:
       - name: Hub entry and final pending cleanup
         run: npx tsx scripts/test_hub_entry_and_final_pending.ts
 
+      - name: Hub access status and legacy owner regression
+        run: npx tsx scripts/test_hub_access_status_regression.ts
+
       - name: Public home conversion funnel and analytics security
         run: npx tsx scripts/test_public_home_funnel.ts
 
