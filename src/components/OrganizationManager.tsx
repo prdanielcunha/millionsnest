@@ -5,7 +5,12 @@ import { PremiumEmptyState } from '../packages/ui/empty-state.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { normalizeSlug } from '../lib/slug.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
-import { canChangeOrganizationRole } from '../lib/roleResolver.js';
+import {
+  getInviteableOrganizationRolesForActor,
+  getOrganizationRoleDescription,
+  getOrganizationRoleLabel,
+  normalizeExistingOrganizationRole
+} from '../lib/organizationRoles.js';
 import { feedback } from '../packages/ui/feedback.js';
 import type { HubAppExperience } from '../lib/hubAppExperience.js';
 import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
@@ -123,6 +128,12 @@ export function OrganizationManager({
     timeZone: 'America/Sao_Paulo'
   });
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+  const organizationRoleLocale: 'pt' | 'en' | 'es' =
+    String(organizationDetails.locale || organization?.locale || 'pt-BR').toLowerCase().startsWith('en')
+      ? 'en'
+      : String(organizationDetails.locale || organization?.locale || 'pt-BR').toLowerCase().startsWith('es')
+        ? 'es'
+        : 'pt';
 
   useEffect(() => {
     setOrganizationDetails({
@@ -289,6 +300,45 @@ export function OrganizationManager({
     } finally {
       setReissuingInviteId(null);
     }
+  };
+
+  const authoritativeOwnerUid = String(
+    organization?.ownerUid ||
+    organization?.ownerUserId ||
+    organization?.ownerId ||
+    organization?.owner_user_id ||
+    '',
+  );
+  const actorIsAuthoritativeOwner =
+    Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === user?.uid;
+
+  const getMemberRoleManagementOptions = (member: any) => {
+    const memberId = String(member?.id || member?.uid || '');
+    if (!memberId || memberId === user?.uid) return [];
+
+    const rawRole = String(
+      member?.organizationRole ?? member?.role ?? 'member',
+    ).trim().toLowerCase();
+    const actorRole = normalizeExistingOrganizationRole(currentUserRole || '');
+    const targetRole = normalizeExistingOrganizationRole(rawRole);
+    const targetIsAuthoritativeOwner =
+      Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === memberId;
+
+    if (targetIsAuthoritativeOwner) return [];
+    if (rawRole === 'owner' && !isGlobalAdmin && !actorIsAuthoritativeOwner) {
+      return [];
+    }
+    if (!isGlobalAdmin && actorRole !== 'owner' && actorRole !== 'admin') {
+      return [];
+    }
+    if (!isGlobalAdmin && actorRole === 'admin' && targetRole === 'admin') {
+      return [];
+    }
+
+    return getInviteableOrganizationRolesForActor({
+      systemRole: profile?.systemRole,
+      organizationRole: currentUserRole,
+    });
   };
 
   const roleInheritsLiveConduct = (role: string | null | undefined) =>
@@ -719,23 +769,23 @@ export function OrganizationManager({
 
                <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
                   {members.map((member: any, i: number) => (
-                    <div key={member.id} className={`flex items-center justify-between p-4 ${i !== members.length - 1 ? 'border-b border-white/5' : ''}`}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
-                          {member.photoURL ? <img src={member.photoURL} className="w-full h-full rounded-xl object-cover" /> : member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
+                    <div key={member.id} className={`flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between ${i !== members.length - 1 ? 'border-b border-white/5' : ''}`}>
+                      <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
+                        <div className="w-10 h-10 shrink-0 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
+                          {member.photoURL ? <img src={member.photoURL} alt="" className="w-full h-full rounded-xl object-cover" /> : member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
                         </div>
-                        <div className="flex flex-col">
-                          <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
+                        <div className="flex min-w-0 flex-1 flex-col">
+                          <span className="text-sm font-semibold text-[#F5F7FA] break-words">
                             {member.displayName || 'Usuário'} {member.id === user?.uid && '(Você)'}
                           </span>
-                          <span className="text-xs text-[#A0A7B5]">{member.email}</span>
+                          <span className="text-xs text-[#A0A7B5] break-all">{member.email}</span>
                         </div>
                       </div>
                       
                       {(currentUserPerms['organization.roles.manage'] || isGlobalAdmin) ? (
-                        <div className="flex items-center gap-2.5 flex-wrap justify-end">
+                        <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 sm:w-auto sm:justify-end">
                           {(() => {
-                            const inherited = roleInheritsLiveConduct(member.role);
+                            const inherited = roleInheritsLiveConduct(member.organizationRole ?? member.role);
                             const enabled = inherited || liveConductorByMember[member.id] === true;
                             const isSaving = liveConductorSavingId === member.id;
                             return (
@@ -775,27 +825,36 @@ export function OrganizationManager({
                             );
                           })()}
 
-                          <select
-                            value={member.role || 'member'}
-                            onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                            disabled={
-                               // Se não puder alterar o cargo do alvo para o mesmo cargo atual, então não pode editá-lo
-                               !canChangeOrganizationRole(currentUserRole, member.role, member.role, member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed
-                            }
-                            className={`bg-[#0B0F19] border border-white/10 text-[#F5F7FA] text-xs font-medium rounded-lg px-3 py-1.5 outline-none focus:border-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed`}
-                          >
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'owner', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="owner">Dono (Owner)</option>}
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'admin', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="admin">Administrador</option>}
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'leader', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="leader">Líder</option>}
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'secretary', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="secretary">Operador / Secretaria</option>}
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'member', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="member">Membro Padrão</option>}
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'guest', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="guest">Visitante (Leitura)</option>}
-                            
-                            {/* Se nenhuma permissão acima der certo, mas for impossível renderizar vazio e manter o select, renderizamos a opcao atual desabilitada */}
-                            {!canChangeOrganizationRole(currentUserRole, member.role, member.role, member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && 
-                               <option value={member.role}>{member.role}</option>
-                            }
-                          </select>
+                          {(() => {
+                            const rawRole = String(
+                              member?.organizationRole ?? member?.role ?? 'member',
+                            ).trim().toLowerCase();
+                            const options = getMemberRoleManagementOptions(member);
+                            const canEditRole = options.length > 0;
+                            const optionValues = new Set(options);
+                            const currentIsCanonicalOption = optionValues.has(rawRole as any);
+
+                            return (
+                              <select
+                                value={rawRole}
+                                onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
+                                disabled={!canEditRole}
+                                aria-label={`Nível de acesso de ${member.displayName || member.email || 'membro'}`}
+                                className="min-w-0 max-w-full flex-1 sm:flex-none bg-[#0B0F19] border border-white/10 text-[#F5F7FA] text-xs font-medium rounded-lg px-3 py-2 outline-none focus:border-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {!currentIsCanonicalOption && (
+                                  <option value={rawRole} disabled={canEditRole}>
+                                    {getOrganizationRoleLabel(rawRole, organizationRoleLocale)}
+                                  </option>
+                                )}
+                                {options.map((role) => (
+                                  <option key={role} value={role}>
+                                    {getOrganizationRoleLabel(role, organizationRoleLocale)}
+                                  </option>
+                                ))}
+                              </select>
+                            );
+                          })()}
                           
                           {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
                             <>
@@ -809,7 +868,7 @@ export function OrganizationManager({
                               )}
                               <button
                                  onClick={() => handleRemoveMember(member.id)}
-                                 disabled={member.role === 'owner' && (currentUserRole !== 'owner' && !isGlobalAdmin)}
+                                 disabled={String(member?.organizationRole ?? member?.role ?? '').toLowerCase() === 'owner'}
                                  className="text-xs text-red-500/70 hover:text-red-500 font-medium px-2 py-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                               >
                                  {member.id === user?.uid ? 'Sair' : 'Remover'}
@@ -819,7 +878,7 @@ export function OrganizationManager({
                         </div>
                       ) : (
                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-[#2B85EB]/10 text-[#2B85EB]">
-                            {{owner: 'Dono', admin: 'Admin', leader: 'Líder', secretary: 'Operador', member: 'Membro', guest: 'Visitante'}[(member.role as string) || 'member'] || member.role || 'Membro'}
+                            {getOrganizationRoleLabel(String(member?.organizationRole ?? member?.role ?? 'member'), organizationRoleLocale)}
                          </span>
                       )}
                     </div>
@@ -838,19 +897,19 @@ export function OrganizationManager({
                        const isOld = invite.status === 'pending' && invite.createdAt && invite.createdAt.toMillis && (Date.now() - invite.createdAt.toMillis() > 7 * 24 * 60 * 60 * 1000);
                        const showAsExpired = isExpired || isOld;
                        return (
-                       <div key={invite.id} className={`flex items-center justify-between p-4 ${i !== pendingInvites.length - 1 ? 'border-b border-white/5' : ''}`}>
-                         <div className="flex items-center gap-3">
-                           <div className="flex flex-col">
+                       <div key={invite.id} className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${i !== pendingInvites.length - 1 ? 'border-b border-white/5' : ''}`}>
+                         <div className="flex min-w-0 flex-1 items-center gap-3">
+                           <div className="flex min-w-0 flex-1 flex-col">
                              <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
                                Status: <span className={showAsExpired ? "text-red-400" : "text-[#10B981]"}>{showAsExpired ? 'Expirado' : 'Aguardando'}</span>
                              </span>
-                             <span className="text-xs text-[#A0A7B5]">{invite.email || invite.emailNormalized || 'E-mail protegido'}</span>
-                             <span className="text-xs text-[#A0A7B5]">Acesso: {{owner: 'Dono', admin: 'Administrador', manager: 'Gestor', leader: 'Líder', secretary: 'Operador', member: 'Membro', viewer: 'Visualizador', guest: 'Visitante'}[(invite.role as string) || 'member'] || invite.role || 'Membro'}</span>
+                             <span className="text-xs text-[#A0A7B5] break-all">{invite.email || invite.emailNormalized || 'E-mail protegido'}</span>
+                             <span className="text-xs text-[#A0A7B5]">Acesso: {getOrganizationRoleLabel(String(invite.role || 'member'), organizationRoleLocale)}</span>
                            </div>
                          </div>
                          
                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
-                           <div className="flex flex-wrap justify-end gap-2">
+                           <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
                              <button
                                type="button"
                                disabled={reissuingInviteId === invite.id}
@@ -881,19 +940,19 @@ export function OrganizationManager({
                    <p className="text-xs text-[#A0A7B5] mb-4">Usuários aguardando aprovação para ingressar na organização como membro padrão.</p>
                    <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
                      {joinRequests.map((req: any, i: number) => (
-                       <div key={req.id} className={`flex items-center justify-between p-4 ${i !== joinRequests.length - 1 ? 'border-b border-white/5' : ''}`}>
-                         <div className="flex items-center gap-3">
-                           <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
+                       <div key={req.id} className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${i !== joinRequests.length - 1 ? 'border-b border-white/5' : ''}`}>
+                         <div className="flex min-w-0 flex-1 items-center gap-3">
+                           <div className="w-10 h-10 shrink-0 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
                              {req.photoURL ? <img src={req.photoURL} alt="" className="w-full h-full rounded-xl object-cover" /> : req.displayName?.charAt(0) || req.email?.charAt(0) || '?'}
                            </div>
-                           <div className="flex flex-col">
-                             <span className="text-sm font-semibold text-[#F5F7FA]">{req.displayName || 'Usuário Indefinido'}</span>
-                             <span className="text-xs text-[#A0A7B5]">{req.email || req.id}</span>
+                           <div className="flex min-w-0 flex-1 flex-col">
+                             <span className="text-sm font-semibold text-[#F5F7FA] break-words">{req.displayName || 'Usuário Indefinido'}</span>
+                             <span className="text-xs text-[#A0A7B5] break-all">{req.email || req.id}</span>
                            </div>
                          </div>
                          
                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
-                           <div className="flex gap-2">
+                           <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
                               <button onClick={() => handleRejectJoinRequest && handleRejectJoinRequest(req.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 rounded-lg">
                                 Recusar
                               </button>
@@ -916,22 +975,24 @@ export function OrganizationManager({
                 <p className="text-sm text-[#A0A7B5] mb-6">Escolha o nível de acesso que combina com a responsabilidade de cada pessoa. As regras técnicas ficam protegidas nos bastidores.</p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="bg-[#050505] p-5 rounded-2xl border border-[#2B85EB]/20">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><ShieldCheck className="w-4 h-4 text-[#2B85EB]" /> Dono</h4>
-                      <p className="text-xs text-[#A0A7B5]">Responsável principal pela organização. Pode administrar equipe, aplicativos, assinatura e configurações críticas.</p>
-                   </div>
-                   <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><ShieldCheck className="w-4 h-4 text-[#A0A7B5]" /> Administrador</h4>
-                      <p className="text-xs text-[#A0A7B5]">Pode administrar a organização e a equipe, sem assumir a propriedade principal da conta.</p>
-                   </div>
-                   <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Líder / Operador</h4>
-                      <p className="text-xs text-[#A0A7B5]">Ajuda na rotina da equipe e nos aplicativos conforme as permissões recebidas, sem controlar cobrança ou propriedade.</p>
-                   </div>
-                   <div className="bg-[#050505] p-5 rounded-2xl border border-white/5">
-                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-[#A0A7B5]" /> Membro / Visitante</h4>
-                      <p className="text-xs text-[#A0A7B5]">Usa somente as áreas liberadas para sua participação, sem acesso às configurações administrativas.</p>
-                   </div>
+                  {(['owner', 'admin', 'manager', 'member', 'viewer'] as const).map((role) => (
+                    <div
+                      key={role}
+                      className={`bg-[#050505] p-5 rounded-2xl border ${role === 'owner' ? 'border-[#2B85EB]/20' : 'border-white/5'}`}
+                    >
+                      <h4 className="text-[#F5F7FA] font-medium flex items-center gap-2 mb-2">
+                        {role === 'owner' || role === 'admin' ? (
+                          <ShieldCheck className={`w-4 h-4 ${role === 'owner' ? 'text-[#2B85EB]' : 'text-[#A0A7B5]'}`} />
+                        ) : (
+                          <Users className="w-4 h-4 text-[#A0A7B5]" />
+                        )}
+                        {getOrganizationRoleLabel(role, organizationRoleLocale)}
+                      </h4>
+                      <p className="text-xs text-[#A0A7B5]">
+                        {getOrganizationRoleDescription(role, organizationRoleLocale)}
+                      </p>
+                    </div>
+                  ))}
                 </div>
 
                 <div className="mt-6 rounded-2xl border border-white/5 bg-white/[0.02] p-4">

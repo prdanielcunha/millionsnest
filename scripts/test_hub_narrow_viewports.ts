@@ -19,9 +19,31 @@ assert.ok(organization.includes('flex flex-col sm:flex-row sm:items-center sm:ju
 assert.ok(organization.includes('flex flex-wrap sm:flex-nowrap items-center gap-2'), 'public URL editor must wrap safely below small widths');
 assert.ok(organization.includes('min-w-[110px]'), 'public slug input must retain usable touch width');
 assert.ok(organization.includes('break-all inline-block max-w-full'), 'technical IDs must never overflow even for global admins');
+assert.ok(organization.includes('flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between'), 'member rows must stack instead of clipping controls on narrow screens');
+assert.ok(organization.includes('flex w-full min-w-0 items-start gap-3 sm:flex-1'), 'member identity must be allowed to shrink inside the viewport');
+assert.ok(organization.includes('text-xs text-[#A0A7B5] break-all">{member.email}'), 'member emails must wrap instead of forcing horizontal overflow');
+assert.ok(organization.includes('flex w-full min-w-0 flex-wrap items-center gap-2.5 sm:w-auto sm:justify-end'), 'member controls must wrap within the card on narrow screens');
+assert.ok(organization.includes('min-w-0 max-w-full flex-1 sm:flex-none'), 'member role selector must remain viewport-bounded');
+assert.ok(organization.includes('flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between'), 'pending invite/access-request rows must stack on narrow screens');
+assert.ok(organization.includes('text-xs text-[#A0A7B5] break-all">{invite.email'), 'pending invitation email must wrap on narrow screens');
+assert.ok(organization.includes('text-xs text-[#A0A7B5] break-all">{req.email || req.id}'), 'join-request identity must wrap on narrow screens');
+assert.ok(organization.includes('authoritativeOwnerUid'), 'member role management must distinguish the authoritative owner from stale owner memberships');
+assert.ok(organization.includes('getMemberRoleManagementOptions'), 'member role selector must use the canonical management policy');
+assert.equal(organization.includes('<option value="leader">'), false, 'member role selector must not submit legacy leader as an organization role');
+assert.equal(organization.includes('<option value="secretary">'), false, 'member role selector must not submit legacy secretary as an organization role');
+assert.equal(organization.includes('<option value="guest">'), false, 'member role selector must not submit legacy guest as an organization role');
+assert.ok(organization.includes("['owner', 'admin', 'manager', 'member', 'viewer']"), 'role guidance must present every canonical organization role');
+assert.ok(organization.includes('getOrganizationRoleDescription(role, organizationRoleLocale)'), 'role guidance must use the shared localized canonical descriptions');
+assert.equal(organization.includes('Líder / Operador'), false, 'role guidance must not advertise removed legacy organization roles');
+assert.equal(organization.includes('Membro / Visitante'), false, 'role guidance must distinguish canonical member and viewer roles');
+assert.ok(dashboard.includes('/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(memberId)}/role'), 'inline role changes must use the canonical v1 endpoint');
+assert.ok(dashboard.includes("method: 'PATCH'"), 'inline role changes must use the canonical PATCH mutation');
+assert.ok(dashboard.includes('canEditOrganizationRoleForMember'), 'member edit modal must share the stale-owner protection model');
+assert.ok(dashboard.includes('targetIsAuthoritativeOwner'), 'member edit save must never demote the authoritative owner');
+assert.ok(dashboard.includes('member.organizationRole || member.role || "member"'), 'member edit must prefer the canonical organizationRole projection');
 
 assert.ok(invite.includes('max-h-[calc(100dvh'), 'invite bottom sheet must remain bounded by the dynamic viewport');
 assert.ok(shell.includes('w-[min(22rem,calc(100vw-1rem))]'), 'app launcher must remain viewport-bounded');
 assert.ok(shell.includes('max-w-[92px] min-[390px]:max-w-[128px]'), 'organization context must adapt around 320–390px widths');
 
-console.log('PASS Hub narrow viewport polish: 320px-safe account, organization, invite, launcher and long-content layouts');
+console.log('PASS Hub narrow viewport polish: 320px-safe account, organization members, invite, launcher and long-content layouts');

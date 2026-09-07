@@ -31,14 +31,25 @@ function normalizeRole(value: unknown): CanonicalRole | null {
   return CANONICAL_ROLES.has(normalized as CanonicalRole) ? normalized as CanonicalRole : null;
 }
 
+function normalizeExistingRole(value: unknown): CanonicalRole | null {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'secretary') return 'manager';
+  if (normalized === 'guest') return 'viewer';
+  // "leader" was historically a MusicScale-oriented organization role.
+  // For authorization of an explicit repair it is treated as a non-admin
+  // member; the requested destination role must still be canonical.
+  if (normalized === 'leader') return 'member';
+  return normalizeRole(normalized);
+}
+
 function classifyMembership(data: FirebaseFirestore.DocumentData | undefined): MembershipState {
   if (!data) return { state: 'absent' };
   const status = typeof data.status === 'string' ? data.status.trim().toLowerCase() : '';
   if (INACTIVE_STATUSES.has(status)) return { state: 'inactive' };
   if (status && status !== 'active') return { state: 'inconsistent' };
-  const role = normalizeRole(data.organizationRole ?? data.role);
-  const otherRole = normalizeRole(data.role);
-  const organizationRole = normalizeRole(data.organizationRole);
+  const role = normalizeExistingRole(data.organizationRole ?? data.role);
+  const otherRole = normalizeExistingRole(data.role);
+  const organizationRole = normalizeExistingRole(data.organizationRole);
   if (!role || (otherRole && organizationRole && otherRole !== organizationRole)) return { state: 'inconsistent' };
   return { state: 'active', role };
 }
@@ -82,7 +93,13 @@ function roleDecision(options: {
   newRole: AssignableRole;
 }): { allowed: true } | { allowed: false; reasonCode: string } {
   const { actorGlobal, actorMetadataOwner, actorMembership, targetRole, newRole } = options;
-  if (targetRole === 'owner') return { allowed: false, reasonCode: 'OWNER_ROLE_REQUIRES_TRANSFER' };
+  if (targetRole === 'owner') {
+    // A canonical membership can carry a stale legacy owner role even when the
+    // organization metadata points to a different authoritative owner. Only
+    // that authoritative owner (or a global privileged actor) may repair it.
+    if (actorGlobal || actorMetadataOwner) return { allowed: true };
+    return { allowed: false, reasonCode: 'TARGET_ROLE_PROTECTED' };
+  }
   if (actorGlobal || actorMetadataOwner || (actorMembership.state === 'active' && actorMembership.role === 'owner')) {
     return { allowed: true };
   }
@@ -141,7 +158,11 @@ export async function updateOrganizationMemberRole(
       if (targetMembership.state === 'absent') return { success: false as const, reasonCode: 'MEMBERSHIP_NOT_FOUND' };
       if (targetMembership.state === 'inactive') return { success: false as const, reasonCode: 'MEMBERSHIP_INACTIVE' };
       if (targetMembership.state === 'inconsistent') return { success: false as const, reasonCode: 'MEMBERSHIP_STATE_INCONSISTENT' };
-      if (organizationOwnerMatches(organization, memberId) || targetMembership.role === 'owner') {
+      // The authoritative owner is defined by organization metadata and must
+      // only change through the dedicated ownership-transfer flow. A member
+      // document that says "owner" but is not the metadata owner is treated as
+      // a repairable legacy mismatch and is handled by roleDecision below.
+      if (organizationOwnerMatches(organization, memberId)) {
         return { success: false as const, reasonCode: 'OWNER_ROLE_REQUIRES_TRANSFER' };
       }
       const actorGlobal = isCanonicalGlobalRole(actorUserSnap.data()?.systemRole);
@@ -200,4 +221,4 @@ export async function updateOrganizationMemberRole(
   }
 }
 
-export { classifyMembership, roleDecision, normalizeRole };
+export { classifyMembership, roleDecision, normalizeRole, normalizeExistingRole };
