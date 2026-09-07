@@ -152,7 +152,7 @@ export function Join() {
         sessionStorage.removeItem('mn_invite_redirect');
         
         timeoutRef.current = setTimeout(() => {
-          window.location.href = '/dashboard';
+          window.location.href = '/dashboard/overview';
         }, 2500);
         return;
       }
@@ -255,7 +255,7 @@ export function Join() {
               </button>
             ) : (
               <Link 
-                to="/dashboard"
+                to="/dashboard/overview"
                 className="w-full py-3 bg-white/5 text-[#F5F7FA] text-sm font-semibold rounded-xl hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
               >
                 {t.dashboardLabel} <ArrowRight className="w-4 h-4" />
