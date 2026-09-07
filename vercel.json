@@ -39,10 +39,6 @@
     }
   ],
   "git": {
-    "deploymentEnabled": {
-      "main": false,
-      "production": true
-    }
-  },
-  "ignoreCommand": "node -e \"const ref=process.env.VERCEL_GIT_COMMIT_REF || ''; process.exit(ref === 'production' ? 1 : 0)\""
+    "deploymentEnabled": false
+  }
 }
