@@ -5,29 +5,19 @@ import { spawnSync } from 'node:child_process';
 const config = JSON.parse(readFileSync('vercel.json', 'utf8'));
 
 assert.equal(
-  config.git?.deploymentEnabled?.main,
+  config.git?.deploymentEnabled,
   false,
-  'main must not trigger duplicate Vercel deployments; production remains the release branch'
+  'all automatic Git deployments must stay disabled; releases are manual-only'
 );
 assert.equal(
-  config.git?.deploymentEnabled?.production,
-  true,
-  'production deployments must remain explicitly enabled'
-);
-assert.match(
-  config.ignoreCommand || '',
-  /VERCEL_GIT_COMMIT_REF/,
-  'Vercel ignored-build policy must inspect the Git branch'
+  Object.prototype.hasOwnProperty.call(config, 'ignoreCommand'),
+  false,
+  'manual-only release mode must not depend on an ignored-build shell command'
 );
 
-const runIgnore = (ref: string) => spawnSync(config.ignoreCommand, {
-  shell: true,
-  env: { ...process.env, VERCEL_GIT_COMMIT_REF: ref },
-  encoding: 'utf8'
-});
-assert.equal(runIgnore('production').status, 1, 'production must proceed with a Vercel build');
-assert.equal(runIgnore('main').status, 0, 'main must be skipped by Vercel');
-assert.equal(runIgnore('fix/home-authority').status, 0, 'ordinary branches must be skipped by Vercel');
+// Operational contract: commits, pull requests, main and production pushes are
+// validated by CI only. A Vercel deployment is created explicitly by the
+// release operator after the batch is approved.
 
 const apiHeaders = (config.headers || [])
   .find((entry: any) => entry.source === '/api/(.*)')?.headers || [];
