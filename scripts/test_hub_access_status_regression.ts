@@ -12,7 +12,7 @@ const locales = {
 
 for (const [lang, locale] of Object.entries(locales)) {
   for (const key of ['active', 'cancel_scheduled', 'administrative', 'error']) {
-    assert.match(locale, new RegExp('\\b' + key + ':\\s*["\\']'), lang + ' must translate MusicScale status ' + key);
+    assert.match(locale, new RegExp("\\b" + key + ":\\s*[\\\"']"), lang + ' must translate MusicScale status ' + key);
   }
   assert.match(locale, /plan_administrative:\s*["']/, lang + ' must translate administrative Pro plan');
 }
@@ -30,7 +30,7 @@ assert.match(
 assert.match(server, /tenant\.context\.owner_membership_repaired/, 'legacy owner repair must be audited');
 assert.match(server, /org\.ownerUserId === uid[\s\S]*org\.ownerUid === uid[\s\S]*org\.ownerId === uid/, 'legacy repair must require authoritative owner metadata');
 assert.match(server, /collection\('organizations'\)\.doc\(orgId\)\.collection\('members'\)\.doc\(uid\)/, 'repair must restore the canonical member document');
-assert.match(server, /collection\('organization_members'\)\.doc\(\`\\\$\{uid\}_\\\$\{orgId\}\`\)/, 'repair must preserve the legacy projection during migration');
+assert.match(server, /collection\('organization_members'\)\.doc\(\`\$\{uid\}_\$\{orgId\}\`\)/, 'repair must preserve the legacy projection during migration');
 assert.match(server, /permissions:\s*getDefaultPermissions\('owner'\)/, 'repaired owner must receive canonical owner permissions');
 assert.equal(
   /ownerMatches\s*=\s*orgId\s*===\s*uid/.test(server),
