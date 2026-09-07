@@ -17,7 +17,6 @@ for (const marker of [
   'onSnapshot(orgRef',
   'onSnapshot(subscriptionRef',
   'onSnapshot(membersRef',
-  'onSnapshot(pendingInviteQuery',
   'onSnapshot(joinRequestQuery',
   'onSnapshot(auditQuery'
 ]) {
@@ -29,6 +28,9 @@ for (const collectionName of ["collection(db, 'songs')", "collection(db, 'scales
 }
 assert.match(dashboard, /musicscale_members/, 'MusicScale configured-member summary must be live');
 assert.match(dashboard, /responseSummaryAvailable/, 'response privacy state must be explicit');
+assert.match(dashboard, /refreshPendingInvites/, 'pending invites must refresh through the protected backend');
+assert.match(dashboard, /\/api\/v1\/organizations\/.*\/invitations/, 'Hub must use protected invitation APIs');
+assert.equal(dashboard.includes('onSnapshot(pendingInviteQuery'), false, 'Hub must not subscribe directly to secret invitation documents');
 
 assert.match(workspace, /musicScaleSummary/, 'app workspace must consume real MusicScale summary');
 assert.match(workspace, /Dados ao vivo/, 'MusicScale workspace must label live operational data');
@@ -59,10 +61,15 @@ assert.match(server, /Você não possui permissão para alterar esta organizaç�
 assert.match(server, /\/api\/v1\/organizations\/:organizationId\/logo/, 'logo endpoint must exist');
 assert.match(server, /\/api\/v1\/invitations\/email/, 'invite email endpoint must exist');
 assert.match(server, /\/invitations\/:invitationId\/reissue/, 'safe invite reissue endpoint must exist');
+assert.match(server, /app\.get\('\/api\/v1\/organizations\/:organizationId\/invitations'/, 'protected pending-invite endpoint must exist');
+assert.match(server, /\/invitations\/:invitationId\/revoke/, 'protected invite revoke endpoint must exist');
 assert.match(server, /tokenHash !== inviteData\.tokenHash/, 'email delivery must validate the raw invite URL against its stored token hash');
 
-assert.ok(rules.includes('match /scales/{scaleId}/responses/{responseId}'), 'response summary reads require an explicit rule');
-assert.ok(rules.includes('isOrgAdmin(get(/databases/$(database)/documents/scales/$(scaleId))'), 'response details must remain admin-scoped');
+assert.ok(rules.includes('match /scales/{scaleId}/responses/{responseId}'), 'response reads require an explicit rule');
+assert.ok(rules.includes("resource.data.get('userId', '') == request.auth.uid"), 'a member must retain access to their own response');
+assert.ok(rules.includes("'canManageScales'"), 'team-wide response reads must require scale-management authority');
+assert.ok(rules.includes('match /scales/{scaleId}/responseHistory/{historyId}'), 'response history must remain explicitly protected');
+assert.match(rules, /match \/invites\/\{inviteId\} \{[\s\S]*allow read, create, update, delete: if false;/, 'invitation secrets must stay backend-only');
 
 assert.match(guide, /completedByStep/, 'all onboarding steps must derive completion from live state');
 assert.match(guide, /nextStepId/, 'onboarding must identify one next step');
