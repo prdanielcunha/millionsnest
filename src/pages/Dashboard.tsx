@@ -9,7 +9,7 @@ import {
   Star, Zap, Headphones, Video, ListMusic, Check, Users, Link, Mail, Plus, X, Loader2, Copy, Wallet
 } from "lucide-react";
 import { Navbar } from "../components/Navbar.js";
-import { doc, getDoc, updateDoc, setDoc, collection, getDocs, query, where, addDoc, deleteDoc, limit, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, collection, getDocs, query, where, limit, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { auth } from "../lib/firebase.js";
 import { sendPasswordResetEmail } from "firebase/auth";
@@ -1694,6 +1694,66 @@ export function Dashboard() {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0B0F19]/70 p-7 text-center shadow-2xl">
+          <AlertCircle className="w-9 h-9 text-amber-300 mx-auto mb-4" />
+          <h1 className="text-lg font-semibold text-white">Não conseguimos preparar sua conta</h1>
+          <p className="text-sm text-[#A0A7B5] mt-2 leading-relaxed">
+            Sua sessão está ativa, mas os dados do perfil não terminaram de carregar.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="min-h-[44px] rounded-xl bg-white text-black text-sm font-semibold hover:bg-gray-100"
+            >
+              Tentar novamente
+            </button>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="min-h-[44px] rounded-xl border border-white/10 bg-white/5 text-white text-sm font-semibold hover:bg-white/10"
+            >
+              Sair da conta
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!activeContextOrgId && !isGlobalAdmin) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0B0F19]/70 p-7 text-center shadow-2xl">
+          <Building2 className="w-9 h-9 text-[#2B85EB] mx-auto mb-4" />
+          <h1 className="text-lg font-semibold text-white">Sua organização ainda não apareceu</h1>
+          <p className="text-sm text-[#A0A7B5] mt-2 leading-relaxed">
+            Vamos tentar carregar novamente o vínculo da sua igreja ou organização.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="min-h-[44px] rounded-xl bg-white text-black text-sm font-semibold hover:bg-gray-100"
+            >
+              Carregar novamente
+            </button>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="min-h-[44px] rounded-xl border border-white/10 bg-white/5 text-white text-sm font-semibold hover:bg-white/10"
+            >
+              Trocar de conta
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const msIsInstalled = musicScaleProjection?.accessible === true;
