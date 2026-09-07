@@ -805,6 +805,7 @@ export default {
       plan_label: "Plan actual:",
       plan_starter: "Starter",
       plan_unknown: "Plan no identificado",
+      plan_administrative: "Acceso administrativo · Pro",
       billing_action: "Gestionar Suscripción",
       team_title: "Miembros y Equipo",
       team_desc: "Mira quién ya está en el equipo, invita personas y ajusta los accesos cuando sea necesario.",
