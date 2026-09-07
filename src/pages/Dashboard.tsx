@@ -1962,19 +1962,19 @@ export function Dashboard() {
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-5 mb-2"
+            className="flex items-center gap-3 sm:gap-5 mb-2"
           >
             {profile?.photoURL ? (
-              <img src={profile.photoURL} alt="Profile" loading="lazy" decoding="async" className="w-16 h-16 rounded-2xl border border-white/10 shadow-sm" />
+              <img src={profile.photoURL} alt="Profile" loading="lazy" decoding="async" className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl border border-white/10 shadow-sm" />
             ) : (
-              <div className="w-16 h-16 bg-[#0B0F19] rounded-2xl flex items-center justify-center text-[#F5F7FA] font-bold text-2xl border border-white/10 shadow-sm">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-[#0B0F19] rounded-2xl flex items-center justify-center text-[#F5F7FA] font-bold text-lg sm:text-2xl border border-white/10 shadow-sm">
                 {profile?.displayName?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
               </div>
             )}
             <div className="flex-1 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-3 flex-wrap mb-1">
-                  <h1 className="text-2xl md:text-3xl font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-[#F5F7FA] tracking-tight flex items-center gap-2">
                     Olá, {profile?.displayName?.split(' ')[0] || user.email?.split('@')[0]}
                   </h1>
                 </div>
@@ -2008,7 +2008,7 @@ export function Dashboard() {
                      })}
                   </div>
                   <div className="hidden md:block w-px h-4 bg-white/10" />
-                  <p className="text-[#A0A7B5] text-sm">
+                  <p className="hidden sm:block text-[#A0A7B5] text-sm">
                     Visão geral da sua organização
                   </p>
                 </div>
@@ -2846,7 +2846,7 @@ export function Dashboard() {
               </button>
 
               <div className="flex flex-col items-center text-center mt-4">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#2B85EB]/20 to-[#2B85EB]/5 border border-[#2B85EB]/30 text-[#2B85EB] flex items-center justify-center mb-6 shadow-lg shadow-[#2B85EB]/5">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-[#2B85EB]/20 to-[#2B85EB]/5 border border-[#2B85EB]/30 text-[#2B85EB] flex items-center justify-center mb-6 shadow-lg shadow-[#2B85EB]/5">
                   <Music className="w-8 h-8 animate-pulse" />
                 </div>
 
