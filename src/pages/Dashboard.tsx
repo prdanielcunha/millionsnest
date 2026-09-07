@@ -37,6 +37,7 @@ import { EcosystemAppIcon } from "../components/apps/EcosystemAppIcon.js";
 import { SupportHubProvider } from "../components/support/SupportHubContext.js";
 import { SupportHub } from "../components/support/SupportHub.js";
 import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js";
+import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -1758,11 +1759,21 @@ export function Dashboard() {
 
   const msIsInstalled = musicScaleProjection?.accessible === true;
 
-  const installedApps = ECOSYSTEM_APPS.filter(app => {
-    if (app.id === 'nestfinance') return false;
-    if (app.id === 'musicscale') return msIsInstalled;
-    return organization?.enabledApps?.includes(app.id);
+  const hubAppCatalog = resolveHubAppCatalog(ECOSYSTEM_APPS, {
+    organization,
+    subscription,
+    musicScaleAccess: {
+      accessible: musicScaleProjection?.accessible === true,
+      catalogState: musicScaleProjectionError
+        ? 'error'
+        : musicScaleProjectionLoading
+          ? 'loading'
+          : musicScaleProjection?.catalogState || 'unavailable'
+    },
+    isGlobalAdmin
   });
+  const installedAppExperiences = hubAppCatalog.filter(experience => experience.installed);
+  const installedApps = installedAppExperiences.map(experience => experience.app);
   const musicScaleApp = ECOSYSTEM_APPS.find(a => a.id === 'musicscale');
   const entitlements = resolveMusicScaleEntitlements({ subscription, organization, userProfile: profile });
   const maxUsersLimit = entitlements?.limits?.users ?? 10;
