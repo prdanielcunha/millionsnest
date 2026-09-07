@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemApp } from '../../lib/apps.js';
+import type { HubAppExperience } from '../../lib/hubAppExperience.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -13,6 +14,7 @@ import { useSupportHub } from '../support/SupportHubContext.js';
 interface EcosystemWorkspaceHomeProps {
   selectedWorkspace: string;
   installedApps: EcosystemApp[];
+  appExperiences: HubAppExperience[];
   organization: any;
   subscription: any;
   members: any[];
@@ -68,11 +70,18 @@ interface EcosystemWorkspaceHomeProps {
   activeSection: 'overview' | 'resources' | 'getting-started';
   onSelectMusicScaleSection: (section: 'overview' | 'resources' | 'getting-started') => void;
   onRetryMusicScaleAccess: () => void;
+  recentActivity: Array<{
+    id: string;
+    label: string;
+    timestampMs: number | null;
+    actorName: string | null;
+  }>;
 }
 
 export function EcosystemWorkspaceHome({
   selectedWorkspace,
   installedApps,
+  appExperiences,
   organization,
   subscription,
   members,
@@ -92,7 +101,8 @@ export function EcosystemWorkspaceHome({
   onNavigateToOrganizationSettings,
   activeSection,
   onSelectMusicScaleSection,
-  onRetryMusicScaleAccess
+  onRetryMusicScaleAccess,
+  recentActivity
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
   const { openHub } = useSupportHub();
