@@ -93,7 +93,7 @@ assert('17 metadata owner target requires ownership transfer', r.statusCode === 
 await reset();
 await seedOrg('org-1', 'owner-1'); await seedUser('owner-1'); await seedMember('org-1', 'owner-1', 'owner'); await seedUser('target-1'); await seedMember('org-1', 'target-1', 'owner');
 r = await call('owner-1', 'member');
-assert('18 canonical owner target cannot be demoted by generic role command', r.statusCode === 409 && r.body.reasonCode === 'OWNER_ROLE_REQUIRES_TRANSFER');
+assert('18 authoritative owner can repair stale non-metadata owner membership', r.statusCode === 200 && r.body.reasonCode === 'ROLE_UPDATED' && r.body.organizationRole === 'member');
 
 await reset();
 await seedOrg('org-1', 'owner-1'); await seedUser('owner-1'); await seedMember('org-1', 'owner-1', 'owner'); await seedUser('target-1'); await seedMember('org-1', 'target-1', 'member', 'inactive');
@@ -153,5 +153,20 @@ await reset();
 await seedOrg('org-1', 'owner-1', 'inactive'); await seedUser('owner-1'); await seedMember('org-1', 'owner-1', 'owner'); await seedUser('target-1'); await seedMember('org-1', 'target-1', 'member');
 r = await call('owner-1', 'viewer');
 assert('35 inactive organization blocks role change', r.statusCode === 409 && r.body.reasonCode === 'ORGANIZATION_INACTIVE');
+
+await reset();
+await seedOrg('org-1', 'owner-1'); await seedUser('owner-1'); await seedMember('org-1', 'owner-1', 'owner'); await seedUser('admin-1'); await seedMember('org-1', 'admin-1', 'admin'); await seedUser('target-1'); await seedMember('org-1', 'target-1', 'owner');
+r = await call('admin-1', 'member');
+assert('36 admin cannot repair a stale owner membership', r.statusCode === 409 && r.body.reasonCode === 'TARGET_ROLE_PROTECTED');
+
+await reset();
+await seedOrg('org-1', 'owner-1'); await seedUser('global-1', { systemRole: 'ceo' }); await seedUser('target-1'); await seedMember('org-1', 'target-1', 'owner');
+r = await call('global-1', 'viewer');
+assert('37 global privileged actor can repair a stale owner membership', r.statusCode === 200 && r.body.organizationRole === 'viewer');
+
+await reset();
+await seedOrg('org-1', 'owner-1'); await seedUser('owner-1'); await seedMember('org-1', 'owner-1', 'owner'); await seedUser('target-1'); await seedMember('org-1', 'target-1', 'leader');
+r = await call('owner-1', 'member');
+assert('38 legacy leader membership can be repaired to a canonical member role', r.statusCode === 200 && r.body.organizationRole === 'member');
 
 finish();

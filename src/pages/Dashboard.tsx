@@ -23,7 +23,7 @@ import { canPurchasePlanAgain, isSubscriptionValid, normalizeDateToMs } from "..
 import { isGlobalPrivilegedUser, canAccessNestFinanceDevelopment } from "../lib/permissionService.js";
 import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
-import { getInviteableOrganizationRolesForActor, getOrganizationRoleLabel } from "../lib/organizationRoles.js";
+import { getInviteableOrganizationRolesForActor, getOrganizationRoleLabel, normalizeExistingOrganizationRole } from "../lib/organizationRoles.js";
 
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
@@ -471,6 +471,43 @@ export function Dashboard() {
 
   const [adminSelectedOrgId, setAdminSelectedOrgId] = useState<string | null>(null);
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+  const authoritativeOwnerUid = String(
+    organization?.ownerUid ||
+    organization?.ownerUserId ||
+    organization?.ownerId ||
+    organization?.owner_user_id ||
+    '',
+  );
+  const actorIsAuthoritativeOwner =
+    Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === user?.uid;
+
+  const canEditOrganizationRoleForMember = (member: any) => {
+    const memberId = String(member?.id || member?.uid || '');
+    if (!memberId || memberId === user?.uid) return false;
+
+    const rawRole = String(
+      member?.organizationRole ?? member?.role ?? 'member',
+    ).trim().toLowerCase();
+    const actorRole = normalizeExistingOrganizationRole(
+      currentUserData?.role || profile?.organizationRole || 'member',
+    );
+    const targetRole = normalizeExistingOrganizationRole(rawRole);
+    const targetIsAuthoritativeOwner =
+      Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === memberId;
+
+    if (targetIsAuthoritativeOwner) return false;
+    if (rawRole === 'owner' && !isGlobalAdmin && !actorIsAuthoritativeOwner) {
+      return false;
+    }
+    if (!isGlobalAdmin && actorRole !== 'owner' && actorRole !== 'admin') {
+      return false;
+    }
+    if (!isGlobalAdmin && actorRole === 'admin' && targetRole === 'admin') {
+      return false;
+    }
+    return true;
+  };
+
   const hasNestFinanceDevelopmentAccess = canAccessNestFinanceDevelopment(profile?.systemRole);
   const activeContextOrgId = isGlobalAdmin && adminSelectedOrgId 
     ? adminSelectedOrgId 
@@ -978,29 +1015,48 @@ export function Dashboard() {
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
     try {
       const targetMember = members.find(m => m.id === memberId);
-      if (!targetMember) return;
-      if (!user) return;
+      if (!targetMember || !user || !activeContextOrgId) return;
 
       const token = await user.getIdToken();
       const orgId = activeContextOrgId;
-      
-      const res = await fetch(`/api/organizations/${orgId}/members/${memberId}/role`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ newRole })
-      });
+      const res = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(memberId)}/role`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ organizationRole: newRole })
+        }
+      );
+      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        feedback.error(errorData.error || 'Não foi possível alterar o nível de acesso.');
+      if (!res.ok || data?.success !== true) {
+        const code = String(data?.reasonCode || data?.error || '');
+        if (code.includes('SELF_ROLE_CHANGE_DENIED')) {
+          feedback.error('Você não pode alterar seu próprio nível de acesso por aqui.');
+        } else if (
+          code.includes('TARGET_ROLE_PROTECTED') ||
+          code.includes('ROLE_ASSIGNMENT_NOT_ALLOWED') ||
+          code.includes('OWNER_ROLE_REQUIRES_TRANSFER')
+        ) {
+          feedback.error('Esse nível de acesso precisa de uma ação administrativa específica.');
+        } else {
+          feedback.error('Não foi possível alterar o nível de acesso dessa pessoa.');
+        }
         return;
       }
 
-      const perms = getDefaultPermissions(newRole);
-      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole, permissions: perms, permissionsVersion: CURRENT_PERMISSIONS_VERSION } : m));
+      const canonicalRole = String(data?.organizationRole || newRole);
+      const perms = getDefaultPermissions(canonicalRole);
+      setMembers(prev => prev.map(m => m.id === memberId ? {
+        ...m,
+        role: canonicalRole,
+        organizationRole: canonicalRole,
+        permissions: perms,
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION
+      } : m));
     } catch (e) {
       console.error("Erro ao atualizar função", e);
       feedback.error("Não foi possível alterar o nível de acesso dessa pessoa.");
@@ -1012,16 +1068,12 @@ export function Dashboard() {
       const targetMember = members.find(member => member.id === memberId);
       if (!targetMember || !user || !activeContextOrgId) return;
 
-      if (targetMember.role === 'owner') {
-        if (profile?.organizationRole !== 'owner' && !isGlobalAdmin) {
-          feedback.error("Somente o dono ou o suporte autorizado pode remover outro dono.");
-          return;
-        }
-        const ownersCount = members.filter(member => member.role === 'owner').length;
-        if (ownersCount <= 1) {
-          feedback.error("Transfira a propriedade antes de remover o único dono da organização.");
-          return;
-        }
+      const targetOrganizationRole = String(
+        targetMember.organizationRole ?? targetMember.role ?? '',
+      ).toLowerCase();
+      if (targetOrganizationRole === 'owner') {
+        feedback.error('Esse nível de acesso precisa de uma ação administrativa específica.');
+        return;
       }
 
       const message = memberId === user.uid
@@ -1065,13 +1117,18 @@ export function Dashboard() {
     try {
       const orgId = activeContextOrgId;
       const token = await user.getIdToken();
-      const originalRole = editingMember.role || editingMember.organizationRole || 'member';
+      const originalRole = String(
+        editingMember.organizationRole ?? editingMember.role ?? 'member',
+      ).toLowerCase();
+      const targetIsAuthoritativeOwner =
+        Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === editingMember.id;
 
       if (
         editingMember.id !== user.uid &&
         editingMemberRole &&
         editingMemberRole !== originalRole &&
-        editingMember.role !== 'owner'
+        !targetIsAuthoritativeOwner &&
+        canEditOrganizationRoleForMember(editingMember)
       ) {
         const roleResponse = await fetch(
           `/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(editingMember.id)}/role`,
@@ -1113,8 +1170,8 @@ export function Dashboard() {
         ...member,
         displayName: editingMemberName.trim(),
         photoURL: editingMemberPhoto.trim(),
-        role: editingMember.role === 'owner' ? 'owner' : editingMemberRole,
-        organizationRole: editingMember.role === 'owner' ? 'owner' : editingMemberRole
+        role: targetIsAuthoritativeOwner ? 'owner' : (editingMemberRole || originalRole),
+        organizationRole: targetIsAuthoritativeOwner ? 'owner' : (editingMemberRole || originalRole)
       } : member));
       setEditingMember(null);
       feedback.success("Dados do membro atualizados.");
@@ -2096,7 +2153,7 @@ export function Dashboard() {
                   setEditingMember(member);
                   setEditingMemberName(member.displayName || "");
                   setEditingMemberPhoto(member.photoURL || "");
-                  setEditingMemberRole(member.role || member.organizationRole || "member");
+                  setEditingMemberRole(member.organizationRole || member.role || "member");
                 }}
                 isEditingOrg={isEditingOrg}
                 setIsEditingOrg={setIsEditingOrg}
@@ -3047,12 +3104,18 @@ export function Dashboard() {
                   </div>
                 </details>
 
-                {(isGlobalAdmin || profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin') && (
+                {(isGlobalAdmin || ['owner', 'admin'].includes(
+                  normalizeExistingOrganizationRole(
+                    currentUserData?.role || profile?.organizationRole || 'member'
+                  )
+                )) && (
                   <div>
                     <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Nível de acesso na Organização</label>
-                    {editingMember?.role === 'owner' ? (
+                    {!canEditOrganizationRoleForMember(editingMember) ? (
                        <div className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-[#A0A7B5] text-sm opacity-70 cursor-not-allowed">
-                         {t('dashboard.invite.role_owner', 'Proprietário')}
+                         {getOrganizationRoleLabel(
+                           String(editingMember?.organizationRole ?? editingMember?.role ?? 'member')
+                         )}
                        </div>
                     ) : (
                        <select
@@ -3060,9 +3123,17 @@ export function Dashboard() {
                          onChange={(e) => setEditingMemberRole(e.target.value)}
                          className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
                        >
+                         {!getInviteableOrganizationRolesForActor({
+                           systemRole: profile?.systemRole,
+                           organizationRole: currentUserData?.role || profile?.organizationRole
+                         }).includes(editingMemberRole as any) && (
+                           <option value={editingMemberRole} disabled>
+                             {getOrganizationRoleLabel(editingMemberRole)}
+                           </option>
+                         )}
                          {getInviteableOrganizationRolesForActor({
                            systemRole: profile?.systemRole,
-                           organizationRole: profile?.organizationRole
+                           organizationRole: currentUserData?.role || profile?.organizationRole
                          }).map((r) => (
                            <option key={r} value={r}>
                              {getOrganizationRoleLabel(r)}
