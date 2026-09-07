@@ -10,6 +10,7 @@ import { eventBus } from '../packages/events/index.js';
 import { Link, useNavigate } from 'react-router-dom';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
+import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
@@ -17,11 +18,12 @@ import { feedback } from '../packages/ui/feedback.js';
 
 interface EcosystemShellProps {
   children: ReactNode;
-  activeAppId?: string; // e.g., 'core', 'musicscale'
+  activeAppId?: string;
   breadcrumbList?: { label: string; path?: string }[];
+  installedAppIds?: string[];
 }
 
-export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList }: EcosystemShellProps) {
+export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList, installedAppIds }: EcosystemShellProps) {
   const { user, profile, canonicalContext, logout, switchOrganization, switchingOrganizationId } = useAuth();
   
   let organization: any = null;
@@ -67,6 +69,9 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
       if (!target.closest('#profile-menu-container')) {
         setProfileMenuOpen(false);
       }
+      if (!target.closest('#app-launcher-container')) {
+        setLauncherOpen(false);
+      }
     };
     window.addEventListener('mousedown', handleClickOutside);
 
@@ -96,7 +101,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
     
     // Core is local route
     if (app.id === 'core') {
-       navigate('/dashboard');
+       navigate('/dashboard/overview');
        return;
     }
 
@@ -118,6 +123,24 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList 
     { id: 'core', name: 'Painel Central', icon: 'LayoutDashboard' },
     ...ECOSYSTEM_APPS
   ].find(a => a.id === activeAppId) || { id: 'core', name: 'Painel Central' };
+
+  const fallbackInstalledAppIds = ECOSYSTEM_APPS
+    .filter(app => {
+      if (app.status !== 'active') return false;
+      if (app.id === 'musicscale') {
+        return (
+          isGlobalPrivilegedUser(profile) ||
+          profile?.products?.includes('musicscale') ||
+          isSubscriptionValid(subscription) ||
+          organization?.enabledApps?.includes('musicscale')
+        );
+      }
+      return organization?.enabledApps?.includes(app.id) || organization?.apps?.[app.id]?.enabled === true;
+    })
+    .map(app => app.id);
+
+  const effectiveInstalledAppIds = installedAppIds ?? fallbackInstalledAppIds;
+  const launcherApps = ECOSYSTEM_APPS.filter(app => effectiveInstalledAppIds.includes(app.id));
 
   let supportModeObj: any = null;
   try {
