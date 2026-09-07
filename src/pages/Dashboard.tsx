@@ -3077,6 +3077,58 @@ export function Dashboard() {
       </AnimatePresence>
 
     </EcosystemShell>
+
+    <nav
+      aria-label="Navegação principal"
+      className="md:hidden fixed inset-x-0 bottom-0 z-[70] border-t border-white/10 bg-[#050505]/95 backdrop-blur-2xl px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+    >
+      <div className="mx-auto grid max-w-lg grid-cols-4 gap-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab('overview')}
+          aria-current={activeTab === 'overview' ? 'page' : undefined}
+          className={`min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors ${
+            activeTab === 'overview' ? 'bg-[#2B85EB]/12 text-white' : 'text-[#A0A7B5]'
+          }`}
+        >
+          <LayoutGrid className="w-5 h-5" />
+          <span>Início</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('organization')}
+          aria-current={activeTab === 'organization' ? 'page' : undefined}
+          className={`min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors ${
+            activeTab === 'organization' ? 'bg-[#2B85EB]/12 text-white' : 'text-[#A0A7B5]'
+          }`}
+        >
+          <Building2 className="w-5 h-5" />
+          <span>Organização</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('billing')}
+          aria-current={activeTab === 'billing' ? 'page' : undefined}
+          className={`min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors ${
+            activeTab === 'billing' ? 'bg-[#2B85EB]/12 text-white' : 'text-[#A0A7B5]'
+          }`}
+        >
+          <CreditCard className="w-5 h-5" />
+          <span>Assinatura</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('account')}
+          aria-current={activeTab === 'account' ? 'page' : undefined}
+          className={`min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors ${
+            activeTab === 'account' ? 'bg-[#2B85EB]/12 text-white' : 'text-[#A0A7B5]'
+          }`}
+        >
+          <User className="w-5 h-5" />
+          <span>Conta</span>
+        </button>
+      </div>
+    </nav>
     <SupportHub />
     </SupportHubProvider>
   );
