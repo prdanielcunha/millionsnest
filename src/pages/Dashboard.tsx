@@ -2153,7 +2153,7 @@ export function Dashboard() {
                   setEditingMember(member);
                   setEditingMemberName(member.displayName || "");
                   setEditingMemberPhoto(member.photoURL || "");
-                  setEditingMemberRole(member.role || member.organizationRole || "member");
+                  setEditingMemberRole(member.organizationRole || member.role || "member");
                 }}
                 isEditingOrg={isEditingOrg}
                 setIsEditingOrg={setIsEditingOrg}
@@ -3104,7 +3104,11 @@ export function Dashboard() {
                   </div>
                 </details>
 
-                {(isGlobalAdmin || profile?.organizationRole === 'owner' || profile?.organizationRole === 'admin') && (
+                {(isGlobalAdmin || ['owner', 'admin'].includes(
+                  normalizeExistingOrganizationRole(
+                    currentUserData?.role || profile?.organizationRole || 'member'
+                  )
+                )) && (
                   <div>
                     <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Nível de acesso na Organização</label>
                     {!canEditOrganizationRoleForMember(editingMember) ? (
