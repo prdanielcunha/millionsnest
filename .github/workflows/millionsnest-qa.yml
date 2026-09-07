@@ -64,6 +64,9 @@ jobs:
       - name: Hub access status and legacy owner regression
         run: npx tsx scripts/test_hub_access_status_regression.ts
 
+      - name: Safe legacy member repair contract
+        run: npx tsx scripts/test_safe_legacy_member_repair.ts
+
       - name: Public home conversion funnel and analytics security
         run: npx tsx scripts/test_public_home_funnel.ts
 

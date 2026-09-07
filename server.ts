@@ -19,6 +19,7 @@ import {
   toPublicHomeAnalyticsDocument,
 } from './src/server/services/PublicHomeAnalyticsService.js';
 import { summarizeGrowthEvents, type GrowthAnalyticsEvent } from './src/server/services/GrowthFunnelService.js';
+import { resolveLegacyMembershipCandidates } from './src/server/services/TenantBootstrapPlanner.js';
 
 import Stripe from 'stripe';
 import cors from 'cors';
@@ -2698,12 +2699,45 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
     }
 
-    // Include any legacy organization_members links the user has
+    // Include any legacy organization_members links the user has.
+    // Keep the source data so a valid legacy membership can be migrated safely
+    // to the canonical organizations/{orgId}/members/{uid} document.
+    const legacyMembershipCandidates = new Map<string, {
+      organizationId: string;
+      sourcePath: string;
+      status?: string;
+      role?: string;
+      organizationRole?: string;
+      createdAtMs?: number;
+    }>();
     try {
-      const legacyMembersSnap = await db!.collection('organization_members').where('uid', '==', uid).get();
-      legacyMembersSnap.docs.forEach(doc => {
-        const oId = doc.data()?.organizationId;
-        if (oId && typeof oId === 'string') potentialOrgIds.add(oId);
+      const [legacyByUid, legacyByUserId] = await Promise.all([
+        db!.collection('organization_members').where('uid', '==', uid).get(),
+        db!.collection('organization_members').where('user_id', '==', uid).get()
+      ]);
+
+      [...legacyByUid.docs, ...legacyByUserId.docs].forEach(document => {
+        const data = document.data() || {};
+        const organizationId = data.organizationId;
+        if (!organizationId || typeof organizationId !== 'string') return;
+
+        potentialOrgIds.add(organizationId);
+
+        const createdAtMs =
+          typeof data.createdAt?.toMillis === 'function'
+            ? data.createdAt.toMillis()
+            : typeof data.createdAt?.seconds === 'number'
+              ? data.createdAt.seconds * 1000
+              : undefined;
+
+        legacyMembershipCandidates.set(document.ref.path, {
+          organizationId,
+          sourcePath: document.ref.path,
+          status: data.status,
+          role: data.role,
+          organizationRole: data.organizationRole,
+          createdAtMs
+        });
       });
     } catch (legErr) {
       console.warn('[resolveUserOrganizationContext] Legacy members lookup bypassed:', legErr);
@@ -2750,6 +2784,80 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     const ownedOrganizations: any[] = [];
     let inconsistencies: string[] = [];
     let needsRepair = false;
+
+    // Safe legacy-member repair. This never invents membership: it only promotes
+    // an already-existing, internally consistent, active legacy membership into
+    // the canonical member document used by the access resolver.
+    const legacyResolution = resolveLegacyMembershipCandidates(
+      Array.from(legacyMembershipCandidates.values())
+    );
+
+    if (!legacyResolution.ok) {
+      needsRepair = true;
+      inconsistencies.push('Existem vínculos antigos conflitantes que precisam de revisão administrativa.');
+    } else {
+      for (const legacyMembership of legacyResolution.memberships) {
+        const orgId = legacyMembership.organizationId;
+        const org = organizationsMap[orgId];
+        if (!org || membershipsMap[orgId]) continue;
+
+        const orgIsActive =
+          org.status !== 'archived' &&
+          org.status !== 'inactive' &&
+          org.status !== 'suspended' &&
+          org.status !== 'disabled' &&
+          org.disabled !== true;
+        if (!orgIsActive) continue;
+
+        try {
+          const role = legacyMembership.sanitizedRole;
+          const canonicalRef = db!.collection('organizations').doc(orgId).collection('members').doc(uid);
+          const auditRef = db!.collection('organizations').doc(orgId).collection('audit_logs').doc();
+          const joinedAt = legacyMembership.createdAtMs
+            ? admin.firestore.Timestamp.fromMillis(legacyMembership.createdAtMs)
+            : admin.firestore.FieldValue.serverTimestamp();
+
+          const patch = {
+            uid,
+            organizationId: orgId,
+            role,
+            organizationRole: role,
+            status: 'active',
+            permissions: getDefaultPermissions(role),
+            permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+            joinedAt,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          };
+
+          const batch = db!.batch();
+          batch.set(canonicalRef, patch, { merge: true });
+          batch.set(auditRef, {
+            action: 'tenant.context.legacy_membership_repaired',
+            actorUid: uid,
+            organizationId: orgId,
+            membershipRole: role,
+            legacySourcePath: legacyMembership.sourcePath,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
+          await batch.commit();
+
+          membershipsMap[orgId] = {
+            id: uid,
+            ...patch
+          };
+
+          console.log('[AUTO-HEAL] Restored canonical legacy membership.', {
+            organizationId: orgId,
+            role,
+            maskedUid: `${uid.substring(0, 3)}...`
+          });
+        } catch (repairError) {
+          needsRepair = true;
+          inconsistencies.push(`Não foi possível restaurar um vínculo antigo da organização ${org.name || 'Sem nome'} (${orgId}).`);
+          console.error('[AUTO-HEAL LEGACY MEMBERSHIP ERROR]', repairError);
+        }
+      }
+    }
 
     // Safe legacy-owner repair: older tenants may still have authoritative owner
     // metadata on the organization but no canonical members/{uid} document.
