@@ -161,8 +161,8 @@ export function Dashboard() {
   const { tab, subTab } = useParams();
   
   const activeOrgId = canonicalContext?.activeOrganizationId || profile?.organizationId;
-  const userOrgs = canonicalContext?.organizations || 
-     (profile?.organizations ? profile.organizations.map((id: string) => ({ id, name: `Org ID: ${id.substring(0,8)}` })) : []);
+  const userOrgs = canonicalContext?.organizations ||
+     (profile?.organizations ? profile.organizations.map((id: string) => ({ id, name: 'Organização' })) : []);
   
   // Mapping specific routes to internal tabs
   let initialTab: Tab = "overview";
@@ -2070,6 +2070,8 @@ export function Dashboard() {
                     : null
                 }))}
               />
+            </motion.section>
+          )}
 
           {activeTab === "organization" && (
             <motion.section
@@ -2122,6 +2124,10 @@ export function Dashboard() {
                     void handleLaunchEcosystemApp(musicScaleApp, currentUserPerms, destinationPath);
                   }
                 }}
+                appExperiences={hubAppCatalog}
+                onOpenApp={(app: EcosystemApp, destinationPath?: string) => {
+                  void handleLaunchEcosystemApp(app, currentUserPerms, destinationPath);
+                }}
               />
             </motion.section>
           )}
@@ -2135,7 +2141,7 @@ export function Dashboard() {
               transition={{ duration: 0.2 }}
               className="max-w-2xl"
             >
-              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[2rem] p-8 border border-white/5 shadow-2xl">
+              <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[1.5rem] md:rounded-[2rem] p-5 sm:p-7 md:p-8 border border-white/5 shadow-2xl">
                 <h2 className="text-xl font-semibold text-[#F5F7FA] flex items-center gap-3 mb-8 border-b border-white/5 pb-6">
                    <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
                     <User className="w-4 h-4 text-[#A0A7B5]" />
@@ -2206,10 +2212,9 @@ export function Dashboard() {
                            >
                              <div>
                                <p className="text-sm font-semibold text-[#F5F7FA]">
-                                 {org.name || `ID: ${org.id}`}
+                                 {org.name || 'Organização'}
                                  {activeOrgId === org.id && <span className="ml-2 text-[10px] bg-[#2B85EB]/20 text-[#2B85EB] uppercase tracking-widest px-2 py-0.5 rounded font-bold">Ativa</span>}
                                </p>
-                               {org.name && <p className="text-xs text-[#A0A7B5] mt-1 font-mono">{org.id}</p>}
                              </div>
                              {activeOrgId !== org.id && (
                                 <span className="text-xs text-[#A0A7B5] group-hover:text-white transition-colors flex items-center gap-1 font-medium bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">Acessar</span>
@@ -2222,14 +2227,15 @@ export function Dashboard() {
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between pb-6 border-b border-white/5">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">ID Central</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-2 py-1 rounded-md border border-white/5">{user.uid}</span>
+                  {isGlobalAdmin && (
+                    <details className="pb-6 border-b border-white/5">
+                      <summary className="cursor-pointer text-xs font-semibold text-[#A0A7B5]">Detalhes técnicos da conta</summary>
+                      <div className="mt-3">
+                        <p className="text-[10px] uppercase tracking-widest text-[#A0A7B5] mb-1">Identificador técnico</p>
+                        <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-2 py-1 rounded-md border border-white/5 break-all">{user.uid}</span>
                       </div>
-                    </div>
-                  </div>
+                    </details>
+                  )}
 
                   <div className="pt-6">
                     <button 
