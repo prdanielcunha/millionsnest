@@ -11,7 +11,7 @@ assert.match(dashboard, /navigate\('\/dashboard\/overview', \{ replace: true \}\
 assert.equal(dashboard.includes('installedApps.length === 1'), false, 'a single installed app must not bypass Hub Home');
 assert.equal(dashboard.includes('configAppModal'), false, 'legacy app config modal must be removed');
 assert.equal(dashboard.includes('Painel de configurações avançadas estará disponível em breve'), false, 'no fake app settings promise may remain');
-assert.match(dashboard, /handleLaunchEcosystemApp\(app, currentUserPerms, '\/profile'\)/, 'MusicScale settings gear must open a real route');
+assert.ok(organization.includes("onOpenMusicScale?.('/profile')"), 'MusicScale preferences must remain connected to a real route');
 
 assert.ok(login.includes("navigate('/dashboard/overview')"), 'login must land on Hub Home');
 assert.ok(home.includes('<Navigate to="/dashboard/overview" replace />'), 'authenticated public home must land on Hub Home');
