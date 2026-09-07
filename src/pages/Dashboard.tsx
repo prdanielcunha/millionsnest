@@ -1906,11 +1906,15 @@ export function Dashboard() {
 
   return (
     <SupportHubProvider organizationId={activeContextOrgId || null} organizationName={organization?.name || null} appId="core">
-    <EcosystemShell activeAppId="core" breadcrumbList={breadcrumbs}>
+    <EcosystemShell
+      activeAppId="core"
+      breadcrumbList={breadcrumbs}
+      installedAppIds={installedAppExperiences.map(experience => experience.app.id)}
+    >
       <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-[#2B85EB]/5 blur-[150px] rounded-full pointer-events-none" />
       
       {/* Secondary Navigation */}
-      <div className="bg-[#050505]/80 backdrop-blur-xl border-b border-white/5 pt-4 md:pt-6 px-6 sticky top-14 z-40">
+      <div className="hidden md:block bg-[#050505]/80 backdrop-blur-xl border-b border-white/5 pt-5 px-6 sticky top-14 z-40">
         <div className="max-w-7xl mx-auto flex items-center gap-8 overflow-x-auto no-scrollbar">
           <button 
             onClick={() => setActiveTab("overview")}
@@ -1953,8 +1957,8 @@ export function Dashboard() {
         </div>
       </div>
       
-      <main className="py-12 max-w-7xl mx-auto px-6 relative z-10">
-        <header className="mb-12">
+      <main className="py-6 md:py-10 max-w-7xl mx-auto px-4 sm:px-6 relative z-10 pb-28 md:pb-10">
+        <header className="mb-8 md:mb-10">
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
