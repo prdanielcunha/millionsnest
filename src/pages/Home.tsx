@@ -48,7 +48,7 @@ export function Home() {
     );
   }
 
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to="/dashboard/overview" replace />;
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#050505] font-sans text-[#F5F7FA]">
