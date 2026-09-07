@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { MillionsNestLogo } from "../components/MillionsNestLogo.js";
 
 export function Login() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation(['auth']);
   
@@ -101,13 +101,43 @@ export function Login() {
     );
   }
 
-  // Se já tiver usuário, mas não fez o redirect ainda (aguardando o effect)
   if (user) {
+    const inviteRedirect = parseInvitationRedirectPath(sessionStorage.getItem('mn_invite_redirect'));
+
+    if (inviteRedirect.valid || profile) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[#050505]">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 text-[#F5F7FA] animate-spin" />
+            <p className="text-[#A0A7B5] text-sm">{t("access_central") || "Carregando ecossistema..."}</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-[#F5F7FA] animate-spin" />
-          <p className="text-[#A0A7B5] text-sm">{t("access_central") || "Carregando ecossistema..."}</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#050505] p-6">
+        <div className="w-full max-w-md bg-[#0B0F19]/70 border border-white/10 rounded-3xl p-7 text-center shadow-2xl">
+          <h2 className="text-xl font-semibold text-white">Não conseguimos terminar a configuração da conta</h2>
+          <p className="text-sm text-[#A0A7B5] mt-3 leading-relaxed">
+            Sua autenticação funcionou, mas o perfil do MillionsNest não foi carregado.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="min-h-[44px] rounded-xl bg-white text-black text-sm font-semibold hover:bg-gray-100"
+            >
+              Tentar novamente
+            </button>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="min-h-[44px] rounded-xl border border-white/10 bg-white/5 text-white text-sm font-semibold hover:bg-white/10"
+            >
+              Sair da conta
+            </button>
+          </div>
         </div>
       </div>
     );
