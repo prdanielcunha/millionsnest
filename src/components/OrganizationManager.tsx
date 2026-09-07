@@ -5,7 +5,11 @@ import { PremiumEmptyState } from '../packages/ui/empty-state.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { normalizeSlug } from '../lib/slug.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
-import { canChangeOrganizationRole } from '../lib/roleResolver.js';
+import {
+  getInviteableOrganizationRolesForActor,
+  getOrganizationRoleLabel,
+  normalizeExistingOrganizationRole
+} from '../lib/organizationRoles.js';
 import { feedback } from '../packages/ui/feedback.js';
 import type { HubAppExperience } from '../lib/hubAppExperience.js';
 import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
@@ -289,6 +293,45 @@ export function OrganizationManager({
     } finally {
       setReissuingInviteId(null);
     }
+  };
+
+  const authoritativeOwnerUid = String(
+    organization?.ownerUid ||
+    organization?.ownerUserId ||
+    organization?.ownerId ||
+    organization?.owner_user_id ||
+    '',
+  );
+  const actorIsAuthoritativeOwner =
+    Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === user?.uid;
+
+  const getMemberRoleManagementOptions = (member: any) => {
+    const memberId = String(member?.id || member?.uid || '');
+    if (!memberId || memberId === user?.uid) return [];
+
+    const rawRole = String(
+      member?.organizationRole ?? member?.role ?? 'member',
+    ).trim().toLowerCase();
+    const actorRole = normalizeExistingOrganizationRole(currentUserRole || '');
+    const targetRole = normalizeExistingOrganizationRole(rawRole);
+    const targetIsAuthoritativeOwner =
+      Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === memberId;
+
+    if (targetIsAuthoritativeOwner) return [];
+    if (rawRole === 'owner' && !isGlobalAdmin && !actorIsAuthoritativeOwner) {
+      return [];
+    }
+    if (!isGlobalAdmin && actorRole !== 'owner' && actorRole !== 'admin') {
+      return [];
+    }
+    if (!isGlobalAdmin && actorRole === 'admin' && targetRole === 'admin') {
+      return [];
+    }
+
+    return getInviteableOrganizationRolesForActor({
+      systemRole: profile?.systemRole,
+      organizationRole: currentUserRole,
+    });
   };
 
   const roleInheritsLiveConduct = (role: string | null | undefined) =>
@@ -719,21 +762,21 @@ export function OrganizationManager({
 
                <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
                   {members.map((member: any, i: number) => (
-                    <div key={member.id} className={`flex items-center justify-between p-4 ${i !== members.length - 1 ? 'border-b border-white/5' : ''}`}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
-                          {member.photoURL ? <img src={member.photoURL} className="w-full h-full rounded-xl object-cover" /> : member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
+                    <div key={member.id} className={`flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between ${i !== members.length - 1 ? 'border-b border-white/5' : ''}`}>
+                      <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
+                        <div className="w-10 h-10 shrink-0 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
+                          {member.photoURL ? <img src={member.photoURL} alt="" className="w-full h-full rounded-xl object-cover" /> : member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
                         </div>
-                        <div className="flex flex-col">
-                          <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
+                        <div className="flex min-w-0 flex-1 flex-col">
+                          <span className="text-sm font-semibold text-[#F5F7FA] break-words">
                             {member.displayName || 'Usuário'} {member.id === user?.uid && '(Você)'}
                           </span>
-                          <span className="text-xs text-[#A0A7B5]">{member.email}</span>
+                          <span className="text-xs text-[#A0A7B5] break-all">{member.email}</span>
                         </div>
                       </div>
                       
                       {(currentUserPerms['organization.roles.manage'] || isGlobalAdmin) ? (
-                        <div className="flex items-center gap-2.5 flex-wrap justify-end">
+                        <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 sm:w-auto sm:justify-end">
                           {(() => {
                             const inherited = roleInheritsLiveConduct(member.role);
                             const enabled = inherited || liveConductorByMember[member.id] === true;
@@ -775,27 +818,38 @@ export function OrganizationManager({
                             );
                           })()}
 
-                          <select
-                            value={member.role || 'member'}
-                            onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                            disabled={
-                               // Se não puder alterar o cargo do alvo para o mesmo cargo atual, então não pode editá-lo
-                               !canChangeOrganizationRole(currentUserRole, member.role, member.role, member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed
-                            }
-                            className={`bg-[#0B0F19] border border-white/10 text-[#F5F7FA] text-xs font-medium rounded-lg px-3 py-1.5 outline-none focus:border-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed`}
-                          >
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'owner', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="owner">Dono (Owner)</option>}
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'admin', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="admin">Administrador</option>}
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'leader', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="leader">Líder</option>}
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'secretary', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="secretary">Operador / Secretaria</option>}
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'member', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="member">Membro Padrão</option>}
-                            {canChangeOrganizationRole(currentUserRole, member.role, 'guest', member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && <option value="guest">Visitante (Leitura)</option>}
-                            
-                            {/* Se nenhuma permissão acima der certo, mas for impossível renderizar vazio e manter o select, renderizamos a opcao atual desabilitada */}
-                            {!canChangeOrganizationRole(currentUserRole, member.role, member.role, member.id === user?.uid, members.filter(m => m.role === 'owner').length, isGlobalAdmin).allowed && 
-                               <option value={member.role}>{member.role}</option>
-                            }
-                          </select>
+                          {(() => {
+                            const rawRole = String(
+                              member?.organizationRole ?? member?.role ?? 'member',
+                            ).trim().toLowerCase();
+                            const options = getMemberRoleManagementOptions(member);
+                            const canEditRole = options.length > 0;
+                            const optionValues = new Set(options);
+                            const currentIsCanonicalOption = optionValues.has(rawRole as any);
+
+                            return (
+                              <select
+                                value={rawRole}
+                                onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
+                                disabled={!canEditRole}
+                                aria-label={`Nível de acesso de ${member.displayName || member.email || 'membro'}`}
+                                className="min-w-0 max-w-full flex-1 sm:flex-none bg-[#0B0F19] border border-white/10 text-[#F5F7FA] text-xs font-medium rounded-lg px-3 py-2 outline-none focus:border-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {!currentIsCanonicalOption && (
+                                  <option value={rawRole} disabled={canEditRole}>
+                                    {rawRole === 'owner'
+                                      ? 'Dono (Owner)'
+                                      : getOrganizationRoleLabel(rawRole)}
+                                  </option>
+                                )}
+                                {options.map((role) => (
+                                  <option key={role} value={role}>
+                                    {getOrganizationRoleLabel(role)}
+                                  </option>
+                                ))}
+                              </select>
+                            );
+                          })()}
                           
                           {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
                             <>
