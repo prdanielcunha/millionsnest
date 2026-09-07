@@ -1475,6 +1475,7 @@ export function Dashboard() {
       scales: [] as any[],
       bandScales: [] as any[],
       configuredMembersCount: 0,
+      responseSummaryAvailable: false,
       responseCounts: { pending: 0, accepted: 0, maybe: 0, declined: 0 }
     };
     let responsesUnsubscribe: (() => void) | null = null;
@@ -1501,8 +1502,9 @@ export function Dashboard() {
         responsesUnsubscribe?.();
         responsesUnsubscribe = null;
         responseScaleId = nextScale?.id || null;
+        live.responseSummaryAvailable = false;
         live.responseCounts = {
-          pending: activeAssignments.length,
+          pending: 0,
           accepted: 0,
           maybe: 0,
           declined: 0
@@ -1530,10 +1532,14 @@ export function Dashboard() {
                 !respondedAssignmentIds.has(assignment.eventAssignmentId)
               ).length;
 
+              live.responseSummaryAvailable = true;
               live.responseCounts = counts;
               publishSummary();
             },
             (error) => {
+              live.responseSummaryAvailable = false;
+              live.responseCounts = { pending: 0, accepted: 0, maybe: 0, declined: 0 };
+              publishSummary();
               console.warn('[Dashboard] MusicScale response summary listener failed:', error);
             }
           );
@@ -1556,7 +1562,7 @@ export function Dashboard() {
           songCount: Array.isArray(nextScale.songIds) ? nextScale.songIds.length : 0,
           assignmentCount: activeAssignments.length,
           bandScaleId: nextScale.bandScaleId || null,
-          responseSummaryAvailable: canReadResponseSummary,
+          responseSummaryAvailable: canReadResponseSummary && live.responseSummaryAvailable,
           responseCounts: { ...live.responseCounts }
         } : null,
         updatedAtMs: Date.now()
