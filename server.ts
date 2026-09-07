@@ -744,6 +744,190 @@ async function startServer() {
   app.post('/api/v1/onboarding/bootstrap', express.json(), bootstrapUserContext);
   app.post('/api/v1/invitations', express.json(), (req, res) => createInvitation(req, res));
 
+  app.get('/api/v1/organizations/:organizationId/invitations', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      const organizationId = String(req.params.organizationId || '').trim();
+      if (!organizationId || organizationId.length > 256 || organizationId.includes('/') || organizationId.includes('\\')) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_REQUEST' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, reasonCode: 'SERVICE_UNAVAILABLE' });
+      }
+
+      const [orgSnap, actorSnap, memberSnap] = await Promise.all([
+        dbInstance.collection('organizations').doc(organizationId).get(),
+        dbInstance.collection('users').doc(decoded.uid).get(),
+        dbInstance.collection('organizations').doc(organizationId).collection('members').doc(decoded.uid).get()
+      ]);
+
+      if (!orgSnap.exists) {
+        return res.status(404).json({ success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' });
+      }
+
+      const orgData = orgSnap.data() || {};
+      const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+      const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+      const role = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+      const actorIsOwner =
+        orgData.ownerUid === decoded.uid ||
+        orgData.ownerId === decoded.uid ||
+        orgData.ownerUserId === decoded.uid ||
+        orgData.owner_user_id === decoded.uid;
+      const canReadInvites =
+        isGlobalPrivilegedRole(actorData.systemRole) ||
+        actorIsOwner ||
+        role === 'owner' ||
+        role === 'admin' ||
+        memberData.permissions?.['organization.members.invite'] === true ||
+        memberData.permissions?.['organization.members.manage'] === true;
+
+      if (!canReadInvites) {
+        return res.status(403).json({ success: false, reasonCode: 'PERMISSION_DENIED' });
+      }
+
+      const snapshot = await dbInstance
+        .collection('organizations')
+        .doc(organizationId)
+        .collection('invites')
+        .where('status', '==', 'pending')
+        .limit(100)
+        .get();
+
+      const invitations = snapshot.docs
+        .map(document => {
+          const data = document.data() || {};
+          const expiresAtMs = normalizeInvitationTemporalMs(data.expiresAt) || null;
+          const createdAtMs = normalizeInvitationTemporalMs(data.createdAt) || null;
+          const lastSentAtMs = normalizeInvitationTemporalMs(data.emailDelivery?.lastSentAt) || null;
+          return {
+            id: document.id,
+            organizationId,
+            organizationName: data.organizationName || orgData.name || '',
+            email: data.emailNormalized || data.email || '',
+            role: data.role || 'member',
+            status: 'pending',
+            expiresAtMs,
+            createdAtMs,
+            lastSentAtMs
+          };
+        })
+        .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.json({ success: true, invitations });
+    } catch (error) {
+      console.error('[Invitations] Pending invitation read failed', error);
+      return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
+    }
+  });
+
+  app.post('/api/v1/organizations/:organizationId/invitations/:invitationId/revoke', express.json({ limit: '8kb' }), async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      let decoded;
+      try {
+        decoded = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      } catch {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      const organizationId = String(req.params.organizationId || '').trim();
+      const invitationId = String(req.params.invitationId || '').trim();
+      if (!organizationId || !invitationId || organizationId.length > 256 || invitationId.length > 256) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_REQUEST' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, reasonCode: 'SERVICE_UNAVAILABLE' });
+      }
+
+      const result = await dbInstance.runTransaction(async transaction => {
+        const orgRef = dbInstance.collection('organizations').doc(organizationId);
+        const actorRef = dbInstance.collection('users').doc(decoded.uid);
+        const memberRef = orgRef.collection('members').doc(decoded.uid);
+        const inviteRef = orgRef.collection('invites').doc(invitationId);
+
+        const [orgSnap, actorSnap, memberSnap, inviteSnap] = await Promise.all([
+          transaction.get(orgRef),
+          transaction.get(actorRef),
+          transaction.get(memberRef),
+          transaction.get(inviteRef)
+        ]);
+
+        if (!orgSnap.exists || !inviteSnap.exists) {
+          return { status: 404, payload: { success: false, reasonCode: 'INVITATION_NOT_FOUND' } };
+        }
+
+        const orgData = orgSnap.data() || {};
+        const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+        const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+        const inviteData = inviteSnap.data() || {};
+        const role = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+        const actorIsOwner =
+          orgData.ownerUid === decoded.uid ||
+          orgData.ownerId === decoded.uid ||
+          orgData.ownerUserId === decoded.uid ||
+          orgData.owner_user_id === decoded.uid;
+        const canRevoke =
+          isGlobalPrivilegedRole(actorData.systemRole) ||
+          actorIsOwner ||
+          role === 'owner' ||
+          role === 'admin' ||
+          memberData.permissions?.['organization.members.invite'] === true ||
+          memberData.permissions?.['organization.members.manage'] === true;
+
+        if (!canRevoke) {
+          return { status: 403, payload: { success: false, reasonCode: 'PERMISSION_DENIED' } };
+        }
+        if (inviteData.status !== 'pending') {
+          return { status: 409, payload: { success: false, reasonCode: 'INVITATION_NOT_PENDING' } };
+        }
+
+        transaction.set(inviteRef, {
+          status: 'revoked',
+          revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+          revokedBy: decoded.uid,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        transaction.set(orgRef, {
+          invitesUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        transaction.set(orgRef.collection('audit_logs').doc(), {
+          action: 'invitation.revoked',
+          actorUid: decoded.uid,
+          invitationId,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        return { status: 200, payload: { success: true } };
+      });
+
+      return res.status(result.status).json(result.payload);
+    } catch (error) {
+      console.error('[Invitations] Revoke failed', error);
+      return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
+    }
+  });
+
   app.post('/api/v1/invitations/email', express.json({ limit: '16kb' }), async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
@@ -1083,6 +1267,10 @@ async function startServer() {
           useCount: 0,
           replacesInvitationId: invitationId
         });
+
+        transaction.set(orgRef, {
+          invitesUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
 
         transaction.set(orgRef.collection('audit_logs').doc(), {
           action: 'invitation.reissued',
