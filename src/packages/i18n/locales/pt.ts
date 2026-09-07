@@ -1136,8 +1136,12 @@ export default {
       status: {
         available: "Disponível",
         trialing: "Período de teste",
+        active: "Ativo",
+        cancel_scheduled: "Cancelamento agendado",
         payment_issue: "Pagamento pendente",
+        administrative: "Acesso administrativo",
         loading: "Carregando",
+        error: "Erro ao verificar",
         unavailable: "Indisponível"
       },
       checklist: {
