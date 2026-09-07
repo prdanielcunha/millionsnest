@@ -2751,6 +2751,76 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     let inconsistencies: string[] = [];
     let needsRepair = false;
 
+    // Safe legacy-owner repair: older tenants may still have authoritative owner
+    // metadata on the organization but no canonical members/{uid} document.
+    // Restore only that owner's own membership; never infer ownership from UID/orgId.
+    for (const orgId of Object.keys(organizationsMap)) {
+      const org = organizationsMap[orgId];
+      const ownerMatches =
+        org.ownerUserId === uid ||
+        org.ownerUid === uid ||
+        org.ownerId === uid ||
+        org.owner_user_id === uid;
+      const orgIsActive =
+        org.status !== 'archived' &&
+        org.status !== 'inactive' &&
+        org.status !== 'suspended' &&
+        org.status !== 'disabled' &&
+        org.disabled !== true;
+
+      if (ownerMatches && orgIsActive && !membershipsMap[orgId]) {
+        const memberPatch = {
+          uid,
+          organizationId: orgId,
+          role: 'owner',
+          organizationRole: 'owner',
+          status: 'active',
+          permissions: getDefaultPermissions('owner'),
+          permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        try {
+          const canonicalRef = db!.collection('organizations').doc(orgId).collection('members').doc(uid);
+          const legacyRef = db!.collection('organization_members').doc(`${uid}_${orgId}`);
+          const auditRef = db!.collection('organizations').doc(orgId).collection('audit_logs').doc();
+          const batch = db!.batch();
+
+          batch.set(canonicalRef, {
+            ...memberPatch,
+            joinedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+          batch.set(legacyRef, memberPatch, { merge: true });
+          batch.set(auditRef, {
+            action: 'tenant.context.owner_membership_repaired',
+            actorUid: uid,
+            organizationId: orgId,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
+          await batch.commit();
+
+          membershipsMap[orgId] = {
+            id: uid,
+            uid,
+            organizationId: orgId,
+            role: 'owner',
+            organizationRole: 'owner',
+            status: 'active',
+            permissions: getDefaultPermissions('owner'),
+            permissionsVersion: CURRENT_PERMISSIONS_VERSION
+          };
+          console.log('[AUTO-HEAL] Restored canonical owner membership.', {
+            organizationId: orgId,
+            maskedUid: `${uid.substring(0, 3)}...`
+          });
+        } catch (repairError) {
+          needsRepair = true;
+          inconsistencies.push(`Não foi possível restaurar o vínculo de dono da organização ${org.name || 'Sem nome'} (${orgId}).`);
+          console.error('[AUTO-HEAL OWNER MEMBERSHIP ERROR]', repairError);
+        }
+      }
+    }
+
     for (const orgId of Object.keys(organizationsMap)) {
       const org = organizationsMap[orgId];
       if (!membershipsMap[orgId]) {
