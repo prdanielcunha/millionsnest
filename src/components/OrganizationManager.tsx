@@ -491,13 +491,13 @@ export function OrganizationManager({
                   <div className="bg-transparent p-0 rounded-none border-none">
                      <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-4">Dados principais</p>
                      
-                     <div className="flex items-start gap-5 bg-[#050505] p-5 rounded-2xl border border-white/5 mb-6">
-                        <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-2xl text-[#F5F7FA]">
+                     <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-5 bg-[#050505] p-4 sm:p-5 rounded-2xl border border-white/5 mb-6">
+                        <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-2xl text-[#F5F7FA] shrink-0">
                           {organization?.logo ? <img src={organization.logo} className="w-full h-full rounded-xl object-cover" /> : organization?.name?.charAt(0) || 'O'}
                         </div>
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0 w-full">
                            <p className="text-xs font-semibold text-[#F5F7FA] mb-1.5">Logo da organização</p>
-                           <div className="flex items-center gap-2">
+                           <div className="flex items-center gap-2 min-w-0">
                               <input
                                 type="file"
                                 accept="image/png,image/jpeg,image/webp"
@@ -507,7 +507,7 @@ export function OrganizationManager({
                                   void handleLogoUpload(file);
                                   event.currentTarget.value = '';
                                 }}
-                                className="text-xs text-[#A0A7B5] file:mr-4 file:py-1.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/5 file:text-[#F5F7FA] hover:file:bg-white/10 transition-all cursor-pointer disabled:opacity-50"
+                                className="text-xs text-[#A0A7B5] file:mr-3 file:py-1.5 file:px-3 sm:file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/5 file:text-[#F5F7FA] hover:file:bg-white/10 transition-all cursor-pointer disabled:opacity-50 min-w-0 max-w-full w-full"
                               />
                               {logoUploading && <Loader2 className="w-4 h-4 text-[#2B85EB] animate-spin" />}
                            </div>
@@ -518,34 +518,34 @@ export function OrganizationManager({
                        <div>
                          <p className="text-xs font-semibold text-[#A0A7B5] mb-1.5">Nome Oficial</p>
                          {isEditingOrg ? (
-                           <div className="flex items-center gap-2">
+                           <div className="flex items-center gap-2 min-w-0">
                              <input 
                                title="Nome"
                                type="text" 
                                value={orgNameInput} 
                                onChange={(e) => setOrgNameInput(e.target.value)} 
-                               className="bg-[#050505] border border-white/10 rounded-xl px-4 py-2 text-sm text-[#F5F7FA] outline-none focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all w-full"
+                               className="bg-[#050505] border border-white/10 rounded-xl px-4 py-2 text-sm text-[#F5F7FA] outline-none focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all min-w-0 flex-1 w-full"
                              />
-                             <button disabled={savingOrg} onClick={onSaveOrg} className="p-2.5 bg-[#2B85EB] hover:bg-[#2B85EB]/80 text-white rounded-xl transition-colors">
+                             <button disabled={savingOrg} onClick={onSaveOrg} className="p-2.5 bg-[#2B85EB] hover:bg-[#2B85EB]/80 text-white rounded-xl transition-colors shrink-0">
                                {savingOrg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                              </button>
-                             <button disabled={savingOrg} onClick={() => { setIsEditingOrg(false); setOrgNameInput(organization.name); }} className="p-2.5 bg-white/5 text-[#A0A7B5] rounded-xl hover:bg-white/10 transition-colors">
+                             <button disabled={savingOrg} onClick={() => { setIsEditingOrg(false); setOrgNameInput(organization.name); }} className="p-2.5 bg-white/5 text-[#A0A7B5] rounded-xl hover:bg-white/10 transition-colors shrink-0">
                                <X className="w-4 h-4" />
                              </button>
                            </div>
                          ) : (
-                           <div className="flex items-center justify-between bg-[#050505] border border-white/5 rounded-xl px-4 py-3">
-                             <p className="text-sm font-medium text-[#F5F7FA]">{organization?.name}</p>
+                           <div className="flex items-center justify-between gap-3 bg-[#050505] border border-white/5 rounded-xl px-4 py-3 min-w-0">
+                             <p className="text-sm font-medium text-[#F5F7FA] min-w-0 break-words">{organization?.name}</p>
                              <button onClick={() => setIsEditingOrg(true)} className="text-xs font-medium bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg text-[#F5F7FA] transition-colors">Editar</button>
                            </div>
                          )}
                        </div>
 
                        <div>
-                         <p className="text-xs font-semibold text-[#A0A7B5] mb-1.5 flex justify-between">
+                         <div className="text-xs font-semibold text-[#A0A7B5] mb-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                             <span>Endereço da página pública</span>
                             {organization?.slug && !isEditingOrg && (
-                               <span className="flex items-center gap-2">
+                               <span className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                                    <button
                                      type="button"
                                      onClick={async () => {
@@ -563,9 +563,9 @@ export function OrganizationManager({
                                    <a href={`/${organization.slug}`} target="_blank" rel="noopener noreferrer" className="bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-[10px] font-bold rounded-md px-2.5 py-1 flex items-center gap-1.5 uppercase tracking-widest shadow-sm hover:bg-[#2B85EB]/20 transition-colors"><Link className="w-3.5 h-3.5" /> Ver Página</a>
                                </span>
                             )}
-                         </p>
-                         <div className={`flex items-center gap-2 bg-[#050505] border ${isEditingOrg ? (orgSlugInput.trim().length > 0 && slugStatus === 'available' ? 'border-[#10B981]' : (orgSlugInput.trim().length > 0 && slugStatus !== 'checking' ? 'border-[#EF4444]' : 'border-white/10')) : 'border-white/5'} rounded-xl px-4 py-3 ${isEditingOrg ? '' : 'opacity-70'} relative transition-colors`}>
-                           <span className="text-sm text-[#A0A7B5]">millionsnest.com/</span>
+                         </div>
+                         <div className={`flex flex-wrap sm:flex-nowrap items-center gap-2 bg-[#050505] border ${isEditingOrg ? (orgSlugInput.trim().length > 0 && slugStatus === 'available' ? 'border-[#10B981]' : (orgSlugInput.trim().length > 0 && slugStatus !== 'checking' ? 'border-[#EF4444]' : 'border-white/10')) : 'border-white/5'} rounded-xl px-4 py-3 ${isEditingOrg ? '' : 'opacity-70'} relative transition-colors`}>
+                           <span className="text-xs sm:text-sm text-[#A0A7B5] shrink-0">millionsnest.com/</span>
                            {isEditingOrg ? (
                              <>
                                <input 
@@ -573,7 +573,7 @@ export function OrganizationManager({
                                  value={orgSlugInput}
                                  onChange={(e) => setOrgSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                                  placeholder="sua-organizacao"
-                                 className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1"
+                                 className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1 min-w-[110px]"
                                />
                                {slugStatus === 'checking' && <Loader2 className="w-4 h-4 text-[#A0A7B5] animate-spin shrink-0" />}
                                {slugStatus === 'available' && orgSlugInput.trim().length > 0 && <span className="text-xs font-semibold text-[#10B981] shrink-0 bg-[#10B981]/10 px-2 py-1 rounded">Disponível</span>}
@@ -586,7 +586,7 @@ export function OrganizationManager({
                                type="text" 
                                value={organization?.slug || ''}
                                placeholder="sua-organizacao"
-                               className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1"
+                               className="bg-transparent text-sm text-[#F5F7FA] outline-none focus:border-none flex-1 min-w-[110px]"
                                disabled
                              />
                            )}
@@ -601,7 +601,7 @@ export function OrganizationManager({
                   </div>
                   
                   <details className="group bg-[#050505] border border-white/5 rounded-2xl p-5">
-                    <summary className="cursor-pointer list-none flex items-center justify-between gap-4">
+                    <summary className="cursor-pointer list-none flex items-start sm:items-center justify-between gap-4">
                       <div>
                         <p className="text-sm font-semibold text-[#F5F7FA]">Contato e localização</p>
                         <p className="text-xs text-[#A0A7B5] mt-1">Complete somente as informações que sua igreja deseja usar.</p>
@@ -689,7 +689,7 @@ export function OrganizationManager({
                     <details className="bg-transparent pt-4 border-t border-white/5">
                       <summary className="cursor-pointer text-xs font-semibold text-[#A0A7B5]">Informações técnicas</summary>
                       <div className="mt-3">
-                        <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-3 py-2 rounded-xl border border-white/5 select-all">{organization?.id || user.uid}</span>
+                        <span className="text-xs font-mono text-[#A0A7B5] bg-[#050505] px-3 py-2 rounded-xl border border-white/5 select-all break-all inline-block max-w-full">{organization?.id || user.uid}</span>
                       </div>
                     </details>
                   )}
