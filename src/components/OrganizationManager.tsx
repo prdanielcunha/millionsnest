@@ -496,7 +496,7 @@ export function OrganizationManager({
         <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_65%_-10%,rgba(43,133,235,.09),transparent_60%)]" />
         <div className="relative flex flex-col gap-4 md:flex-row md:gap-5">
       {/* Sidebar Navigation */}
-      <aside className="w-full shrink-0 overflow-x-auto rounded-2xl border border-white/[0.055] bg-black/15 p-2 no-scrollbar md:w-64 md:overflow-visible md:p-3">
+      <aside className="w-full shrink-0 overflow-x-auto md:overflow-visible no-scrollbar rounded-2xl border border-white/[0.055] bg-black/15 p-2 md:w-64 md:p-3">
         <h2 className="hidden md:flex text-xl font-semibold text-[#F5F7FA] items-center gap-3 mb-6 px-4">
            <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
             <Building2 className="w-4 h-4 text-[#A0A7B5]" />
