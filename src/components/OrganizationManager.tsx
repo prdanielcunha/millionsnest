@@ -11,6 +11,7 @@ import {
   getOrganizationRoleLabel,
   normalizeExistingOrganizationRole
 } from '../lib/organizationRoles.js';
+import { getMemberRoleUiPolicy } from '../lib/organizationMemberRoleUiPolicy.js';
 import { feedback } from '../packages/ui/feedback.js';
 import type { HubAppExperience } from '../lib/hubAppExperience.js';
 import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
@@ -314,26 +315,21 @@ export function OrganizationManager({
 
   const getMemberRoleManagementOptions = (member: any) => {
     const memberId = String(member?.id || member?.uid || '');
-    if (!memberId || memberId === user?.uid) return [];
-
     const rawRole = String(
       member?.organizationRole ?? member?.role ?? 'member',
     ).trim().toLowerCase();
-    const actorRole = normalizeExistingOrganizationRole(currentUserRole || '');
-    const targetRole = normalizeExistingOrganizationRole(rawRole);
-    const targetIsAuthoritativeOwner =
-      Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === memberId;
 
-    if (targetIsAuthoritativeOwner) return [];
-    if (rawRole === 'owner' && !isGlobalAdmin && !actorIsAuthoritativeOwner) {
-      return [];
-    }
-    if (!isGlobalAdmin && actorRole !== 'owner' && actorRole !== 'admin') {
-      return [];
-    }
-    if (!isGlobalAdmin && actorRole === 'admin' && targetRole === 'admin') {
-      return [];
-    }
+    const decision = getMemberRoleUiPolicy({
+      actorUid: user?.uid,
+      actorIsGlobalPrivileged: isGlobalAdmin,
+      actorOrganizationRole: currentUserRole,
+      actorIsAuthoritativeOwner,
+      targetUid: memberId,
+      targetOrganizationRole: rawRole,
+      authoritativeOwnerUid,
+    });
+
+    if (!decision.canEdit) return [];
 
     return getInviteableOrganizationRolesForActor({
       systemRole: profile?.systemRole,
