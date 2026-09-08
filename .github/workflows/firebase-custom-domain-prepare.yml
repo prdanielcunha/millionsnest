@@ -74,22 +74,7 @@ jobs:
             DOMAIN="$2"
             URL="https://firebasehosting.googleapis.com/v1beta1/projects/millionsnest/sites/$SITE/customDomains/$DOMAIN"
             echo "===== DOMAIN:$DOMAIN SITE:$SITE ====="
-            curl --fail --silent --show-error               -H "Authorization: Bearer $TOKEN" "$URL"               | python3 -c '
-import json,sys
-x=json.load(sys.stdin)
-out={
-  "name":x.get("name"),
-  "ownershipState":x.get("ownershipState"),
-  "hostState":x.get("hostState"),
-  "reconciling":x.get("reconciling"),
-  "certPreference":x.get("certPreference"),
-  "certState":(x.get("cert") or {}).get("state"),
-  "requiredDnsDesired":(x.get("requiredDnsUpdates") or {}).get("desired",[]),
-  "certDnsDesired":(((x.get("cert") or {}).get("verification") or {}).get("dns") or {}).get("desired",[]),
-  "issues":x.get("issues",[])
-}
-print(json.dumps(out,indent=2,sort_keys=True))
-'
+            curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$URL" | python3 -c 'import json,sys; x=json.load(sys.stdin); out={"name":x.get("name"),"ownershipState":x.get("ownershipState"),"hostState":x.get("hostState"),"reconciling":x.get("reconciling"),"certPreference":x.get("certPreference"),"certState":(x.get("cert") or {}).get("state"),"requiredDnsDesired":(x.get("requiredDnsUpdates") or {}).get("desired",[]),"certDnsDesired":(((x.get("cert") or {}).get("verification") or {}).get("dns") or {}).get("desired",[]),"issues":x.get("issues",[])}; print(json.dumps(out,indent=2,sort_keys=True))'
           }
 
           show_domain "mn-hub-555464791734" "millionsnest.com"
