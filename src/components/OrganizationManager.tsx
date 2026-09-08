@@ -462,7 +462,9 @@ export function OrganizationManager({
   return (
     <div className="flex flex-col gap-6">
       {isGlobalAdmin && (
-        <div className="bg-[#2B85EB]/10 border border-[#2B85EB]/20 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="relative overflow-hidden rounded-[1.6rem] border border-[#2B85EB]/25 bg-[#08111D] p-4 shadow-[0_22px_60px_rgba(0,0,0,.24)] sm:p-5">
+          <div className="pointer-events-none absolute right-[-5%] top-[-80%] h-56 w-56 rounded-full bg-[#2B85EB]/20 blur-[80px]" />
+          <div className="relative flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-3">
              <ShieldCheck className="w-5 h-5 text-[#2B85EB]" />
              <div>
@@ -486,12 +488,15 @@ export function OrganizationManager({
                <option key={org.id} value={org.id}>{org.name} {org.slug ? `(${org.slug})` : ''}</option>
              ))}
           </select>
+          </div>
         </div>
       )}
 
-      <div className="bg-[#0B0F19]/50 backdrop-blur-xl rounded-[1.5rem] md:rounded-[2rem] p-4 sm:p-6 lg:p-8 border border-white/5 shadow-2xl flex flex-col md:flex-row gap-5 md:gap-8">
+      <div className="relative overflow-hidden rounded-[1.75rem] border border-white/[0.08] bg-[#07090D]/95 p-3 shadow-[0_35px_100px_rgba(0,0,0,.28)] backdrop-blur-xl sm:p-4 lg:p-5">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_65%_-10%,rgba(43,133,235,.09),transparent_60%)]" />
+        <div className="relative flex flex-col gap-4 md:flex-row md:gap-5">
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 shrink-0 flex md:flex-col gap-2 overflow-x-auto md:overflow-visible no-scrollbar pb-1 md:pb-0">
+      <aside className="w-full shrink-0 overflow-x-auto rounded-2xl border border-white/[0.055] bg-black/15 p-2 no-scrollbar md:w-64 md:overflow-visible md:p-3">
         <h2 className="hidden md:flex text-xl font-semibold text-[#F5F7FA] items-center gap-3 mb-6 px-4">
            <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
             <Building2 className="w-4 h-4 text-[#A0A7B5]" />
@@ -499,6 +504,7 @@ export function OrganizationManager({
           Administração
         </h2>
         
+        <div className="flex gap-2 md:flex-col">
         {visibleTabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -523,10 +529,11 @@ export function OrganizationManager({
             </button>
           )
         })}
+        </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 min-h-[400px]">
+      <div className="min-h-[400px] min-w-0 flex-1 rounded-2xl border border-white/[0.05] bg-black/10 p-3 sm:p-5 md:p-6">
         <AnimatePresence mode="wait">
           
           {activeTab === 'settings' && (
@@ -1181,6 +1188,7 @@ export function OrganizationManager({
 
         </AnimatePresence>
       </div>
+        </div>
     </div>
     </div>
   );
