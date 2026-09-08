@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import admin from 'firebase-admin';
 import { CURRENT_PERMISSIONS_VERSION, getDefaultPermissions } from '../../lib/rbac.js';
 import { isCanonicalGlobalRole } from '../../lib/permissionService.js';
 
@@ -107,7 +108,7 @@ export async function repairOrganizationOwnership(
         return { status: 409, payload: { success: false, reasonCode: 'TARGET_NOT_AUTHORITATIVE_OWNER' } };
       }
 
-      const now = FirebaseFirestore.FieldValue.serverTimestamp();
+      const now = admin.firestore.FieldValue.serverTimestamp();
 
       transaction.set(orgRef, {
         ownerUid: decoded.uid,
