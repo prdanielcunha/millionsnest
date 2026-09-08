@@ -1,0 +1,99 @@
+name: Firebase Custom Domain Prepare
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/firebase-custom-domain-prepare.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Create custom-domain resources without changing DNS
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+
+          create_domain () {
+            SITE="$1"
+            DOMAIN="$2"
+            BASE="https://firebasehosting.googleapis.com/v1beta1/projects/millionsnest/sites/$SITE/customDomains"
+            GET_URL="$BASE/$DOMAIN"
+
+            STATUS="$(curl --silent --output /tmp/domain-get.json --write-out '%{http_code}'               -H "Authorization: Bearer $TOKEN" "$GET_URL")"
+
+            if [ "$STATUS" = "200" ]; then
+              echo "CUSTOM_DOMAIN_EXISTS=$DOMAIN site=$SITE"
+              return 0
+            fi
+
+            if [ "$STATUS" != "404" ]; then
+              echo "Unexpected GET status $STATUS for $DOMAIN"
+              cat /tmp/domain-get.json
+              exit 1
+            fi
+
+            echo "Creating CustomDomain: $DOMAIN -> $SITE"
+            curl --fail --silent --show-error               -X POST               -H "Authorization: Bearer $TOKEN"               -H "Content-Type: application/json"               "$BASE?customDomainId=$DOMAIN"               -d '{"certPreference":"DEDICATED","annotations":{"migration":"vercel-to-firebase-2026-09-08"}}'               | python3 -c 'import json,sys; x=json.load(sys.stdin); print("CREATE_OPERATION="+str(x.get("name","unknown")))'
+          }
+
+          create_domain "mn-hub-555464791734" "millionsnest.com"
+          create_domain "mn-hub-555464791734" "www.millionsnest.com"
+          create_domain "mn-musicscale-555464791734" "musicscale.millionsnest.com"
+          create_domain "mn-nestfinance-555464791734" "nestfinance.millionsnest.com"
+          create_domain "mn-connect-555464791734" "connect.millionsnest.com"
+          create_domain "mn-nestjourney-555464791734" "nestjourney.millionsnest.com"
+
+      - name: Wait for Firebase reconciliation
+        run: sleep 10
+
+      - name: Print required DNS actions only
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+
+          show_domain () {
+            SITE="$1"
+            DOMAIN="$2"
+            URL="https://firebasehosting.googleapis.com/v1beta1/projects/millionsnest/sites/$SITE/customDomains/$DOMAIN"
+            echo "===== DOMAIN:$DOMAIN SITE:$SITE ====="
+            curl --fail --silent --show-error               -H "Authorization: Bearer $TOKEN" "$URL"               | python3 -c '
+import json,sys
+x=json.load(sys.stdin)
+out={
+  "name":x.get("name"),
+  "ownershipState":x.get("ownershipState"),
+  "hostState":x.get("hostState"),
+  "reconciling":x.get("reconciling"),
+  "certPreference":x.get("certPreference"),
+  "certState":(x.get("cert") or {}).get("state"),
+  "requiredDnsDesired":(x.get("requiredDnsUpdates") or {}).get("desired",[]),
+  "certDnsDesired":(((x.get("cert") or {}).get("verification") or {}).get("dns") or {}).get("desired",[]),
+  "issues":x.get("issues",[])
+}
+print(json.dumps(out,indent=2,sort_keys=True))
+'
+          }
+
+          show_domain "mn-hub-555464791734" "millionsnest.com"
+          show_domain "mn-hub-555464791734" "www.millionsnest.com"
+          show_domain "mn-musicscale-555464791734" "musicscale.millionsnest.com"
+          show_domain "mn-nestfinance-555464791734" "nestfinance.millionsnest.com"
+          show_domain "mn-connect-555464791734" "connect.millionsnest.com"
+          show_domain "mn-nestjourney-555464791734" "nestjourney.millionsnest.com"
