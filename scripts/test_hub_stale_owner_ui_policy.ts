@@ -37,15 +37,25 @@ const metadataOwnerRepairsStaleOwner = getMemberRoleUiPolicy({
 });
 assert.equal(metadataOwnerRepairsStaleOwner.canEdit, true, 'authoritative metadata owner must be able to repair stale owner');
 
-const globalCannotEditTrueOwner = getMemberRoleUiPolicy({
+const globalOwnerCanReachCanonicalRepair = getMemberRoleUiPolicy({
   actorUid: 'ceo-1',
   actorIsGlobalPrivileged: true,
   actorOrganizationRole: 'owner',
+  targetUid: 'wrong-authoritative-owner',
+  targetOrganizationRole: 'owner',
+  authoritativeOwnerUid: 'wrong-authoritative-owner',
+});
+assert.equal(globalOwnerCanReachCanonicalRepair.canEdit, true, 'CEO who is also an owner member must reach explicit canonical ownership repair');
+
+const globalNonOwnerCannotRepairCanonicalOwner = getMemberRoleUiPolicy({
+  actorUid: 'global-1',
+  actorIsGlobalPrivileged: true,
+  actorOrganizationRole: 'admin',
   targetUid: 'real-owner',
   targetOrganizationRole: 'owner',
   authoritativeOwnerUid: 'real-owner',
 });
-assert.equal(globalCannotEditTrueOwner.canEdit, false, 'true authoritative owner must stay behind ownership-transfer flow');
+assert.equal(globalNonOwnerCannotRepairCanonicalOwner.canEdit, false, 'global actor without owner membership cannot repair canonical ownership');
 
 const adminCannotEditOwner = getMemberRoleUiPolicy({
   actorUid: 'admin-1',
@@ -89,7 +99,8 @@ const service = readFileSync('src/server/services/OrganizationRoleCommandService
 
 assert.match(organizationManager, /getMemberRoleUiPolicy/, 'inline selector must use centralized UI policy');
 assert.match(dashboard, /getMemberRoleUiPolicy/, 'member edit modal must use centralized UI policy');
-assert.match(service, /organizationOwnerMatches\(organization, memberId\)/, 'server must still protect authoritative owner target');
-assert.match(service, /actorGlobal \|\| actorMetadataOwner/, 'server must remain authoritative for stale-owner repair');
+assert.match(service, /organizationOwnerMatches\(organization, memberId\)/, 'generic role command must still protect authoritative owner target');
+assert.match(service, /actorGlobal \|\| actorMetadataOwner/, 'generic role command must remain authoritative for stale-owner repair');
+assert.match(dashboard, /\/ownership\/repair/, 'Dashboard must route canonical owner conflicts through explicit ownership repair');
 
 console.log('PASS Hub stale-owner UI policy: CEO/owner can reach repair action while server keeps true owner and tenant authority protected');

@@ -37,7 +37,7 @@ assert.ok(organization.includes('getOrganizationRoleDescription(role, organizati
 assert.equal(organization.includes('Líder / Operador'), false, 'role guidance must not advertise removed legacy organization roles');
 assert.equal(organization.includes('Membro / Visitante'), false, 'role guidance must distinguish canonical member and viewer roles');
 assert.ok(dashboard.includes('/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(memberId)}/role'), 'inline role changes must use the canonical v1 endpoint');
-assert.ok(dashboard.includes("method: 'PATCH'"), 'inline role changes must use the canonical PATCH mutation');
+assert.ok(dashboard.includes("method: useOwnershipRepair ? 'POST' : 'PATCH'"), 'inline role changes must keep canonical PATCH and use explicit POST only for ownership repair');
 assert.ok(dashboard.includes('canEditOrganizationRoleForMember'), 'member edit modal must share the stale-owner protection model');
 assert.ok(dashboard.includes('targetIsAuthoritativeOwner'), 'member edit save must never demote the authoritative owner');
 assert.ok(dashboard.includes('member.organizationRole || member.role || "member"'), 'member edit must prefer the canonical organizationRole projection');
