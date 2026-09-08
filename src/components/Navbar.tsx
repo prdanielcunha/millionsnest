@@ -249,18 +249,18 @@ export function Navbar() {
   };
 
   return (
-    <header
-      className={cn(
-        'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
-        isScrolled
-          ? 'bg-[#050505]/80 backdrop-blur-xl border-b border-white/5 shadow-lg py-3'
-          : 'bg-transparent border-transparent py-5'
-      )}
-    >
-      <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+    <header className="fixed inset-x-0 top-3 z-50 px-3 sm:top-4 sm:px-5">
+      <div
+        className={cn(
+          'mx-auto flex max-w-7xl items-center justify-between rounded-[22px] border px-3.5 py-2.5 transition-all duration-300 sm:px-4',
+          isScrolled
+            ? 'border-white/10 bg-[#07090D]/92 shadow-[0_18px_60px_rgba(0,0,0,.38)] backdrop-blur-2xl'
+            : 'border-white/[0.08] bg-[#07090D]/72 shadow-[0_14px_50px_rgba(0,0,0,.24)] backdrop-blur-xl'
+        )}
+      >
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
-          <MillionsNestLogo className="h-10 md:h-12 w-auto transition-transform group-hover:scale-105" />
+          <MillionsNestLogo className="h-9 md:h-10 w-auto transition-transform group-hover:scale-[1.02]" />
           <span className="font-semibold text-lg tracking-tight text-[#F5F7FA] hidden sm:block">MillionsNest</span>
         </Link>
 

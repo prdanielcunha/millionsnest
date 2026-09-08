@@ -58,6 +58,9 @@ jobs:
       - name: MillionsNest Design 2.0 product storytelling
         run: npx tsx scripts/test_millionsnest_design_2.ts
 
+      - name: MillionsNest Design 3 visible overhaul
+        run: npx tsx scripts/test_millionsnest_design_3.ts
+
       - name: Hub zero-knowledge customer UX
         run: npx tsx scripts/test_hub_zero_knowledge_ux.ts
 
