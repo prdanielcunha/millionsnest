@@ -394,34 +394,113 @@ export function EcosystemWorkspaceHome({
 
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-3 duration-300 space-y-8 md:space-y-10">
-        <section aria-labelledby="hub-home-title">
-          <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
+        <section aria-labelledby="hub-home-title" className="relative overflow-hidden rounded-[2rem] border border-white/[0.08] bg-[#07090D] p-5 shadow-[0_30px_90px_rgba(0,0,0,.28)] sm:p-7 md:p-8">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute right-[-10%] top-[-45%] h-96 w-96 rounded-full bg-[#2B85EB]/16 blur-[110px]" />
+            <div className="absolute bottom-[-45%] left-[10%] h-72 w-72 rounded-full bg-[#6E56CF]/10 blur-[100px]" />
+            <div className="absolute inset-0 opacity-[0.16]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px)', backgroundSize: '42px 42px' }} />
+          </div>
+
+          <div className="relative grid gap-7 xl:grid-cols-[1fr_auto] xl:items-end">
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#2B85EB] mb-2">
-                {t('workspace.home_eyebrow', 'Central da organização')}
+              <div className="mb-5 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#2B85EB]/20 bg-[#2B85EB]/[0.08] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#86BEFF]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#73B4FF]" />
+                  {t('workspace.home_eyebrow', 'Central da organização')}
+                </span>
+                {isGlobalAdmin && (
+                  <span className="rounded-full border border-amber-400/15 bg-amber-400/[0.055] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-amber-300">
+                    CEO
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs font-medium uppercase tracking-[0.17em] text-[#626E7E]">
+                {organization?.name || t('workspace.intro', 'Tudo da sua organização em um só lugar')}
               </p>
-              <h2 id="hub-home-title" className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-[-0.03em] text-white max-w-3xl">
+              <h2 id="hub-home-title" className="mt-3 max-w-4xl text-3xl font-semibold leading-[1.02] tracking-[-0.045em] text-white sm:text-4xl md:text-5xl">
                 {t('workspace.intro', 'Tudo da sua organização em um só lugar')}
               </h2>
-              <p className="text-[#A0A7B5] text-sm md:text-base leading-relaxed max-w-2xl mt-3">
+              <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[#909BAA] md:text-base">
                 {t('workspace.sub_intro', 'Veja o que está funcionando, o que precisa de atenção e qual é o próximo passo.')}
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 w-full xl:w-auto">
-              <div className="min-w-0 rounded-2xl mn-surface px-3.5 py-3">
-                <p className="text-xl font-semibold text-white">{operationalApps.length}</p>
-                <p className="text-[10px] uppercase tracking-wider text-[#A0A7B5] mt-1">{t('workspace.summary.active_apps', 'Apps ativos')}</p>
+            <div className="grid w-full grid-cols-3 gap-2 xl:w-[390px]">
+              <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3.5 backdrop-blur">
+                <p className="text-2xl font-semibold tracking-[-0.03em] text-white">{operationalApps.length}</p>
+                <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#748091]">{t('workspace.summary.active_apps', 'Apps ativos')}</p>
               </div>
-              <div className="min-w-0 rounded-2xl mn-surface px-3.5 py-3">
-                <p className="text-xl font-semibold text-white">{members.length}</p>
-                <p className="text-[10px] uppercase tracking-wider text-[#A0A7B5] mt-1">{t('workspace.summary.people', 'Pessoas')}</p>
+              <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3.5 backdrop-blur">
+                <p className="text-2xl font-semibold tracking-[-0.03em] text-white">{members.length}</p>
+                <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#748091]">{t('workspace.summary.people', 'Pessoas')}</p>
               </div>
-              <div className="min-w-0 rounded-2xl mn-surface px-3.5 py-3">
-                <p className="text-xl font-semibold text-white">{pendingInvites.length}</p>
-                <p className="text-[10px] uppercase tracking-wider text-[#A0A7B5] mt-1">{t('workspace.summary.invites', 'Convites')}</p>
+              <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3.5 backdrop-blur">
+                <p className="text-2xl font-semibold tracking-[-0.03em] text-white">{pendingInvites.length}</p>
+                <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#748091]">{t('workspace.summary.invites', 'Convites')}</p>
               </div>
             </div>
+          </div>
+
+          <div className="relative mt-7 grid gap-2 border-t border-white/[0.06] pt-5 sm:grid-cols-2 xl:grid-cols-4">
+            <button
+              type="button"
+              onClick={() => onSelectWorkspace('musicscale')}
+              className="group flex min-h-[78px] items-center gap-3 rounded-2xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.055] px-4 text-left transition hover:border-[#2B85EB]/30 hover:bg-[#2B85EB]/[0.08]"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2B85EB]/15 bg-black/20">
+                <img src="/LogoIconMusicScale-1.png" alt="" className="h-6 w-6 object-contain" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-white">MusicScale</p>
+                <p className="mt-1 truncate text-[10px] text-[#7D8999]">{t('workspace.apps_hint', 'Entre para ver dados, acessos e configurações de cada produto.')}</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={onOpenInviteModal}
+              disabled={!canInviteMembers}
+              className="flex min-h-[78px] items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 text-left transition hover:border-white/[0.12] hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.025]">
+                <UserPlus className="h-4 w-4 text-[#9CC8FF]" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-white">{t('workspace.next_step.invite_action', 'Convidar equipe')}</p>
+                <p className="mt-1 truncate text-[10px] text-[#7D8999]">{t('workspace.summary.people', 'Pessoas')}: {members.length}</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={onNavigateToOrganizationSettings}
+              disabled={!canManageOrganization}
+              className="flex min-h-[78px] items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 text-left transition hover:border-white/[0.12] hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.025]">
+                <Settings className="h-4 w-4 text-[#9CC8FF]" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-white">{t('workspace.next_step.organization_action', 'Conferir organização')}</p>
+                <p className="mt-1 truncate text-[10px] text-[#7D8999]">{organization?.name || 'MillionsNest'}</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={onNavigateToBilling}
+              disabled={!canManageBilling}
+              className="flex min-h-[78px] items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 text-left transition hover:border-white/[0.12] hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.025]">
+                <CreditCard className="h-4 w-4 text-[#9CC8FF]" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-white">{t('workspace.next_step.payment_action', 'Revisar pagamento')}</p>
+                <p className="mt-1 truncate text-[10px] text-[#7D8999]">{t('workspace.plan_label', 'Plano atual:')}</p>
+              </div>
+            </button>
           </div>
         </section>
 

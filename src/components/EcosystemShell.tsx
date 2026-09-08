@@ -181,7 +181,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
       )}
       
       {/* Ecosystem Topbar - Persistent & OS-like */}
-      <header className="mn-topbar h-14 border-b border-white/5 backdrop-blur-2xl sticky top-0 z-50 flex items-center justify-between px-2.5 sm:px-4 lg:px-6 gap-1.5 sm:gap-3 w-full">
+      <header className="mn-topbar sticky top-2 z-50 mx-2 mt-2 flex h-16 items-center justify-between gap-1.5 rounded-[20px] border border-white/[0.08] px-2.5 shadow-[0_18px_60px_rgba(0,0,0,.30)] backdrop-blur-2xl sm:mx-3 sm:px-4 lg:mx-4 lg:px-5">
         
         {/* Left: Ecosystem Identity & Context */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0 min-w-0">
@@ -555,7 +555,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
         )}
       </AnimatePresence>
 
-      <main className="mn-dashboard-grid flex-1 relative">
+      <main className="mn-dashboard-grid relative flex-1 pt-2 sm:pt-3">
         {children}
       </main>
 
