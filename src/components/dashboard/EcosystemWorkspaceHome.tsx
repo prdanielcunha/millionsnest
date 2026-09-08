@@ -409,15 +409,15 @@ export function EcosystemWorkspaceHome({
             </div>
 
             <div className="grid grid-cols-3 gap-2 w-full xl:w-auto">
-              <div className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.025] px-3.5 py-3">
+              <div className="min-w-0 rounded-2xl mn-surface px-3.5 py-3">
                 <p className="text-xl font-semibold text-white">{operationalApps.length}</p>
                 <p className="text-[10px] uppercase tracking-wider text-[#A0A7B5] mt-1">{t('workspace.summary.active_apps', 'Apps ativos')}</p>
               </div>
-              <div className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.025] px-3.5 py-3">
+              <div className="min-w-0 rounded-2xl mn-surface px-3.5 py-3">
                 <p className="text-xl font-semibold text-white">{members.length}</p>
                 <p className="text-[10px] uppercase tracking-wider text-[#A0A7B5] mt-1">{t('workspace.summary.people', 'Pessoas')}</p>
               </div>
-              <div className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.025] px-3.5 py-3">
+              <div className="min-w-0 rounded-2xl mn-surface px-3.5 py-3">
                 <p className="text-xl font-semibold text-white">{pendingInvites.length}</p>
                 <p className="text-[10px] uppercase tracking-wider text-[#A0A7B5] mt-1">{t('workspace.summary.invites', 'Convites')}</p>
               </div>
@@ -427,7 +427,7 @@ export function EcosystemWorkspaceHome({
 
         <section
           aria-label={t('workspace.next_step.eyebrow', 'Próximo passo')}
-          className={`relative overflow-hidden rounded-[1.75rem] border p-5 sm:p-6 md:p-7 flex flex-col md:flex-row md:items-center justify-between gap-5 ${
+          className={`mn-surface-strong relative overflow-hidden rounded-[1.75rem] p-5 sm:p-6 md:p-7 flex flex-col md:flex-row md:items-center justify-between gap-5 ${
             nextStep.tone === 'warning'
               ? 'bg-amber-500/[0.08] border-amber-500/20'
               : nextStep.tone === 'success'
@@ -490,7 +490,7 @@ export function EcosystemWorkspaceHome({
                 return (
                   <article
                     key={app.id}
-                    className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#07090D] p-5 sm:p-6 transition-colors hover:border-white/20"
+                    className="mn-surface-strong mn-interactive relative overflow-hidden rounded-[1.75rem] p-5 sm:p-6"
                   >
                     <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_90%_0%,rgba(43,133,235,.08),transparent_38%)]" />
                     <div className="relative">
@@ -710,7 +710,7 @@ export function EcosystemWorkspaceHome({
           <button
             type="button"
             onClick={openHub}
-            className="rounded-[1.75rem] border border-white/8 bg-white/[0.02] hover:bg-white/[0.04] p-5 sm:p-6 text-left transition-colors group min-h-[180px]"
+            className="mn-surface mn-interactive rounded-[1.75rem] p-5 sm:p-6 text-left group min-h-[180px]"
           >
             <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 text-[#2B85EB] flex items-center justify-center"><CircleHelp className="w-5 h-5" /></div>
             <h3 className="text-lg font-semibold text-white mt-5">{t('support.hub.central_action.title', 'Central de Ajuda & Suporte')}</h3>
@@ -770,7 +770,7 @@ export function EcosystemWorkspaceHome({
     const teamStarted = members.length > 1 || pendingInvites.length > 0;
 
     const heroContent = (
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#0a0a0a] to-[#111] border border-white/10 rounded-3xl p-6 md:p-10 flex flex-col md:flex-row gap-8 items-start md:items-center justify-between mb-8">
+        <div className="mn-surface-strong relative overflow-hidden rounded-3xl p-6 md:p-10 flex flex-col md:flex-row gap-8 items-start md:items-center justify-between mb-8">
           <div className="absolute top-0 right-0 w-96 h-96 bg-[#2B85EB]/10 blur-[100px] rounded-full pointer-events-none" />
           
           <div className="relative z-10 flex-1 max-w-2xl">
@@ -1087,7 +1087,7 @@ export function EcosystemWorkspaceHome({
 
     return (
       <div className="animate-in fade-in slide-in-from-bottom-3 duration-300 space-y-6">
-        <section className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#07090D] p-5 sm:p-7 md:p-8">
+        <section className="mn-surface-strong relative overflow-hidden rounded-[1.75rem] p-5 sm:p-7 md:p-8">
           <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_90%_0%,rgba(43,133,235,.10),transparent_40%)]" />
           <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div className="flex items-start gap-4 min-w-0">

@@ -154,7 +154,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
   } catch(e) {}
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#F5F7FA] font-sans flex flex-col">
+    <div className="mn-shell min-h-screen text-[#F5F7FA] font-sans flex flex-col">
       {supportModeObj && (
          <div className="w-full bg-[#2B85EB]/10 border-b border-[#2B85EB]/20 px-4 py-2 flex items-center justify-between shadow-[0_0_15px_rgba(43,133,235,0.1)]">
             <div className="flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-2">
@@ -181,7 +181,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
       )}
       
       {/* Ecosystem Topbar - Persistent & OS-like */}
-      <header className="h-14 border-b border-white/5 bg-[#050505]/90 backdrop-blur-2xl sticky top-0 z-50 flex items-center justify-between px-2.5 sm:px-4 lg:px-6 gap-1.5 sm:gap-3 w-full">
+      <header className="mn-topbar h-14 border-b border-white/5 backdrop-blur-2xl sticky top-0 z-50 flex items-center justify-between px-2.5 sm:px-4 lg:px-6 gap-1.5 sm:gap-3 w-full">
         
         {/* Left: Ecosystem Identity & Context */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0 min-w-0">
@@ -555,7 +555,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
         )}
       </AnimatePresence>
 
-      <main className="flex-1 relative">
+      <main className="mn-dashboard-grid flex-1 relative">
         {children}
       </main>
 

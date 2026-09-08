@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, CreditCard, Languages, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation, Trans } from 'react-i18next';
-import { DashboardMockup } from "./DashboardMockup.js";
+import { ProductMotionStage } from "./ProductMotionStage.js";
 import { trackHomeMusicScaleInterest } from "../lib/publicFunnelAnalytics.js";
 
 export function Hero() {
@@ -64,7 +64,7 @@ export function Hero() {
               <button
                 onClick={() => {
                   trackHomeMusicScaleInterest('hero_primary');
-                  navigate('/musicscale');
+                  navigate('/musicscale#musicscale-demo');
                 }}
                 className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#F7F9FC] px-6 py-3.5 text-sm font-semibold text-[#06080D] shadow-[0_18px_50px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white active:translate-y-0"
               >
@@ -88,6 +88,8 @@ export function Hero() {
               <span className="font-medium text-[#B8C0CC]">{t('hero_tag_free')}</span>
               <span className="hidden h-1 w-1 rounded-full bg-white/20 sm:block" />
               <span>{t('hero_trial_note')}</span>
+              <span className="hidden h-1 w-1 rounded-full bg-white/20 sm:block" />
+              <span>{t('hero_scope_note')}</span>
             </motion.div>
           </div>
 
@@ -97,61 +99,9 @@ export function Hero() {
             transition={{ duration: 0.7, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
             className="relative"
           >
-            <div className="absolute -inset-12 rounded-[3rem] bg-[#2B85EB]/10 blur-[90px]" />
-            <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#090D14]/95 shadow-[0_45px_120px_rgba(0,0,0,0.55)]">
-              <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#687384]">{t('hero_canvas_label')}</div>
-                  <div className="mt-1 text-sm font-semibold text-white">MillionsNest</div>
-                </div>
-                <div className="flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                  {t('hero_canvas_live')}
-                </div>
-              </div>
-
-              <div className="grid gap-3 p-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-[#2B85EB]/25 bg-[#2B85EB]/[0.08] p-4">
-                  <div className="mb-6 flex items-center justify-between">
-                    <img src="/LogoIconMusicScale-1.png" alt="" aria-hidden="true" className="h-9 w-9 object-contain" />
-                    <span className="rounded-md border border-[#2B85EB]/20 bg-[#2B85EB]/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#79B6FF]">{t('ecosystem_status_live')}</span>
-                  </div>
-                  <div className="text-base font-semibold text-white">MusicScale</div>
-                  <p className="mt-1 text-xs leading-relaxed text-[#8490A1]">{t('ecosystem_musicscale_desc')}</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    ['NestFinance', '/brand/nestfinance/nest-flow-signature/v1/symbols/nestfinance-symbol-vector-gradient-compact.svg'],
-                    ['NestLocal', null],
-                    ['NestJourney', null],
-                    ['Connect', '/brand/connect/v2/connect-mark-color.svg'],
-                  ].map(([name, asset]) => (
-                    <div key={name} className="flex min-h-[96px] flex-col justify-between rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.035] text-[9px] font-bold text-[#9DA7B5]">
-                        {asset ? <img src={asset} alt="" aria-hidden="true" className="h-5 w-5 object-contain" /> : name?.slice(0, 1)}
-                      </div>
-                      <div>
-                        <div className="truncate text-[11px] font-semibold text-[#D9DEE7]">{name}</div>
-                        <div className="mt-0.5 text-[9px] uppercase tracking-wider text-[#606A78]">{t('hero_canvas_next')}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="border-t border-white/[0.06] bg-[#070A10] p-3">
-                <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-[#050505]">
-                  <DashboardMockup />
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 border-t border-white/[0.06] px-4 py-3">
-                <span className="mr-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#596372]">{t('hero_canvas_foundation')}</span>
-                {[t('hero_canvas_identity'), t('hero_canvas_billing'), t('hero_canvas_access'), t('hero_canvas_quality')].map(item => (
-                  <span key={item} className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1 text-[9px] text-[#8994A4]">{item}</span>
-                ))}
-              </div>
+            <div className="absolute -inset-10 rounded-[3rem] bg-[#2B85EB]/10 blur-[90px]" />
+            <div className="relative">
+              <ProductMotionStage />
             </div>
           </motion.div>
         </div>
