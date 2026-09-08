@@ -46,6 +46,9 @@ jobs:
       - name: Vercel release and CORS hygiene
         run: npx tsx scripts/test_vercel_release_hygiene.ts
 
+      - name: Firebase Hosting and Cloud Run migration contract
+        run: npx tsx scripts/test_firebase_hosting_cloudrun_policy.ts
+
       - name: Hub product positioning and trust contract
         run: npx tsx scripts/test_hub_product_positioning.ts
 
