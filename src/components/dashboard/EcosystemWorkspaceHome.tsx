@@ -427,7 +427,7 @@ export function EcosystemWorkspaceHome({
 
         <section
           aria-label={t('workspace.next_step.eyebrow', 'Próximo passo')}
-          className={`mn-surface-strong relative overflow-hidden rounded-[1.75rem] p-5 sm:p-6 md:p-7 flex flex-col md:flex-row md:items-center justify-between gap-5 ${
+          className={`relative overflow-hidden rounded-[1.75rem] border p-5 sm:p-6 md:p-7 flex flex-col md:flex-row md:items-center justify-between gap-5 ${
             nextStep.tone === 'warning'
               ? 'bg-amber-500/[0.08] border-amber-500/20'
               : nextStep.tone === 'success'
