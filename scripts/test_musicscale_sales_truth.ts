@@ -63,6 +63,13 @@ assert.equal(landing.includes('app.millionsnest.com/musicscale'), false, 'old mo
 assert.match(landing, /musicscale\.millionsnest\.com/, 'mock browser must show the operational MusicScale domain');
 assert.equal(landing.includes('botão principal testa o Pro'), false, 'trial CTA must not force Pro');
 assert.match(landing, /faq_a7/, 'trial-selection FAQ must remain translated');
+assert.match(landing, /faq_q8/, 'pricing FAQ must explicitly answer whether each musician pays');
+assert.match(pricing, /pricing_team_payment_title/, 'pricing must visibly state that the plan price is for the organization, not each musician');
+assert.match(pricing, /pricing_organization_scope_label/, 'every pricing card must reinforce organization-level pricing');
+for (const [lang, source] of [['pt', pt], ['en', en], ['es', es]] as const) {
+  assert.match(source, /faq_q8:/, `${lang} must translate the per-musician pricing objection`);
+  assert.match(source, /pricing_team_payment_title:/, `${lang} must translate the team-level pricing headline`);
+}
 assert.match(landing, /isGlobalPrivilegedUser\(profile\)/, 'landing global-role checks must use the canonical helper');
 
 console.log('PASS MusicScale sales truth and i18n contract');

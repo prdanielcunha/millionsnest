@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Check, Star, Zap, Headphones, Settings, Video, ListMusic } from "lucide-react";
+import { Check, Star, Zap, Headphones, Settings, Video, ListMusic, UsersRound } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.js";
 import { useTranslation, Trans } from 'react-i18next';
@@ -164,14 +164,24 @@ export function Pricing() {
             initial={{ opacity: 0, y: 15 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="mt-8 mb-4 p-4 rounded-2xl bg-[#0B0F19] border border-[#2B85EB]/30 max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left shadow-lg"
+            className="mt-8 mb-5 overflow-hidden rounded-[1.5rem] border border-[#2B85EB]/35 bg-[#08111D] shadow-[0_20px_60px_rgba(0,0,0,.28)]"
           >
-            <div className="px-3 py-1 rounded-full bg-[#2B85EB]/10 border border-[#2B85EB]/20 text-[#2B85EB] text-[11px] font-bold uppercase tracking-wider shrink-0">
-              {t('pricing_organization_scope_badge', 'Uma única assinatura por organização')}
+            <div className="flex flex-col items-center gap-4 p-5 text-center sm:flex-row sm:items-start sm:text-left">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#2B85EB]/20 bg-[#2B85EB]/10">
+                <UsersRound className="h-5 w-5 text-[#78B6FF]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="inline-flex items-center rounded-full border border-[#2B85EB]/20 bg-[#2B85EB]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#86BEFF]">
+                  {t('pricing_organization_scope_badge', 'Uma única assinatura para a equipe')}
+                </div>
+                <h3 className="mt-3 text-lg font-semibold tracking-[-0.02em] text-white sm:text-xl">
+                  {t('pricing_team_payment_title', 'O valor do plano é da organização inteira — não de cada músico.')}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#9AA5B5]">
+                  {t('pricing_organization_scope_desc', 'Sua igreja, ministério ou grupo paga um único valor. Cada integrante usa seu próprio acesso sem pagar uma assinatura individual; o limite de pessoas depende do plano escolhido.')}
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-[#A0A7B5] leading-relaxed">
-              {t('pricing_organization_scope_desc', 'Sua igreja, ministério ou grupo paga um único valor do plano. Todos os integrantes incluídos usam a plataforma sem custo adicional individual.')}
-            </p>
           </motion.div>
 
           <p className="mt-4 text-xs text-[#A0A7B5]">
@@ -229,12 +239,10 @@ export function Pricing() {
               <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
             
-            <p className="mt-1 text-[11px] text-[#A0A7B5]">
-              {t(
-                'pricing_organization_scope_label',
-                'Valor por organização, não por pessoa.'
-              )}
-            </p>
+            <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.055] px-2.5 py-1.5 text-[10px] font-semibold text-emerald-300">
+              <UsersRound className="h-3.5 w-3.5" />
+              {t('pricing_organization_scope_label', 'Preço total da organização — não por pessoa.')}
+            </div>
             
             <div className="mt-2 mb-6">
                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB]/10 text-[#2B85EB] rounded-md border border-[#2B85EB]/20">
@@ -289,12 +297,10 @@ export function Pricing() {
               <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
             
-            <p className="mt-1 text-[11px] text-[#A0A7B5]">
-              {t(
-                'pricing_organization_scope_label',
-                'Valor por organização, não por pessoa.'
-              )}
-            </p>
+            <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.055] px-2.5 py-1.5 text-[10px] font-semibold text-emerald-300">
+              <UsersRound className="h-3.5 w-3.5" />
+              {t('pricing_organization_scope_label', 'Preço total da organização — não por pessoa.')}
+            </div>
             
             <div className="mt-2 mb-6">
                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB]/10 text-[#2B85EB] rounded-md border border-[#2B85EB]/20">
@@ -357,12 +363,10 @@ export function Pricing() {
               <span className="text-[#A0A7B5] font-normal text-sm">{t('pricing_period')}</span>
             </div>
             
-            <p className="mt-1 text-[11px] text-[#A0A7B5] relative z-10">
-              {t(
-                'pricing_organization_scope_label',
-                'Valor por organização, não por pessoa.'
-              )}
-            </p>
+            <div className="relative z-10 mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.055] px-2.5 py-1.5 text-[10px] font-semibold text-emerald-300">
+              <UsersRound className="h-3.5 w-3.5" />
+              {t('pricing_organization_scope_label', 'Preço total da organização — não por pessoa.')}
+            </div>
 
             <div className="mt-2 mb-6 relative z-10">
                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB] text-white rounded-md shadow-[0_0_15px_rgba(43,133,235,0.4)]">
