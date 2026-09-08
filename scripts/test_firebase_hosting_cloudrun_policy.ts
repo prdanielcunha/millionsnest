@@ -18,7 +18,7 @@ assert.equal(rewrites.at(-1)?.destination, "/index.html", "SPA fallback must res
 
 const rc = JSON.parse(fs.readFileSync(".firebaserc", "utf8"));
 const sites = rc?.targets?.millionsnest?.hosting?.hub;
-assert.deepEqual(sites, ["millionsnest"], "Hub target must map to the canonical MillionsNest Hosting site");
+assert.deepEqual(sites, ["mn-hub-555464791734"], "Hub target must map to the canonical MillionsNest Hosting site");
 
 const dockerfile = fs.readFileSync("Dockerfile", "utf8");
 assert.match(dockerfile, /node:24-bookworm-slim/, "Hub container must preserve the repository Node 24 runtime");
