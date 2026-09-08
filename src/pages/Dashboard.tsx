@@ -24,6 +24,7 @@ import { isGlobalPrivilegedUser, canAccessNestFinanceDevelopment } from "../lib/
 import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
 import { getInviteableOrganizationRolesForActor, getOrganizationRoleLabel, normalizeExistingOrganizationRole } from "../lib/organizationRoles.js";
+import { getMemberRoleUiPolicy } from "../lib/organizationMemberRoleUiPolicy.js";
 
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
@@ -483,29 +484,19 @@ export function Dashboard() {
 
   const canEditOrganizationRoleForMember = (member: any) => {
     const memberId = String(member?.id || member?.uid || '');
-    if (!memberId || memberId === user?.uid) return false;
-
     const rawRole = String(
       member?.organizationRole ?? member?.role ?? 'member',
     ).trim().toLowerCase();
-    const actorRole = normalizeExistingOrganizationRole(
-      currentUserData?.role || profile?.organizationRole || 'member',
-    );
-    const targetRole = normalizeExistingOrganizationRole(rawRole);
-    const targetIsAuthoritativeOwner =
-      Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === memberId;
 
-    if (targetIsAuthoritativeOwner) return false;
-    if (rawRole === 'owner' && !isGlobalAdmin && !actorIsAuthoritativeOwner) {
-      return false;
-    }
-    if (!isGlobalAdmin && actorRole !== 'owner' && actorRole !== 'admin') {
-      return false;
-    }
-    if (!isGlobalAdmin && actorRole === 'admin' && targetRole === 'admin') {
-      return false;
-    }
-    return true;
+    return getMemberRoleUiPolicy({
+      actorUid: user?.uid,
+      actorIsGlobalPrivileged: isGlobalAdmin,
+      actorOrganizationRole: currentUserData?.role || profile?.organizationRole || 'member',
+      actorIsAuthoritativeOwner,
+      targetUid: memberId,
+      targetOrganizationRole: rawRole,
+      authoritativeOwnerUid,
+    }).canEdit;
   };
 
   const hasNestFinanceDevelopmentAccess = canAccessNestFinanceDevelopment(profile?.systemRole);

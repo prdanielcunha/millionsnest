@@ -76,6 +76,9 @@ jobs:
       - name: Hub narrow viewport polish
         run: npx tsx scripts/test_hub_narrow_viewports.ts
 
+      - name: Hub CEO stale-owner repair affordance
+        run: npx tsx scripts/test_hub_stale_owner_ui_policy.ts
+
       - name: Public home conversion funnel and analytics security
         run: npx tsx scripts/test_public_home_funnel.ts
 
