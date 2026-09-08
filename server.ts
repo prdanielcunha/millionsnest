@@ -9,6 +9,7 @@ import { canInviteOrganizationRole } from './src/lib/organizationRoles.js';
 import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
+import { repairOrganizationOwnership } from './src/server/services/OrganizationOwnershipRepairService.js';
 import { updateMusicScaleMemberCapability } from './src/server/services/MusicScaleMemberCapabilityCommandService.js';
 import { createSupportTicket } from './src/server/services/SupportTicketService.js';
 import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
@@ -420,8 +421,10 @@ export async function upsertEcosystemSubscription(params: {
   if (!orgDoc.exists) createdDocuments.push(`organizations/${orgId}`);
   else updatedDocuments.push(`organizations/${orgId}`);
 
-  if (!memberDoc.exists) createdDocuments.push(`organization_members/${userId}_${orgId}`);
-  else updatedDocuments.push(`organization_members/${userId}_${orgId}`);
+  if (!orgDoc.exists) {
+    createdDocuments.push(`organizations/${orgId}/members/${userId}`);
+    createdDocuments.push(`organization_members/${userId}_${orgId}`);
+  }
 
   if (!userDoc.exists) createdDocuments.push(`users/${userId}`);
   else updatedDocuments.push(`users/${userId}`);
@@ -482,9 +485,6 @@ export async function upsertEcosystemSubscription(params: {
   const orgName = orgDoc.exists ? (orgDoc.data()?.name || `Organização de ${userEmail || userId}`) : `Organização de ${userEmail || userId}`;
   const orgPayload: any = {
     name: orgName,
-    ownerUid: userId,
-    ownerUserId: userId,
-    ownerId: userId,
     plan: resolvedPlan,
     subscriptionPlan: resolvedPlan,
     subscriptionStatus: subscription.status,
@@ -511,32 +511,39 @@ export async function upsertEcosystemSubscription(params: {
   };
   
   if (!orgDoc.exists) {
+     // Ownership is established only when checkout creates a brand-new
+     // organization. Subscription reconciliation must never transfer an
+     // existing tenant to the user associated with a Stripe event.
+     orgPayload.ownerUid = userId;
+     orgPayload.ownerUserId = userId;
+     orgPayload.ownerId = userId;
+     orgPayload.owner_user_id = userId;
      orgPayload.createdAt = admin.firestore.FieldValue.serverTimestamp();
   }
   batch.set(orgRef, orgPayload, { merge: true });
 
-  // 3. New Architecture member doc: organizations/{orgId}/members/{userId}
-  const memberData: any = {
-     uid: userId,
-     email: userEmail || '',
-     organizationId: orgId,
-     role: 'owner',
-     organizationRole: 'owner',
-     appRole: 'Administrador',
-     status: 'active',
-     permissionsVersion: CURRENT_PERMISSIONS_VERSION,
-     permissions: getDefaultPermissions('owner'),
-     updatedAt: admin.firestore.FieldValue.serverTimestamp()
-  };
-  if (!memberDoc.exists) {
-     memberData.createdAt = admin.firestore.FieldValue.serverTimestamp();
-     memberData.joinedAt = admin.firestore.FieldValue.serverTimestamp();
-  }
-  
-  batch.set(memberRef, memberData, { merge: true });
+  // 3. Authorization membership is not a billing projection.
+  // For an existing organization, Stripe sync must never grant or overwrite
+  // organization roles. Only a newly-created tenant gets its initial owner.
+  if (!orgDoc.exists) {
+    const memberData: any = {
+       uid: userId,
+       email: userEmail || '',
+       organizationId: orgId,
+       role: 'owner',
+       organizationRole: 'owner',
+       appRole: 'Administrador',
+       status: 'active',
+       permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+       permissions: getDefaultPermissions('owner'),
+       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+       createdAt: admin.firestore.FieldValue.serverTimestamp(),
+       joinedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
 
-  // 3.1. organization_members/{userId}_{orgId} (Legacy)
-  batch.set(legacyMemberRef, memberData, { merge: true });
+    batch.set(memberRef, memberData, { merge: true });
+    batch.set(legacyMemberRef, memberData, { merge: true });
+  }
 
   // 4. users/{userId}
   const userPayload: any = {
@@ -1312,6 +1319,10 @@ async function startServer() {
   app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/reject', express.json({ limit: '8kb' }), (req, res) => rejectJoinRequest(req, res));
   app.delete('/api/v1/organizations/:organizationId/members/:memberId', (req, res) => removeOrganizationMember(req, res));
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/role', express.json({ limit: '8kb' }), (req, res) => updateOrganizationMemberRole(req, res));
+  app.post('/api/v1/organizations/:organizationId/ownership/repair', express.json({ limit: '8kb' }), (req, res) => repairOrganizationOwnership(req, res, {
+    verifyIdToken: (token: string) => admin.auth().verifyIdToken(token),
+    getFirestore: () => getDb(),
+  }));
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/musicscale-capability', express.json({ limit: '8kb' }), (req, res) => updateMusicScaleMemberCapability(req, res));
   app.post('/api/v1/user/active-organization', express.json(), setActiveOrganization);
 
