@@ -26,6 +26,8 @@ assert.match(flagship, /subscription_scope_badge/, 'flagship must preserve organ
 assert.match(ecosystem, /ProductPreview/, 'ecosystem must present visual product previews');
 assert.match(ecosystem, /snap-x snap-mandatory/, 'mobile ecosystem must use user-controlled scroll snapping');
 assert.equal(ecosystem.includes('autoPlay'), false, 'ecosystem gallery must not auto-advance media');
+assert.equal(ecosystem.includes('Culto de domingo'), false, 'ecosystem visual preview copy must not bypass i18n');
+assert.equal(ecosystem.includes('Próxima escala'), false, 'ecosystem visual preview labels must not bypass i18n');
 assert.match(shell, /mn-shell/, 'Hub must use the Design 2.0 shell');
 assert.match(shell, /mn-topbar/, 'Hub topbar must use the Design 2.0 surface');
 assert.match(shell, /mn-dashboard-grid/, 'Hub workspace must use the lightweight visual grid');
@@ -49,7 +51,12 @@ for (const source of locales) {
     'flagship_flow_1_title',
     'flagship_flow_2_title',
     'flagship_flow_3_title',
-    'eco_gallery_hint'
+    'eco_gallery_hint',
+    'eco_preview_ready',
+    'eco_preview_service',
+    'eco_preview_repertoire',
+    'eco_preview_team',
+    'eco_preview_next_scale'
   ]) {
     assert.match(source, new RegExp(`\\b${key}\\b`), `missing Design 2.0 i18n key: ${key}`);
   }
