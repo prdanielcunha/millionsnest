@@ -245,10 +245,10 @@ export function MusicScaleLanding() {
               <div className="w-2.5 h-2.5 rounded-full bg-[#2B85EB] animate-pulse flex-shrink-0" />
               <div className="text-left">
                 <span className="text-xs font-bold text-white block uppercase tracking-wider mb-0.5">
-                  {t('musicscale:subscription_scope_badge', 'Uma assinatura para todo o grupo')}
+                  {t('musicscale:subscription_scope_badge', 'Uma assinatura para toda a equipe')}
                 </span>
                 <span className="text-xs text-[#A0A7B5] font-light block leading-relaxed">
-                  {t('musicscale:subscription_scope_desc', 'A igreja, ministério ou equipe contrata um único plano. Os integrantes não pagam individualmente.')}
+                  {t('musicscale:subscription_scope_desc', 'A igreja ou ministério paga um único plano. Cada músico e vocal usa o próprio acesso, mas ninguém paga uma assinatura individual.')}
                 </span>
               </div>
             </motion.div>
@@ -779,6 +779,10 @@ export function MusicScaleLanding() {
             <FAQItem 
               question={t('musicscale:faq_q7', 'Posso testar antes de pagar?')} 
               answer={t('musicscale:faq_a7', 'Com certeza. Todo plano inclui 7 dias de teste gratuito e libera os recursos do plano escolhido. Selecione Starter, Advanced ou Pro na seção de planos; o teste seguirá exatamente essa escolha. Se não fizer sentido para sua equipe, cancele antes do fim do teste para não haver cobrança.')} 
+            />
+            <FAQItem
+              question={t('musicscale:faq_q8', 'Cada músico ou vocal precisa pagar uma assinatura?')}
+              answer={t('musicscale:faq_a8', 'Não. A cobrança é da organização, não de cada pessoa. A igreja ou ministério escolhe um plano e convida os integrantes incluídos naquele limite. Cada pessoa usa seu próprio login sem pagar outra assinatura. No Pro, o número de pessoas é ilimitado.')}
             />
           </div>
         </div>
