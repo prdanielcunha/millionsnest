@@ -1010,23 +1010,46 @@ export function Dashboard() {
 
       const token = await user.getIdToken();
       const orgId = activeContextOrgId;
+      const actorRole = normalizeExistingOrganizationRole(
+        currentUserData?.role || profile?.organizationRole || 'member'
+      );
+      const targetIsAuthoritativeOwner =
+        Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === memberId;
+      const useOwnershipRepair =
+        targetIsAuthoritativeOwner &&
+        isGlobalAdmin &&
+        actorRole === 'owner' &&
+        memberId !== user.uid;
+
       const res = await fetch(
-        `/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(memberId)}/role`,
+        useOwnershipRepair
+          ? `/api/v1/organizations/${encodeURIComponent(orgId)}/ownership/repair`
+          : `/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(memberId)}/role`,
         {
-          method: 'PATCH',
+          method: useOwnershipRepair ? 'POST' : 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ organizationRole: newRole })
+          body: JSON.stringify(
+            useOwnershipRepair
+              ? { targetMemberId: memberId, targetRole: newRole }
+              : { organizationRole: newRole }
+          )
         }
       );
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || data?.success !== true) {
         const code = String(data?.reasonCode || data?.error || '');
-        if (code.includes('SELF_ROLE_CHANGE_DENIED')) {
+        if (code.includes('SELF_ROLE_CHANGE_DENIED') || code.includes('SELF_REPAIR_DENIED')) {
           feedback.error('Você não pode alterar seu próprio nível de acesso por aqui.');
+        } else if (
+          code.includes('GLOBAL_AUTHORITY_REQUIRED') ||
+          code.includes('OWNER_MEMBERSHIP_REQUIRED') ||
+          code.includes('TARGET_NOT_AUTHORITATIVE_OWNER')
+        ) {
+          feedback.error('Não foi possível confirmar a autoridade necessária para corrigir a propriedade desta organização.');
         } else if (
           code.includes('TARGET_ROLE_PROTECTED') ||
           code.includes('ROLE_ASSIGNMENT_NOT_ALLOWED') ||
@@ -1039,7 +1062,7 @@ export function Dashboard() {
         return;
       }
 
-      const canonicalRole = String(data?.organizationRole || newRole);
+      const canonicalRole = String(data?.organizationRole || data?.targetRole || newRole);
       const perms = getDefaultPermissions(canonicalRole);
       setMembers(prev => prev.map(m => m.id === memberId ? {
         ...m,
@@ -1048,6 +1071,17 @@ export function Dashboard() {
         permissions: perms,
         permissionsVersion: CURRENT_PERMISSIONS_VERSION
       } : m));
+
+      if (useOwnershipRepair) {
+        setOrganization((previous: any) => previous ? {
+          ...previous,
+          ownerUid: user.uid,
+          ownerUserId: user.uid,
+          ownerId: user.uid,
+          owner_user_id: user.uid
+        } : previous);
+        feedback.success('Propriedade da organização corrigida e nível de acesso atualizado.');
+      }
     } catch (e) {
       console.error("Erro ao atualizar função", e);
       feedback.error("Não foi possível alterar o nível de acesso dessa pessoa.");
@@ -1118,23 +1152,45 @@ export function Dashboard() {
         editingMember.id !== user.uid &&
         editingMemberRole &&
         editingMemberRole !== originalRole &&
-        !targetIsAuthoritativeOwner &&
         canEditOrganizationRoleForMember(editingMember)
       ) {
+        const actorRole = normalizeExistingOrganizationRole(
+          currentUserData?.role || profile?.organizationRole || 'member'
+        );
+        const useOwnershipRepair =
+          targetIsAuthoritativeOwner &&
+          isGlobalAdmin &&
+          actorRole === 'owner';
+
         const roleResponse = await fetch(
-          `/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(editingMember.id)}/role`,
+          useOwnershipRepair
+            ? `/api/v1/organizations/${encodeURIComponent(orgId)}/ownership/repair`
+            : `/api/v1/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(editingMember.id)}/role`,
           {
-            method: 'PATCH',
+            method: useOwnershipRepair ? 'POST' : 'PATCH',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`
             },
-            body: JSON.stringify({ organizationRole: editingMemberRole })
+            body: JSON.stringify(
+              useOwnershipRepair
+                ? { targetMemberId: editingMember.id, targetRole: editingMemberRole }
+                : { organizationRole: editingMemberRole }
+            )
           }
         );
         const roleData = await roleResponse.json().catch(() => ({}));
         if (!roleResponse.ok || roleData?.success !== true) {
           throw new Error(roleData?.reasonCode || 'ROLE_UPDATE_FAILED');
+        }
+        if (useOwnershipRepair) {
+          setOrganization((previous: any) => previous ? {
+            ...previous,
+            ownerUid: user.uid,
+            ownerUserId: user.uid,
+            ownerId: user.uid,
+            owner_user_id: user.uid
+          } : previous);
         }
       }
 
@@ -1161,8 +1217,8 @@ export function Dashboard() {
         ...member,
         displayName: editingMemberName.trim(),
         photoURL: editingMemberPhoto.trim(),
-        role: targetIsAuthoritativeOwner ? 'owner' : (editingMemberRole || originalRole),
-        organizationRole: targetIsAuthoritativeOwner ? 'owner' : (editingMemberRole || originalRole)
+        role: editingMemberRole || originalRole,
+        organizationRole: editingMemberRole || originalRole
       } : member));
       setEditingMember(null);
       feedback.success("Dados do membro atualizados.");

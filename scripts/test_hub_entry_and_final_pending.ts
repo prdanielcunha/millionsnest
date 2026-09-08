@@ -23,8 +23,9 @@ const memberSaveEnd = dashboard.indexOf('const handleSendMemberPasswordReset', m
 assert.ok(memberSaveStart >= 0 && memberSaveEnd > memberSaveStart, 'member save handler must exist');
 const memberSave = dashboard.slice(memberSaveStart, memberSaveEnd);
 assert.match(memberSave, /\/api\/v1\/organizations\//, 'role updates must use canonical organization API');
-assert.match(memberSave, /method: 'PATCH'/, 'role updates must use canonical PATCH command');
-assert.match(memberSave, /organizationRole: editingMemberRole/, 'role changes must use canonical organizationRole payload');
+assert.match(memberSave, /method: useOwnershipRepair \? 'POST' : 'PATCH'/, 'role updates must keep canonical PATCH and use explicit POST only for ownership repair');
+assert.match(memberSave, /organizationRole: editingMemberRole/, 'ordinary role changes must use canonical organizationRole payload');
+assert.match(memberSave, /targetMemberId: editingMember\.id, targetRole: editingMemberRole/, 'ownership conflicts must use the dedicated repair payload');
 const profileBodyStart = memberSave.indexOf("body: JSON.stringify({", memberSave.indexOf('/profile'));
 assert.ok(profileBodyStart >= 0, 'profile update payload must exist');
 const profileBody = memberSave.slice(profileBodyStart, profileBodyStart + 450);

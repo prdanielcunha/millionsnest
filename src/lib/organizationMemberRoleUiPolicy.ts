@@ -15,6 +15,7 @@ export type MemberRoleUiPolicyDecision = {
   reason:
     | 'allowed_global'
     | 'allowed_authoritative_owner'
+    | 'allowed_global_owner_repair'
     | 'allowed_owner_membership'
     | 'allowed_admin'
     | 'self'
@@ -43,13 +44,17 @@ export function getMemberRoleUiPolicy(
   }
 
   const authoritativeOwnerUid = String(input.authoritativeOwnerUid || '');
-  if (authoritativeOwnerUid && authoritativeOwnerUid === targetUid) {
-    return { canEdit: false, reason: 'authoritative_owner_target' };
-  }
 
   const actorRole = normalizeExistingOrganizationRole(
     String(input.actorOrganizationRole || ''),
   );
+
+  if (authoritativeOwnerUid && authoritativeOwnerUid === targetUid) {
+    if (input.actorIsGlobalPrivileged && actorRole === 'owner') {
+      return { canEdit: true, reason: 'allowed_global_owner_repair' };
+    }
+    return { canEdit: false, reason: 'authoritative_owner_target' };
+  }
   const targetRole = normalizeExistingOrganizationRole(
     String(input.targetOrganizationRole || 'member'),
   );

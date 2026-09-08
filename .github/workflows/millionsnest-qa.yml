@@ -79,6 +79,9 @@ jobs:
       - name: Hub CEO stale-owner repair affordance
         run: npx tsx scripts/test_hub_stale_owner_ui_policy.ts
 
+      - name: Subscription ownership integrity
+        run: npx tsx scripts/test_subscription_ownership_integrity.ts
+
       - name: Public home conversion funnel and analytics security
         run: npx tsx scripts/test_public_home_funnel.ts
 
@@ -142,7 +145,7 @@ jobs:
           --config firebase.rules-test.json
           --only firestore
           --project demo-millionsnest-ci
-          "npx tsx --test --test-concurrency=1 tests/firestore/*.test.ts && npx tsx scripts/test_musicscale_live_conductor_rbac.ts && npx tsx scripts/test_p0_organization_role_commands_certification.ts"
+          "npx tsx --test --test-concurrency=1 tests/firestore/*.test.ts && npx tsx scripts/test_musicscale_live_conductor_rbac.ts && npx tsx scripts/test_p0_organization_role_commands_certification.ts && npx tsx scripts/test_organization_ownership_repair.ts"
 
       - name: Build
         run: npm run build
