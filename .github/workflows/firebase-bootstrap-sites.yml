@@ -1,0 +1,60 @@
+name: Firebase Bootstrap Sites and Registry
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/firebase-bootstrap-sites.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools@15.26.0
+
+      - name: Create missing Firebase Hosting sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing="$(firebase hosting:sites:list --project millionsnest --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);for(const r of (x.result||[])) console.log(r.name||r.site||r.siteId||'')})" || true)"
+          for site in musicscale-millionsnest nestfinance-millionsnest millionsnest-connect nestjourney-millionsnest; do
+            if echo "$existing" | grep -qx "$site"; then
+              echo "HOSTING_SITE_EXISTS=$site"
+            else
+              echo "Creating Hosting site: $site"
+              firebase hosting:sites:create "$site" --project millionsnest
+            fi
+          done
+          echo "HOSTING_SITES_AFTER:"
+          firebase hosting:sites:list --project millionsnest
+
+      - name: Ensure Docker Artifact Registry repository
+        shell: bash
+        run: |
+          set -u
+          if gcloud artifacts repositories describe millionsnest-web             --project millionsnest             --location us-central1 >/dev/null 2>&1; then
+            echo "ARTIFACT_REPOSITORY_EXISTS=millionsnest-web"
+          else
+            echo "Attempting to create Artifact Registry repository..."
+            if gcloud artifacts repositories create millionsnest-web               --project millionsnest               --location us-central1               --repository-format=docker               --description="MillionsNest web Cloud Run images"; then
+              echo "ARTIFACT_REPOSITORY_CREATED=millionsnest-web"
+            else
+              echo "ARTIFACT_REPOSITORY_CREATE_NEEDS_MANUAL=millionsnest-web"
+            fi
+          fi
+          echo "ARTIFACT_REGISTRY_AFTER:"
+          gcloud artifacts repositories list --project millionsnest --location us-central1 --format='table(name,format,location)' || true
