@@ -111,3 +111,71 @@ textarea {
     font-size: 16px;
   }
 }
+
+
+/* MillionsNest Design 2.0 — lightweight visual system */
+.mn-shell {
+  background:
+    radial-gradient(circle at 18% -10%, rgba(43, 133, 235, 0.10), transparent 34rem),
+    radial-gradient(circle at 88% 8%, rgba(110, 86, 207, 0.07), transparent 30rem),
+    #050505;
+}
+
+.mn-dashboard-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: center top;
+}
+
+.mn-topbar {
+  background:
+    linear-gradient(180deg, rgba(8, 10, 15, 0.96), rgba(5, 5, 5, 0.88));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.025), 0 18px 50px rgba(0, 0, 0, 0.18);
+}
+
+.mn-surface {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026), rgba(255, 255, 255, 0.012)),
+    rgba(6, 8, 12, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.025),
+    0 18px 50px rgba(0, 0, 0, 0.16);
+}
+
+.mn-surface-strong {
+  background:
+    radial-gradient(circle at 90% 0%, rgba(43, 133, 235, 0.075), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026), rgba(255, 255, 255, 0.012)),
+    #07090d;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.028),
+    0 22px 60px rgba(0, 0, 0, 0.20);
+}
+
+.mn-interactive {
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mn-interactive:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.035),
+      0 24px 70px rgba(0, 0, 0, 0.24);
+  }
+}
+
+@media (max-width: 639px) {
+  .mn-dashboard-grid {
+    background-size: 36px 36px;
+  }
+}
