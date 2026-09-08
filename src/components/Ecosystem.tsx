@@ -17,6 +17,8 @@ function ProductIcon({ app }: { app: EcosystemApp }) {
 }
 
 function ProductPreview({ appId }: { appId: string }) {
+  const { t } = useTranslation(["landing"]);
+
   if (appId === "musicscale") {
     return (
       <div className="grid h-full min-h-[250px] grid-rows-[auto_1fr] overflow-hidden rounded-[22px] border border-white/[0.07] bg-[#06090E]">
@@ -25,11 +27,11 @@ function ProductPreview({ appId }: { appId: string }) {
             <span className="h-2 w-2 rounded-full bg-[#66A8FF]" />
             <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#728093]">MusicScale</span>
           </div>
-          <span className="rounded-md border border-emerald-400/15 bg-emerald-400/[0.055] px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-emerald-300">Ready</span>
+          <span className="rounded-md border border-emerald-400/15 bg-emerald-400/[0.055] px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-emerald-300">{t("eco_preview_ready")}</span>
         </div>
         <div className="grid gap-2 p-3 sm:grid-cols-[.42fr_.58fr]">
           <div className="space-y-2">
-            {["Culto de domingo", "Repertório", "Equipe"].map((label, index) => (
+            {[t("eco_preview_service"), t("eco_preview_repertoire"), t("eco_preview_team")].map((label, index) => (
               <div key={label} className={`rounded-xl border p-3 ${index === 0 ? "border-[#2B85EB]/20 bg-[#2B85EB]/[0.08]" : "border-white/[0.05] bg-white/[0.018]"}`}>
                 <p className="text-[9px] font-semibold text-[#A9B3C1]">{label}</p>
                 <div className="mt-2 h-1.5 rounded-full bg-white/[0.06]">
@@ -40,7 +42,7 @@ function ProductPreview({ appId }: { appId: string }) {
           </div>
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.018] p-3">
             <div className="flex items-center justify-between">
-              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#697484]">Próxima escala</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#697484]">{t("eco_preview_next_scale")}</p>
               <UsersRound className="h-3.5 w-3.5 text-[#66A8FF]" />
             </div>
             <div className="mt-5 space-y-2">
