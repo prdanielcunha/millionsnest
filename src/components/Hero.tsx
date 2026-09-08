@@ -64,7 +64,7 @@ export function Hero() {
               <button
                 onClick={() => {
                   trackHomeMusicScaleInterest('hero_primary');
-                  navigate('/musicscale');
+                  navigate('/musicscale#musicscale-demo');
                 }}
                 className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#F7F9FC] px-6 py-3.5 text-sm font-semibold text-[#06080D] shadow-[0_18px_50px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white active:translate-y-0"
               >
