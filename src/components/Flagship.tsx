@@ -27,15 +27,36 @@ export function Flagship() {
               <Trans i18nKey="landing:flagship_title" components={{ 1: <span className="text-[#8E99A8]" /> }} />
             </h2>
             <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[#8A95A5]">{t('flagship_desc')}</p>
+            <div className="mt-5 inline-flex max-w-2xl items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-4 py-3">
+              <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-[#66A8FF]" />
+              <div>
+                <p className="text-xs font-semibold text-[#DDE7F5]">{t('subscription_scope_badge')}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-[#7E8999]">{t('subscription_scope_desc')}</p>
+              </div>
+            </div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
-            <Link to="/musicscale" onClick={() => trackHomeMusicScaleInterest('flagship_primary')} className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:-translate-y-0.5">
+            <Link to="/musicscale#musicscale-demo" onClick={() => trackHomeMusicScaleInterest('flagship_primary')} className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:-translate-y-0.5">
               {t('flagship_cta')} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
             </Link>
             <a href="/musicscale#pricing-section" onClick={() => trackHomeMusicScaleInterest('flagship_pricing')} className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] px-5 py-3 text-sm font-medium text-[#E7EBF2] transition hover:bg-white/[0.06]">
               {t('flagship_secondary')}
             </a>
           </div>
+        </div>
+
+        <div className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.06] sm:grid-cols-3">
+          {[
+            [t('flagship_flow_1_number'), t('flagship_flow_1_title'), t('flagship_flow_1_desc')],
+            [t('flagship_flow_2_number'), t('flagship_flow_2_title'), t('flagship_flow_2_desc')],
+            [t('flagship_flow_3_number'), t('flagship_flow_3_title'), t('flagship_flow_3_desc')],
+          ].map(([number, title, desc]) => (
+            <div key={title} className="bg-[#080B11] p-5 sm:p-6">
+              <span className="font-mono text-[10px] text-[#5E6978]">{number}</span>
+              <h3 className="mt-6 text-sm font-semibold text-[#E9EDF3]">{title}</h3>
+              <p className="mt-2 text-xs leading-relaxed text-[#758090]">{desc}</p>
+            </div>
+          ))}
         </div>
 
         <div className="relative mt-14 overflow-hidden rounded-[30px] border border-white/[0.08] bg-[#05070B] p-3 shadow-[0_40px_120px_rgba(0,0,0,0.45)] md:p-5">

@@ -49,7 +49,7 @@ for (const marker of expectedOrder) {
   last = pos;
 }
 
-assert.match(hero, /DashboardMockup/, 'hero must show a real product/system visual');
+assert.match(hero, /ProductMotionStage/, 'hero must show a lightweight product/system workflow visual');
 assert.match(hero, /hero_trust_release/, 'hero must expose release-quality trust signal');
 assert.match(problem, /thesis_solution_title/, 'brand thesis must explain the MillionsNest operating model');
 assert.match(flagship, /EscalasMockup/, 'flagship must show real MusicScale UI instead of a video placeholder');
@@ -57,6 +57,8 @@ assert.equal(flagship.includes('flagship_watch_action'), false, 'unfinished vide
 assert.equal(flagship.includes("t('soon'"), false, 'flagship must not advertise unfinished demo content');
 assert.match(ecosystem, /activeProduct/, 'live product must receive distinct hierarchy');
 assert.match(ecosystem, /futureProducts/, 'future products must remain visibly subordinate to the live product');
+assert.match(ecosystem, /snap-x snap-mandatory/, 'ecosystem gallery must be swipeable without auto-advancing on mobile');
+assert.equal(hero.includes('<video'), false, 'hero must not use a heavyweight autoplay background video');
 assert.match(vision, /vision_p4_title/, 'engineering trust section must include release QA');
 assert.equal(guarantee.includes('guarantee_badge_days'), false, 'generic giant 7-day badge must not return');
 assert.equal(salesChat.includes('animate-ping'), false, 'sales contact must not fake urgency/presence animation');
