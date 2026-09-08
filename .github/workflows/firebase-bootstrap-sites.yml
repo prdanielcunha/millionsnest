@@ -1,4 +1,5 @@
 name: Firebase Bootstrap Sites and Registry
+# Billing-enabled retry
 
 on:
   push:
