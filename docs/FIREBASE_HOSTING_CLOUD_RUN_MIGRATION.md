@@ -6,7 +6,7 @@ The MillionsNest Hub is being migrated from Vercel-first web delivery to **Fireb
 
 - Firebase project: `millionsnest`
 - Hosting target: `hub`
-- Hosting site: `millionsnest`
+- Hosting site: `mn-hub-555464791734`
 - Cloud Run API service: `millionsnest-api`
 - Cloud Run region: `us-central1`
 - Public domains after cutover: `millionsnest.com` and `www.millionsnest.com`
