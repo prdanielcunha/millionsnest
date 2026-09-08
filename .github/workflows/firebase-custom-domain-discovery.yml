@@ -1,0 +1,35 @@
+name: Firebase Custom Domain Discovery
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/firebase-custom-domain-discovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: List custom domains for every Hosting site
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          for SITE in             millionsnest             mn-hub-555464791734             mn-musicscale-555464791734             mn-nestfinance-555464791734             mn-connect-555464791734             mn-nestjourney-555464791734
+          do
+            echo "===== SITE:$SITE ====="
+            curl --fail --silent --show-error               -H "Authorization: Bearer $TOKEN"               "https://firebasehosting.googleapis.com/v1beta1/projects/millionsnest/sites/$SITE/customDomains?pageSize=100"               | python3 -c 'import json,sys; x=json.load(sys.stdin); print(json.dumps(x,indent=2,sort_keys=True))'
+          done
