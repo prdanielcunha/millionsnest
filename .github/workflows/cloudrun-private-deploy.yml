@@ -1,0 +1,92 @@
+name: Cloud Run Private Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: millionsnest-cloudrun-private
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: millionsnest
+  REGION: us-central1
+  REGISTRY: millionsnest-web
+  SERVICE: millionsnest-api
+  IMAGE: us-central1-docker.pkg.dev/millionsnest/millionsnest-web/millionsnest-api:${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Configure Docker authentication
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build Hub image
+        run: |
+          docker build \
+            --build-arg VITE_FIREBASE_API_KEY="AIzaSyAhXY8TV8qoXz8Pd2u5jFHUTVssZmi3kMs" \
+            --build-arg VITE_FIREBASE_AUTH_DOMAIN="millionsnest.firebaseapp.com" \
+            --build-arg VITE_FIREBASE_PROJECT_ID="millionsnest" \
+            --build-arg VITE_FIREBASE_STORAGE_BUCKET="millionsnest.firebasestorage.app" \
+            --build-arg VITE_FIREBASE_MESSAGING_SENDER_ID="555464791734" \
+            --build-arg VITE_FIREBASE_APP_ID="1:555464791734:web:3059e8ac2b8089a1767817" \
+            --build-arg VITE_APP_URL="https://www.millionsnest.com" \
+            --build-arg VITE_MUSICSCALE_APP_URL="https://musicscale.millionsnest.com/start" \
+            --build-arg VITE_NESTFINANCE_LAUNCH_ENABLED="true" \
+            -t "$IMAGE" .
+
+      - name: Local container smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --rm --name mn-hub-smoke -e PORT=8080 -p 18080:8080 "$IMAGE"
+          trap 'docker stop mn-hub-smoke >/dev/null 2>&1 || true' EXIT
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/ >/dev/null; then
+              echo "HUB_CONTAINER_SMOKE_OK"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs mn-hub-smoke
+          exit 1
+
+      - name: Push image
+        run: docker push "$IMAGE"
+
+      - name: Deploy private Cloud Run revision
+        shell: bash
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE" \
+            --service-account "mn-hub-runtime@millionsnest.iam.gserviceaccount.com" \
+            --port 8080 \
+            --cpu 1 \
+            --memory 512Mi \
+            --min-instances 0 \
+            --max-instances 3 \
+            --concurrency 80 \
+            --timeout 60 \
+            --no-allow-unauthenticated \
+            --set-env-vars "FIREBASE_PROJECT_ID=millionsnest,NODE_ENV=production,VITE_APP_URL=https://www.millionsnest.com,NESTFINANCE_APP_URL=https://nestfinance.millionsnest.com,NESTFINANCE_HANDOFF_ENABLED=true,MUSICSCALE_DEFAULT_CURRENCY=brl,MUSICSCALE_PRO_ACTIVE_PRICE=launch,STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY=price_1TURaNPmDx20joKa3MDtwOro,STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY=price_1TYR1sPmDx20joKaJZGdyzgE,STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY=price_1Tdb8LPmDx20joKaBoD4IR9T,STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY=price_1Tdb8LPmDx20joKayRHKzW2k,STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY=price_1TYXhCPmDx20joKamBd9nkti,STRIPE_PRICE_MUSICSCALE_PRO_YEARLY=price_1TYXitPmDx20joKaJMTXffLZ,STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY=price_1TYXhCPmDx20joKamBd9nkti,STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY=price_1TYXitPmDx20joKaJMTXffLZ,STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY=price_1TdpfnPmDx20joKakj9v2zVu,STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY=price_1TdphzPmDx20joKaL9S4FkYZ,STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM=price_1TYXkVPmDx20joKa2LwXB2ei,STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS=price_1TYXl9PmDx20joKaYs0DrfQt,STRIPE_PRICE_MUSICSCALE_WORSHIP_100=price_1TYXorPmDx20joKaBZyaIfOQ,STRIPE_PRICE_MUSICSCALE_PACK_10=price_1TYXvlPmDx20joKatAGawTgL" \
+            --set-secrets "STRIPE_SECRET_KEY=millionsnest-stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=millionsnest-stripe-webhook-secret:latest" \
+            --quiet
+
+      - name: Verify Cloud Run readiness
+        run: |
+          gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" \
+            --format='table(metadata.name,status.url,status.conditions[0].type,status.conditions[0].status)'
