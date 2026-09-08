@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "millionsnest"
+  },
+  "targets": {
+    "millionsnest": {
+      "hosting": {
+        "hub": [
+          "millionsnest"
+        ]
+      }
+    }
+  }
+}
