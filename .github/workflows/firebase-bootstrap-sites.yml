@@ -30,9 +30,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          existing="$(firebase hosting:sites:list --project millionsnest --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);for(const r of (x.result||[])) console.log(r.name||r.site||r.siteId||'')})" || true)"
-          for site in musicscale-millionsnest nestfinance-millionsnest millionsnest-connect nestjourney-millionsnest; do
-            if echo "$existing" | grep -qx "$site"; then
+          existing="$(firebase hosting:sites:list --project millionsnest)"
+          for site in mn-hub-555464791734 mn-musicscale-555464791734 mn-nestfinance-555464791734 mn-connect-555464791734 mn-nestjourney-555464791734; do
+            if echo "$existing" | grep -q "$site"; then
               echo "HOSTING_SITE_EXISTS=$site"
             else
               echo "Creating Hosting site: $site"
