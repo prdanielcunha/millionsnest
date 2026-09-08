@@ -39,9 +39,6 @@
     }
   ],
   "git": {
-    "deploymentEnabled": {
-      "*": false,
-      "production": true
-    }
+    "deploymentEnabled": false
   }
 }
