@@ -1,4 +1,5 @@
 name: Firebase Custom Domain Prepare
+# Trigger domain preparation after workflow registration
 
 on:
   push:
