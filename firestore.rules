@@ -148,7 +148,23 @@ service cloud.firestore {
 
     function isSystemAdmin() {
       let userDoc = isAuthenticated() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
-      return userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'global_admin' || userDoc.data.systemRole == 'ecosystem_owner' || userDoc.data.systemRole == 'founder');
+      return userDoc != null && 'systemRole' in userDoc.data && (
+        userDoc.data.systemRole == 'ceo' ||
+        userDoc.data.systemRole == 'admin' ||
+        userDoc.data.systemRole == 'global_admin' ||
+        userDoc.data.systemRole == 'ecosystem_owner' ||
+        userDoc.data.systemRole == 'founder'
+      );
+    }
+
+    function isEcosystemSupport() {
+      let userDoc = isAuthenticated() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
+      return userDoc != null &&
+        userDoc.data.get('systemRole', '') == 'ecosystem_support';
+    }
+
+    function checkOrgReadAccess(orgId) {
+      return checkOrgAccess(orgId) || isEcosystemSupport();
     }
 
     // ==========================================
@@ -179,6 +195,7 @@ service cloud.firestore {
     match /organizations/{orgId} {
       allow read: if isAuthenticated() && (
         isSystemAdmin() ||
+        isEcosystemSupport() ||
         (resource != null && resource.data.get('ownerUid', '') == request.auth.uid) ||
         (resource != null && resource.data.get('ownerId', '') == request.auth.uid) ||
         (resource != null && resource.data.get('owner_user_id', '') == request.auth.uid) ||
@@ -206,9 +223,9 @@ service cloud.firestore {
 
       match /members/{uid} {
         allow read: if isAuthenticated() && (
-          uid == request.auth.uid || checkOrgAccess(orgId) || isSystemAdmin()
+          uid == request.auth.uid || checkOrgReadAccess(orgId) || isSystemAdmin()
         );
-        allow list: if isAuthenticated() && (checkOrgAccess(orgId) || isSystemAdmin());
+        allow list: if isAuthenticated() && (checkOrgReadAccess(orgId) || isSystemAdmin());
         allow create: if isAuthenticated() && (isOrgAdmin(orgId) || isSystemAdmin());
         allow update, delete: if isAuthenticated() && (
           isOrgAdmin(orgId) || isSystemAdmin()
@@ -224,6 +241,7 @@ service cloud.firestore {
       match /join_requests/{requestId} {
         allow read, list: if isAuthenticated() && (
           isSystemAdmin() ||
+          isEcosystemSupport() ||
           (
             exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)) &&
             get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('status', '') == 'active' &&
@@ -239,11 +257,11 @@ service cloud.firestore {
       }
 
       match /audit_logs/{document=**} {
-        allow read: if isAuthenticated() && checkOrgAccess(orgId);
+        allow read: if isAuthenticated() && checkOrgReadAccess(orgId);
         allow write: if isAuthenticated() && checkOrgAccess(orgId);
       }
       match /timeline/{document=**} {
-        allow read: if isAuthenticated() && checkOrgAccess(orgId);
+        allow read: if isAuthenticated() && checkOrgReadAccess(orgId);
         allow write: if isAuthenticated() && checkOrgAccess(orgId);
       }
 
@@ -299,7 +317,7 @@ service cloud.firestore {
       match /{app}/{document=**} {
         // Firestore ORs overlapping allow rules. Sensitive subcollections with
         // narrower policies must never inherit this generic tenant-wide access.
-        allow read: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow read: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
         allow create: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
         allow update, delete: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
@@ -330,9 +348,9 @@ service cloud.firestore {
     
     match /subscriptions/{userId} {
       allow read, list: if isAuthenticated() && (
-        checkOrgAccess(userId) || 
+        checkOrgReadAccess(userId) || 
         isSystemAdmin() ||
-        (resource != null && 'organizationId' in resource.data && checkOrgAccess(resource.data.organizationId)) ||
+        (resource != null && 'organizationId' in resource.data && checkOrgReadAccess(resource.data.organizationId)) ||
         (resource != null && 'userId' in resource.data && resource.data.userId == request.auth.uid) ||
         (resource == null)
       );
