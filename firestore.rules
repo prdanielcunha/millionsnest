@@ -239,18 +239,17 @@ service cloud.firestore {
       }
 
       match /join_requests/{requestId} {
+        // Sensitive membership requests stay tenant-local in Firestore.
+        // Global governance reads and all mutations go through authenticated
+        // backend commands so support/global identities never gain raw access.
         allow read, list: if isAuthenticated() && (
-          isSystemAdmin() ||
-          isEcosystemSupport() ||
+          exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('status', '') == 'active' &&
           (
-            exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)) &&
-            get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('status', '') == 'active' &&
-            (
-              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('role', '') == 'owner' ||
-              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('role', '') == 'admin' ||
-              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('organizationRole', '') == 'owner' ||
-              get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('organizationRole', '') == 'admin'
-            )
+            get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('role', '') == 'owner' ||
+            get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('role', '') == 'admin' ||
+            get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('organizationRole', '') == 'owner' ||
+            get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.get('organizationRole', '') == 'admin'
           )
         );
         allow create, update, delete: if false;
