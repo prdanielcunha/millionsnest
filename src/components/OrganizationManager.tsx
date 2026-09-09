@@ -503,7 +503,7 @@ export function OrganizationManager({
             }}
             className="bg-[#050505] text-[#F5F7FA] text-sm rounded-xl px-4 py-2.5 border border-white/10 outline-none w-full sm:w-auto sm:min-w-[250px]"
           >
-             <option value={profile?.organizationId || ''}>Sua Organização ({organization?.name})</option>
+             <option value={profile?.organizationId || ''}>Voltar à sua organização</option>
              {adminOrgs.filter(o => o.id !== profile?.organizationId).map(org => (
                <option key={org.id} value={org.id}>{org.name} {org.slug ? `(${org.slug})` : ''}</option>
              ))}
@@ -1079,30 +1079,27 @@ export function OrganizationManager({
                             </div>
 
                             <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-                              {experience.needsAttention ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenApp?.(app)}
+                                disabled={experience.needsAttention && !isEcosystemSupport}
+                                className="min-h-[42px] px-4 rounded-xl bg-white text-[#050505] text-xs font-semibold hover:bg-[#F5F7FA] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Abrir {app.name}
+                              </button>
+                              {!isEcosystemSupport && (
                                 <button
                                   type="button"
                                   onClick={() => setActiveDashboardTab('billing')}
-                                  className="min-h-[42px] px-4 rounded-xl bg-red-500/10 text-red-300 border border-red-500/20 text-xs font-semibold hover:bg-red-500/15"
+                                  className={`min-h-[42px] px-4 rounded-xl border text-xs font-semibold ${
+                                    experience.needsAttention
+                                      ? 'bg-red-500/10 text-red-300 border-red-500/20 hover:bg-red-500/15'
+                                      : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
+                                  }`}
                                 >
-                                  Revisar assinatura
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenApp?.(app)}
-                                  className="min-h-[42px] px-4 rounded-xl bg-white text-[#050505] text-xs font-semibold hover:bg-[#F5F7FA]"
-                                >
-                                  Abrir {app.name}
+                                  {experience.needsAttention ? 'Revisar assinatura' : 'Plano e cobrança'}
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => setActiveDashboardTab('billing')}
-                                className="min-h-[42px] px-4 rounded-xl border border-white/10 bg-white/5 text-white text-xs font-semibold hover:bg-white/10"
-                              >
-                                Plano e cobrança
-                              </button>
                             </div>
                           </div>
 
