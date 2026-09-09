@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { isCanonicalGlobalRole, canAccessNestFinanceDevelopment } from '../../../src/lib/permissionService.js';
+import { isCanonicalGlobalRole, canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -107,7 +107,7 @@ export async function resolveEcosystemAppAccess(params: {
   }
 
   const systemRole = userData.systemRole;
-  
+  const privilegePolicy = resolveEcosystemPrivilegePolicy(systemRole);
   const hasGlobalRole = isCanonicalGlobalRole(systemRole);
 
   // Etapa 2 — papel global validation
@@ -134,6 +134,35 @@ export async function resolveEcosystemAppAccess(params: {
       systemRole,
       denialReason:
         DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED
+    };
+  }
+
+  if (privilegePolicy.isEcosystemSupportStaff && appId === 'musicscale') {
+    return {
+      appId,
+      organizationId,
+      accessible: true,
+      isGlobalAccess: true,
+      accessSource: 'global_system_role',
+      systemRole,
+      roles: ['ecosystem_support'],
+      permissions: [
+        'songs.read', 'songs.create', 'songs.update', 'songs.delete',
+        'scales.read', 'scales.create', 'scales.update', 'scales.delete', 'scales.publish',
+        'bandScales.read', 'bandScales.create', 'bandScales.update', 'bandScales.delete',
+        'musicians.read', 'musicians.manageMusicalProfile', 'musicians.assignToScale',
+        'scaleResponses.readManaged'
+      ],
+      scopes: { musicscale: ['support'] },
+      decisionState: 'granted',
+      entitlement: {
+        subscriptionStatus: null,
+        organizationAppStatus: null,
+        canonicalStatus: 'active',
+        cancellationScheduled: false,
+        currentPeriodEndMs: null,
+        individualAccessSource: 'global_system_role'
+      }
     };
   }
 
