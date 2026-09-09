@@ -472,7 +472,7 @@ This separation is a core product invariant. It reduces alert fatigue and lets M
 
 ## 22. Pilot telemetry
 
-The first Action OS pilot telemetry layer is implemented behind the current certification branch using the existing buffered MillionsNest analytics infrastructure.
+The first Action OS pilot telemetry layer is implemented in `main` using the existing buffered MillionsNest analytics infrastructure.
 
 Initial interaction events:
 - action opened;
@@ -500,15 +500,23 @@ Allowed metadata is intentionally small:
 
 These events remain organization-scoped and are deliberately excluded from the global commercial Growth mirror.
 
+Analytics storage is also privacy-scoped:
+- authenticated members may append only a valid event bound to their organization;
+- user attribution must be the authenticated user or `none`;
+- ordinary organization members cannot read the analytics stream;
+- client updates/deletes are denied;
+- global system administrators retain read access for controlled pilot analysis.
+
 Telemetry is recorded only for explicit user interactions. The first pilot does not count every card render as an impression because React rerenders and reconnects could inflate the metric without proving human attention.
 
 ## 23. Immediate next step
 
-1. Certify and merge the privacy-safe Action OS interaction telemetry into `main`.
+1. Certify organization-analytics privacy so pilot telemetry cannot become a tenant-wide behavioral feed.
 2. Keep exact song-level review inside MusicScale; the Hub summarizes only source-owned change categories and deep-links to the specialist app.
 3. Use pilot interaction data to validate whether leaders actually open, defer and review the surfaced work before adding more telemetry.
-4. Add the next source only when NestJourney, Connect or another product exposes a factual signal/commitment/change contract; do not hardcode app-specific UI cards.
-5. Validate weekly use with real organizations before adding generative intelligence or expensive infrastructure.
+4. Do not add a NestJourney adapter until its shared Firebase mode is active; its current repository still runs real product behavior primarily through local/demo persistence.
+5. Do not add a Connect inbox adapter until Connect leaves `DEMO_MODE` and exposes backend-authoritative conversation signals.
+6. Validate weekly use with real organizations before adding generative intelligence or expensive infrastructure.
 
 ### Current invariant for the same event
 
