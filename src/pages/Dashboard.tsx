@@ -117,6 +117,9 @@ type MusicScaleHubSummary = {
     startsAtMs: number;
     songCount: number;
     functionNames: string[];
+    publishRevision: number;
+    responseSummaryAvailable: boolean;
+    pendingResponses: number;
   };
   updatedAtMs: number;
 };
@@ -1688,10 +1691,14 @@ export function Dashboard() {
       bandScales: [] as any[],
       configuredMembersCount: 0,
       responseSummaryAvailable: false,
-      responseCounts: { pending: 0, accepted: 0, maybe: 0, declined: 0 }
+      responseCounts: { pending: 0, accepted: 0, maybe: 0, declined: 0 },
+      personalResponseSummaryAvailable: false,
+      personalPendingResponses: 0
     };
     let responsesUnsubscribe: (() => void) | null = null;
     let responseScaleId: string | null = null;
+    let personalResponsesUnsubscribe: (() => void) | null = null;
+    let personalResponseScaleId: string | null = null;
     const currentMember = members.find(member => member.id === user.uid || member.uid === user.uid);
     const currentRole = String(currentMember?.role || currentMember?.organizationRole || '').toLowerCase();
     const canReadResponseSummary = isGlobalAdmin || currentRole === 'owner' || currentRole === 'admin';
@@ -1724,6 +1731,62 @@ export function Dashboard() {
             assignment?.userId === user.uid
           )
         : [];
+
+      if (nextPersonalScale?.id !== personalResponseScaleId) {
+        personalResponsesUnsubscribe?.();
+        personalResponsesUnsubscribe = null;
+        personalResponseScaleId = nextPersonalScale?.id || null;
+        live.personalResponseSummaryAvailable = false;
+        live.personalPendingResponses = 0;
+
+        if (nextPersonalScale?.id) {
+          personalResponsesUnsubscribe = onSnapshot(
+            query(
+              collection(db, `scales/${nextPersonalScale.id}/responses`),
+              where('userId', '==', user.uid)
+            ),
+            responseSnapshot => {
+              const respondedAssignmentIds = new Set<string>();
+              let pending = 0;
+
+              responseSnapshot.docs.forEach(responseDoc => {
+                const data = responseDoc.data() as any;
+                if (data?.active === false) return;
+
+                respondedAssignmentIds.add(
+                  data.eventAssignmentId || responseDoc.id
+                );
+
+                const status = String(data.status || 'pending').toLowerCase();
+                if (
+                  status !== 'accepted' &&
+                  status !== 'maybe' &&
+                  status !== 'declined'
+                ) {
+                  pending += 1;
+                }
+              });
+
+              pending += personalAssignments.filter((assignment: any) =>
+                !respondedAssignmentIds.has(assignment.eventAssignmentId)
+              ).length;
+
+              live.personalResponseSummaryAvailable = true;
+              live.personalPendingResponses = pending;
+              publishSummary();
+            },
+            error => {
+              live.personalResponseSummaryAvailable = false;
+              live.personalPendingResponses = 0;
+              publishSummary();
+              console.warn(
+                '[Dashboard] MusicScale personal response listener failed:',
+                error
+              );
+            }
+          );
+        }
+      }
 
       if (nextScale?.id !== responseScaleId) {
         responsesUnsubscribe?.();
@@ -1804,7 +1867,14 @@ export function Dashboard() {
             personalAssignments
               .map((assignment: any) => String(assignment?.functionName || '').trim())
               .filter(Boolean)
-          ))
+          )),
+          publishRevision:
+            typeof nextPersonalScale.publishRevision === 'number' &&
+            Number.isFinite(nextPersonalScale.publishRevision)
+              ? nextPersonalScale.publishRevision
+              : 0,
+          responseSummaryAvailable: live.personalResponseSummaryAvailable,
+          pendingResponses: live.personalPendingResponses
         } : null,
         updatedAtMs: Date.now()
       });
@@ -1860,6 +1930,7 @@ export function Dashboard() {
     return () => {
       unsubscribers.forEach(unsubscribe => unsubscribe());
       responsesUnsubscribe?.();
+      personalResponsesUnsubscribe?.();
     };
   }, [user, activeContextOrgId, musicScaleProjection?.accessible, isGlobalAdmin, members]);
 
