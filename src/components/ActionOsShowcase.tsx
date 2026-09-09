@@ -83,7 +83,7 @@ export function ActionOsShowcase() {
 
         <article className={`mt-5 grid gap-3 rounded-2xl border border-white/[0.065] bg-white/[0.022] p-3.5 ${isCompact ? "" : "sm:grid-cols-[auto_1fr_auto] sm:items-center"}`}>
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#2B85EB]/20 bg-[#2B85EB]/10">
-            <img src="/LogoIconMusicScale-1.png" alt="" className="h-5.5 w-5.5 object-contain" />
+            <img src="/LogoIconMusicScale-1.png" alt="" className="h-5 w-5 object-contain" />
           </div>
 
           <div className="min-w-0">
@@ -101,7 +101,7 @@ export function ActionOsShowcase() {
             </p>
           </div>
 
-          <div className={`flex gap-1.5 ${isCompact ? "grid grid-cols-3" : "sm:flex-col"}`}>
+          <div className={isCompact ? "grid grid-cols-3 gap-1.5" : "flex gap-1.5 sm:flex-col"}>
             <button type="button" className="min-h-[36px] rounded-lg bg-white px-3 text-[9px] font-semibold text-[#07090D]">
               <span className="inline-flex items-center justify-center gap-1">
                 {t("action_demo_open")}
@@ -315,21 +315,18 @@ export function ActionOsShowcase() {
                   <aside className="border-r border-white/[0.06] bg-[#06080D]/80 p-3">
                     <div className="space-y-1.5">
                       {[
-                        [LayoutGrid, t("action_demo_nav_home"), true],
-                        [Music2, "MusicScale", false],
-                        [UsersRound, t("action_demo_nav_team"), false],
-                        [CreditCard, t("action_demo_nav_billing"), false],
-                      ].map(([Icon, label, active]) => {
-                        const Cmp = Icon as typeof LayoutGrid;
-                        return (
-                          <div key={String(label)} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${active
-                            ? "border-[#2B85EB]/20 bg-[#2B85EB]/[0.09] text-white"
-                            : "border-transparent text-[#687486]"}`}>
-                            <Cmp className="h-3.5 w-3.5" />
-                            <span className="truncate text-[9px] font-semibold">{String(label)}</span>
-                          </div>
-                        );
-                      })}
+                        { icon: LayoutGrid, label: t("action_demo_nav_home"), active: true },
+                        { icon: Music2, label: "MusicScale", active: false },
+                        { icon: UsersRound, label: t("action_demo_nav_team"), active: false },
+                        { icon: CreditCard, label: t("action_demo_nav_billing"), active: false },
+                      ].map(({ icon: Icon, label, active }) => (
+                        <div key={label} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${active
+                          ? "border-[#2B85EB]/20 bg-[#2B85EB]/[0.09] text-white"
+                          : "border-transparent text-[#687486]"}`}>
+                          <Icon className="h-3.5 w-3.5" />
+                          <span className="truncate text-[9px] font-semibold">{label}</span>
+                        </div>
+                      ))}
                     </div>
                     <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.018] p-3">
                       <div className="text-[8px] font-bold uppercase tracking-[0.14em] text-[#556171]">{t("action_demo_system_label")}</div>
