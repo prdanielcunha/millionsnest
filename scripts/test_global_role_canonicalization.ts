@@ -36,7 +36,13 @@ assert.equal(isAssignableSystemRole('admin'), true, 'legacy admin input must be 
 assert.equal(ASSIGNABLE_SYSTEM_ROLES.includes('admin' as any), false, 'legacy admin must not be offered as a new role');
 
 assert.equal(isGlobalPrivilegedRole('ecosystem_support'), false, 'support role must not receive global governance');
-assert.equal(resolveEcosystemPrivilegePolicy('ecosystem_support').isEcosystemSupportStaff, true);
+const supportPolicy = resolveEcosystemPrivilegePolicy('ecosystem_support');
+assert.equal(supportPolicy.isEcosystemSupportStaff, true);
+assert.equal(supportPolicy.canEnterAnyOrganization, true, 'support must be able to enter any tenant for support');
+assert.equal(supportPolicy.canOperateAnyOrganization, true, 'support must have scoped operational tenant access');
+assert.equal(supportPolicy.canManageGlobalGovernance, false, 'support must never inherit global governance');
+assert.equal(ASSIGNABLE_SYSTEM_ROLES.includes('ecosystem_support'), true, 'support must be assignable as a canonical system role');
+assert.equal(canChangeSystemRole('ecosystem_support', 'user', 'global_admin').allowed, false, 'support cannot manage global roles');
 
 assert.equal(canChangeSystemRole('ceo', 'user', 'founder').allowed, true);
 assert.equal(canChangeSystemRole('founder', 'user', 'global_admin').allowed, true);
