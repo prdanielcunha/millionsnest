@@ -28,6 +28,41 @@ assert.deepEqual(actionPayload, {
   },
 });
 
+const dismissPayload = buildActionOsAnalyticsPayload({
+  organizationId: 'org-1',
+  userId: 'user-1',
+  kind: 'action_dismissed',
+  lane: 'action',
+  sourceApp: 'musicscale',
+  signalType: 'musicscale_pending_responses',
+  priority: 'high',
+  dismissCode: 'already_handled',
+});
+
+assert.deepEqual(dismissPayload?.metadata, {
+  action: 'action_dismissed',
+  lane: 'action',
+  sourceApp: 'musicscale',
+  signalType: 'musicscale_pending_responses',
+  priority: 'high',
+  dismissCode: 'already_handled',
+});
+
+const invalidDismissCode = buildActionOsAnalyticsPayload({
+  organizationId: 'org-1',
+  userId: 'user-1',
+  kind: 'action_dismissed',
+  lane: 'action',
+  sourceApp: 'hub',
+  dismissCode: 'free text with a person name' as any,
+});
+
+assert.deepEqual(invalidDismissCode?.metadata, {
+  action: 'action_dismissed',
+  lane: 'action',
+  sourceApp: 'hub',
+});
+
 const changePayload = buildActionOsAnalyticsPayload({
   organizationId: 'org-1',
   userId: 'user-1',
@@ -119,6 +154,8 @@ for (const payload of [
   actionPayload,
   changePayload,
   commitmentPayload,
+  dismissPayload,
+  invalidDismissCode,
   unsafeSignal,
 ]) {
   assert.ok(payload);
@@ -132,7 +169,7 @@ for (const payload of [
 
   assert.ok(
     keys.every(key =>
-      ['action', 'lane', 'sourceApp', 'signalType', 'priority']
+      ['action', 'lane', 'sourceApp', 'signalType', 'priority', 'dismissCode']
         .includes(key)
     ),
     'Action OS telemetry metadata must stay inside the explicit allowlist'
@@ -248,6 +285,18 @@ for (const kind of [
     `workspace must track ${kind}`
   );
 }
+
+assert.match(
+  workspaceSource,
+  /dismiss_reason_not_relevant/,
+  'dismiss UI must offer structured pilot feedback instead of free text'
+);
+
+assert.match(
+  workspaceSource,
+  /onSetActionPreference\([\s\S]*?'dismissed'[\s\S]*?reason\.code/,
+  'dismiss UI must pass an allowlisted dismiss code to persistence/telemetry orchestration'
+);
 
 assert.ok(
   !workspaceSource.includes('onActionOsInteraction({\n        sourceEntityId:'),
