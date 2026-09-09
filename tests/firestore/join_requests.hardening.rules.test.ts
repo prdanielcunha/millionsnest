@@ -43,18 +43,18 @@ test('canonical tenant admin can get and list join requests', async () => {
   await assertSucceeds(getDocs(collection(db, 'organizations/a/join_requests')));
 });
 
-for (const uid of ['ceo', 'global-admin', 'ecosystem-owner', 'founder']) {
-  test(`${uid} exact canonical global can get and list join requests but cannot mutate`, async () => {
+for (const uid of ['ceo', 'global-admin', 'ecosystem-owner', 'founder', 'system-admin']) {
+  test(`${uid} global governance cannot bypass backend commands for raw join request access`, async () => {
     const db = env.authenticatedContext(uid).firestore();
-    await assertSucceeds(getDoc(doc(db, 'organizations/a/join_requests/requester')));
-    await assertSucceeds(getDocs(collection(db, 'organizations/a/join_requests')));
+    await assertFails(getDoc(doc(db, 'organizations/a/join_requests/requester')));
+    await assertFails(getDocs(collection(db, 'organizations/a/join_requests')));
     await assertFails(setDoc(doc(db, 'organizations/a/join_requests/new'), { status: 'pending' }));
     await assertFails(updateDoc(doc(db, 'organizations/a/join_requests/requester'), { status: 'approved' }));
     await assertFails(deleteDoc(doc(db, 'organizations/a/join_requests/requester')));
   });
 }
 
-for (const uid of ['member', 'system-admin', 'global-support', 'ecosystem-support', 'outsider']) {
+for (const uid of ['member', 'global-support', 'ecosystem-support', 'outsider']) {
   test(`${uid} cannot read or directly mutate join requests`, async () => {
     const db = env.authenticatedContext(uid).firestore();
     await assertFails(getDoc(doc(db, 'organizations/a/join_requests/requester')));
