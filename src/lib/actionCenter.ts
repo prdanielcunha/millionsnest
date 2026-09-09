@@ -4,9 +4,12 @@ export type ActionDestination =
   | { kind: 'app'; appId: string; path?: string }
   | { kind: 'hub'; section: 'organization' | 'members' | 'billing' };
 
+export type ActionPreferenceMode = 'snoozed' | 'dismissed';
+
 export interface ReadOnlyHubAction {
   id: string;
   dedupeKey: string;
+  fingerprint: string;
   sourceApp: 'hub' | 'musicscale';
   signalType:
     | 'organization_incomplete'
@@ -19,6 +22,14 @@ export interface ReadOnlyHubAction {
   destination: ActionDestination;
   dueAtMs?: number | null;
   createdAtMs?: number | null;
+}
+
+export interface ActionPreference {
+  dedupeKey: string;
+  fingerprint: string;
+  mode: ActionPreferenceMode;
+  snoozedUntilMs?: number | null;
+  updatedAtMs?: number | null;
 }
 
 export interface ActionProjectionInput {
@@ -42,7 +53,7 @@ export interface ActionProjectionInput {
 }
 
 /**
- * Slice 1 Action OS projection.
+ * Action OS projection.
  *
  * Pure and read-only by design:
  * - no Firestore writes
@@ -59,6 +70,7 @@ export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnly
     actions.push({
       id: 'hub:organization_incomplete',
       dedupeKey: 'hub:organization_incomplete',
+      fingerprint: 'hub:organization_incomplete:v1',
       sourceApp: 'hub',
       signalType: 'organization_incomplete',
       priority: 'high',
@@ -72,6 +84,7 @@ export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnly
     actions.push({
       id: 'hub:pending_invites',
       dedupeKey: 'hub:pending_invites',
+      fingerprint: `hub:pending_invites:${input.pendingInvitesCount}`,
       sourceApp: 'hub',
       signalType: 'pending_invites',
       priority: 'normal',
@@ -91,6 +104,7 @@ export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnly
     actions.push({
       id: `musicscale:pending_responses:${nextScale.id}`,
       dedupeKey: `musicscale:pending_responses:${nextScale.id}`,
+      fingerprint: `musicscale:pending_responses:${nextScale.id}:${nextScale.pendingResponses}`,
       sourceApp: 'musicscale',
       signalType: 'musicscale_pending_responses',
       priority: 'high',
@@ -118,5 +132,34 @@ export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnly
     if (aDue !== bDue) return aDue - bDue;
 
     return a.dedupeKey.localeCompare(b.dedupeKey);
+  });
+}
+
+/**
+ * Applies user-scoped interaction preferences without changing the source truth.
+ *
+ * A dismissed/snoozed action reappears when its fingerprint changes, so a
+ * materially changed signal cannot remain hidden forever.
+ */
+export function applyActionPreferences(
+  actions: ReadOnlyHubAction[],
+  preferences: ActionPreference[],
+  nowMs = Date.now()
+): ReadOnlyHubAction[] {
+  const byKey = new Map(preferences.map(preference => [preference.dedupeKey, preference]));
+
+  return actions.filter(action => {
+    const preference = byKey.get(action.dedupeKey);
+    if (!preference) return true;
+    if (preference.fingerprint !== action.fingerprint) return true;
+
+    if (preference.mode === 'dismissed') return false;
+
+    if (preference.mode === 'snoozed') {
+      const until = preference.snoozedUntilMs ?? 0;
+      return until <= nowMs;
+    }
+
+    return true;
   });
 }
