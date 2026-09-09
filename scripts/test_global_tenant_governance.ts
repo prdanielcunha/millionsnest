@@ -59,6 +59,9 @@ assert.equal(server.includes('canManageTenantBilling(systemRole)'), true, 'billi
 assert.equal(server.includes("action: 'organization.billing.reactivated'"), true, 'global billing mutation must be audited');
 assert.equal(server.includes("action: 'organization.billing.portal_opened'"), true, 'global billing portal access must be audited');
 assert.equal(server.includes('canManageTenantSettings(actorData.systemRole)'), true, 'organization settings must honor global tenant settings governance');
+assert.equal(server.includes('const billingSubjectUid = isSystemAdmin ? targetOwnerUid : uid'), true, 'global billing reconciliation must mutate the tenant billing owner, never the operator');
+assert.equal(server.includes('userId: billingSubjectUid'), true, 'reactivation must project subscription state to the tenant billing subject');
+assert.equal(server.includes("code: 'GLOBAL_CHECKOUT_REQUIRES_TENANT_CUSTOMER'"), true, 'global cross-tenant checkout must remain customer-bound');
 
 const portalStart = server.indexOf("app.post('/api/v1/billing/portal'");
 const portalEnd = server.indexOf("// API Fallback mechanism", portalStart);
@@ -78,6 +81,8 @@ assert.equal(
 const dashboard = readFileSync('src/pages/Dashboard.tsx', 'utf8');
 assert.equal(dashboard.includes('/ownership/transfer'), true, 'dashboard must expose the dedicated ownership-transfer command');
 assert.equal(dashboard.includes('ownershipTransferReason.trim().length < 8'), true, 'global transfer UX must require an explicit reason');
+assert.equal(dashboard.includes('isGlobalTenantGovernanceSession'), true, 'global cross-tenant billing UI must distinguish governance from customer checkout');
+assert.equal(dashboard.includes("data.action === 'customer_checkout_required'"), true, 'global reactivation must surface customer checkout handoff instead of redirecting the operator');
 assert.equal(dashboard.includes('Sua conta global continuará fora do membership do tenant.'), true, 'UI must make global-vs-tenant identity boundary explicit');
 
 const organizationManager = readFileSync('src/components/OrganizationManager.tsx', 'utf8');
