@@ -507,17 +507,20 @@ async function runTests() {
     assertionCount++; assert.ok(dashboardSrc.includes("billing.subscription.upgraded"));
 
     const homeSrc = fs.readFileSync('src/components/dashboard/EcosystemWorkspaceHome.tsx', 'utf-8');
+    // Design 3 consolidated MusicScale launch authority into one canonical
+    // workspace CTA. Lock that single guarded path instead of the former
+    // duplicated launcher count.
     const isReadyCount = (homeSrc.match(/const isReadyToOpen = \[/g) || []).length;
-    check(isReadyCount, 2);
+    check(isReadyCount, 1);
     
     const isDisabledCount = (homeSrc.match(/const isPrimaryActionDisabled = \[/g) || []).length;
-    check(isDisabledCount, 2);
+    check(isDisabledCount, 1);
     
     const disabledCount = (homeSrc.match(/disabled=\{isPrimaryActionDisabled\}/g) || []).length;
-    check(disabledCount, 2);
+    check(disabledCount, 1);
     
     const launchCount = (homeSrc.match(/else if \(isReadyToOpen && musicScaleApp\) \{/g) || []).length;
-    check(launchCount, 2);
+    check(launchCount, 1);
     
     const inlineArrayCount = (homeSrc.match(/\['active',\s*'trialing',\s*'cancel_scheduled',\s*'administrative'\]\.includes/g) || []).length;
     check(inlineArrayCount, 0);
