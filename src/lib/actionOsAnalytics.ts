@@ -3,6 +3,13 @@ export type ActionOsLane =
   | 'change'
   | 'commitment';
 
+export type ActionOsDismissCode =
+  | 'not_relevant'
+  | 'already_handled'
+  | 'not_my_responsibility'
+  | 'too_early'
+  | 'no_reason';
+
 export type ActionOsInteractionKind =
   | 'action_opened'
   | 'action_snoozed'
@@ -18,6 +25,7 @@ export interface ActionOsInteractionInput {
   sourceApp: 'hub' | 'musicscale';
   signalType?: string;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
+  dismissCode?: ActionOsDismissCode;
 }
 
 export interface ActionOsAnalyticsPayload {
@@ -30,10 +38,18 @@ export interface ActionOsAnalyticsPayload {
     sourceApp: 'hub' | 'musicscale';
     signalType?: string;
     priority?: 'low' | 'normal' | 'high' | 'urgent';
+    dismissCode?: ActionOsDismissCode;
   };
 }
 
 const SAFE_SIGNAL = /^[a-z0-9_:-]{1,80}$/;
+const SAFE_DISMISS_CODES = new Set<ActionOsDismissCode>([
+  'not_relevant',
+  'already_handled',
+  'not_my_responsibility',
+  'too_early',
+  'no_reason',
+]);
 
 function safeSignalType(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -54,6 +70,12 @@ export function buildActionOsAnalyticsPayload(
   if (!organizationId || !userId) return null;
 
   const signalType = safeSignalType(input.signalType);
+  const dismissCode =
+    input.kind === 'action_dismissed' &&
+    input.dismissCode &&
+    SAFE_DISMISS_CODES.has(input.dismissCode)
+      ? input.dismissCode
+      : undefined;
 
   return {
     organizationId,
@@ -65,6 +87,7 @@ export function buildActionOsAnalyticsPayload(
       sourceApp: input.sourceApp,
       ...(signalType ? { signalType } : {}),
       ...(input.priority ? { priority: input.priority } : {}),
+      ...(dismissCode ? { dismissCode } : {}),
     },
   };
 }

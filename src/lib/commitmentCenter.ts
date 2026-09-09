@@ -1,3 +1,6 @@
+export const PREPARATION_WINDOW_DAYS = 7;
+export const PREPARATION_WINDOW_MS = PREPARATION_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
 export type CommitmentDestination =
   | { kind: 'app'; appId: string; path?: string };
 
@@ -46,6 +49,7 @@ export function deriveReadOnlyHubCommitments(
   if (!scale?.id) return [];
   if (!Number.isFinite(scale.startsAtMs)) return [];
   if (scale.startsAtMs < nowMs - 6 * 60 * 60 * 1000) return [];
+  if (scale.startsAtMs > nowMs + PREPARATION_WINDOW_MS) return [];
 
   const functionNames = Array.from(
     new Set(

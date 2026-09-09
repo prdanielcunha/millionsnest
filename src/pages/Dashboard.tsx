@@ -42,7 +42,7 @@ import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
 import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "../lib/actionCenter.js";
 import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
 import { fetchActionPreferences, saveActionPreference } from "../services/actionCenterClient.js";
-import { trackActionOsInteraction } from "../lib/actionOsAnalytics.js";
+import { trackActionOsInteraction, type ActionOsDismissCode } from "../lib/actionOsAnalytics.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -100,6 +100,7 @@ type MusicScaleHubSummary = {
     id: string;
     date: string;
     time?: string | null;
+    startsAtMs: number;
     status?: string | null;
     songCount: number;
     assignmentCount: number;
@@ -591,7 +592,8 @@ export function Dashboard() {
 
   const handleSetActionPreference = async (
     action: ReadOnlyHubAction,
-    mode: ActionPreferenceMode
+    mode: ActionPreferenceMode,
+    dismissCode?: ActionOsDismissCode
   ) => {
     if (!user || !activeContextOrgId || actionPreferenceBusyKey) return;
 
@@ -628,6 +630,9 @@ export function Dashboard() {
         sourceApp: action.sourceApp,
         signalType: action.signalType,
         priority: action.priority,
+        ...(mode === 'dismissed'
+          ? { dismissCode: dismissCode || 'no_reason' }
+          : {}),
       });
 
       feedback.success(
@@ -1806,9 +1811,8 @@ export function Dashboard() {
     let responseScaleId: string | null = null;
     let personalResponsesUnsubscribe: (() => void) | null = null;
     let personalResponseScaleId: string | null = null;
-    const currentMember = members.find(member => member.id === user.uid || member.uid === user.uid);
-    const currentRole = String(currentMember?.role || currentMember?.organizationRole || '').toLowerCase();
-    const canReadResponseSummary = isGlobalAdmin || currentRole === 'owner' || currentRole === 'admin';
+    const canReadResponseSummary =
+      musicScaleProjection?.canReadManagedScaleResponses === true;
 
     const publishSummary = () => {
       if (currentActiveOrgIdRef.current !== orgId) return;
@@ -1958,6 +1962,7 @@ export function Dashboard() {
           id: nextScale.id,
           date: nextScale.date,
           time: nextScale.time || null,
+          startsAtMs: toEventEpoch(nextScale),
           status: nextScale.status || null,
           songCount: Array.isArray(nextScale.songIds) ? nextScale.songIds.length : 0,
           assignmentCount: activeAssignments.length,
@@ -2042,7 +2047,12 @@ export function Dashboard() {
       responsesUnsubscribe?.();
       personalResponsesUnsubscribe?.();
     };
-  }, [user, activeContextOrgId, musicScaleProjection?.accessible, isGlobalAdmin, members]);
+  }, [
+    user,
+    activeContextOrgId,
+    musicScaleProjection?.accessible,
+    musicScaleProjection?.canReadManagedScaleResponses
+  ]);
 
   useEffect(() => {
     fetch('/api/v1/billing/products')

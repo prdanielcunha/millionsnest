@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { deriveReadOnlyHubCommitments } from '../src/lib/commitmentCenter.js';
+import {
+  PREPARATION_WINDOW_DAYS,
+  deriveReadOnlyHubCommitments
+} from '../src/lib/commitmentCenter.js';
 
 const now = Date.parse('2026-09-09T10:00:00Z');
 const future = now + 3 * 24 * 60 * 60 * 1000;
@@ -49,6 +52,26 @@ assert.deepEqual(projected[0]?.destination, {
   appId: 'musicscale',
   path: '/scales/scale-1'
 });
+
+const outsidePreparationWindow = deriveReadOnlyHubCommitments({
+  musicScale: {
+    ready: true,
+    nextPersonalScale: {
+      id: 'scale-too-far',
+      date: '2026-09-18',
+      time: '19:00',
+      startsAtMs: now + (PREPARATION_WINDOW_DAYS + 1) * 24 * 60 * 60 * 1000,
+      songCount: 5,
+      functionNames: ['Teclado']
+    }
+  }
+}, now);
+
+assert.deepEqual(
+  outsidePreparationWindow,
+  [],
+  'personal commitments outside the 7-day preparation window must stay out of the Hub'
+);
 
 const alreadyEnded = deriveReadOnlyHubCommitments({
   musicScale: {

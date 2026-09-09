@@ -97,6 +97,59 @@ test('active member can append a valid self-attributed analytics event', async (
   );
 });
 
+test('active member can append privacy-safe structured Action OS dismiss feedback', async () => {
+  const db = env.authenticatedContext('member-1').firestore();
+
+  await assertSucceeds(
+    setDoc(
+      doc(db, 'organizations/org-1/analytics/dismiss-feedback'),
+      event('member-1', {
+        metadata: {
+          action: 'action_dismissed',
+          lane: 'action',
+          sourceApp: 'musicscale',
+          signalType: 'musicscale_pending_responses',
+          priority: 'high',
+          dismissCode: 'already_handled',
+        },
+      })
+    )
+  );
+});
+
+test('Action OS analytics rejects free-text or unknown metadata fields', async () => {
+  const db = env.authenticatedContext('member-1').firestore();
+
+  await assertFails(
+    setDoc(
+      doc(db, 'organizations/org-1/analytics/free-text-feedback'),
+      event('member-1', {
+        metadata: {
+          action: 'action_dismissed',
+          lane: 'action',
+          sourceApp: 'musicscale',
+          dismissCode: 'already_handled',
+          notes: 'Pastoral or personnel text must never be accepted here',
+        },
+      })
+    )
+  );
+
+  await assertFails(
+    setDoc(
+      doc(db, 'organizations/org-1/analytics/invalid-dismiss-code'),
+      event('member-1', {
+        metadata: {
+          action: 'action_dismissed',
+          lane: 'action',
+          sourceApp: 'musicscale',
+          dismissCode: 'custom_free_text',
+        },
+      })
+    )
+  );
+});
+
 test('active member can append a valid anonymous-within-tenant analytics event', async () => {
   const db = env.authenticatedContext('member-1').firestore();
 

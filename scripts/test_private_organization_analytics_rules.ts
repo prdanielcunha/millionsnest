@@ -46,6 +46,37 @@ assert.match(
 );
 
 assert.match(
+  rules,
+  /function isValidOrganizationActionOsAnalytics\(\)/,
+  'Action OS organization analytics must have a dedicated privacy validator'
+);
+
+assert.match(
+  analyticsBlock,
+  /eventType != 'action_os_interaction'[\s\S]*?isValidOrganizationActionOsAnalytics\(\)/,
+  'Action OS analytics must pass the strict metadata validator before append'
+);
+
+for (const safeDismissCode of [
+  'not_relevant',
+  'already_handled',
+  'not_my_responsibility',
+  'too_early',
+  'no_reason',
+]) {
+  assert.ok(
+    rules.includes(`'${safeDismissCode}'`),
+    `Action OS analytics rule must allow the structured dismiss code: ${safeDismissCode}`
+  );
+}
+
+assert.match(
+  rules,
+  /metadata\.keys\(\)\.hasOnly\(\[[\s\S]*?'dismissCode'[\s\S]*?\]\)/,
+  'Action OS analytics metadata must use an explicit field allowlist'
+);
+
+assert.match(
   analyticsBlock,
   /allow read:\s*if isSystemAdmin\(\);/,
   'ordinary tenant members must not receive analytics read access'

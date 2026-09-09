@@ -415,13 +415,13 @@ The Hub already has a premium **Hoje / Today / Hoy** section backed by determini
 
 User-scoped snooze/dismiss interaction state is also implemented behind authenticated backend commands. A source condition is never falsely marked resolved by a UI click, and materially changed fingerprints resurface automatically.
 
-The first **Commitments** lane is now implemented in `main`: normal participation that matters to the current user but is not a problem. Its first adapter projects the authenticated user's next MusicScale assignment from data already loaded by the Hub, without a new collection or paid service.
+The first **Commitments** lane is implemented: normal participation that matters to the current user but is not a problem. Its first adapter projects the authenticated user's next MusicScale assignment from data already loaded by the Hub, without a new collection or paid service. MusicScale preparation is intentionally bounded to the next **7 days**, so a distant future assignment does not compete with work that matters this week.
 
 Personal responsibility on top of that commitment is also implemented in `main`. A MusicScale assignment can therefore produce two different truths at the same time:
 - **Commitment:** “you are scheduled”;
 - **Action:** “you still need to confirm”.
 
-Leader-wide pending confirmations remain a third, separate responsibility. This prevents a pastor who is also a musician from losing either their personal task or their leadership view.
+Leader-wide pending confirmations remain a third, separate responsibility. This prevents a pastor who is also a musician from losing either their personal task or their leadership view. Leadership visibility is derived server-side from the canonical MusicScale managed-response capability/role semantics (global access, explicit `scaleResponses.readManaged`, owner/admin/leader) instead of being guessed from Hub UI roles. The event start time is preserved as the action due time so urgency can be ordered by the real service date.
 
 The **Changes** lane is now implemented in `main`. Its first adapter consumes only recipient-scoped `music_scale_changed` notifications produced by MusicScale itself, including its deterministic `preparationChangeSummary`. The Hub does not infer changes from timestamps or guess what changed.
 
@@ -496,7 +496,8 @@ Allowed metadata is intentionally small:
 - semantic lane;
 - source app;
 - normalized signal type when safe;
-- action priority when applicable.
+- action priority when applicable;
+- optional structured dismiss code from a closed allowlist (`not_relevant`, `already_handled`, `not_my_responsibility`, `too_early`, `no_reason`).
 
 These events remain organization-scoped and are deliberately excluded from the global commercial Growth mirror.
 
@@ -509,14 +510,19 @@ Analytics storage is also privacy-scoped:
 
 Telemetry is recorded only for explicit user interactions. The first pilot does not count every card render as an impression because React rerenders and reconnects could inflate the metric without proving human attention.
 
+Dismiss feedback is optional and structured only. The Hub never sends a free-text reason. This gives the pilot a usable false-positive signal without creating a pastoral, personnel or behavioral note stream.
+
 ## 23. Immediate next step
 
-1. Certify organization-analytics privacy so pilot telemetry cannot become a tenant-wide behavioral feed.
-2. Keep exact song-level review inside MusicScale; the Hub summarizes only source-owned change categories and deep-links to the specialist app.
-3. Use pilot interaction data to validate whether leaders actually open, defer and review the surfaced work before adding more telemetry.
-4. Do not add a NestJourney adapter until its shared Firebase mode is active; its current repository still runs real product behavior primarily through local/demo persistence.
-5. Do not add a Connect inbox adapter until Connect leaves `DEMO_MODE` and exposes backend-authoritative conversation signals.
-6. Validate weekly use with real organizations before adding generative intelligence or expensive infrastructure.
+1. Promote the certified 7-day preparation / managed-response capability release through `main` and then `production` only after CI is clean.
+2. Run the first real pilot with the Action / Commitment / Change lanes and use explicit interaction plus structured-dismiss telemetry to measure usefulness and false positives.
+3. Keep exact song-level review inside MusicScale; the Hub summarizes only source-owned change categories and deep-links to the specialist app.
+4. Do not infer whether a musician "prepared" from app opens, time-on-screen or similar surveillance proxies. If preparation acknowledgement is ever needed, it must be an explicit user action.
+5. Do not add persistent manual/delegated Action Center workflow until the derived-action pilot proves repeated use; assignment, lifecycle and audit remain the next product slice after validation.
+6. Do not add a NestJourney adapter until its shared Firebase mode is active and backend-authoritative.
+7. Do not add a Connect inbox adapter until Connect leaves `DEMO_MODE` and exposes backend-authoritative conversation signals.
+8. Replace broad client-side MusicScale summary reads with a bounded source-owned read model before scale history/tenant volume makes the current low-cost pilot projection materially inefficient.
+9. Validate weekly use with real organizations before adding generative intelligence or expensive infrastructure.
 
 ### Current invariant for the same event
 
