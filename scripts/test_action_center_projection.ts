@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { deriveReadOnlyHubActions } from '../src/lib/actionCenter.js';
 
 const baseInput = {
-  organization: { name: 'OBPC Monte Castelo', slug: 'obpc-monte-castelo' },
+  organization: { isConfigured: true },
   permissions: {
     canManageOrganization: true,
     canManageMembers: true
@@ -43,7 +43,7 @@ assert.deepEqual(pendingResponses[0]?.destination, {
 });
 
 const multipleActions = deriveReadOnlyHubActions({
-  organization: { name: '', slug: '' },
+  organization: { isConfigured: false },
   permissions: {
     canManageOrganization: true,
     canManageMembers: true
@@ -75,7 +75,7 @@ assert.ok(
 );
 
 const unauthorized = deriveReadOnlyHubActions({
-  organization: { name: '', slug: '' },
+  organization: { isConfigured: false },
   permissions: {
     canManageOrganization: false,
     canManageMembers: false
