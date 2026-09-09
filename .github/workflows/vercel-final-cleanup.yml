@@ -1,0 +1,79 @@
+name: Vercel Final Cleanup
+on:
+  push:
+    branches: [ production ]
+    paths: [".github/workflows/vercel-final-cleanup.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+      - name: Load token
+        run: |
+          set -euo pipefail
+          T="$(gcloud secrets versions access latest --secret=mn-vercel-admin-token --project=millionsnest)"
+          test -n "$T"
+          echo "::add-mask::$T"
+          echo "VERCEL_TOKEN=$T" >> "$GITHUB_ENV"
+      - name: Validate project-scoped access
+        run: |
+          set -euo pipefail
+          TEAM="team_qtUDx2cqVcgfKlO5T17JdqJP"
+          CODE="$(curl -sS -o /tmp/p.json -w '%{http_code}' -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v9/projects/prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju?teamId=$TEAM")"
+          echo "VERCEL_PROJECT_CHECK_HTTP=$CODE"
+          if [ "$CODE" != "200" ]; then
+            python3 - <<'PY'
+import json
+try:
+  x=json.load(open('/tmp/p.json'))
+  e=x.get('error') or {}
+  print("VERCEL_ERROR_CODE=", e.get('code'))
+  print("VERCEL_ERROR_MESSAGE=", e.get('message'))
+except Exception:
+  print("VERCEL_RESPONSE_UNREADABLE")
+PY
+            exit 1
+          fi
+          echo "VERCEL_PROJECT_ACCESS_OK"
+      - name: Remove custom domains
+        run: |
+          set -euo pipefail
+          TEAM="team_qtUDx2cqVcgfKlO5T17JdqJP"
+          rm_domain() {
+            P="$1"; D="$2"
+            C="$(curl -sS -o /tmp/r.json -w '%{http_code}' -X DELETE -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v9/projects/$P/domains/$D?teamId=$TEAM")"
+            case "$C" in
+              200|204|404) echo "REMOVED_OR_ABSENT $D HTTP=$C" ;;
+              *) cat /tmp/r.json; exit 1 ;;
+            esac
+          }
+          rm_domain prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju millionsnest.com
+          rm_domain prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju www.millionsnest.com
+          rm_domain prj_uNXRuXYTmbB062k0klWLhRfj8OLh musicscale.millionsnest.com
+          rm_domain prj_z5h2rI0DSmSNoLj40FU7nA4jektP nestfinance.millionsnest.com
+          rm_domain prj_AtXHj9MbpSoNUePtnS9U0tBhT3en connect.millionsnest.com
+          rm_domain prj_X15W5pqfVMo7ARQMcyixtBa1QmIr nestjourney.millionsnest.com
+          echo "VERCEL_CUSTOM_DOMAINS_REMOVED"
+      - name: Verify
+        run: |
+          set -euo pipefail
+          TEAM="team_qtUDx2cqVcgfKlO5T17JdqJP"
+          for P in prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju prj_uNXRuXYTmbB062k0klWLhRfj8OLh prj_z5h2rI0DSmSNoLj40FU7nA4jektP prj_AtXHj9MbpSoNUePtnS9U0tBhT3en prj_X15W5pqfVMo7ARQMcyixtBa1QmIr; do
+            curl -fsS -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v9/projects/$P/domains?teamId=$TEAM&limit=100" > /tmp/d.json
+            python3 - <<'PY'
+import json
+x=json.load(open('/tmp/d.json'))
+bad=[r.get('name','') for r in (x.get('domains') or []) if r.get('name','').endswith('millionsnest.com')]
+assert not bad, bad
+print("PROJECT_CUSTOM_DOMAINS_NONE")
+PY
+          done
+          echo "VERCEL_FINAL_CLEAN_OK"
