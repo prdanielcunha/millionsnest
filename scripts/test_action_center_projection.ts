@@ -42,6 +42,11 @@ assert.equal(pendingResponses.length, 1);
 assert.equal(pendingResponses[0]?.signalType, 'musicscale_pending_responses');
 assert.equal(pendingResponses[0]?.translationParams?.count, 3);
 assert.equal(
+  pendingResponses[0]?.dueAtMs,
+  1_800_000_000_000,
+  'MusicScale leadership actions must preserve the event start as their due time'
+);
+assert.equal(
   pendingResponses[0]?.fingerprint,
   'musicscale:pending_responses:scale-123:3'
 );
