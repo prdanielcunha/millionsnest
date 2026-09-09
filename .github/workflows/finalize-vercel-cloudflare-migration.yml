@@ -1,4 +1,5 @@
 name: Finalize Vercel Cloudflare Migration
+# Vercel token refresh trigger
 
 on:
   push:
