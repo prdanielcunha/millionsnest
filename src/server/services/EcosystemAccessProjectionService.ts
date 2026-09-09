@@ -3,6 +3,36 @@ import { mapCanonicalDecisionToCatalogState, MusicScaleAccessProjection } from '
 import { resolveEcosystemAppAccess } from './EcosystemAccessResolver.js';
 import * as admin from 'firebase-admin';
 
+function normalizeOrganizationRole(value: unknown): string {
+  const role = String(value || '').trim().toLowerCase();
+  if (['owner', 'dono'].includes(role)) return 'owner';
+  if (['admin', 'administrator', 'administrador'].includes(role)) return 'admin';
+  if ([
+    'leader', 'lider', 'líder', 'lider / ministro', 'líder / ministro',
+    'minister', 'ministro', 'pastor', 'worship_leader', 'music_leader'
+  ].includes(role)) return 'leader';
+  return role;
+}
+
+function canReadManagedScaleResponses(accessDecision: any): boolean {
+  if (accessDecision?.isGlobalAccess === true) return true;
+
+  const permissions = Array.isArray(accessDecision?.permissions)
+    ? accessDecision.permissions.map((value: unknown) => String(value))
+    : [];
+
+  if (
+    permissions.includes('*') ||
+    permissions.includes('scaleResponses.readManaged')
+  ) {
+    return true;
+  }
+
+  return ['owner', 'admin', 'leader'].includes(
+    normalizeOrganizationRole(accessDecision?.organizationRole)
+  );
+}
+
 export interface EcosystemAccessProjectionDependencies {
   verifyIdToken: (token: string) => Promise<admin.auth.DecodedIdToken>;
   getDb: () => admin.firestore.Firestore | null;
@@ -109,6 +139,7 @@ export async function handleEcosystemAccessProjectionRequest(
       decisionState: accessDecision.accessible ? 'granted' : 'denied',
       denialReason: accessDecision.denialReason || null,
       catalogState,
+      canReadManagedScaleResponses: canReadManagedScaleResponses(accessDecision),
       entitlement: accessDecision.entitlement ? {
         canonicalStatus: accessDecision.entitlement.canonicalStatus,
         cancellationScheduled: accessDecision.entitlement.cancellationScheduled,
