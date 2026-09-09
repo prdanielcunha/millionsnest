@@ -55,6 +55,8 @@ assert.equal(transferService.includes("action: 'organization.ownership.transferr
 
 const server = readFileSync('server.ts', 'utf8');
 assert.equal(server.includes("app.post('/api/v1/organizations/:organizationId/ownership/transfer'"), true);
+assert.equal(server.includes("app.get('/api/v1/organizations/:organizationId/join-requests'"), true, 'global join-request visibility must go through an authenticated backend route');
+assert.equal(server.includes('const actorGlobal = canManageTenantMembers(actorSystemRole)'), true, 'join-request backend listing must use canonical tenant-member governance');
 assert.equal(server.includes('canManageTenantBilling(systemRole)'), true, 'billing reactivation must honor global tenant billing governance');
 assert.equal(server.includes("action: 'organization.billing.reactivated'"), true, 'global billing mutation must be audited');
 assert.equal(server.includes("action: 'organization.billing.portal_opened'"), true, 'global billing portal access must be audited');
@@ -83,6 +85,8 @@ assert.equal(
 
 const dashboard = readFileSync('src/pages/Dashboard.tsx', 'utf8');
 assert.equal(dashboard.includes('/ownership/transfer'), true, 'dashboard must expose the dedicated ownership-transfer command');
+assert.equal(dashboard.includes('/join-requests'), true, 'dashboard must load global join requests through the authenticated backend');
+assert.equal(dashboard.includes("if (isGlobalAdmin)"), true, 'global join-request refresh must avoid raw Firestore subscriptions');
 assert.equal(dashboard.includes('ownershipTransferReason.trim().length < 8'), true, 'global transfer UX must require an explicit reason');
 assert.equal(dashboard.includes('isGlobalTenantGovernanceSession'), true, 'global cross-tenant billing UI must distinguish governance from customer checkout');
 assert.equal(dashboard.includes("data.action === 'customer_checkout_required'"), true, 'global reactivation must surface customer checkout handoff instead of redirecting the operator');
