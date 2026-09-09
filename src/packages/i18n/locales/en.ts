@@ -882,6 +882,21 @@ export default {
           description_other: "The next MusicScale schedule still has participations without confirmation."
         }
       },
+      commitments: {
+        eyebrow: "Your commitments",
+        title: "What's coming up for you",
+        subtitle: "Your participation across the apps, even when nothing is pending.",
+        today: "Today",
+        tomorrow: "Tomorrow",
+        in_days: "In {{count}} days",
+        musicscale_title: "Your next schedule",
+        musicscale_with_role_one: "{{roles}} · {{count}} song",
+        musicscale_with_role_other: "{{roles}} · {{count}} songs",
+        musicscale_without_role_one: "{{count}} song in this commitment",
+        musicscale_without_role_other: "{{count}} songs in this commitment",
+        open: "Open schedule",
+        note: "Commitments show where you participate. Items that need action stay separate in Today."
+      },
       spaces_title: "Quick access",
       apps_title: "Your apps",
       open_app: "Open {{appName}}",

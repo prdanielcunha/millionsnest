@@ -898,6 +898,21 @@ export default {
           description_other: "A próxima escala do MusicScale ainda tem participações sem confirmação."
         }
       },
+      commitments: {
+        eyebrow: "Seus compromissos",
+        title: "O que vem a seguir para você",
+        subtitle: "Participações da sua agenda nos aplicativos, mesmo quando não há nenhuma pendência.",
+        today: "Hoje",
+        tomorrow: "Amanhã",
+        in_days: "Em {{count}} dias",
+        musicscale_title: "Sua próxima escala",
+        musicscale_with_role_one: "{{roles}} · {{count}} música",
+        musicscale_with_role_other: "{{roles}} · {{count}} músicas",
+        musicscale_without_role_one: "{{count}} música neste compromisso",
+        musicscale_without_role_other: "{{count}} músicas neste compromisso",
+        open: "Abrir escala",
+        note: "Compromissos mostram onde você participa. O que precisa de ação continua separado em Hoje."
+      },
       spaces_title: "Acesso rápido",
       apps_title: "Seus aplicativos",
       open_app: "Abrir {{appName}}",
