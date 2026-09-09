@@ -23,8 +23,7 @@ export interface ReadOnlyHubAction {
 
 export interface ActionProjectionInput {
   organization?: {
-    name?: string | null;
-    slug?: string | null;
+    isConfigured: boolean;
   } | null;
   permissions: {
     canManageOrganization: boolean;
@@ -54,8 +53,7 @@ export interface ActionProjectionInput {
 export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnlyHubAction[] {
   const actions: ReadOnlyHubAction[] = [];
 
-  const organizationIncomplete =
-    !input.organization?.name?.trim() || !input.organization?.slug?.trim();
+  const organizationIncomplete = !input.organization?.isConfigured;
 
   if (organizationIncomplete && input.permissions.canManageOrganization) {
     actions.push({
