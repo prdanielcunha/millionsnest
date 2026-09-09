@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, Firestore, getFirestore } from 'firebase-admin/firestore';
-import { isCanonicalGlobalRole } from '../../lib/permissionService.js';
+import { canManageTenantMembers } from '../../lib/permissionService.js';
 import { CURRENT_PERMISSIONS_VERSION, PERMISSION_KEYS } from '../../lib/rbac.js';
 
 type Dependencies = {
@@ -176,7 +176,7 @@ export async function updateMusicScaleMemberCapability(
         return { success: false as const, reasonCode: 'MEMBERSHIP_NOT_ACTIVE' };
       }
 
-      const actorGlobal = isCanonicalGlobalRole(
+      const actorGlobal = canManageTenantMembers(
         actorUserSnap.data()?.systemRole,
       );
       const actorMetadataOwner = organizationOwnerMatches(
