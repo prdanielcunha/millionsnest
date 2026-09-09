@@ -108,6 +108,18 @@ assert.equal(
   'support app view must hide plan and billing controls'
 );
 
+const ecosystemLauncher = readFileSync('src/lib/ecosystemLauncher.ts', 'utf8');
+assert.equal(
+  ecosystemLauncher.includes("String(profile?.systemRole || '').trim().toLowerCase() === 'ecosystem_support'"),
+  true,
+  'MusicScale launcher must mark canonical ecosystem_support handoffs explicitly'
+);
+assert.equal(
+  ecosystemLauncher.includes("body: JSON.stringify({ appId: moduleKey, orgId: expectedOrganizationId, supportMode: isSupportMode })"),
+  true,
+  'support-mode hint must travel through the handoff request for server verification'
+);
+
 const ecosystemAdmin = readFileSync('src/pages/EcosystemAdmin.tsx', 'utf8');
 assert.equal(ecosystemAdmin.includes('<option value="admin">Tornar Admin Global</option>'), false, 'UI must not create new legacy admin assignments');
 assert.equal(ecosystemAdmin.includes('ASSIGNABLE_SYSTEM_ROLES'), true, 'UI must use canonical assignable roles');
