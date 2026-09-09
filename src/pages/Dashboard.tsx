@@ -42,6 +42,7 @@ import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
 import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "../lib/actionCenter.js";
 import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
 import { fetchActionPreferences, saveActionPreference } from "../services/actionCenterClient.js";
+import { trackActionOsInteraction } from "../lib/actionOsAnalytics.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -615,6 +616,18 @@ export function Dashboard() {
       setActionPreferences(current => {
         const withoutCurrent = current.filter(item => item.dedupeKey !== preference.dedupeKey);
         return [...withoutCurrent, preference];
+      });
+
+      trackActionOsInteraction({
+        organizationId: orgId,
+        userId: user.uid,
+        kind: mode === 'snoozed'
+          ? 'action_snoozed'
+          : 'action_dismissed',
+        lane: 'action',
+        sourceApp: action.sourceApp,
+        signalType: action.signalType,
+        priority: action.priority,
       });
 
       feedback.success(
@@ -2449,6 +2462,14 @@ export function Dashboard() {
                 actionPreferences={actionPreferences}
                 actionPreferenceBusyKey={actionPreferenceBusyKey}
                 onSetActionPreference={handleSetActionPreference}
+                onActionOsInteraction={(interaction) => {
+                  if (!user || !activeContextOrgId) return;
+                  trackActionOsInteraction({
+                    organizationId: activeContextOrgId,
+                    userId: user.uid,
+                    ...interaction,
+                  });
+                }}
                 recentActivity={auditLogs.slice(0, 5).map(log => ({
                   id: log.id,
                   label: humanizeAuditAction(log.action),
