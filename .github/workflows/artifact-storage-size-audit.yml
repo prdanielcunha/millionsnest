@@ -1,0 +1,41 @@
+name: Artifact Storage Size Audit
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/artifact-storage-size-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - name: Calculate unique stored bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud artifacts files list             --project=millionsnest             --location=us-central1             --repository=millionsnest-web             --format=json > /tmp/files.json
+          python3 - <<'PY'
+          import json
+          rows=json.load(open('/tmp/files.json'))
+          seen={}
+          for r in rows:
+              name=r.get('name') or r.get('file') or str(r)
+              size=int(r.get('sizeBytes') or 0)
+              seen[name]=max(seen.get(name,0),size)
+          total=sum(seen.values())
+          print(f"ARTIFACT_UNIQUE_FILES={len(seen)}")
+          print(f"ARTIFACT_TOTAL_BYTES={total}")
+          print(f"ARTIFACT_TOTAL_MIB={total/1024/1024:.2f}")
+          print(f"ARTIFACT_TOTAL_GIB={total/1024/1024/1024:.4f}")
+          PY
