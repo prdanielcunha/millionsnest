@@ -56,6 +56,10 @@ export interface EcosystemPrivilegePolicy {
   canEnterAnyOrganization: boolean;
   canOperateAnyOrganization: boolean;
   canManageGlobalGovernance: boolean;
+  canManageTenantMembers: boolean;
+  canManageTenantBilling: boolean;
+  canManageTenantSettings: boolean;
+  canTransferTenantOwnership: boolean;
 }
 
 export function resolveEcosystemPrivilegePolicy(systemRole: string | undefined | null): EcosystemPrivilegePolicy {
@@ -74,7 +78,11 @@ export function resolveEcosystemPrivilegePolicy(systemRole: string | undefined |
       canBypassSupportMembership: true,
       canEnterAnyOrganization: true,
       canOperateAnyOrganization: true,
-      canManageGlobalGovernance: true
+      canManageGlobalGovernance: true,
+      canManageTenantMembers: true,
+      canManageTenantBilling: true,
+      canManageTenantSettings: true,
+      canTransferTenantOwnership: true
     };
   }
 
@@ -88,7 +96,11 @@ export function resolveEcosystemPrivilegePolicy(systemRole: string | undefined |
       canBypassSupportMembership: true,
       canEnterAnyOrganization: true,
       canOperateAnyOrganization: true,
-      canManageGlobalGovernance: false
+      canManageGlobalGovernance: false,
+      canManageTenantMembers: false,
+      canManageTenantBilling: false,
+      canManageTenantSettings: false,
+      canTransferTenantOwnership: false
     };
   }
 
@@ -101,7 +113,11 @@ export function resolveEcosystemPrivilegePolicy(systemRole: string | undefined |
     canBypassSupportMembership: false,
     canEnterAnyOrganization: false,
     canOperateAnyOrganization: false,
-    canManageGlobalGovernance: false
+    canManageGlobalGovernance: false,
+    canManageTenantMembers: false,
+    canManageTenantBilling: false,
+    canManageTenantSettings: false,
+    canTransferTenantOwnership: false
   };
 }
 
@@ -262,6 +278,22 @@ export function canOperateAnyOrganization(profileOrRole: any) {
 
 export function canManageAnyOrganization(userProfile: any) {
   return resolveEcosystemPrivilegePolicy(getSystemRole(userProfile)).canManageGlobalGovernance;
+}
+
+export function canManageTenantMembers(profileOrRole: any) {
+  return resolveEcosystemPrivilegePolicy(getSystemRole(profileOrRole)).canManageTenantMembers;
+}
+
+export function canManageTenantBilling(profileOrRole: any) {
+  return resolveEcosystemPrivilegePolicy(getSystemRole(profileOrRole)).canManageTenantBilling;
+}
+
+export function canManageTenantSettings(profileOrRole: any) {
+  return resolveEcosystemPrivilegePolicy(getSystemRole(profileOrRole)).canManageTenantSettings;
+}
+
+export function canTransferTenantOwnership(profileOrRole: any) {
+  return resolveEcosystemPrivilegePolicy(getSystemRole(profileOrRole)).canTransferTenantOwnership;
 }
 
 export function canManageOrganization(userProfile: any, orgId: string) {
