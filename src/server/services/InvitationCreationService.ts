@@ -252,6 +252,8 @@ export async function createInvitation(
       t.set(auditLogRef, {
         action: 'invitation.created',
         actorUid: uid,
+        actorSystemRole: globalRole || null,
+        governanceScope: isGlobalAdmin ? 'ecosystem_global' : 'organization',
         invitationId: inviteId,
         membershipRole: planResult.role,
         timestamp: FieldValue.serverTimestamp()
