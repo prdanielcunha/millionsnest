@@ -10,6 +10,7 @@ import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
 import { repairOrganizationOwnership } from './src/server/services/OrganizationOwnershipRepairService.js';
+import { transferOrganizationOwnership } from './src/server/services/OrganizationOwnershipTransferService.js';
 import { updateMusicScaleMemberCapability } from './src/server/services/MusicScaleMemberCapabilityCommandService.js';
 import {
   getActionPreferences,
@@ -1326,6 +1327,10 @@ async function startServer() {
   app.post('/api/v1/organizations/:organizationId/ownership/repair', express.json({ limit: '8kb' }), (req, res) => repairOrganizationOwnership(req, res, {
     verifyIdToken: (token: string) => admin.auth().verifyIdToken(token),
     getFirestore: () => getDb(),
+  }));
+  app.post('/api/v1/organizations/:organizationId/ownership/transfer', express.json({ limit: '8kb' }), (req, res) => transferOrganizationOwnership(req, res, {
+    verifyIdToken: (token: string) => admin.auth().verifyIdToken(token),
+    getFirestore: () => getDb()!,
   }));
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/musicscale-capability', express.json({ limit: '8kb' }), (req, res) => updateMusicScaleMemberCapability(req, res));
   app.get('/api/v1/organizations/:organizationId/action-preferences', (req, res) => getActionPreferences(req, res));
