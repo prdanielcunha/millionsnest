@@ -58,6 +58,9 @@ jobs:
       - name: Action OS privacy-safe pilot telemetry
         run: npx tsx scripts/test_action_os_pilot_telemetry.ts
 
+      - name: Private organization analytics rules contract
+        run: npx tsx scripts/test_private_organization_analytics_rules.ts
+
       - name: Vercel release and CORS hygiene
         run: npx tsx scripts/test_vercel_release_hygiene.ts
 
