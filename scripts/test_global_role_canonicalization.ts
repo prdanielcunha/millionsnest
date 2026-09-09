@@ -26,6 +26,10 @@ for (const role of CANONICAL_GLOBAL_ROLES) {
   const policy = resolveEcosystemPrivilegePolicy(role);
   assert.equal(policy.hasFullProductEntitlements, true, `${role} must retain full product entitlements`);
   assert.equal(policy.canManageGlobalGovernance, true, `${role} must retain global governance`);
+  assert.equal(policy.canManageTenantMembers, true, `${role} must manage tenant members cross-tenant`);
+  assert.equal(policy.canManageTenantBilling, true, `${role} must manage tenant billing cross-tenant`);
+  assert.equal(policy.canManageTenantSettings, true, `${role} must manage tenant settings cross-tenant`);
+  assert.equal(policy.canTransferTenantOwnership, true, `${role} must support audited tenant ownership transfer`);
 }
 
 assert.equal(isCanonicalGlobalRole('admin'), false, 'legacy admin must never become canonical');
@@ -41,6 +45,10 @@ assert.equal(supportPolicy.isEcosystemSupportStaff, true);
 assert.equal(supportPolicy.canEnterAnyOrganization, true, 'support must be able to enter any tenant for support');
 assert.equal(supportPolicy.canOperateAnyOrganization, true, 'support must have scoped operational tenant access');
 assert.equal(supportPolicy.canManageGlobalGovernance, false, 'support must never inherit global governance');
+assert.equal(supportPolicy.canManageTenantMembers, false, 'support must not manage tenant memberships');
+assert.equal(supportPolicy.canManageTenantBilling, false, 'support must not manage tenant billing');
+assert.equal(supportPolicy.canManageTenantSettings, false, 'support must not manage tenant settings');
+assert.equal(supportPolicy.canTransferTenantOwnership, false, 'support must not transfer tenant ownership');
 assert.equal(ASSIGNABLE_SYSTEM_ROLES.includes('ecosystem_support'), true, 'support must be assignable as a canonical system role');
 assert.equal(canChangeSystemRole('ecosystem_support', 'user', 'global_admin').allowed, false, 'support cannot manage global roles');
 
