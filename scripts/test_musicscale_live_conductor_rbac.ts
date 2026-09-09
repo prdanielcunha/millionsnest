@@ -156,13 +156,15 @@ assert(
 
 await reset();
 await seedOrg();
-await seedUser('local-admin', { systemRole: 'admin' });
+await seedUser('legacy-admin', { systemRole: 'admin' });
 await seedUser('target-1');
 await seedMember('org-1', 'target-1', 'member');
-r = await call('local-admin', true);
+r = await call('legacy-admin', true);
 assert(
-  '11 noncanonical systemRole admin is not treated as global',
-  r.statusCode === 403 && r.body.reasonCode === 'PERMISSION_DENIED',
+  '11 legacy systemRole admin preserves global_admin compatibility',
+  r.statusCode === 200 &&
+    r.body.reasonCode === 'CAPABILITY_UPDATED' &&
+    r.body.enabled === true,
 );
 
 await reset();
