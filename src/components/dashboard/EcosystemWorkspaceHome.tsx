@@ -414,20 +414,22 @@ export function EcosystemWorkspaceHome({
         todayActions.some(action => action.signalType === 'musicscale_pending_responses'));
 
     const handleTodayAction = (action: ReadOnlyHubAction) => {
-      if (action.destination.kind === 'hub') {
-        if (action.destination.section === 'organization') onNavigateToOrganizationSettings();
-        if (action.destination.section === 'members') onNavigateToOrganizationMembers();
-        if (action.destination.section === 'billing') onNavigateToBilling();
+      const destination = action.destination;
+
+      if (destination.kind === 'hub') {
+        if (destination.section === 'organization') onNavigateToOrganizationSettings();
+        if (destination.section === 'members') onNavigateToOrganizationMembers();
+        if (destination.section === 'billing') onNavigateToBilling();
         return;
       }
 
-      const experience = appExperiences.find(item => item.app.id === action.destination.appId);
+      const experience = appExperiences.find(item => item.app.id === destination.appId);
       if (experience?.app && experience.canOpen) {
-        onLaunchApp(experience.app, action.destination.path);
+        onLaunchApp(experience.app, destination.path);
         return;
       }
 
-      if (action.destination.appId === 'musicscale') {
+      if (destination.appId === 'musicscale') {
         onSelectWorkspace('musicscale');
       }
     };
