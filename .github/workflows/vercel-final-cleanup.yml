@@ -1,9 +1,7 @@
 name: Vercel Final Cleanup
-# execution trigger
+# Legacy post-migration cleanup. The Firebase cutover is complete, so this
+# workflow is intentionally manual-only and must not participate in releases.
 on:
-  push:
-    branches: [ production ]
-    paths: [".github/workflows/vercel-final-cleanup.yml"]
   workflow_dispatch:
 permissions:
   contents: read
