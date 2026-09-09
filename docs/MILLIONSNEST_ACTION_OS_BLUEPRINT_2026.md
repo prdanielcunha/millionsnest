@@ -423,7 +423,7 @@ Personal responsibility on top of that commitment is also implemented in `main`.
 
 Leader-wide pending confirmations remain a third, separate responsibility. This prevents a pastor who is also a musician from losing either their personal task or their leadership view.
 
-The next semantic lane under certification is **Changes**. The first adapter consumes only recipient-scoped `music_scale_changed` notifications produced by MusicScale itself, including its deterministic `preparationChangeSummary`. The Hub does not infer changes from timestamps or guess what changed.
+The **Changes** lane is now implemented in `main`. Its first adapter consumes only recipient-scoped `music_scale_changed` notifications produced by MusicScale itself, including its deterministic `preparationChangeSummary`. The Hub does not infer changes from timestamps or guess what changed.
 
 ## 21. Semantic lanes: Actions, Commitments and Changes
 
@@ -451,7 +451,7 @@ Examples:
 Commitments are informational and should never be presented as operational failure.
 
 ### Changes — “O que mudou recentemente”
-Previously known truth changed materially and the user may need to review it. The first MusicScale adapter is implemented behind the current certification branch.
+Previously known truth changed materially and the user may need to review it. The first MusicScale adapter is implemented in `main`.
 
 Examples:
 - repertoire/key/order changed after preparation;
@@ -470,11 +470,43 @@ For MusicScale:
 
 This separation is a core product invariant. It reduces alert fatigue and lets MillionsNest become an operational layer without turning normal church life into a list of “problems”.
 
-## 22. Immediate next step
+## 22. Pilot telemetry
 
-1. Certify and merge the private MusicScale **Changes** adapter and notification-rule hardening into `main`.
+The first Action OS pilot telemetry layer is implemented behind the current certification branch using the existing buffered MillionsNest analytics infrastructure.
+
+Initial interaction events:
+- action opened;
+- action snoozed;
+- action dismissed;
+- change reviewed;
+- commitment opened.
+
+Privacy invariant:
+- no entity IDs;
+- no notification IDs;
+- no titles, descriptions or message bodies;
+- no names, email, phone or WhatsApp;
+- no free-text reasons;
+- no financial values;
+- no pastoral notes or spiritual inference;
+- no engagement score or volunteer behavior score.
+
+Allowed metadata is intentionally small:
+- interaction kind;
+- semantic lane;
+- source app;
+- normalized signal type when safe;
+- action priority when applicable.
+
+These events remain organization-scoped and are deliberately excluded from the global commercial Growth mirror.
+
+Telemetry is recorded only for explicit user interactions. The first pilot does not count every card render as an impression because React rerenders and reconnects could inflate the metric without proving human attention.
+
+## 23. Immediate next step
+
+1. Certify and merge the privacy-safe Action OS interaction telemetry into `main`.
 2. Keep exact song-level review inside MusicScale; the Hub summarizes only source-owned change categories and deep-links to the specialist app.
-3. Add lightweight Action OS quality telemetry for pilot validation (surfaced/opened/snoozed/dismissed, without sensitive pastoral inference) before expanding to another app.
+3. Use pilot interaction data to validate whether leaders actually open, defer and review the surfaced work before adding more telemetry.
 4. Add the next source only when NestJourney, Connect or another product exposes a factual signal/commitment/change contract; do not hardcode app-specific UI cards.
 5. Validate weekly use with real organizations before adding generative intelligence or expensive infrastructure.
 
