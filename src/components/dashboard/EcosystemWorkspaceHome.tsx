@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
+import { deriveReadOnlyHubActions, type ReadOnlyHubAction } from '../../lib/actionCenter.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -240,6 +241,28 @@ export function EcosystemWorkspaceHome({
         .replace(/\b\w/g, character => character.toUpperCase());
     };
 
+    const todayActions = deriveReadOnlyHubActions({
+      organization: {
+        name: organization?.name ?? null,
+        slug: organization?.slug ?? null
+      },
+      permissions: {
+        canManageOrganization,
+        canManageMembers
+      },
+      pendingInvitesCount: pendingInvites.length,
+      musicScale: {
+        ready: isMusicScaleReady && appSummaryReady,
+        nextScale: musicScaleSummary.nextScale
+          ? {
+              id: musicScaleSummary.nextScale.id,
+              responseSummaryAvailable: musicScaleSummary.nextScale.responseSummaryAvailable,
+              pendingResponses: musicScaleSummary.nextScale.responseCounts.pending || 0
+            }
+          : null
+      }
+    });
+
     const attentionApp = operationalApps.find(experience => experience.needsAttention);
 
     const nextStep = attentionApp?.state === 'payment_issue'
@@ -381,6 +404,34 @@ export function EcosystemWorkspaceHome({
                                   label: t('workspace.next_step.view_products_action', 'Ver produtos')
                                 };
 
+    const isNextStepRepresentedInToday =
+      (nextStep.action === 'organization' &&
+        todayActions.some(action => action.signalType === 'organization_incomplete')) ||
+      (nextStep.action === 'app' &&
+        'path' in nextStep &&
+        typeof nextStep.path === 'string' &&
+        nextStep.path.startsWith('/scales/') &&
+        todayActions.some(action => action.signalType === 'musicscale_pending_responses'));
+
+    const handleTodayAction = (action: ReadOnlyHubAction) => {
+      if (action.destination.kind === 'hub') {
+        if (action.destination.section === 'organization') onNavigateToOrganizationSettings();
+        if (action.destination.section === 'members') onNavigateToOrganizationMembers();
+        if (action.destination.section === 'billing') onNavigateToBilling();
+        return;
+      }
+
+      const experience = appExperiences.find(item => item.app.id === action.destination.appId);
+      if (experience?.app && experience.canOpen) {
+        onLaunchApp(experience.app, action.destination.path);
+        return;
+      }
+
+      if (action.destination.appId === 'musicscale') {
+        onSelectWorkspace('musicscale');
+      }
+    };
+
     const handleNextStep = () => {
       if (nextStep.action === 'billing') onNavigateToBilling();
       if (nextStep.action === 'invite') onOpenInviteModal();
@@ -505,7 +556,122 @@ export function EcosystemWorkspaceHome({
         </section>
 
         <section
-          aria-label={t('workspace.next_step.eyebrow', 'Próximo passo')}
+          aria-labelledby="hub-today-title"
+          className="relative overflow-hidden rounded-[1.9rem] border border-white/[0.08] bg-[#080A0F] p-5 shadow-[0_26px_80px_rgba(0,0,0,.24)] sm:p-6 md:p-7"
+        >
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#2B85EB]/10 blur-[90px]" />
+            <div className="absolute bottom-[-55%] left-[8%] h-56 w-56 rounded-full bg-emerald-400/[0.05] blur-[90px]" />
+          </div>
+
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-[#73B4FF] shadow-[0_0_18px_rgba(115,180,255,.55)]" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#86BEFF]">
+                  {t('workspace.actions.eyebrow')}
+                </p>
+              </div>
+              <h3 id="hub-today-title" className="text-2xl font-semibold tracking-[-0.035em] text-white md:text-3xl">
+                {todayActions.length > 0
+                  ? t('workspace.actions.title')
+                  : t('workspace.actions.title_clear')}
+              </h3>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#8E99A8]">
+                {todayActions.length > 0
+                  ? t('workspace.actions.subtitle')
+                  : t('workspace.actions.clear_description')}
+              </p>
+            </div>
+
+            {todayActions.length > 0 && (
+              <div className="shrink-0 rounded-full border border-white/[0.08] bg-white/[0.035] px-3.5 py-2 text-xs font-semibold text-white/80">
+                {t('workspace.actions.count', { count: todayActions.length })}
+              </div>
+            )}
+          </div>
+
+          {todayActions.length > 0 ? (
+            <div className="relative mt-6 space-y-2.5">
+              {todayActions.map((action, index) => {
+                const isMusicScaleAction = action.sourceApp === 'musicscale';
+                const highPriority = action.priority === 'high' || action.priority === 'urgent';
+
+                return (
+                  <article
+                    key={action.id}
+                    className="group grid gap-4 rounded-2xl border border-white/[0.065] bg-white/[0.022] p-4 transition-all hover:border-white/[0.12] hover:bg-white/[0.035] sm:grid-cols-[auto_1fr_auto] sm:items-center"
+                  >
+                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${
+                      isMusicScaleAction
+                        ? 'border-[#2B85EB]/20 bg-[#2B85EB]/10'
+                        : highPriority
+                          ? 'border-amber-400/15 bg-amber-400/[0.07]'
+                          : 'border-white/[0.08] bg-white/[0.035]'
+                    }`}>
+                      {isMusicScaleAction ? (
+                        <img src="/LogoIconMusicScale-1.png" alt="" className="h-6 w-6 object-contain" />
+                      ) : action.signalType === 'pending_invites' ? (
+                        <UserPlus className="h-4 w-4 text-[#9CC8FF]" />
+                      ) : (
+                        <AlertCircle className={`h-4 w-4 ${highPriority ? 'text-amber-300' : 'text-[#9CC8FF]'}`} />
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#687486]">
+                          {isMusicScaleAction ? 'MusicScale' : t('workspace.actions.source_hub')}
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${
+                          highPriority
+                            ? 'border-amber-400/15 bg-amber-400/[0.06] text-amber-300'
+                            : 'border-white/[0.07] bg-white/[0.025] text-[#8793A3]'
+                        }`}>
+                          {highPriority
+                            ? t('workspace.actions.priority_high')
+                            : t('workspace.actions.priority_normal')}
+                        </span>
+                        <span className="text-[9px] font-medium text-[#4F5968]">#{index + 1}</span>
+                      </div>
+                      <h4 className="text-[15px] font-semibold leading-snug text-white sm:text-base">
+                        {t(action.titleKey, action.translationParams ?? {})}
+                      </h4>
+                      <p className="mt-1 text-xs leading-relaxed text-[#8A95A4] sm:text-[13px]">
+                        {t(action.descriptionKey, action.translationParams ?? {})}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleTodayAction(action)}
+                      className="min-h-[44px] w-full rounded-xl border border-white/[0.08] bg-white px-4 py-2.5 text-xs font-semibold text-[#07090D] transition-all hover:bg-[#F2F5F8] active:scale-[0.985] sm:w-auto sm:min-w-[108px]"
+                    >
+                      <span className="inline-flex items-center justify-center gap-1.5">
+                        {t('workspace.actions.open_action')}
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </span>
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="relative mt-6 flex items-start gap-3 rounded-2xl border border-emerald-400/10 bg-emerald-400/[0.045] p-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-emerald-400/15 bg-emerald-400/[0.08]">
+                <Check className="h-4 w-4 text-emerald-300" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">{t('workspace.actions.clear_status')}</p>
+                <p className="mt-1 text-xs leading-relaxed text-[#83908F]">{t('workspace.actions.clear_hint')}</p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {!isNextStepRepresentedInToday && (
+        <section
+          aria-label={t('workspace.next_step.eyebrow', 'Próximo passo')
           className={`relative overflow-hidden rounded-[1.75rem] border p-5 sm:p-6 md:p-7 flex flex-col md:flex-row md:items-center justify-between gap-5 ${
             nextStep.tone === 'warning'
               ? 'bg-amber-500/[0.08] border-amber-500/20'
@@ -541,6 +707,7 @@ export function EcosystemWorkspaceHome({
             </button>
           )}
         </section>
+        )}
 
         <section id="apps-overview" aria-labelledby="active-apps-title">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-4">
