@@ -320,6 +320,10 @@ export function Dashboard() {
   const [editingMemberPhoto, setEditingMemberPhoto] = useState("");
   const [editingMemberRole, setEditingMemberRole] = useState("");
   const [editingMemberSaving, setEditingMemberSaving] = useState(false);
+  const [ownershipTransferTarget, setOwnershipTransferTarget] = useState<any>(null);
+  const [ownershipTransferPreviousRole, setOwnershipTransferPreviousRole] = useState<'admin' | 'manager' | 'member' | 'viewer'>('admin');
+  const [ownershipTransferReason, setOwnershipTransferReason] = useState("");
+  const [ownershipTransferSaving, setOwnershipTransferSaving] = useState(false);
 
 
   const [repairing, setRepairing] = useState(false);
@@ -1289,6 +1293,100 @@ export function Dashboard() {
       } else {
         feedback.error("Não foi possível remover essa pessoa. Verifique seu acesso e tente novamente.");
       }
+    }
+  };
+
+  const handleOpenOwnershipTransfer = (member: any) => {
+    if (!isGlobalAdmin) return;
+    setOwnershipTransferTarget(member);
+    setOwnershipTransferPreviousRole('admin');
+    setOwnershipTransferReason('');
+  };
+
+  const handleConfirmOwnershipTransfer = async () => {
+    if (!user || !activeContextOrgId || !ownershipTransferTarget || !isGlobalAdmin) return;
+    const reason = ownershipTransferReason.trim();
+    if (reason.length < 8) {
+      feedback.error('Informe brevemente o motivo da transferência para o registro de auditoria.');
+      return;
+    }
+
+    setOwnershipTransferSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/v1/organizations/${encodeURIComponent(activeContextOrgId)}/ownership/transfer`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            newOwnerMemberId: ownershipTransferTarget.id,
+            previousOwnerRole: ownershipTransferPreviousRole,
+            reason
+          })
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success !== true) {
+        const code = String(data?.reasonCode || data?.error || '');
+        if (code.includes('GLOBAL_REASON_REQUIRED')) {
+          feedback.error('O motivo administrativo é obrigatório.');
+        } else if (code.includes('NEW_OWNER_MEMBERSHIP_INACTIVE')) {
+          feedback.error('O novo dono precisa ser um membro ativo desta organização.');
+        } else {
+          feedback.error('Não foi possível transferir a propriedade da organização.');
+        }
+        return;
+      }
+
+      const newOwnerId = String(data.ownerUid || ownershipTransferTarget.id);
+      const previousOwnerIds = Array.isArray(data.previousOwnerUids)
+        ? data.previousOwnerUids.map((value: unknown) => String(value))
+        : [authoritativeOwnerUid].filter(Boolean);
+
+      setMembers(previous => previous.map(member => {
+        if (member.id === newOwnerId) {
+          return {
+            ...member,
+            role: 'owner',
+            organizationRole: 'owner',
+            permissions: getDefaultPermissions('owner'),
+            permissionsVersion: CURRENT_PERMISSIONS_VERSION
+          };
+        }
+        if (previousOwnerIds.includes(String(member.id)) && member.id !== newOwnerId) {
+          return {
+            ...member,
+            role: ownershipTransferPreviousRole,
+            organizationRole: ownershipTransferPreviousRole,
+            permissions: getDefaultPermissions(ownershipTransferPreviousRole),
+            permissionsVersion: CURRENT_PERMISSIONS_VERSION
+          };
+        }
+        return member;
+      }));
+
+      setOrganization((previous: any) => previous ? {
+        ...previous,
+        ownerUid: newOwnerId,
+        ownerUserId: newOwnerId,
+        ownerId: newOwnerId,
+        owner_user_id: newOwnerId,
+        ownerEmail: ownershipTransferTarget.email || null,
+        ownerName: ownershipTransferTarget.displayName || null
+      } : previous);
+
+      setOwnershipTransferTarget(null);
+      setOwnershipTransferReason('');
+      feedback.success('Propriedade transferida e registrada na auditoria.');
+    } catch (error) {
+      console.error('[Dashboard] Ownership transfer failed', error);
+      feedback.error('Não foi possível transferir a propriedade da organização.');
+    } finally {
+      setOwnershipTransferSaving(false);
     }
   };
 
@@ -2587,6 +2685,7 @@ export function Dashboard() {
                   setEditingMemberPhoto(member.photoURL || "");
                   setEditingMemberRole(member.organizationRole || member.role || "member");
                 }}
+                onTransferOwnership={handleOpenOwnershipTransfer}
                 isEditingOrg={isEditingOrg}
                 setIsEditingOrg={setIsEditingOrg}
                 adminSelectedOrgId={adminSelectedOrgId}
@@ -3626,6 +3725,99 @@ export function Dashboard() {
                   ) : (
                     "Salvar Alterações"
                   )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {ownershipTransferTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 8 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 8 }}
+              className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#0A0A0A] p-6 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={() => !ownershipTransferSaving && setOwnershipTransferTarget(null)}
+                className="absolute right-4 top-4 p-2 text-[#A0A7B5] transition-colors hover:text-white disabled:opacity-40"
+                disabled={ownershipTransferSaving}
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              <div className="mb-6 pr-10">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#2B85EB]">
+                  Governança do ecossistema
+                </p>
+                <h3 className="text-xl font-semibold text-white">Transferir propriedade</h3>
+                <p className="mt-2 text-sm leading-6 text-[#A0A7B5]">
+                  {ownershipTransferTarget.displayName || ownershipTransferTarget.email || 'Este membro'} passará a ser o dono da organização. Sua conta global continuará fora do membership do tenant.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-[#A0A7B5]">
+                    Cargo do dono anterior
+                  </label>
+                  <select
+                    value={ownershipTransferPreviousRole}
+                    onChange={(event) => setOwnershipTransferPreviousRole(event.target.value as 'admin' | 'manager' | 'member' | 'viewer')}
+                    disabled={ownershipTransferSaving}
+                    className="w-full rounded-xl border border-white/10 bg-[#1A1D24] px-4 py-3 text-sm text-white outline-none transition-colors focus:border-[#2B85EB]"
+                  >
+                    <option value="admin">Administrador</option>
+                    <option value="manager">Gestor</option>
+                    <option value="member">Membro</option>
+                    <option value="viewer">Somente leitura</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-[#A0A7B5]">
+                    Motivo administrativo
+                  </label>
+                  <textarea
+                    value={ownershipTransferReason}
+                    onChange={(event) => setOwnershipTransferReason(event.target.value)}
+                    maxLength={500}
+                    rows={4}
+                    disabled={ownershipTransferSaving}
+                    placeholder="Ex.: correção solicitada pelo responsável da organização."
+                    className="w-full resize-none rounded-xl border border-white/10 bg-[#1A1D24] px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-white/25 focus:border-[#2B85EB]"
+                  />
+                  <p className="mt-1.5 text-[11px] text-[#A0A7B5]/70">
+                    O motivo, o administrador global e a troca de owner ficam registrados na auditoria.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-7 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setOwnershipTransferTarget(null)}
+                  disabled={ownershipTransferSaving}
+                  className="flex-1 rounded-xl bg-white/5 px-4 py-3 font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmOwnershipTransfer}
+                  disabled={ownershipTransferSaving || ownershipTransferReason.trim().length < 8}
+                  className="flex-1 rounded-xl bg-[#2B85EB] px-4 py-3 font-semibold text-white transition-colors hover:bg-[#1E6FD6] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {ownershipTransferSaving ? 'Transferindo...' : 'Confirmar transferência'}
                 </button>
               </div>
             </motion.div>
