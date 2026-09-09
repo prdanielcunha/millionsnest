@@ -13,6 +13,7 @@ export type OrganizationRole = 'owner' | 'admin' | 'leader' | 'member';
 
 export const ASSIGNABLE_SYSTEM_ROLES = [
   'user',
+  'ecosystem_support',
   'global_admin',
   'ecosystem_owner',
   'founder',
@@ -23,7 +24,7 @@ export type AssignableSystemRole = (typeof ASSIGNABLE_SYSTEM_ROLES)[number];
 
 export const SYSTEM_ROLE_RANK: Record<string, number> = {
   user: 0,
-  ecosystem_support: 0,
+  ecosystem_support: 40,
   admin: 80, // legacy alias for global_admin
   global_admin: 80,
   ecosystem_owner: 85,
