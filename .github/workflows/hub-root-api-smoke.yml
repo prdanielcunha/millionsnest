@@ -1,0 +1,23 @@
+name: Hub Root API Smoke
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/hub-root-api-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Smoke root Hub billing read
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location             --retry 8 --retry-delay 2 --retry-all-errors             "https://millionsnest.com/api/v1/billing/products" -o /tmp/products.json
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/products.json','utf8'));if(!x||!Array.isArray(x.plans))process.exit(1);console.log('HUB_ROOT_BILLING_READ_OK',x.plans.length);"
