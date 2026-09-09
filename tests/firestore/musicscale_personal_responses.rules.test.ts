@@ -32,6 +32,38 @@ before(async () => {
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
 
+    await setDoc(doc(db, 'organizations/org-1'), {
+      status: 'active',
+      ownerUid: 'owner-1'
+    });
+
+    await setDoc(doc(db, 'organizations/org-1/members/leader-1'), {
+      uid: 'leader-1',
+      organizationId: 'org-1',
+      status: 'active',
+      role: 'leader'
+    });
+
+    await setDoc(doc(db, 'organizations/org-1/members/capability-member'), {
+      uid: 'capability-member',
+      organizationId: 'org-1',
+      status: 'active',
+      role: 'member',
+      appAccess: {
+        musicscale: {
+          enabled: true,
+          permissions: ['scaleResponses.readManaged']
+        }
+      }
+    });
+
+    await setDoc(doc(db, 'organizations/org-1/members/member-1'), {
+      uid: 'member-1',
+      organizationId: 'org-1',
+      status: 'active',
+      role: 'member'
+    });
+
     await setDoc(doc(db, 'scales/scale-1'), {
       organizationId: 'org-1',
       status: 'published'
@@ -71,6 +103,35 @@ test('a MusicScale user can query only their own response state', async () => {
   if (snapshot.size !== 1) {
     throw new Error(`Expected one personal response, got ${snapshot.size}`);
   }
+});
+
+test('a canonical MusicScale leader can read managed team responses', async () => {
+  const db = env.authenticatedContext('leader-1').firestore();
+  const snapshot = await assertSucceeds(
+    getDocs(collection(db, 'scales/scale-1/responses'))
+  );
+
+  if (snapshot.size !== 2) {
+    throw new Error(`Expected two managed responses, got ${snapshot.size}`);
+  }
+});
+
+test('an explicit managed-response capability can read team responses', async () => {
+  const db = env.authenticatedContext('capability-member').firestore();
+  const snapshot = await assertSucceeds(
+    getDocs(collection(db, 'scales/scale-1/responses'))
+  );
+
+  if (snapshot.size !== 2) {
+    throw new Error(`Expected two managed responses, got ${snapshot.size}`);
+  }
+});
+
+test('an ordinary member cannot read the full team response collection', async () => {
+  const db = env.authenticatedContext('member-1').firestore();
+  await assertFails(
+    getDocs(collection(db, 'scales/scale-1/responses'))
+  );
 });
 
 test('a MusicScale user cannot query another person response state', async () => {
