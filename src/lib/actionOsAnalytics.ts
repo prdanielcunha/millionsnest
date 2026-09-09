@@ -1,5 +1,3 @@
-import { analytics } from './analytics.js';
-
 export type ActionOsLane =
   | 'action'
   | 'change'
@@ -77,10 +75,19 @@ export function trackActionOsInteraction(
   const payload = buildActionOsAnalyticsPayload(input);
   if (!payload) return;
 
-  analytics.track('action_os_interaction', {
-    organizationId: payload.organizationId,
-    userId: payload.userId,
-    app: payload.app,
-    metadata: payload.metadata,
-  });
+  // Keep the pure privacy policy importable in Node/CI without initializing
+  // Firebase. In the browser this module is already warm through Dashboard,
+  // so the dynamic import resolves from the module cache.
+  void import('./analytics.js')
+    .then(({ analytics }) => {
+      analytics.track('action_os_interaction', {
+        organizationId: payload.organizationId,
+        userId: payload.userId,
+        app: payload.app,
+        metadata: payload.metadata,
+      });
+    })
+    .catch(() => {
+      // Pilot telemetry must never interrupt the product experience.
+    });
 }
