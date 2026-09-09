@@ -225,6 +225,31 @@ export function Dashboard() {
   const musicScaleProjectionSeqRef = useRef<number>(0);
   const musicScaleExpectedOrgRef = useRef<string | null>(null);
 
+  const acknowledgeMusicScaleChange = async (
+    notificationId: string
+  ) => {
+    if (!activeContextOrgId || !notificationId) return;
+
+    try {
+      await updateDoc(
+        doc(
+          db,
+          `organizations/${activeContextOrgId}/notifications`,
+          notificationId
+        ),
+        {
+          isRead: true,
+          readAt: new Date().toISOString(),
+        }
+      );
+    } catch (error) {
+      console.warn(
+        '[Dashboard] Could not acknowledge MusicScale change notification:',
+        error
+      );
+    }
+  };
+
   const refreshMusicScaleAccessProjection = async (orgId: string) => {
     if (!user || !orgId) return;
 
@@ -2409,6 +2434,7 @@ export function Dashboard() {
                 onLaunchApp={(app, destinationPath) => handleLaunchEcosystemApp(app, currentUserPerms, destinationPath)}
                 musicScaleSummary={musicScaleHubSummary}
                 musicScaleChanges={musicScaleChangeNotifications}
+                onAcknowledgeMusicScaleChange={acknowledgeMusicScaleChange}
                 onOpenInviteModal={() => setIsInviteModalOpen(true)}
                 onNavigateToOrganizationMembers={() => navigate('/dashboard/organization/members')}
                 onNavigateToBilling={() => setActiveTab('billing')}
