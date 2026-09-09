@@ -249,6 +249,7 @@ async function runTests() {
       check(res._body.success, true);
       check(res._body.apps.musicscale.accessible, ct.expectedAccessible);
       check(res._body.apps.musicscale.catalogState, ct.expectedCatalog);
+      check(typeof res._body.apps.musicscale.canReadManagedScaleResponses, "boolean");
       
       // Privacy check
       verifyNoSensitiveData(res._body);
@@ -289,6 +290,54 @@ async function runTests() {
       check(capturedArgs.appId, "musicscale");
       assertionCount++;
       assert.ok(capturedArgs[field] === undefined || (field === 'uid' && capturedArgs[field] === "user123"), `Field ${field} leaked into resolver args`);
+    }
+
+    // MusicScale leadership capability must be server-derived and privacy-safe.
+    for (const leadershipCase of [
+      {
+        organizationRole: 'leader',
+        permissions: [],
+        expected: true
+      },
+      {
+        organizationRole: 'member',
+        permissions: ['scaleResponses.readManaged'],
+        expected: true
+      },
+      {
+        organizationRole: 'member',
+        permissions: [],
+        expected: false
+      }
+    ]) {
+      const res = new FakeResponse();
+      const req = new FakeRequest("Bearer token1", { organizationId: "org1" });
+      await handleEcosystemAccessProjectionRequest(req as any, res as any, {
+        verifyIdToken: async () => ({ uid: "user123" } as any),
+        getDb: () => fakeDb,
+        resolveAccess: async () => ({
+          accessible: true,
+          isGlobalAccess: false,
+          accessSource: 'organization_membership',
+          organizationRole: leadershipCase.organizationRole,
+          permissions: leadershipCase.permissions,
+          denialReason: null,
+          entitlement: {
+            canonicalStatus: 'active',
+            cancellationScheduled: false
+          }
+        }),
+        logger: { log: () => {}, info: () => {}, error: () => {}, warn: () => {} },
+        now: () => FIXED_NOW
+      } as any);
+
+      check(res._status, 200);
+      check(
+        res._body.apps.musicscale.canReadManagedScaleResponses,
+        leadershipCase.expected,
+        'managed response capability must follow canonical MusicScale leadership semantics'
+      );
+      verifyNoSensitiveData(res._body);
     }
 
     // Invalid body tests
@@ -458,17 +507,20 @@ async function runTests() {
     assertionCount++; assert.ok(dashboardSrc.includes("billing.subscription.upgraded"));
 
     const homeSrc = fs.readFileSync('src/components/dashboard/EcosystemWorkspaceHome.tsx', 'utf-8');
+    // Design 3 consolidated MusicScale launch authority into one canonical
+    // workspace CTA. Lock that single guarded path instead of the former
+    // duplicated launcher count.
     const isReadyCount = (homeSrc.match(/const isReadyToOpen = \[/g) || []).length;
-    check(isReadyCount, 2);
+    check(isReadyCount, 1);
     
     const isDisabledCount = (homeSrc.match(/const isPrimaryActionDisabled = \[/g) || []).length;
-    check(isDisabledCount, 2);
+    check(isDisabledCount, 1);
     
     const disabledCount = (homeSrc.match(/disabled=\{isPrimaryActionDisabled\}/g) || []).length;
-    check(disabledCount, 2);
+    check(disabledCount, 1);
     
     const launchCount = (homeSrc.match(/else if \(isReadyToOpen && musicScaleApp\) \{/g) || []).length;
-    check(launchCount, 2);
+    check(launchCount, 1);
     
     const inlineArrayCount = (homeSrc.match(/\['active',\s*'trialing',\s*'cancel_scheduled',\s*'administrative'\]\.includes/g) || []).length;
     check(inlineArrayCount, 0);

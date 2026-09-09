@@ -26,7 +26,8 @@ export type AnalyticsEventType =
   | 'scale_creation_completed'
   | 'performance_mode_started'
   | 'performance_mode_ended'
-  | 'trial_cta_clicked';
+  | 'trial_cta_clicked'
+  | 'action_os_interaction';
 
 interface AnalyticsEvent {
   eventType: AnalyticsEventType;

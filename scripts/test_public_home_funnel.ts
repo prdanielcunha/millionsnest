@@ -56,10 +56,31 @@ assert.match(server, /createHash\('sha256'\)/, 'session/source dedupe key must b
 assert.match(server, /limit:\s*'2kb'/, 'public analytics request body must stay tightly bounded');
 assert.match(server, /Cache-Control', 'no-store'/, 'public analytics endpoint must not be cacheable');
 
+const publicAnalyticsStart = rules.indexOf(
+  'function isValidPublicMusicScaleAnalytics()'
+);
+const publicAnalyticsEnd = rules.indexOf(
+  'function isValidAuthenticatedAnalytics()',
+  publicAnalyticsStart
+);
+assert.ok(
+  publicAnalyticsStart >= 0 && publicAnalyticsEnd > publicAnalyticsStart,
+  'public analytics validator must remain explicit'
+);
+const publicAnalyticsBlock = rules.slice(
+  publicAnalyticsStart,
+  publicAnalyticsEnd
+);
+
 assert.equal(
-  rules.includes("data.app == 'millionsnest_core'"),
+  publicAnalyticsBlock.includes("data.app == 'millionsnest_core'"),
   false,
   'public-home funnel must not broaden anonymous Firestore Rules'
+);
+assert.match(
+  publicAnalyticsBlock,
+  /data\.app == 'musicscale'/,
+  'anonymous Firestore analytics must remain limited to the explicit MusicScale public funnel'
 );
 
 console.log('PASS public home funnel attribution, explicit-plan routing, and backend-mediated analytics security');

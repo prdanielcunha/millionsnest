@@ -36,6 +36,20 @@ service cloud.firestore {
       return subActive || appActive || isSystemAdmin();
     }
 
+    function isOrganizationLifecycleActive(orgId) {
+      return exists(/databases/$(database)/documents/organizations/$(orgId)) &&
+        !(
+          get(/databases/$(database)/documents/organizations/$(orgId)).data.get('status', 'active')
+          in [
+            'archived',
+            'inactive',
+            'suspended',
+            'disabled'
+          ]
+        ) &&
+        get(/databases/$(database)/documents/organizations/$(orgId)).data.get('disabled', false) != true;
+    }
+
     function checkOrgAccess(orgId) {
       let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
       let isOwner = orgDoc != null && (
@@ -85,6 +99,53 @@ service cloud.firestore {
       return isSystemAdmin() || role == 'owner' || role == 'admin' || hasExplicitPerm;
     }
     
+    function canReadManagedScaleResponses(orgId) {
+      let memberData = getMemberPermissions(orgId);
+      let role = memberData != null
+        ? memberData.get('role', memberData.get('organizationRole', ''))
+        : '';
+      let rootPermissions = memberData != null
+        ? memberData.get('permissions', {})
+        : {};
+      let appAccess = memberData != null
+        ? memberData.get('appAccess', {})
+        : {};
+      let musicScaleAccess = appAccess is map
+        ? appAccess.get('musicscale', {})
+        : {};
+      let appPermissions = musicScaleAccess is map
+        ? musicScaleAccess.get('permissions', [])
+        : [];
+
+      let hasRootCapability =
+        rootPermissions is map &&
+        rootPermissions.get('scaleResponses.readManaged', false) == true;
+      let hasAppCapability =
+        appPermissions is list &&
+        (
+          'scaleResponses.readManaged' in appPermissions ||
+          '*' in appPermissions
+        );
+
+      return isSystemAdmin() ||
+        role in [
+          'owner',
+          'admin',
+          'leader',
+          'lider',
+          'líder',
+          'lider / ministro',
+          'líder / ministro',
+          'minister',
+          'ministro',
+          'pastor',
+          'worship_leader',
+          'music_leader'
+        ] ||
+        hasRootCapability ||
+        hasAppCapability;
+    }
+
     function isSystemAdmin() {
       let userDoc = isAuthenticated() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
       return userDoc != null && 'systemRole' in userDoc.data && (userDoc.data.systemRole == 'ceo' || userDoc.data.systemRole == 'global_admin' || userDoc.data.systemRole == 'ecosystem_owner' || userDoc.data.systemRole == 'founder');
@@ -186,10 +247,61 @@ service cloud.firestore {
         allow write: if isAuthenticated() && checkOrgAccess(orgId);
       }
 
+      // Notifications may contain personal preparation and assignment context.
+      // Keep recipient isolation explicit and exclude this collection from the
+      // generic organization wildcard below.
+      match /notifications/{notificationId} {
+        allow read: if isAuthenticated() &&
+          resource.data.get('recipientId', '') == request.auth.uid;
+        allow create: if false;
+        allow update: if isAuthenticated() &&
+          resource.data.get('recipientId', '') == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'isRead',
+            'isArchived',
+            'readAt',
+            'archivedAt'
+          ]);
+        allow delete: if false;
+      }
+
+      // Product analytics can contain user/session attribution and error
+      // context. Clients may append valid self-attributed events, but analytics
+      // are not a tenant-wide data feed for ordinary members.
+      match /analytics/{eventId} {
+        allow create: if isAuthenticated() &&
+          checkOrgAccess(orgId) &&
+          isOrganizationLifecycleActive(orgId) &&
+          hasValidAnalyticsEnvelope() &&
+          (
+            request.resource.data.eventType != 'action_os_interaction' ||
+            isValidOrganizationActionOsAnalytics()
+          ) &&
+          request.resource.data.get('organizationId', '') == orgId &&
+          request.resource.data.get('userId', '') in [
+            request.auth.uid,
+            'none'
+          ];
+        allow read: if isSystemAdmin();
+        allow update, delete: if false;
+      }
+
+      // Action OS state is backend-authoritative. Clients use authenticated
+      // API commands so preference ownership can never be forged.
+      match /actionCenterUsers/{uid}/{document=**} {
+        allow read, write: if false;
+      }
+
+      match /actionCenter/{document=**} {
+        allow read, write: if false;
+      }
+
       match /{app}/{document=**} {
-        allow read: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow create: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        // Firestore ORs overlapping allow rules. Sensitive subcollections with
+        // narrower policies must never inherit this generic tenant-wide access.
+        allow read: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 
@@ -287,16 +399,16 @@ service cloud.firestore {
     }
 
     // Keep response privacy compatible with MusicScale's canonical policy:
-    // a person may read only their own response; team summaries require scale-management authority.
+    // a person may read only their own response; team summaries require the
+    // canonical MusicScale managed-response capability / leadership role.
     match /scales/{scaleId}/responses/{responseId} {
       allow read: if isAuthenticated() && (
         isSystemAdmin() ||
         resource.data.get('userId', '') == request.auth.uid ||
         (
           exists(/databases/$(database)/documents/scales/$(scaleId)) &&
-          hasPermission(
-            get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', ''),
-            'canManageScales'
+          canReadManagedScaleResponses(
+            get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', '')
           )
         )
       );
@@ -308,9 +420,8 @@ service cloud.firestore {
         isSystemAdmin() ||
         (
           exists(/databases/$(database)/documents/scales/$(scaleId)) &&
-          hasPermission(
-            get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', ''),
-            'canManageScales'
+          canReadManagedScaleResponses(
+            get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', '')
           )
         )
       );
@@ -448,6 +559,73 @@ service cloud.firestore {
       request.resource.data.app.size() <= 64 &&
       request.resource.data.metadata is map &&
       request.resource.data.timestamp is timestamp;
+    }
+
+    function isValidOrganizationActionOsAnalytics() {
+      let data = request.resource.data;
+      let metadata = data.metadata;
+
+      return data.eventType == 'action_os_interaction' &&
+        data.app == 'millionsnest_core' &&
+        metadata.keys().hasAll([
+          'action',
+          'lane',
+          'sourceApp'
+        ]) &&
+        metadata.keys().hasOnly([
+          'action',
+          'lane',
+          'sourceApp',
+          'signalType',
+          'priority',
+          'dismissCode'
+        ]) &&
+        metadata.action in [
+          'action_opened',
+          'action_snoozed',
+          'action_dismissed',
+          'change_reviewed',
+          'commitment_opened'
+        ] &&
+        metadata.lane in [
+          'action',
+          'change',
+          'commitment'
+        ] &&
+        metadata.sourceApp in [
+          'hub',
+          'musicscale'
+        ] &&
+        (
+          !('signalType' in metadata) ||
+          (
+            metadata.get('signalType', '') is string &&
+            metadata.get('signalType', '').size() > 0 &&
+            metadata.get('signalType', '').size() <= 80
+          )
+        ) &&
+        (
+          !('priority' in metadata) ||
+          metadata.get('priority', '') in [
+            'low',
+            'normal',
+            'high',
+            'urgent'
+          ]
+        ) &&
+        (
+          !('dismissCode' in metadata) ||
+          (
+            metadata.get('action', '') == 'action_dismissed' &&
+            metadata.get('dismissCode', '') in [
+              'not_relevant',
+              'already_handled',
+              'not_my_responsibility',
+              'too_early',
+              'no_reason'
+            ]
+          )
+        );
     }
 
     function isValidPublicMusicScaleAnalytics() {
