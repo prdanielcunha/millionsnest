@@ -11,6 +11,10 @@ import { removeOrganizationMember } from './src/server/services/MemberRemovalCom
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
 import { repairOrganizationOwnership } from './src/server/services/OrganizationOwnershipRepairService.js';
 import { updateMusicScaleMemberCapability } from './src/server/services/MusicScaleMemberCapabilityCommandService.js';
+import {
+  getActionPreferences,
+  updateActionPreference
+} from './src/server/services/ActionPreferenceCommandService.js';
 import { createSupportTicket } from './src/server/services/SupportTicketService.js';
 import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
 import { createSupportWhatsAppLink } from './src/server/services/SupportWhatsAppService.js';
@@ -1324,6 +1328,8 @@ async function startServer() {
     getFirestore: () => getDb(),
   }));
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/musicscale-capability', express.json({ limit: '8kb' }), (req, res) => updateMusicScaleMemberCapability(req, res));
+  app.get('/api/v1/organizations/:organizationId/action-preferences', (req, res) => getActionPreferences(req, res));
+  app.put('/api/v1/organizations/:organizationId/action-preference', express.json({ limit: '8kb' }), (req, res) => updateActionPreference(req, res));
   app.post('/api/v1/user/active-organization', express.json(), setActiveOrganization);
 
   app.post('/api/internal/repair-subscription', async (req: any, res) => {

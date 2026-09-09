@@ -186,10 +186,20 @@ service cloud.firestore {
         allow write: if isAuthenticated() && checkOrgAccess(orgId);
       }
 
+      // Action OS state is backend-authoritative. Clients use authenticated
+      // API commands so preference ownership can never be forged.
+      match /actionCenterUsers/{uid}/{document=**} {
+        allow read, write: if false;
+      }
+
+      match /actionCenter/{document=**} {
+        allow read, write: if false;
+      }
+
       match /{app}/{document=**} {
-        allow read: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow create: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if app != 'join_requests' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow read: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { deriveReadOnlyHubActions } from '../src/lib/actionCenter.js';
+import {
+  applyActionPreferences,
+  deriveReadOnlyHubActions
+} from '../src/lib/actionCenter.js';
 
 const baseInput = {
   organization: { isConfigured: true },
@@ -36,6 +39,10 @@ const pendingResponses = deriveReadOnlyHubActions({
 assert.equal(pendingResponses.length, 1);
 assert.equal(pendingResponses[0]?.signalType, 'musicscale_pending_responses');
 assert.equal(pendingResponses[0]?.translationParams?.count, 3);
+assert.equal(
+  pendingResponses[0]?.fingerprint,
+  'musicscale:pending_responses:scale-123:3'
+);
 assert.deepEqual(pendingResponses[0]?.destination, {
   kind: 'app',
   appId: 'musicscale',
@@ -61,18 +68,9 @@ const multipleActions = deriveReadOnlyHubActions({
 
 assert.equal(multipleActions.length, 3);
 assert.equal(multipleActions[0]?.priority, 'high');
-assert.ok(
-  multipleActions.some(action => action.signalType === 'organization_incomplete'),
-  'must include incomplete organization action'
-);
-assert.ok(
-  multipleActions.some(action => action.signalType === 'pending_invites'),
-  'must include pending invites action'
-);
-assert.ok(
-  multipleActions.some(action => action.signalType === 'musicscale_pending_responses'),
-  'must include MusicScale pending response action'
-);
+assert.ok(multipleActions.some(action => action.signalType === 'organization_incomplete'));
+assert.ok(multipleActions.some(action => action.signalType === 'pending_invites'));
+assert.ok(multipleActions.some(action => action.signalType === 'musicscale_pending_responses'));
 
 const unauthorized = deriveReadOnlyHubActions({
   organization: { isConfigured: false },
@@ -93,4 +91,71 @@ assert.deepEqual(
   'projection must not surface management actions when the user lacks permission'
 );
 
-console.log('Action Center projection checks passed.');
+const sourceAction = pendingResponses[0]!;
+const now = 1_700_000_000_000;
+
+assert.deepEqual(
+  applyActionPreferences(
+    [sourceAction],
+    [{
+      dedupeKey: sourceAction.dedupeKey,
+      fingerprint: sourceAction.fingerprint,
+      mode: 'dismissed'
+    }],
+    now
+  ),
+  [],
+  'dismissed action should be hidden while the source fingerprint is unchanged'
+);
+
+assert.deepEqual(
+  applyActionPreferences(
+    [sourceAction],
+    [{
+      dedupeKey: sourceAction.dedupeKey,
+      fingerprint: sourceAction.fingerprint,
+      mode: 'snoozed',
+      snoozedUntilMs: now + 60_000
+    }],
+    now
+  ),
+  [],
+  'snoozed action should be hidden until snooze expires'
+);
+
+assert.deepEqual(
+  applyActionPreferences(
+    [sourceAction],
+    [{
+      dedupeKey: sourceAction.dedupeKey,
+      fingerprint: sourceAction.fingerprint,
+      mode: 'snoozed',
+      snoozedUntilMs: now - 1
+    }],
+    now
+  ),
+  [sourceAction],
+  'expired snooze must surface the action again'
+);
+
+const changedSourceAction = {
+  ...sourceAction,
+  fingerprint: 'musicscale:pending_responses:scale-123:2',
+  translationParams: { count: 2 }
+};
+
+assert.deepEqual(
+  applyActionPreferences(
+    [changedSourceAction],
+    [{
+      dedupeKey: sourceAction.dedupeKey,
+      fingerprint: sourceAction.fingerprint,
+      mode: 'dismissed'
+    }],
+    now
+  ),
+  [changedSourceAction],
+  'materially changed source must reappear even after a previous dismiss'
+);
+
+console.log('Action Center projection and preference checks passed.');

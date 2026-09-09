@@ -108,13 +108,17 @@ The first release does **not** require generative AI.
 
 All records are tenant-scoped.
 
-Recommended conceptual model:
-
+Organization-level action lifecycle (future persistent/manual/assigned actions):
 ```
-organizations/{organizationId}/action_center/actions/{actionId}
+organizations/{organizationId}/actionCenter/{actionId}
 ```
 
-Action:
+User-scoped interaction preferences for derived actions:
+```
+organizations/{organizationId}/actionCenterUsers/{uid}/preferences/{preferenceId}
+```
+
+Persistent action:
 - id
 - organizationId
 - type
@@ -123,13 +127,12 @@ Action:
 - sourceEntityId
 - titleKey / localized title payload
 - descriptionKey / localized description payload
-- status: open | in_progress | resolved | snoozed | dismissed
+- status: open | in_progress | resolved
 - priority: low | normal | high | urgent
 - ownerUid | null
 - createdAt
 - updatedAt
 - dueAt | null
-- snoozedUntil | null
 - resolvedAt | null
 - resolvedByUid | null
 - fingerprint
@@ -137,22 +140,34 @@ Action:
 - metadata (strict allowlist, non-sensitive where possible)
 - visibilityScope / requiredPermission
 - policyVersion
+
+Derived-action preference:
+- actorUid (always server-derived)
+- dedupeKey
+- fingerprint
+- mode: snoozed | dismissed
+- snoozedUntil | null
+- createdAt
+- updatedAt
+
+Action history for persistent/manual actions:
+```
+organizations/{organizationId}/actionCenter/{actionId}/history/{eventId}
 ```
 
-Action history:
-```
-organizations/{organizationId}/action_center/actions/{actionId}/history/{eventId}
-```
+Important lifecycle rule:
+- derived actions are source-driven and are not marked resolved merely because a user clicks a button;
+- they disappear when the underlying condition is actually resolved;
+- snooze/dismiss are initially user-scoped so one leader cannot hide an issue for everyone;
+- when an action fingerprint changes materially, a previous snooze/dismiss no longer suppresses it.
 
-History events:
+History events for persistent/manual actions:
 - created
 - assigned
 - reassigned
 - started
-- snoozed
 - reopened
 - resolved
-- dismissed
 - source_changed
 
 ## 7. Signal contract
@@ -341,10 +356,13 @@ Do not:
 - no backend critical change.
 
 ### Slice 2 — interaction state
-- authorized assignment, snooze, dismiss and resolve;
-- tenant-scoped persistence;
-- audit history;
-- tests and rules.
+- user-scoped snooze/dismiss for derived actions;
+- source-driven resolution semantics (no false "resolved" state);
+- fingerprint-aware resurfacing when a signal materially changes;
+- tenant-scoped persistence behind authenticated backend commands;
+- assignment/manual-action lifecycle only after the derived-action interaction model is stable;
+- audit history for persistent organization-level actions;
+- tests and explicit backend authorization.
 
 ### Slice 3 — adapter boundary
 - extract source adapters;
@@ -391,13 +409,13 @@ Current workflow for this initiative:
 
 No Google AI Studio dependency.
 
-## 20. Immediate next step
+## 20. Current implementation state and immediate next step
 
-Implement Slice 1 only after full code-path audit of:
-- `src/pages/Dashboard.tsx`
-- `src/components/dashboard/EcosystemWorkspaceHome.tsx`
-- current MusicScale summary derivation
-- current i18n files
-- related scripts/tests
+Slice 1 is implemented in the Hub with a premium **Hoje / Today / Hoy** section backed by existing safe/read-only data. The deterministic projection currently covers organization readiness, pending invitations and MusicScale pending confirmations.
 
-The first visible experiment should be a premium **Hoje** section backed only by existing safe/read-only data, with zero billing/auth/RBAC regressions and no new paid infrastructure.
+The immediate next step is Slice 2A:
+- persist only user-scoped snooze/dismiss preferences for derived actions;
+- never let a UI click falsely mark a still-active source condition as resolved;
+- resurface dismissed/snoozed actions when their fingerprint materially changes;
+- keep all writes behind authenticated backend commands;
+- preserve zero paid AI/API dependency.
