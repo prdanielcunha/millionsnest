@@ -107,6 +107,9 @@ export function EcosystemCommitments({
                   <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#86BEFF]">
                     MusicScale
                   </span>
+                  <span className="rounded-full border border-[#2B85EB]/15 bg-[#2B85EB]/[0.06] px-2 py-0.5 text-[9px] font-semibold text-[#9CC8FF]">
+                    {t('workspace.commitments.preparation_badge')}
+                  </span>
                   <span className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2 py-0.5 text-[9px] font-semibold text-[#A8B2C0]">
                     {when}
                   </span>
