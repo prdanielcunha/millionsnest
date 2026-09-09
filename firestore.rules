@@ -585,14 +585,14 @@ service cloud.firestore {
         (
           !('signalType' in metadata) ||
           (
-            metadata.signalType is string &&
-            metadata.signalType.size() > 0 &&
-            metadata.signalType.size() <= 80
+            metadata.get('signalType', '') is string &&
+            metadata.get('signalType', '').size() > 0 &&
+            metadata.get('signalType', '').size() <= 80
           )
         ) &&
         (
           !('priority' in metadata) ||
-          metadata.priority in [
+          metadata.get('priority', '') in [
             'low',
             'normal',
             'high',
@@ -602,8 +602,8 @@ service cloud.firestore {
         (
           !('dismissCode' in metadata) ||
           (
-            metadata.action == 'action_dismissed' &&
-            metadata.dismissCode in [
+            metadata.get('action', '') == 'action_dismissed' &&
+            metadata.get('dismissCode', '') in [
               'not_relevant',
               'already_handled',
               'not_my_responsibility',
