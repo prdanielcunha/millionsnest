@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, Firestore, getFirestore } from 'firebase-admin/firestore';
-import { isCanonicalGlobalRole } from '../../lib/permissionService.js';
+import { canManageTenantMembers } from '../../lib/permissionService.js';
 
 type Dependencies = {
   verifyIdToken?: (token: string) => Promise<{ uid: string }>;
@@ -144,7 +144,8 @@ export async function removeOrganizationMember(
       const organization = orgSnap.data() ?? {};
       if (organization.status !== 'active') return { success: false as const, reasonCode: 'ORGANIZATION_INACTIVE' };
 
-      const actorGlobal = isCanonicalGlobalRole(actorUserSnap.data()?.systemRole);
+      const actorSystemRole = actorUserSnap.data()?.systemRole;
+      const actorGlobal = canManageTenantMembers(actorSystemRole);
       const actorIsOrganizationOwner = organizationOwnerMatches(organization, actorUid);
       const actorMembership = classifyMembership(actorMemberSnap.data());
       const actorHasBaseAuthority = actorGlobal || actorIsOrganizationOwner ||
@@ -231,6 +232,8 @@ export async function removeOrganizationMember(
         transaction.set(db.doc(`organizations/${organizationId}/audit_logs/${auditId}`), {
           action: 'organization.member.removed',
           actorUid,
+          actorSystemRole: actorSystemRole || null,
+          governanceScope: actorGlobal ? 'ecosystem_global' : 'organization',
           memberId,
           organizationId,
           previousOrganizationRole: targetMembership.role,

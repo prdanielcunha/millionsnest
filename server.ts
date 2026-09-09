@@ -10,6 +10,7 @@ import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
 import { repairOrganizationOwnership } from './src/server/services/OrganizationOwnershipRepairService.js';
+import { transferOrganizationOwnership } from './src/server/services/OrganizationOwnershipTransferService.js';
 import { updateMusicScaleMemberCapability } from './src/server/services/MusicScaleMemberCapabilityCommandService.js';
 import {
   getActionPreferences,
@@ -39,7 +40,7 @@ import { handleEcosystemAccessProjectionRequest } from './src/server/services/Ec
 import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
-import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy } from './src/lib/permissionService.js';
+import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy, canManageTenantMembers, canManageTenantBilling, canManageTenantSettings } from './src/lib/permissionService.js';
 import { canChangeSystemRole, isAssignableSystemRole, normalizeLegacySystemRole } from './src/lib/roleResolver.js';
 import { 
   MUSIC_SCALE_PLANS, 
@@ -800,7 +801,7 @@ async function startServer() {
         orgData.ownerUserId === decoded.uid ||
         orgData.owner_user_id === decoded.uid;
       const canReadInvites =
-        isGlobalPrivilegedRole(actorData.systemRole) ||
+        canManageTenantSettings(actorData.systemRole) ||
         actorIsOwner ||
         role === 'owner' ||
         role === 'admin' ||
@@ -1326,6 +1327,10 @@ async function startServer() {
   app.post('/api/v1/organizations/:organizationId/ownership/repair', express.json({ limit: '8kb' }), (req, res) => repairOrganizationOwnership(req, res, {
     verifyIdToken: (token: string) => admin.auth().verifyIdToken(token),
     getFirestore: () => getDb(),
+  }));
+  app.post('/api/v1/organizations/:organizationId/ownership/transfer', express.json({ limit: '8kb' }), (req, res) => transferOrganizationOwnership(req, res, {
+    verifyIdToken: (token: string) => admin.auth().verifyIdToken(token),
+    getFirestore: () => getDb()!,
   }));
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/musicscale-capability', express.json({ limit: '8kb' }), (req, res) => updateMusicScaleMemberCapability(req, res));
   app.get('/api/v1/organizations/:organizationId/action-preferences', (req, res) => getActionPreferences(req, res));
@@ -2069,7 +2074,7 @@ async function startServer() {
       // Actor global role
       const actorUserDoc = await db.collection('users').doc(actorUid).get();
       const actorSystemRole = actorUserDoc.data()?.systemRole;
-      const isGlobalAdmin = isGlobalPrivilegedRole(actorSystemRole);
+      const isGlobalAdmin = canManageTenantMembers(actorSystemRole);
 
       // Actor local role
       const actorMemberDoc = await db.collection('organizations').doc(orgId).collection('members').doc(actorUid).get();
@@ -2142,6 +2147,19 @@ async function startServer() {
       if (legacyDoc.exists) {
         await legacyDocRef.set(memberUpdate, { merge: true });
       }
+
+      await db.collection(`organizations/${orgId}/audit_logs`).add({
+        action: 'organization.member.profile_updated',
+        actorUid,
+        actorSystemRole: actorSystemRole || null,
+        governanceScope: isGlobalAdmin ? 'ecosystem_global' : 'organization',
+        memberId,
+        changedFields: [
+          ...(displayName !== undefined ? ['displayName'] : []),
+          ...(photoURL !== undefined ? ['photoURL'] : [])
+        ],
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
 
       return res.json({ success: true });
     } catch (err) {
@@ -4737,7 +4755,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userRef.data();
-      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
+      if (!canManageTenantSettings(userData?.systemRole) || !canManageTenantBilling(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -5350,7 +5368,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const syncUserEmail = syncUserDoc.data()?.email;
       const syncSystemRole = syncUserDoc.data()?.systemRole || 'user';
       let isMember = false;
-      let isSystemAdmin = isCanonicalGlobalRole(syncSystemRole);
+      let isSystemAdmin = canManageTenantBilling(syncSystemRole);
       
       if (orgContext.organizations) {
          const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
@@ -5361,6 +5379,28 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       if (!isMember && !isSystemAdmin) {
          return res.status(403).json({ error: 'Você não tem permissão nesta organização.' });
+      }
+
+      let syncBillingEmail = syncUserEmail;
+      if (isSystemAdmin) {
+        const targetOrgDoc = await db.collection('organizations').doc(organizationId).get();
+        if (!targetOrgDoc.exists) {
+          return res.status(404).json({ error: 'Organização não encontrada.' });
+        }
+        const targetOrgData = targetOrgDoc.data() || {};
+        const targetOwnerUid = String(
+          targetOrgData.ownerUid ||
+          targetOrgData.ownerUserId ||
+          targetOrgData.ownerId ||
+          targetOrgData.owner_user_id ||
+          ''
+        ).trim();
+        if (targetOwnerUid) {
+          const targetOwnerDoc = await db.collection('users').doc(targetOwnerUid).get();
+          syncBillingEmail = targetOrgData.ownerEmail || (targetOwnerDoc.exists ? targetOwnerDoc.data()?.email : null) || null;
+        } else {
+          syncBillingEmail = targetOrgData.ownerEmail || null;
+        }
       }
 
       const stripe = getStripe();
@@ -5454,7 +5494,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
 
       // Self-Healing Logic via email (using org context email)
-      const userEmail = syncUserEmail;
+      const userEmail = syncBillingEmail;
       if ((!customerId || allStripeSubs.length === 0) && userEmail) {
         const customers = await stripe.customers.list({ email: userEmail, limit: 10 });
         let potentialSubs: Stripe.Subscription[] = [];
@@ -5518,6 +5558,18 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }, { merge: true });
 
         await batch.commit();
+
+        if (isSystemAdmin) {
+          await db.collection(`organizations/${organizationId}/audit_logs`).add({
+            action: 'organization.billing.synced',
+            actorUid: uid,
+            actorSystemRole: syncSystemRole || null,
+            governanceScope: 'ecosystem_global',
+            organizationId,
+            resultingStatus: 'none',
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
         
         return res.json({ 
            ok: true, 
@@ -5623,6 +5675,19 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       batch.set(db.collection('organizations').doc(organizationId), orgPayload, { merge: true });
 
       await batch.commit();
+
+      if (isSystemAdmin) {
+        await db.collection(`organizations/${organizationId}/audit_logs`).add({
+          action: 'organization.billing.synced',
+          actorUid: uid,
+          actorSystemRole: syncSystemRole || null,
+          governanceScope: 'ecosystem_global',
+          organizationId,
+          resultingStatus: sub.status,
+          stripeSubscriptionId: sub.id,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
       
       return res.json({ 
          ok: true, 
@@ -6454,6 +6519,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       batch.set(auditRef, {
         action: 'organization.updated',
         actorUid: uid,
+        actorSystemRole: actorData.systemRole || null,
+        governanceScope: canManageTenantSettings(actorData.systemRole) ? 'ecosystem_global' : 'organization',
         changedFields: Object.keys(updateData).filter(key => key !== 'updatedAt'),
         timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
@@ -6867,8 +6934,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          const membership = orgContext.memberships.find((m: any) => m.organizationId === orgId);
          const hasBillingPerm = membership?.permissions?.['organization.billing.manage'] === true || membership?.role === 'owner' || membership?.role === 'admin';
          const systemRole = userDoc.data()?.systemRole;
-         const isGlobalAdmin = isGlobalPrivilegedRole(systemRole);
+         const isGlobalAdmin = canManageTenantBilling(systemRole);
          
+         if (!isOwner && !hasBillingPerm && isGlobalAdmin) {
+           return res.status(409).json({
+             error: 'A governança global pode administrar a assinatura existente, mas uma nova contratação deve ser concluída pelo responsável financeiro da organização.',
+             code: 'GLOBAL_CHECKOUT_REQUIRES_TENANT_CUSTOMER'
+           });
+         }
          if (!isOwner && !hasBillingPerm && !isGlobalAdmin) {
            return res.status(403).json({ error: 'Você não tem permissão para gerenciar o faturamento desta organização.' });
          }
@@ -7117,8 +7190,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          const membership = orgContext.memberships.find((m: any) => m.organizationId === orgId);
          const hasBillingPerm = membership?.permissions?.['organization.billing.manage'] === true || membership?.role === 'owner' || membership?.role === 'admin';
          const systemRole = userDoc.data()?.systemRole;
-         const isGlobalAdmin = isGlobalPrivilegedRole(systemRole);
+         const isGlobalAdmin = canManageTenantBilling(systemRole);
          
+         if (!isOwner && !hasBillingPerm && isGlobalAdmin) {
+           return res.status(409).json({
+             error: 'A governança global pode administrar a assinatura existente, mas uma nova contratação deve ser concluída pelo responsável financeiro da organização.',
+             code: 'GLOBAL_CHECKOUT_REQUIRES_TENANT_CUSTOMER'
+           });
+         }
          if (!isOwner && !hasBillingPerm && !isGlobalAdmin) {
            return res.status(403).json({ error: 'Você não tem permissão para gerenciar o faturamento desta organização.' });
          }
@@ -7356,8 +7435,15 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         role === 'admin' ||
         membership?.permissions?.['organization.billing.manage'] === true;
       const systemRole = confirmingUserDoc.exists ? confirmingUserDoc.data()?.systemRole : null;
-      const isGlobalAdmin = isGlobalPrivilegedRole(systemRole || '');
+      const isGlobalAdmin = canManageTenantBilling(systemRole || '');
 
+      if (!canManageBilling && isGlobalAdmin) {
+        return res.status(409).json({
+          ok: false,
+          code: 'GLOBAL_CHECKOUT_REQUIRES_TENANT_CUSTOMER',
+          error: 'A confirmação de uma nova contratação deve permanecer vinculada ao responsável financeiro da organização.'
+        });
+      }
       if (!canManageBilling && !isGlobalAdmin) {
         console.warn('[Checkout Confirm] Organization billing authorization rejected.', {
           authenticatedUid: userId,
@@ -7610,8 +7696,15 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         role === 'admin' ||
         membership?.permissions?.['organization.billing.manage'] === true;
       const systemRole = userDoc.exists ? userDoc.data()?.systemRole : null;
-      const isGlobalAdmin = isGlobalPrivilegedRole(systemRole || '');
+      const isGlobalAdmin = canManageTenantBilling(systemRole || '');
 
+      if (!canManageBilling && isGlobalAdmin) {
+        return res.status(409).json({
+          ok: false,
+          code: 'GLOBAL_CHECKOUT_REQUIRES_TENANT_CUSTOMER',
+          error: 'Uma nova contratação deve permanecer vinculada ao responsável financeiro da organização.'
+        });
+      }
       if (!canManageBilling && !isGlobalAdmin) {
         return res.status(403).json({
           ok: false,
@@ -7703,8 +7796,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         role === 'admin' ||
         membership?.permissions?.['organization.billing.manage'] === true;
       const systemRole = userDoc.exists ? userDoc.data()?.systemRole : null;
-      const isGlobalAdmin = isGlobalPrivilegedRole(systemRole || '');
+      const isGlobalAdmin = canManageTenantBilling(systemRole || '');
 
+      if (!canManageBilling && isGlobalAdmin) {
+        return res.status(409).json({
+          error: 'A compra de um novo complemento deve ser concluída pelo responsável financeiro da organização.',
+          code: 'GLOBAL_CHECKOUT_REQUIRES_TENANT_CUSTOMER'
+        });
+      }
       if (!canManageBilling && !isGlobalAdmin) {
         return res.status(403).json({
           error: 'Você não tem permissão para comprar complementos para esta organização.'
@@ -7837,7 +7936,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         membership?.permissions?.['organization.billing.manage'] === true;
 
       const systemRole = userDoc.data()?.systemRole || 'user';
-      const isSystemAdmin = isGlobalPrivilegedRole(systemRole);
+      const isSystemAdmin = canManageTenantBilling(systemRole);
 
       if (!canManageBilling && !isSystemAdmin) {
         return res.status(403).json({
@@ -7845,10 +7944,33 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         });
       }
 
-      // Retrieve the canonical subscription from Firestore
-      const subDoc = await db.collection('subscriptions').doc(organizationId).get();
+      // Retrieve the canonical subscription from Firestore and resolve the tenant
+      // billing subject independently from the global operator identity.
+      const [subDoc, targetOrgDoc] = await Promise.all([
+        db.collection('subscriptions').doc(organizationId).get(),
+        db.collection('organizations').doc(organizationId).get()
+      ]);
       if (!subDoc.exists) {
          return res.status(404).json({ error: 'Nenhuma assinatura encontrada para esta organização.' });
+      }
+      if (!targetOrgDoc.exists) {
+         return res.status(404).json({ error: 'Organização não encontrada.' });
+      }
+
+      const targetOrgData = targetOrgDoc.data() || {};
+      const targetOwnerUid = String(
+        targetOrgData.ownerUid ||
+        targetOrgData.ownerUserId ||
+        targetOrgData.ownerId ||
+        targetOrgData.owner_user_id ||
+        ''
+      ).trim();
+      const billingSubjectUid = isSystemAdmin ? targetOwnerUid : uid;
+      if (!billingSubjectUid) {
+        return res.status(409).json({
+          error: 'A organização precisa ter um responsável definido antes de alterar a assinatura.',
+          code: 'BILLING_OWNER_REQUIRED'
+        });
       }
 
       const subData = subDoc.data() as any;
@@ -7856,6 +7978,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const stripeCustomerId = subData.stripeCustomerId;
 
       if (!stripeSubscriptionId || !stripeCustomerId) {
+         if (isSystemAdmin) {
+           return res.status(409).json({
+             ok: false,
+             action: 'customer_checkout_required',
+             code: 'GLOBAL_CHECKOUT_REQUIRES_TENANT_CUSTOMER',
+             error: 'A nova contratação deve ser concluída pelo responsável financeiro da organização.'
+           });
+         }
          return res.json({ 
             ok: true,
             action: 'checkout_required',
@@ -7882,7 +8012,15 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const cancelAtPeriodEnd = stripeSub.cancel_at_period_end;
 
       if (status === 'canceled' || status === 'unpaid') {
-         // It's really canceled or unpaid, cannot just remove cancel_at_period_end. Needs checkout.
+         // A fresh checkout must stay bound to the tenant's financial owner.
+         if (isSystemAdmin) {
+           return res.status(409).json({
+             ok: false,
+             action: 'customer_checkout_required',
+             code: 'GLOBAL_CHECKOUT_REQUIRES_TENANT_CUSTOMER',
+             error: 'A nova contratação deve ser concluída pelo responsável financeiro da organização.'
+           });
+         }
          return res.json({ 
            ok: true, 
            action: 'checkout_required', 
@@ -7899,12 +8037,24 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
          // Sync to Firestore immediately so UI updates without waiting for webhook
          await upsertEcosystemSubscription({
-             userId: uid,
+             userId: billingSubjectUid,
              orgId: organizationId,
              subscription: updatedSub,
              eventCreatedTs: Math.floor(Date.now() / 1000),
              event_type: 'customer.subscription.updated'
          });
+
+         if (isSystemAdmin) {
+           await db.collection(`organizations/${organizationId}/audit_logs`).add({
+             action: 'organization.billing.reactivated',
+             actorUid: uid,
+             actorSystemRole: systemRole || null,
+             governanceScope: 'ecosystem_global',
+             organizationId,
+             stripeSubscriptionId,
+             timestamp: admin.firestore.FieldValue.serverTimestamp()
+           });
+         }
 
          return res.json({
             ok: true,
@@ -8002,17 +8152,29 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         customerId = subDoc.data()?.stripeCustomerId;
       }
 
-      if (!customerId && userDoc.exists) {
-        customerId = userDoc.data()?.stripeCustomerId;
-      }
-
+      // Never fall back to the global administrator's own Stripe identity while
+      // operating another tenant. Billing context must always resolve from the
+      // target organization (subscription first, then its authoritative owner).
       if (!customerId) {
-        const email = decodedToken.email || userDoc.data()?.email;
-        if (email) {
-          const stripeLookup = getStripe();
-          const customers = await stripeLookup.customers.list({ email, limit: 1 });
-          if (customers.data.length > 0) {
-            customerId = customers.data[0].id;
+        const orgSnap = await db.collection('organizations').doc(orgId).get();
+        const orgData = orgSnap.exists ? orgSnap.data() || {} : {};
+        const ownerUid = orgData.ownerUid || orgData.ownerUserId || orgData.ownerId || orgData.owner_user_id || null;
+        const ownerUserDoc = ownerUid
+          ? await db.collection('users').doc(String(ownerUid)).get()
+          : null;
+
+        if (ownerUserDoc?.exists) {
+          customerId = ownerUserDoc.data()?.stripeCustomerId;
+        }
+
+        if (!customerId) {
+          const ownerEmail = orgData.ownerEmail || (ownerUserDoc?.exists ? ownerUserDoc.data()?.email : null);
+          if (ownerEmail) {
+            const stripeLookup = getStripe();
+            const customers = await stripeLookup.customers.list({ email: ownerEmail, limit: 1 });
+            if (customers.data.length > 0) {
+              customerId = customers.data[0].id;
+            }
           }
         }
       }
@@ -8038,6 +8200,18 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         customer: customerId,
         return_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
       });
+
+      if (isGlobalAdmin) {
+        await db.collection(`organizations/${orgId}/audit_logs`).add({
+          action: 'organization.billing.portal_opened',
+          actorUid: userId,
+          actorSystemRole: systemRole || null,
+          governanceScope: 'ecosystem_global',
+          organizationId: orgId,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+
       res.json({ url: session.url });
     } catch (e: any) {
       console.error('[Portal] Error creating portal session:', e);

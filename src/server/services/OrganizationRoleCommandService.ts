@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, Firestore, getFirestore } from 'firebase-admin/firestore';
-import { isCanonicalGlobalRole } from '../../lib/permissionService.js';
+import { canManageTenantMembers } from '../../lib/permissionService.js';
 import { CURRENT_PERMISSIONS_VERSION, getDefaultPermissions } from '../../lib/rbac.js';
 
 type Dependencies = {
@@ -165,7 +165,8 @@ export async function updateOrganizationMemberRole(
       if (organizationOwnerMatches(organization, memberId)) {
         return { success: false as const, reasonCode: 'OWNER_ROLE_REQUIRES_TRANSFER' };
       }
-      const actorGlobal = isCanonicalGlobalRole(actorUserSnap.data()?.systemRole);
+      const actorSystemRole = actorUserSnap.data()?.systemRole;
+      const actorGlobal = canManageTenantMembers(actorSystemRole);
       const actorMetadataOwner = organizationOwnerMatches(organization, actorUid);
       const actorMembership = classifyMembership(actorMemberSnap.data());
       const decision = roleDecision({
@@ -199,6 +200,8 @@ export async function updateOrganizationMemberRole(
       transaction.set(auditRef, {
         action: 'organization.member.role_updated',
         actorUid,
+        actorSystemRole: actorSystemRole || null,
+        governanceScope: actorGlobal ? 'ecosystem_global' : 'organization',
         memberId,
         organizationId,
         previousOrganizationRole: targetMembership.role,

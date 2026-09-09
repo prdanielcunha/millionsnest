@@ -14,10 +14,17 @@ on:
       - 'src/components/OrganizationManager.tsx'
       - 'src/server/services/EcosystemAccessResolver.ts'
       - 'src/server/services/MusicScaleHandoffService.ts'
+      - 'src/server/services/OrganizationRoleCommandService.ts'
+      - 'src/server/services/MemberRemovalCommandService.ts'
+      - 'src/server/services/InvitationCreationService.ts'
+      - 'src/server/services/JoinRequestCommandService.ts'
+      - 'src/server/services/MusicScaleMemberCapabilityCommandService.ts'
+      - 'src/server/services/OrganizationOwnershipTransferService.ts'
       - 'server.ts'
       - 'firestore.rules'
       - 'tests/firestore/organization_members.rules.test.ts'
       - 'scripts/test_global_role_canonicalization.ts'
+      - 'scripts/test_global_tenant_governance.ts'
       - 'scripts/test_mn_access_01_musicscale_resolver.ts'
       - 'scripts/test_mn_access_02_musicscale_handoff.ts'
       - '.github/workflows/rbac-qa.yml'
@@ -58,6 +65,9 @@ jobs:
 
       - name: Canonical global role contract
         run: npx tsx scripts/test_global_role_canonicalization.ts
+
+      - name: Global tenant governance contract
+        run: npx tsx scripts/test_global_tenant_governance.ts
 
       - name: MusicScale access resolver contract
         run: npx tsx scripts/test_mn_access_01_musicscale_resolver.ts

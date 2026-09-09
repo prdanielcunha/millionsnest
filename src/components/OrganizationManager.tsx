@@ -80,6 +80,7 @@ export function OrganizationManager({
   handleUpdateMemberRole,
   handleRemoveMember,
   onEditMember,
+  onTransferOwnership,
   isEditingOrg,
   setIsEditingOrg,
   orgNameInput,
@@ -887,6 +888,15 @@ export function OrganizationManager({
                                    className="text-xs text-[#A0A7B5] hover:text-[#F5F7FA] font-medium p-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded bg-white/5 hover:bg-white/10"
                                 >
                                    <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {isGlobalAdmin && onTransferOwnership && member.id !== authoritativeOwnerUid && (
+                                <button
+                                  type="button"
+                                  onClick={() => onTransferOwnership(member)}
+                                  className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border border-[#2B85EB]/25 bg-[#2B85EB]/10 text-[#6EAFFF] hover:bg-[#2B85EB]/15 transition-colors"
+                                >
+                                  Tornar dono
                                 </button>
                               )}
                               <button
