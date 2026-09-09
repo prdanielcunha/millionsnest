@@ -8,7 +8,7 @@ import type { HubAppExperience } from '../../lib/hubAppExperience.js';
 import { applyActionPreferences, deriveReadOnlyHubActions, type ActionPreference, type ActionPreferenceMode, type ReadOnlyHubAction } from '../../lib/actionCenter.js';
 import { deriveReadOnlyHubCommitments, type ReadOnlyHubCommitment } from '../../lib/commitmentCenter.js';
 import { deriveReadOnlyHubChanges, type MusicScaleChangeNotificationInput, type ReadOnlyHubChange } from '../../lib/changeCenter.js';
-import type { ActionOsInteractionInput } from '../../lib/actionOsAnalytics.js';
+import type { ActionOsDismissCode, ActionOsInteractionInput } from '../../lib/actionOsAnalytics.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -94,7 +94,8 @@ interface EcosystemWorkspaceHomeProps {
   actionPreferenceBusyKey?: string | null;
   onSetActionPreference: (
     action: ReadOnlyHubAction,
-    mode: ActionPreferenceMode
+    mode: ActionPreferenceMode,
+    dismissCode?: ActionOsDismissCode
   ) => void | Promise<void>;
   onActionOsInteraction: (
     interaction: Omit<ActionOsInteractionInput, 'organizationId' | 'userId'>
@@ -141,6 +142,18 @@ export function EcosystemWorkspaceHome({
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
   const { openHub } = useSupportHub();
+  const [dismissReasonActionKey, setDismissReasonActionKey] = React.useState<string | null>(null);
+
+  const dismissReasons: Array<{
+    code: ActionOsDismissCode;
+    labelKey: string;
+  }> = [
+    { code: 'not_relevant', labelKey: 'workspace.actions.dismiss_reason_not_relevant' },
+    { code: 'already_handled', labelKey: 'workspace.actions.dismiss_reason_already_handled' },
+    { code: 'not_my_responsibility', labelKey: 'workspace.actions.dismiss_reason_not_my_responsibility' },
+    { code: 'too_early', labelKey: 'workspace.actions.dismiss_reason_too_early' },
+    { code: 'no_reason', labelKey: 'workspace.actions.dismiss_reason_no_reason' },
+  ];
 
   // Selector UI
   const renderWorkspaceSelector = () => {
@@ -796,7 +809,12 @@ export function EcosystemWorkspaceHome({
                         <button
                           type="button"
                           disabled={actionPreferenceBusyKey === action.dedupeKey}
-                          onClick={() => onSetActionPreference(action, 'dismissed')}
+                          aria-expanded={dismissReasonActionKey === action.dedupeKey}
+                          onClick={() =>
+                            setDismissReasonActionKey(current =>
+                              current === action.dedupeKey ? null : action.dedupeKey
+                            )
+                          }
                           className="min-h-[36px] rounded-lg border border-white/[0.07] bg-white/[0.025] px-2.5 text-[10px] font-semibold text-[#A8B2C0] transition hover:bg-white/[0.055] hover:text-white disabled:cursor-wait disabled:opacity-40"
                         >
                           <span className="inline-flex items-center justify-center gap-1.5">
@@ -806,6 +824,38 @@ export function EcosystemWorkspaceHome({
                         </button>
                       </div>
                     </div>
+
+                    {dismissReasonActionKey === action.dedupeKey && (
+                      <div
+                        className="rounded-xl border border-white/[0.07] bg-black/[0.16] p-3 sm:col-start-2 sm:col-span-2"
+                        role="group"
+                        aria-label={t('workspace.actions.dismiss_prompt')}
+                      >
+                        <p className="mb-2 text-[10px] font-semibold text-[#8F9AAA]">
+                          {t('workspace.actions.dismiss_prompt')}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {dismissReasons.map(reason => (
+                            <button
+                              key={reason.code}
+                              type="button"
+                              disabled={actionPreferenceBusyKey === action.dedupeKey}
+                              onClick={async () => {
+                                await onSetActionPreference(
+                                  action,
+                                  'dismissed',
+                                  reason.code
+                                );
+                                setDismissReasonActionKey(null);
+                              }}
+                              className="min-h-[36px] rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 text-[10px] font-semibold text-[#A8B2C0] transition hover:bg-white/[0.06] hover:text-white disabled:cursor-wait disabled:opacity-40"
+                            >
+                              {t(reason.labelKey)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </article>
                 );
               })}
