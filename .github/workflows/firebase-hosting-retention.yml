@@ -1,0 +1,54 @@
+name: Firebase Hosting Retention
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/firebase-hosting-retention.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Set live release retention
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+
+          set_retention () {
+            SITE="$1"
+            COUNT="$2"
+            echo "Setting $SITE retainedReleaseCount=$COUNT"
+            curl --fail --silent --show-error               -X PATCH               -H "Authorization: Bearer $TOKEN"               -H "Content-Type: application/json"               "https://firebasehosting.googleapis.com/v1beta1/sites/$SITE/channels/live?updateMask=retainedReleaseCount"               -d "{\"name\":\"sites/$SITE/channels/live\",\"retainedReleaseCount\":$COUNT}"               | python3 -c 'import json,sys; x=json.load(sys.stdin); print(x.get("name"), "retainedReleaseCount=", x.get("retainedReleaseCount"))'
+          }
+
+          set_retention "mn-hub-555464791734" 5
+          set_retention "mn-musicscale-555464791734" 5
+          set_retention "mn-nestfinance-555464791734" 5
+          set_retention "mn-connect-555464791734" 5
+          set_retention "mn-nestjourney-555464791734" 5
+          set_retention "millionsnest" 1
+
+      - name: Verify live release retention
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          for SITE in             mn-hub-555464791734             mn-musicscale-555464791734             mn-nestfinance-555464791734             mn-connect-555464791734             mn-nestjourney-555464791734             millionsnest
+          do
+            curl --fail --silent --show-error               -H "Authorization: Bearer $TOKEN"               "https://firebasehosting.googleapis.com/v1beta1/sites/$SITE/channels/live"               | python3 -c 'import json,sys; x=json.load(sys.stdin); print(x.get("name"), "retainedReleaseCount=", x.get("retainedReleaseCount"))'
+          done
