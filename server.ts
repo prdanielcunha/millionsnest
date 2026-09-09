@@ -5381,6 +5381,28 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          return res.status(403).json({ error: 'Você não tem permissão nesta organização.' });
       }
 
+      let syncBillingEmail = syncUserEmail;
+      if (isSystemAdmin) {
+        const targetOrgDoc = await db.collection('organizations').doc(organizationId).get();
+        if (!targetOrgDoc.exists) {
+          return res.status(404).json({ error: 'Organização não encontrada.' });
+        }
+        const targetOrgData = targetOrgDoc.data() || {};
+        const targetOwnerUid = String(
+          targetOrgData.ownerUid ||
+          targetOrgData.ownerUserId ||
+          targetOrgData.ownerId ||
+          targetOrgData.owner_user_id ||
+          ''
+        ).trim();
+        if (targetOwnerUid) {
+          const targetOwnerDoc = await db.collection('users').doc(targetOwnerUid).get();
+          syncBillingEmail = targetOrgData.ownerEmail || (targetOwnerDoc.exists ? targetOwnerDoc.data()?.email : null) || null;
+        } else {
+          syncBillingEmail = targetOrgData.ownerEmail || null;
+        }
+      }
+
       const stripe = getStripe();
       const isLiveKey = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live');
 
@@ -5472,7 +5494,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
 
       // Self-Healing Logic via email (using org context email)
-      const userEmail = syncUserEmail;
+      const userEmail = syncBillingEmail;
       if ((!customerId || allStripeSubs.length === 0) && userEmail) {
         const customers = await stripe.customers.list({ email: userEmail, limit: 10 });
         let potentialSubs: Stripe.Subscription[] = [];
@@ -5536,6 +5558,18 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }, { merge: true });
 
         await batch.commit();
+
+        if (isSystemAdmin) {
+          await db.collection(`organizations/${organizationId}/audit_logs`).add({
+            action: 'organization.billing.synced',
+            actorUid: uid,
+            actorSystemRole: syncSystemRole || null,
+            governanceScope: 'ecosystem_global',
+            organizationId,
+            resultingStatus: 'none',
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
         
         return res.json({ 
            ok: true, 
@@ -5641,6 +5675,19 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       batch.set(db.collection('organizations').doc(organizationId), orgPayload, { merge: true });
 
       await batch.commit();
+
+      if (isSystemAdmin) {
+        await db.collection(`organizations/${organizationId}/audit_logs`).add({
+          action: 'organization.billing.synced',
+          actorUid: uid,
+          actorSystemRole: syncSystemRole || null,
+          governanceScope: 'ecosystem_global',
+          organizationId,
+          resultingStatus: sub.status,
+          stripeSubscriptionId: sub.id,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
       
       return res.json({ 
          ok: true, 
