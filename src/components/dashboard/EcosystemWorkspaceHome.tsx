@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
-import { deriveReadOnlyHubActions, type ReadOnlyHubAction } from '../../lib/actionCenter.js';
+import { applyActionPreferences, deriveReadOnlyHubActions, type ActionPreference, type ActionPreferenceMode, type ReadOnlyHubAction } from '../../lib/actionCenter.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
-  AlertCircle, CircleHelp, CreditCard, Rocket, BookOpen, UserPlus, ChevronRight
+  AlertCircle, CircleHelp, CreditCard, Rocket, BookOpen, UserPlus, ChevronRight, EyeOff
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSupportHub } from '../support/SupportHubContext.js';
@@ -71,6 +71,12 @@ interface EcosystemWorkspaceHomeProps {
   activeSection: 'overview' | 'resources' | 'getting-started';
   onSelectMusicScaleSection: (section: 'overview' | 'resources' | 'getting-started') => void;
   onRetryMusicScaleAccess: () => void;
+  actionPreferences: ActionPreference[];
+  actionPreferenceBusyKey?: string | null;
+  onSetActionPreference: (
+    action: ReadOnlyHubAction,
+    mode: ActionPreferenceMode
+  ) => void | Promise<void>;
   recentActivity: Array<{
     id: string;
     label: string;
@@ -103,6 +109,9 @@ export function EcosystemWorkspaceHome({
   activeSection,
   onSelectMusicScaleSection,
   onRetryMusicScaleAccess,
+  actionPreferences,
+  actionPreferenceBusyKey,
+  onSetActionPreference,
   recentActivity
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
@@ -241,7 +250,7 @@ export function EcosystemWorkspaceHome({
         .replace(/\b\w/g, character => character.toUpperCase());
     };
 
-    const todayActions = deriveReadOnlyHubActions({
+    const projectedTodayActions = deriveReadOnlyHubActions({
       organization: {
         isConfigured: Boolean(organization?.name && organization?.slug)
       },
@@ -261,6 +270,8 @@ export function EcosystemWorkspaceHome({
           : null
       }
     });
+    const todayActions = applyActionPreferences(projectedTodayActions, actionPreferences);
+    const hasSuppressedTodayActions = projectedTodayActions.length > todayActions.length;
 
     const attentionApp = operationalApps.find(experience => experience.needsAttention);
 
@@ -576,12 +587,16 @@ export function EcosystemWorkspaceHome({
               <h3 id="hub-today-title" className="text-2xl font-semibold tracking-[-0.035em] text-white md:text-3xl">
                 {todayActions.length > 0
                   ? t('workspace.actions.title')
-                  : t('workspace.actions.title_clear')}
+                  : hasSuppressedTodayActions
+                    ? t('workspace.actions.title_paused')
+                    : t('workspace.actions.title_clear')}
               </h3>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#8E99A8]">
                 {todayActions.length > 0
                   ? t('workspace.actions.subtitle')
-                  : t('workspace.actions.clear_description')}
+                  : hasSuppressedTodayActions
+                    ? t('workspace.actions.paused_description')
+                    : t('workspace.actions.clear_description')}
               </p>
             </div>
 
@@ -643,16 +658,43 @@ export function EcosystemWorkspaceHome({
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleTodayAction(action)}
-                      className="min-h-[44px] w-full rounded-xl border border-white/[0.08] bg-white px-4 py-2.5 text-xs font-semibold text-[#07090D] transition-all hover:bg-[#F2F5F8] active:scale-[0.985] sm:w-auto sm:min-w-[108px]"
-                    >
-                      <span className="inline-flex items-center justify-center gap-1.5">
-                        {t('workspace.actions.open_action')}
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </span>
-                    </button>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => handleTodayAction(action)}
+                        className="min-h-[44px] w-full rounded-xl border border-white/[0.08] bg-white px-4 py-2.5 text-xs font-semibold text-[#07090D] transition-all hover:bg-[#F2F5F8] active:scale-[0.985] sm:min-w-[108px]"
+                      >
+                        <span className="inline-flex items-center justify-center gap-1.5">
+                          {t('workspace.actions.open_action')}
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </span>
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          disabled={actionPreferenceBusyKey === action.dedupeKey}
+                          onClick={() => onSetActionPreference(action, 'snoozed')}
+                          className="min-h-[36px] rounded-lg border border-white/[0.07] bg-white/[0.025] px-2.5 text-[10px] font-semibold text-[#A8B2C0] transition hover:bg-white/[0.055] hover:text-white disabled:cursor-wait disabled:opacity-40"
+                        >
+                          <span className="inline-flex items-center justify-center gap-1.5">
+                            <Clock className="h-3 w-3" />
+                            {t('workspace.actions.snooze_action')}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actionPreferenceBusyKey === action.dedupeKey}
+                          onClick={() => onSetActionPreference(action, 'dismissed')}
+                          className="min-h-[36px] rounded-lg border border-white/[0.07] bg-white/[0.025] px-2.5 text-[10px] font-semibold text-[#A8B2C0] transition hover:bg-white/[0.055] hover:text-white disabled:cursor-wait disabled:opacity-40"
+                        >
+                          <span className="inline-flex items-center justify-center gap-1.5">
+                            <EyeOff className="h-3 w-3" />
+                            {t('workspace.actions.dismiss_action')}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
                   </article>
                 );
               })}
@@ -663,10 +705,24 @@ export function EcosystemWorkspaceHome({
                 <Check className="h-4 w-4 text-emerald-300" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">{t('workspace.actions.clear_status')}</p>
-                <p className="mt-1 text-xs leading-relaxed text-[#83908F]">{t('workspace.actions.clear_hint')}</p>
+                <p className="text-sm font-semibold text-white">
+                  {hasSuppressedTodayActions
+                    ? t('workspace.actions.paused_status')
+                    : t('workspace.actions.clear_status')}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-[#83908F]">
+                  {hasSuppressedTodayActions
+                    ? t('workspace.actions.paused_hint')
+                    : t('workspace.actions.clear_hint')}
+                </p>
               </div>
             </div>
+          )}
+
+          {todayActions.length > 0 && (
+            <p className="relative mt-4 text-[10px] leading-relaxed text-[#5E6978]">
+              {t('workspace.actions.personal_preference_note')}
+            </p>
           )}
         </section>
 
