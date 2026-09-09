@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { PremiumEmptyState } from '../packages/ui/empty-state.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { normalizeSlug } from '../lib/slug.js';
-import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
+import { isGlobalPrivilegedUser, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy } from '../lib/permissionService.js';
 import {
   getInviteableOrganizationRolesForActor,
   getOrganizationRoleDescription,
@@ -104,7 +104,13 @@ export function OrganizationManager({
   appExperiences = [],
   onOpenApp
 }: any) {
-  const [activeTab, setActiveTabInternal] = useState<OrgTab>((initialTab as OrgTab) || 'settings');
+  const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+  const canCrossTenantAccess = canEnterAnyOrganization(profile);
+  const isEcosystemSupport = resolveEcosystemPrivilegePolicy(profile?.systemRole).isEcosystemSupportStaff;
+  const isCrossTenantSupportSession = isEcosystemSupport && Boolean(adminSelectedOrgId);
+  const [activeTab, setActiveTabInternal] = useState<OrgTab>(
+    (initialTab as OrgTab) || (isCrossTenantSupportSession ? 'members' : 'settings')
+  );
   const [slugStatus, setSlugStatus] = useState<string | null>(null);
   const [adminOrgs, setAdminOrgs] = useState<any[]>([]);
   const [liveConductorByMember, setLiveConductorByMember] = useState<Record<string, boolean>>({});
@@ -128,7 +134,6 @@ export function OrganizationManager({
     locale: 'pt-BR',
     timeZone: 'America/Sao_Paulo'
   });
-  const isGlobalAdmin = isGlobalPrivilegedUser(profile);
   const organizationRoleLocale: 'pt' | 'en' | 'es' =
     String(organizationDetails.locale || organization?.locale || 'pt-BR').toLowerCase().startsWith('en')
       ? 'en'
@@ -385,7 +390,7 @@ export function OrganizationManager({
   };
 
   useEffect(() => {
-    if (isGlobalAdmin) {
+    if (canCrossTenantAccess) {
        user.getIdToken().then((token: string) => {
          fetch('/api/admin/organizations', {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -394,7 +399,7 @@ export function OrganizationManager({
          }).catch(console.error);
        });
     }
-  }, [isGlobalAdmin, user]);
+  }, [canCrossTenantAccess, user]);
 
   // Auto-generate slug when typing name if slug is empty or it was auto-generated
   useEffect(() => {
@@ -457,19 +462,34 @@ export function OrganizationManager({
     { id: 'audit', label: 'Atividade e segurança', icon: Settings, perms: ['organization.audit.view'] }
   ];
 
-  const visibleTabs = TABS.filter(t => t.perms.some(p => currentUserPerms[p] || isGlobalAdmin));
+  const visibleTabs = isCrossTenantSupportSession
+    ? TABS.filter(t => ['members', 'apps', 'audit'].includes(t.id))
+    : TABS.filter(t => t.perms.some(p => currentUserPerms[p] || isGlobalAdmin));
+
+  useEffect(() => {
+    if (
+      isCrossTenantSupportSession &&
+      !['members', 'apps', 'audit'].includes(activeTab)
+    ) {
+      setActiveTabInternal('members');
+    }
+  }, [isCrossTenantSupportSession, activeTab]);
 
   return (
     <div className="flex flex-col gap-6">
-      {isGlobalAdmin && (
+      {canCrossTenantAccess && (
         <div className="relative overflow-hidden rounded-[1.6rem] border border-[#2B85EB]/25 bg-[#08111D] p-4 shadow-[0_22px_60px_rgba(0,0,0,.24)] sm:p-5">
           <div className="pointer-events-none absolute right-[-5%] top-[-80%] h-56 w-56 rounded-full bg-[#2B85EB]/20 blur-[80px]" />
           <div className="relative flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-3">
              <ShieldCheck className="w-5 h-5 text-[#2B85EB]" />
              <div>
-                <p className="text-sm font-bold text-[#F5F7FA]">Administração Global (Modo CEO)</p>
-                <p className="text-[11px] text-[#A0A7B5]">Você tem permissão para gerenciar as configurações do ecossistema.</p>
+                <p className="text-sm font-bold text-[#F5F7FA]">{isEcosystemSupport ? 'Modo Suporte' : 'Administração Global'}</p>
+                <p className="text-[11px] text-[#A0A7B5]">
+                  {isEcosystemSupport
+                    ? 'Acesse uma organização para diagnóstico e suporte operacional, sem assumir propriedade.'
+                    : 'Acesse qualquer organização usando seu papel global do ecossistema.'}
+                </p>
              </div>
           </div>
           <select
@@ -483,7 +503,7 @@ export function OrganizationManager({
             }}
             className="bg-[#050505] text-[#F5F7FA] text-sm rounded-xl px-4 py-2.5 border border-white/10 outline-none w-full sm:w-auto sm:min-w-[250px]"
           >
-             <option value={profile?.organizationId || ''}>Sua Organização ({organization?.name})</option>
+             <option value={profile?.organizationId || ''}>Voltar à sua organização</option>
              {adminOrgs.filter(o => o.id !== profile?.organizationId).map(org => (
                <option key={org.id} value={org.id}>{org.name} {org.slug ? `(${org.slug})` : ''}</option>
              ))}
@@ -1059,30 +1079,27 @@ export function OrganizationManager({
                             </div>
 
                             <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-                              {experience.needsAttention ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenApp?.(app)}
+                                disabled={experience.needsAttention && !isEcosystemSupport}
+                                className="min-h-[42px] px-4 rounded-xl bg-white text-[#050505] text-xs font-semibold hover:bg-[#F5F7FA] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Abrir {app.name}
+                              </button>
+                              {!isEcosystemSupport && (
                                 <button
                                   type="button"
                                   onClick={() => setActiveDashboardTab('billing')}
-                                  className="min-h-[42px] px-4 rounded-xl bg-red-500/10 text-red-300 border border-red-500/20 text-xs font-semibold hover:bg-red-500/15"
+                                  className={`min-h-[42px] px-4 rounded-xl border text-xs font-semibold ${
+                                    experience.needsAttention
+                                      ? 'bg-red-500/10 text-red-300 border-red-500/20 hover:bg-red-500/15'
+                                      : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
+                                  }`}
                                 >
-                                  Revisar assinatura
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenApp?.(app)}
-                                  className="min-h-[42px] px-4 rounded-xl bg-white text-[#050505] text-xs font-semibold hover:bg-[#F5F7FA]"
-                                >
-                                  Abrir {app.name}
+                                  {experience.needsAttention ? 'Revisar assinatura' : 'Plano e cobrança'}
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => setActiveDashboardTab('billing')}
-                                className="min-h-[42px] px-4 rounded-xl border border-white/10 bg-white/5 text-white text-xs font-semibold hover:bg-white/10"
-                              >
-                                Plano e cobrança
-                              </button>
                             </div>
                           </div>
 

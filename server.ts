@@ -39,7 +39,7 @@ import { handleEcosystemAccessProjectionRequest } from './src/server/services/Ec
 import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
-import { isCanonicalGlobalRole, isGlobalPrivilegedRole } from './src/lib/permissionService.js';
+import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy } from './src/lib/permissionService.js';
 import { canChangeSystemRole, isAssignableSystemRole, normalizeLegacySystemRole } from './src/lib/roleResolver.js';
 import { 
   MUSIC_SCALE_PLANS, 
@@ -2170,8 +2170,7 @@ async function startServer() {
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       if (!userRef.exists) return res.status(403).json({ error: 'Forbidden' });
       const userData = userRef.data();
-      const isSystemAdmin = isGlobalPrivilegedRole(userData?.systemRole);
-      if (!isSystemAdmin) {
+      if (!canEnterAnyOrganization(userData?.systemRole)) {
          return res.status(403).json({ error: 'Acesso restrito' });
       }
 
@@ -2193,6 +2192,55 @@ async function startServer() {
       return res.json({ organizations });
     } catch (err) {
       console.error('[API Admin Orgs]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.post('/api/admin/organizations/:orgId/access-session', express.json({ limit: '8kb' }), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      const actorSnap = await db!.collection('users').doc(decoded.uid).get();
+      if (!actorSnap.exists) return res.status(403).json({ error: 'Forbidden' });
+
+      const actorData = actorSnap.data() || {};
+      if (!canEnterAnyOrganization(actorData.systemRole)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { orgId } = req.params;
+      const orgSnap = await db!.collection('organizations').doc(orgId).get();
+      if (!orgSnap.exists) return res.status(404).json({ error: 'Organization not found' });
+
+      const orgData = orgSnap.data() || {};
+      if (orgData.status === 'archived' || orgData.archived === true) {
+        return res.status(404).json({ error: 'Organization not found' });
+      }
+
+      const privilegePolicy = resolveEcosystemPrivilegePolicy(actorData.systemRole);
+      const accessMode = privilegePolicy.isEcosystemSupportStaff ? 'support' : 'administrative';
+
+      await db!.collection('organizations').doc(orgId).collection('audit_logs').add({
+        action: 'admin_accessed_organization',
+        actorUid: decoded.uid,
+        actorEmail: decoded.email || actorData.email || null,
+        actorSystemRole: actorData.systemRole || 'user',
+        targetOrganizationId: orgId,
+        organizationId: orgId,
+        accessMode,
+        source: privilegePolicy.isEcosystemSupportStaff ? 'ecosystem_support' : 'global_admin',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ success: true, organizationId: orgId, accessMode });
+    } catch (err) {
+      console.error('[API Admin Access Session]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
   });
@@ -4370,7 +4418,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const userSnap = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userSnap.data();
-      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
+      if (!canEnterAnyOrganization(userData?.systemRole)) {
          return res.status(403).json({ error: 'Acesso restrito' });
       }
 

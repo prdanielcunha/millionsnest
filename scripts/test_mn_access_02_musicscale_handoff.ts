@@ -388,6 +388,26 @@ async function testHarness() {
       assert(res25.body.supportMode === true, 'supportMode true somente quando solicitado e autorizado');
     }
     
+    // CANONICAL ECOSYSTEM SUPPORT MODE SUCESSO
+    {
+      const dbSupport = new MockFirestore();
+      setupStandardUserAndOrg(dbSupport, 'support-user', 'org-support', 'ecosystem_support', 'canceled', 'canceled');
+      // Cross-tenant support access is resolved by systemRole and must not depend on
+      // target membership/subscription. Remove the membership to prove that contract.
+      dbSupport.setMockData('organizations/org-support/members/support-user', null);
+      const depsSupport = new MockDependencies();
+      depsSupport.db = dbSupport;
+      depsSupport.tokenVerifyResult = { uid: 'support-user' };
+      const resSupport = await runReq({
+        headers: { authorization: 'Bearer support-token' },
+        body: { appId: 'musicscale', orgId: 'org-support', supportMode: true }
+      }, depsSupport);
+
+      assert(resSupport.statusCode === 200, 'ecosystem_support handoff returns 200 without local membership');
+      assert(resSupport.body.supportMode === true, 'ecosystem_support handoff preserves verified supportMode');
+      assert(depsSupport.createCustomTokenCalls === 1, 'ecosystem_support receives one verified custom token');
+    }
+
     // Log verification for token errors
     {
       const depsToken = new MockDependencies();

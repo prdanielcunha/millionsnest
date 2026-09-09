@@ -242,14 +242,22 @@ async function runAllTests() {
     });
   }
 
-  await runTest('17. admin não recebe acesso global', 'u1', 'org1', 'musicscale', db => {
+  await runTest('17. admin legado preserva acesso de global_admin', 'u1', 'org1', 'musicscale', db => {
     db.setMockData('users/u1', { status: 'active', systemRole: 'admin' });
     db.setMockData('organizations/org1', { status: 'active' });
   }, res => {
-    if (res.isGlobalAccess || res.accessible || res.denialReason !== DENIAL_REASONS.MEMBERSHIP_NOT_FOUND) throw new Error('Expected MEMBERSHIP_NOT_FOUND');
-    if (res.permissions.includes('*') || Object.keys(res.scopes || {}).includes('*')) throw new Error('Should not have global permissions');
-    if (res.roles.includes('global_admin')) throw new Error('Should not have global_admin role');
-    if (res.accessSource !== 'denied') throw new Error('Expected accessSource denied');
+    if (!res.accessible || !res.isGlobalAccess || res.decisionState !== 'granted') throw new Error('Expected legacy global access');
+    if (!res.roles.includes('global_admin')) throw new Error('Legacy admin must normalize to global_admin');
+  });
+
+  await runTest('17b. ecosystem_support recebe acesso operacional sem wildcard global', 'u1', 'org1', 'musicscale', db => {
+    db.setMockData('users/u1', { status: 'active', systemRole: 'ecosystem_support' });
+    db.setMockData('organizations/org1', { status: 'active' });
+  }, res => {
+    if (!res.accessible || !res.isGlobalAccess || res.decisionState !== 'granted') throw new Error('Expected support access');
+    if (!res.roles.includes('ecosystem_support')) throw new Error('Expected support role');
+    if (res.permissions.includes('*')) throw new Error('Support must not receive wildcard permissions');
+    if (!res.permissions.includes('scales.update') || !res.permissions.includes('songs.update')) throw new Error('Expected scoped MusicScale operations');
   });
 
   await runTest('18. owner não recebe acesso global', 'u1', 'org1', 'musicscale', db => {
@@ -573,13 +581,12 @@ async function runAllTests() {
     if (res.organizationId !== 'org1') throw new Error('Mismatched organizationId');
   });
 
-  await runTest('70. Generic admin sem membership permanece negado', 'u1', 'org1', 'musicscale', db => {
+  await runTest('70. Legacy admin sem membership preserva acesso global', 'u1', 'org1', 'musicscale', db => {
     db.setMockData('users/u1', { status: 'active', systemRole: 'admin' });
     db.setMockData('organizations/org1', { status: 'active', apps: { musicscale: { status: 'active' } } });
     db.setMockData('subscriptions/org1', { status: 'active' });
-    // No membership
   }, res => {
-    if (res.accessible || res.denialReason !== DENIAL_REASONS.MEMBERSHIP_NOT_FOUND) throw new Error('Expected MEMBERSHIP_NOT_FOUND');
+    if (!res.accessible || !res.isGlobalAccess || !res.roles.includes('global_admin')) throw new Error('Expected legacy global_admin access');
   });
 
   // REGRESSÃO NESTFINANCE
@@ -732,11 +739,18 @@ async function runAllTests() {
   }, (res, db) => {
     if (db.accessedPaths.some(p => p.includes('subscriptions'))) throw new Error('Global access should not read subscription');
   });
-  await runTest('94. admin não recebe role global nem permissões globais', 'u1', 'org1', 'musicscale', db => {
+  await runTest('94. admin legado retorna role global_admin normalizada', 'u1', 'org1', 'musicscale', db => {
     db.setMockData('users/u1', { status: 'active', systemRole: 'admin' });
     db.setMockData('organizations/org1', { status: 'active' });
   }, res => {
-    if (res.isGlobalAccess || res.accessible || res.denialReason !== DENIAL_REASONS.MEMBERSHIP_NOT_FOUND) throw new Error('Expected MEMBERSHIP_NOT_FOUND, got ' + res.denialReason);
+    if (!res.accessible || !res.isGlobalAccess || res.roles[0] !== 'global_admin') throw new Error('Expected normalized global_admin');
+  });
+
+  await runTest('94b. ecosystem_support continua bloqueado no NestFinance', 'u1', 'org1', 'nestfinance', db => {
+    db.setMockData('users/u1', { status: 'active', systemRole: 'ecosystem_support' });
+    db.setMockData('organizations/org1', { status: 'active', enabledApps: ['nestfinance'] });
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.NESTFINANCE_DEVELOPMENT_ACCESS_RESTRICTED) throw new Error('Support must not bypass NestFinance development gate');
   });
   await runTest('95. canceled com data futura continua negado após o endurecimento', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db, 'user', 'active', 'active', true, 'canceled', 'active');

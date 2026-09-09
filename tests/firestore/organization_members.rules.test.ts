@@ -51,6 +51,7 @@ beforeEach(async () => {
       setDoc(doc(db, 'users/global-admin-user'), { systemRole: 'global_admin' }),
       setDoc(doc(db, 'users/ecosystem-owner-user'), { systemRole: 'ecosystem_owner' }),
       setDoc(doc(db, 'users/founder-user'), { systemRole: 'founder' }),
+      setDoc(doc(db, 'users/support-user'), { systemRole: 'ecosystem_support' }),
       setDoc(doc(db, 'organization_members/ordinary_tenant-a'), {
         uid: 'ordinary',
         organizationId: 'tenant-a',
@@ -81,6 +82,22 @@ beforeEach(async () => {
         organizationId: 'tenant-b',
         role: 'member',
       }),
+      setDoc(doc(db, 'organizations/tenant-b/members/other-user'), {
+        uid: 'other-user',
+        organizationId: 'tenant-b',
+        role: 'member',
+        status: 'active',
+        displayName: 'Other User',
+      }),
+      setDoc(doc(db, 'organizations/tenant-b/audit_logs/existing'), {
+        action: 'member.updated',
+        actorUid: 'other-owner',
+      }),
+      setDoc(doc(db, 'subscriptions/tenant-b'), {
+        organizationId: 'tenant-b',
+        status: 'active',
+        plan: 'pro',
+      }),
     ]);
   });
 });
@@ -100,7 +117,7 @@ for (const [label, uid] of [
   ['ordinary authenticated user', 'ordinary'],
   ['tenant owner', 'tenant-owner'],
   ['tenant admin', 'tenant-admin'],
-  ['systemRole admin', 'system-admin'],
+  ['ecosystem support', 'support-user'],
 ] as const) {
   test(`${label} global list is denied`, async () => {
     await assertFails(getDocs(legacyCollection(uid)));
@@ -109,6 +126,7 @@ for (const [label, uid] of [
 
 for (const [label, uid] of [
   ['ceo', 'ceo-user'],
+  ['legacy admin', 'system-admin'],
   ['global_admin', 'global-admin-user'],
   ['ecosystem_owner', 'ecosystem-owner-user'],
   ['founder', 'founder-user'],
@@ -117,6 +135,50 @@ for (const [label, uid] of [
     await assertSucceeds(getDocs(legacyCollection(uid)));
   });
 }
+
+test('ecosystem support can read the selected organization without membership', async () => {
+  const db = testEnvironment.authenticatedContext('support-user').firestore();
+  await assertSucceeds(getDoc(doc(db, 'organizations/tenant-b')));
+});
+
+test('ecosystem support can list canonical members only through an organization-scoped path', async () => {
+  const db = testEnvironment.authenticatedContext('support-user').firestore();
+  await assertSucceeds(getDocs(collection(db, 'organizations/tenant-b/members')));
+  await assertFails(getDocs(collection(db, 'organization_members')));
+});
+
+test('ecosystem support can read target subscription and audit history', async () => {
+  const db = testEnvironment.authenticatedContext('support-user').firestore();
+  await assertSucceeds(getDoc(doc(db, 'subscriptions/tenant-b')));
+  await assertSucceeds(getDoc(doc(db, 'organizations/tenant-b/audit_logs/existing')));
+});
+
+test('ecosystem support cannot mutate organization governance or memberships', async () => {
+  const db = testEnvironment.authenticatedContext('support-user').firestore();
+
+  await assertFails(
+    updateDoc(doc(db, 'organizations/tenant-b'), { ownerUid: 'support-user' }),
+  );
+  await assertFails(
+    setDoc(doc(db, 'organizations/tenant-b/members/support-user'), {
+      uid: 'support-user',
+      organizationId: 'tenant-b',
+      role: 'owner',
+      status: 'active',
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(db, 'organizations/tenant-b/members/other-user'), {
+      role: 'owner',
+    }),
+  );
+  await assertFails(
+    setDoc(doc(db, 'organizations/tenant-b/audit_logs/forged'), {
+      action: 'forged',
+      actorUid: 'support-user',
+    }),
+  );
+});
 
 test('own legacy GET remains allowed for uid_orgId IDs', async () => {
   const db = testEnvironment.authenticatedContext('ordinary').firestore();

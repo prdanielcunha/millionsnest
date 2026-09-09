@@ -20,7 +20,7 @@ import { feedback } from '../packages/ui/feedback.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from "../lib/musicScalePlans.js";
 import { canPurchasePlanAgain, isSubscriptionValid, normalizeDateToMs } from "../lib/subscriptionHelpers.js";
-import { isGlobalPrivilegedUser, canAccessNestFinanceDevelopment } from "../lib/permissionService.js";
+import { isGlobalPrivilegedUser, canAccessNestFinanceDevelopment, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy } from "../lib/permissionService.js";
 import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
 import { getInviteableOrganizationRolesForActor, getOrganizationRoleLabel, normalizeExistingOrganizationRole } from "../lib/organizationRoles.js";
@@ -517,6 +517,8 @@ export function Dashboard() {
 
   const [adminSelectedOrgId, setAdminSelectedOrgId] = useState<string | null>(null);
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
+  const canCrossTenantAccess = canEnterAnyOrganization(profile);
+  const isEcosystemSupport = resolveEcosystemPrivilegePolicy(profile?.systemRole).isEcosystemSupportStaff;
   const authoritativeOwnerUid = String(
     organization?.ownerUid ||
     organization?.ownerUserId ||
@@ -545,7 +547,7 @@ export function Dashboard() {
   };
 
   const hasNestFinanceDevelopmentAccess = canAccessNestFinanceDevelopment(profile?.systemRole);
-  const activeContextOrgId = isGlobalAdmin && adminSelectedOrgId 
+  const activeContextOrgId = canCrossTenantAccess && adminSelectedOrgId 
     ? adminSelectedOrgId 
     : canonicalContext?.activeOrganizationId 
       || profile?.activeOrganizationId 
@@ -588,7 +590,7 @@ export function Dashboard() {
       active = false;
       controller.abort();
     };
-  }, [user, activeContextOrgId]);
+  }, [user, activeContextOrgId, isEcosystemSupport]);
 
   const handleSetActionPreference = async (
     action: ReadOnlyHubAction,
@@ -649,17 +651,36 @@ export function Dashboard() {
   };
 
   useEffect(() => {
-    if (isGlobalAdmin && adminSelectedOrgId && user) {
-       createAuditLog({
-         actorUid: user.uid,
-         actorEmail: user.email || '',
-         actorSystemRole: profile?.systemRole,
-         action: 'admin_accessed_organization',
-         targetOrganizationId: adminSelectedOrgId,
-         source: 'global_admin'
-       });
-    }
-  }, [adminSelectedOrgId, isGlobalAdmin, user?.uid]);
+    if (!canCrossTenantAccess || !adminSelectedOrgId || !user) return;
+
+    let cancelled = false;
+    void user.getIdToken()
+      .then(token => fetch(
+        `/api/admin/organizations/${encodeURIComponent(adminSelectedOrgId)}/access-session`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: '{}'
+        }
+      ))
+      .then(response => {
+        if (!cancelled && !response.ok) {
+          console.warn('[Dashboard] Cross-tenant access audit was rejected.');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          console.warn('[Dashboard] Cross-tenant access audit failed.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [adminSelectedOrgId, canCrossTenantAccess, user?.uid]);
 
   const openBillingPortal = async () => {
     if (!user) return;
@@ -870,11 +891,12 @@ export function Dashboard() {
       if (organizationResult.status === 'fulfilled' && organizationResult.value.exists()) {
         currentOrgData = { id: organizationResult.value.id, ...organizationResult.value.data() };
         
-        if (membersResult.status === 'fulfilled') {
+        if (membersResult.status === 'fulfilled' && !isEcosystemSupport) {
           baseMembers = membersResult.value.docs.map(d => ({ id: d.id, uid: d.id, ...d.data() }));
         } else {
-          // fallback global admin for members
-          if (isGlobalAdmin) {
+          // Cross-tenant support/admin uses the authenticated server endpoint so
+          // Support never needs broad read access to users/{uid}.
+          if (canCrossTenantAccess) {
             try {
               const token = await withDashboardTimeout(user.getIdToken(), 6000, "Dashboard timeout getting token");
               const memRes = await withDashboardTimeout(fetch(`/api/admin/organizations/${orgId}/members`, {
@@ -896,7 +918,7 @@ export function Dashboard() {
             } catch (err) {}
           }
         }
-      } else if (isGlobalAdmin) {
+      } else if (canCrossTenantAccess) {
         try {
           const token = await withDashboardTimeout(user.getIdToken(), 6000, "Dashboard timeout getting token");
           const res = await withDashboardTimeout(fetch(`/api/admin/organizations`, {
@@ -1664,23 +1686,43 @@ export function Dashboard() {
         ...memberDoc.data()
       })) as any[];
 
-      const enrichedMembers = await Promise.all(baseMembers.map(async (member) => {
-        if (member.displayName && member.email) return member;
+      let enrichedMembers = baseMembers;
+
+      if (isEcosystemSupport && user) {
         try {
-          const profileSnap = await getDoc(doc(db, "users", member.id));
-          if (!profileSnap.exists()) return member;
-          const profileData = profileSnap.data() as any;
-          return {
-            ...profileData,
-            ...member,
-            displayName: member.displayName || profileData.displayName || profileData.name || "Usuário",
-            email: member.email || profileData.email || "",
-            photoURL: member.photoURL || profileData.photoURL || ""
-          };
+          const token = await user.getIdToken();
+          const response = await fetch(
+            `/api/admin/organizations/${encodeURIComponent(orgId)}/members`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (response.ok) {
+            const payload = await response.json();
+            if (Array.isArray(payload?.members)) {
+              enrichedMembers = payload.members;
+            }
+          }
         } catch {
-          return member;
+          // Keep membership documents already delivered by the scoped listener.
         }
-      }));
+      } else {
+        enrichedMembers = await Promise.all(baseMembers.map(async (member) => {
+          if (member.displayName && member.email) return member;
+          try {
+            const profileSnap = await getDoc(doc(db, "users", member.id));
+            if (!profileSnap.exists()) return member;
+            const profileData = profileSnap.data() as any;
+            return {
+              ...profileData,
+              ...member,
+              displayName: member.displayName || profileData.displayName || profileData.name || "Usuário",
+              email: member.email || profileData.email || "",
+              photoURL: member.photoURL || profileData.photoURL || ""
+            };
+          } catch {
+            return member;
+          }
+        }));
+      }
 
       if (currentActiveOrgIdRef.current === orgId) {
         setMembers(enrichedMembers);
@@ -2137,7 +2179,7 @@ export function Dashboard() {
     );
   }
 
-  if (!activeContextOrgId && !isGlobalAdmin) {
+  if (!activeContextOrgId && !canCrossTenantAccess) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0B0F19]/70 p-7 text-center shadow-2xl">
@@ -2332,7 +2374,7 @@ export function Dashboard() {
           >
             {t('dashboard.navigation.overview', 'Início')}
           </button>
-          {(currentUserPerms['organization.settings.update'] || currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
+          {(currentUserPerms['organization.settings.update'] || currentUserPerms['organization.members.manage'] || canCrossTenantAccess) && (
             <button 
               onClick={() => setActiveTab("organization")}
               className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === "organization" ? "border-[#2B85EB] text-[#F5F7FA]" : "border-transparent text-[#A0A7B5] hover:text-[#F5F7FA]"}`}
@@ -2368,6 +2410,30 @@ export function Dashboard() {
       </div>
       
       <main className="py-6 md:py-10 max-w-7xl mx-auto px-4 sm:px-6 relative z-10 pb-28 md:pb-10">
+        {canCrossTenantAccess && adminSelectedOrgId && organization && (
+          <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-[#2B85EB]/25 bg-[#08111D] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <ShieldCheck className="h-5 w-5 shrink-0 text-[#2B85EB]" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">
+                  {isEcosystemSupport ? 'Modo Suporte' : 'Acesso administrativo'} · {organization.name || 'Organização'}
+                </p>
+                <p className="text-xs text-[#A0A7B5]">
+                  {isEcosystemSupport
+                    ? 'Acesso operacional temporário. Propriedade, faturamento e governança continuam protegidos.'
+                    : 'Você está operando esta organização com seu papel global do MillionsNest, sem virar membro ou dono.'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAdminSelectedOrgId(null)}
+              className="min-h-[40px] shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 text-xs font-semibold text-white hover:bg-white/10"
+            >
+              Sair deste acesso
+            </button>
+          </div>
+        )}
         <header className="mb-8 md:mb-10">
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
@@ -3585,7 +3651,7 @@ export function Dashboard() {
           <LayoutGrid className="w-5 h-5" />
           <span>Início</span>
         </button>
-        {(currentUserPerms['organization.settings.update'] || currentUserPerms['organization.members.manage'] || isGlobalAdmin) && (
+        {(currentUserPerms['organization.settings.update'] || currentUserPerms['organization.members.manage'] || canCrossTenantAccess) && (
                   <button
           type="button"
           onClick={() => setActiveTab('organization')}
