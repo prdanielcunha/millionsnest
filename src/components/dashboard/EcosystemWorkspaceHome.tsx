@@ -2,10 +2,12 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemCommitments } from './EcosystemCommitments.js';
+import { EcosystemChanges } from './EcosystemChanges.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
 import { applyActionPreferences, deriveReadOnlyHubActions, type ActionPreference, type ActionPreferenceMode, type ReadOnlyHubAction } from '../../lib/actionCenter.js';
 import { deriveReadOnlyHubCommitments, type ReadOnlyHubCommitment } from '../../lib/commitmentCenter.js';
+import { deriveReadOnlyHubChanges, type MusicScaleChangeNotificationInput, type ReadOnlyHubChange } from '../../lib/changeCenter.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -73,6 +75,8 @@ interface EcosystemWorkspaceHomeProps {
     };
     updatedAtMs: number;
   };
+  musicScaleChanges: MusicScaleChangeNotificationInput[];
+  onAcknowledgeMusicScaleChange: (notificationId: string) => void | Promise<void>;
   occupiedSlots: number;
   maxUsersLimit: number;
   onSelectWorkspace: (workspaceId: string) => void;
@@ -111,6 +115,8 @@ export function EcosystemWorkspaceHome({
   musicScaleAccess,
   musicScaleApp,
   musicScaleSummary,
+  musicScaleChanges,
+  onAcknowledgeMusicScaleChange,
   occupiedSlots,
   maxUsersLimit,
   onSelectWorkspace,
@@ -302,6 +308,12 @@ export function EcosystemWorkspaceHome({
       }
     });
 
+    const changes = deriveReadOnlyHubChanges(
+      isMusicScaleReady && appSummaryReady
+        ? musicScaleChanges
+        : []
+    );
+
     const attentionApp = operationalApps.find(experience => experience.needsAttention);
 
     const nextStep = attentionApp?.state === 'payment_issue'
@@ -472,6 +484,28 @@ export function EcosystemWorkspaceHome({
       }
 
       if (destination.appId === 'musicscale') {
+        onSelectWorkspace('musicscale');
+      }
+    };
+
+    const handleChangeOpen = (change: ReadOnlyHubChange) => {
+      void onAcknowledgeMusicScaleChange(
+        change.sourceNotificationId
+      );
+
+      const experience = appExperiences.find(
+        item => item.app.id === change.destination.appId
+      );
+
+      if (experience?.app && experience.canOpen) {
+        onLaunchApp(
+          experience.app,
+          change.destination.path
+        );
+        return;
+      }
+
+      if (change.destination.appId === 'musicscale') {
         onSelectWorkspace('musicscale');
       }
     };
@@ -775,6 +809,13 @@ export function EcosystemWorkspaceHome({
             </p>
           )}
         </section>
+
+        {changes.length > 0 && (
+          <EcosystemChanges
+            changes={changes}
+            onOpen={handleChangeOpen}
+          />
+        )}
 
         {commitments.length > 0 && (
           <EcosystemCommitments

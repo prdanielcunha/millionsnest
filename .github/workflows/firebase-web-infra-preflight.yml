@@ -52,6 +52,12 @@ jobs:
       - name: Action OS commitment projection
         run: npx tsx scripts/test_commitment_center_projection.ts
 
+      - name: Private notification rules contract
+        run: npx tsx scripts/test_private_notification_rules.ts
+
+      - name: Action OS recent changes projection
+        run: npx tsx scripts/test_change_center_projection.ts
+
       - name: Build production artifacts with the canonical public Firebase app config
         run: npm run build
 

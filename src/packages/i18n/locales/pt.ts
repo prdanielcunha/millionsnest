@@ -904,6 +904,31 @@ export default {
           description_other: "{{count}} participações suas ainda aguardam resposta. Confirme se poderá servir."
         },
       },
+      changes: {
+        eyebrow: "Mudanças",
+        title: "O que mudou recentemente",
+        subtitle: "Atualizações que afetam você, separadas das pendências e dos compromissos.",
+        new: "Novo",
+        now: "Agora",
+        item_title: "Sua escala foi atualizada",
+        summary: "Mudou: {{items}}",
+        open: "Revisar mudança",
+        note: "O MillionsNest mostra apenas mudanças factuais enviadas pelo aplicativo de origem.",
+        codes: {
+          repertoire: "Repertório",
+          order: "Ordem",
+          key: "Tom",
+          bpm: "BPM",
+          date: "Data",
+          time: "Horário",
+          location: "Local",
+          event: "Evento",
+          notes: "Observações",
+          duration: "Duração",
+          function: "Função",
+          general: "Detalhes da escala"
+        }
+      },
       commitments: {
         eyebrow: "Seus compromissos",
         title: "O que vem a seguir para você",

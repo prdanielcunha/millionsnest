@@ -40,6 +40,7 @@ import { SupportHub } from "../components/support/SupportHub.js";
 import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js";
 import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
 import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "../lib/actionCenter.js";
+import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
 import { fetchActionPreferences, saveActionPreference } from "../services/actionCenterClient.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
@@ -210,6 +211,7 @@ export function Dashboard() {
 
   const [subscription, setSubscription] = useState<any>(null);
   const [musicScaleHubSummary, setMusicScaleHubSummary] = useState<MusicScaleHubSummary>(EMPTY_MUSICSCALE_SUMMARY);
+  const [musicScaleChangeNotifications, setMusicScaleChangeNotifications] = useState<MusicScaleChangeNotificationInput[]>([]);
   const [organization, setOrganization] = useState<any>(null);
   const [actionPreferences, setActionPreferences] = useState<ActionPreference[]>([]);
   const [actionPreferenceBusyKey, setActionPreferenceBusyKey] = useState<string | null>(null);
@@ -222,6 +224,31 @@ export function Dashboard() {
   const musicScaleProjectionAbortControllerRef = useRef<AbortController | null>(null);
   const musicScaleProjectionSeqRef = useRef<number>(0);
   const musicScaleExpectedOrgRef = useRef<string | null>(null);
+
+  const acknowledgeMusicScaleChange = async (
+    notificationId: string
+  ) => {
+    if (!activeContextOrgId || !notificationId) return;
+
+    try {
+      await updateDoc(
+        doc(
+          db,
+          `organizations/${activeContextOrgId}/notifications`,
+          notificationId
+        ),
+        {
+          isRead: true,
+          readAt: new Date().toISOString(),
+        }
+      );
+    } catch (error) {
+      console.warn(
+        '[Dashboard] Could not acknowledge MusicScale change notification:',
+        error
+      );
+    }
+  };
 
   const refreshMusicScaleAccessProjection = async (orgId: string) => {
     if (!user || !orgId) return;
@@ -1559,6 +1586,7 @@ export function Dashboard() {
       setJoinRequests([]);
       setAuditLogs([]);
       setMusicScaleHubSummary(EMPTY_MUSICSCALE_SUMMARY);
+      setMusicScaleChangeNotifications([]);
       
       if (musicScaleProjectionAbortControllerRef.current) {
         musicScaleProjectionAbortControllerRef.current.abort();
@@ -1577,6 +1605,7 @@ export function Dashboard() {
     setPendingInvites([]);
     setJoinRequests([]);
     setAuditLogs([]);
+    setMusicScaleChangeNotifications([]);
     setLoadingSub(true);
     setMusicScaleProjection(null);
     setMusicScaleProjectionError(null);
@@ -1677,6 +1706,71 @@ export function Dashboard() {
       }
     };
   }, [user, activeContextOrgId]);
+
+  useEffect(() => {
+    setMusicScaleChangeNotifications([]);
+
+    if (
+      !user ||
+      !activeContextOrgId ||
+      musicScaleProjection?.accessible !== true
+    ) {
+      return;
+    }
+
+    const orgId = activeContextOrgId;
+    const notificationsQuery = query(
+      collection(db, `organizations/${orgId}/notifications`),
+      where('recipientId', '==', user.uid),
+      where('isArchived', '==', false)
+    );
+
+    const unsubscribe = onSnapshot(
+      notificationsQuery,
+      snapshot => {
+        if (currentActiveOrgIdRef.current !== orgId) return;
+
+        const personalChanges = snapshot.docs
+          .map(notificationDoc => {
+            const data = notificationDoc.data() as any;
+            const createdAtMs =
+              typeof data?.createdAt?.toMillis === 'function'
+                ? data.createdAt.toMillis()
+                : typeof data?.createdAt === 'number'
+                  ? data.createdAt
+                  : null;
+
+            return {
+              id: notificationDoc.id,
+              type: String(data?.type || ''),
+              createdAtMs,
+              isRead: data?.isRead === true,
+              metadata: data?.metadata,
+            } satisfies MusicScaleChangeNotificationInput;
+          })
+          .filter(notification =>
+            notification.type === 'music_scale_changed'
+          );
+
+        setMusicScaleChangeNotifications(personalChanges);
+      },
+      error => {
+        if (currentActiveOrgIdRef.current === orgId) {
+          setMusicScaleChangeNotifications([]);
+        }
+        console.warn(
+          '[Dashboard] Personal MusicScale change listener failed:',
+          error
+        );
+      }
+    );
+
+    return () => unsubscribe();
+  }, [
+    user,
+    activeContextOrgId,
+    musicScaleProjection?.accessible,
+  ]);
 
   useEffect(() => {
     if (!user || !activeContextOrgId || musicScaleProjection?.accessible !== true) {
@@ -2339,6 +2433,8 @@ export function Dashboard() {
                 onSelectWorkspace={handleSelectWorkspace}
                 onLaunchApp={(app, destinationPath) => handleLaunchEcosystemApp(app, currentUserPerms, destinationPath)}
                 musicScaleSummary={musicScaleHubSummary}
+                musicScaleChanges={musicScaleChangeNotifications}
+                onAcknowledgeMusicScaleChange={acknowledgeMusicScaleChange}
                 onOpenInviteModal={() => setIsInviteModalOpen(true)}
                 onNavigateToOrganizationMembers={() => navigate('/dashboard/organization/members')}
                 onNavigateToBilling={() => setActiveTab('billing')}

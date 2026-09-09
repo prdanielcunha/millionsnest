@@ -888,6 +888,31 @@ export default {
           description_other: "{{count}} of your assignments are still awaiting a response. Confirm whether you can serve."
         },
       },
+      changes: {
+        eyebrow: "Changes",
+        title: "What changed recently",
+        subtitle: "Updates that affect you, kept separate from tasks and commitments.",
+        new: "New",
+        now: "Now",
+        item_title: "Your schedule was updated",
+        summary: "Changed: {{items}}",
+        open: "Review change",
+        note: "MillionsNest only shows factual changes sent by the source app.",
+        codes: {
+          repertoire: "Repertoire",
+          order: "Order",
+          key: "Key",
+          bpm: "BPM",
+          date: "Date",
+          time: "Time",
+          location: "Location",
+          event: "Event",
+          notes: "Notes",
+          duration: "Duration",
+          function: "Role",
+          general: "Schedule details"
+        }
+      },
       commitments: {
         eyebrow: "Your commitments",
         title: "What's coming up for you",

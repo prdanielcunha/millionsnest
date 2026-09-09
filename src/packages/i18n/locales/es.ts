@@ -897,6 +897,31 @@ export default {
           description_other: "{{count}} participaciones tuyas aún esperan respuesta. Confirma si podrás servir."
         },
       },
+      changes: {
+        eyebrow: "Cambios",
+        title: "Lo que cambió recientemente",
+        subtitle: "Actualizaciones que te afectan, separadas de las tareas y los compromisos.",
+        new: "Nuevo",
+        now: "Ahora",
+        item_title: "Tu escala fue actualizada",
+        summary: "Cambió: {{items}}",
+        open: "Revisar cambio",
+        note: "MillionsNest solo muestra cambios factuales enviados por la aplicación de origen.",
+        codes: {
+          repertoire: "Repertorio",
+          order: "Orden",
+          key: "Tono",
+          bpm: "BPM",
+          date: "Fecha",
+          time: "Horario",
+          location: "Lugar",
+          event: "Evento",
+          notes: "Observaciones",
+          duration: "Duración",
+          function: "Función",
+          general: "Detalles de la escala"
+        }
+      },
       commitments: {
         eyebrow: "Tus compromisos",
         title: "Lo que viene para ti",

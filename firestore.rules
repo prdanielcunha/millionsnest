@@ -186,6 +186,24 @@ service cloud.firestore {
         allow write: if isAuthenticated() && checkOrgAccess(orgId);
       }
 
+      // Notifications may contain personal preparation and assignment context.
+      // Keep recipient isolation explicit and exclude this collection from the
+      // generic organization wildcard below.
+      match /notifications/{notificationId} {
+        allow read: if isAuthenticated() &&
+          resource.data.get('recipientId', '') == request.auth.uid;
+        allow create: if false;
+        allow update: if isAuthenticated() &&
+          resource.data.get('recipientId', '') == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'isRead',
+            'isArchived',
+            'readAt',
+            'archivedAt'
+          ]);
+        allow delete: if false;
+      }
+
       // Action OS state is backend-authoritative. Clients use authenticated
       // API commands so preference ownership can never be forged.
       match /actionCenterUsers/{uid}/{document=**} {
@@ -197,9 +215,11 @@ service cloud.firestore {
       }
 
       match /{app}/{document=**} {
-        allow read: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow create: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        // Firestore ORs overlapping allow rules. Sensitive subcollections with
+        // narrower policies must never inherit this generic tenant-wide access.
+        allow read: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 
