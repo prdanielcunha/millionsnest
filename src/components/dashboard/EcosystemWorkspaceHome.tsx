@@ -243,8 +243,7 @@ export function EcosystemWorkspaceHome({
 
     const todayActions = deriveReadOnlyHubActions({
       organization: {
-        name: organization?.name ?? null,
-        slug: organization?.slug ?? null
+        isConfigured: Boolean(organization?.name && organization?.slug)
       },
       permissions: {
         canManageOrganization,
