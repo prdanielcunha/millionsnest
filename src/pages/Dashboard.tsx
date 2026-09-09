@@ -1718,7 +1718,10 @@ export function Dashboard() {
         : [];
 
       const nextPersonalScale = candidateScales.find(scale => {
+        const status = String(scale?.status || '').toLowerCase();
+        if (status === 'draft') return false;
         if (!Array.isArray(scale?.eventAssignments)) return false;
+
         return scale.eventAssignments.some((assignment: any) =>
           assignment?.active !== false &&
           assignment?.userId === user.uid
