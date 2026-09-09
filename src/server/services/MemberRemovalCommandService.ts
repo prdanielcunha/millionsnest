@@ -232,6 +232,8 @@ export async function removeOrganizationMember(
         transaction.set(db.doc(`organizations/${organizationId}/audit_logs/${auditId}`), {
           action: 'organization.member.removed',
           actorUid,
+          actorSystemRole: actorSystemRole || null,
+          governanceScope: actorGlobal ? 'ecosystem_global' : 'organization',
           memberId,
           organizationId,
           previousOrganizationRole: targetMembership.role,
