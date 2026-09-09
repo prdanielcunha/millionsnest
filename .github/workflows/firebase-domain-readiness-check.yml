@@ -1,4 +1,5 @@
 name: Firebase Domain Readiness Check
+# Manual verification trigger
 
 on:
   push:
