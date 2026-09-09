@@ -450,7 +450,10 @@ export function EcosystemWorkspaceHome({
         'path' in nextStep &&
         typeof nextStep.path === 'string' &&
         nextStep.path.startsWith('/scales/') &&
-        todayActions.some(action => action.signalType === 'musicscale_pending_responses'));
+        todayActions.some(action => action.signalType === 'musicscale_pending_responses')) ||
+      (nextStep.action === 'none' &&
+        nextStep.tone === 'success' &&
+        todayActions.length > 0);
 
     const handleTodayAction = (action: ReadOnlyHubAction) => {
       const destination = action.destination;
