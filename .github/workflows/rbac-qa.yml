@@ -1,0 +1,77 @@
+name: MillionsNest RBAC QA
+
+on:
+  pull_request:
+    branches:
+      - main
+      - production
+    paths:
+      - 'src/lib/permissionService.ts'
+      - 'src/lib/roleResolver.ts'
+      - 'src/lib/ecosystemLauncher.ts'
+      - 'src/contexts/**'
+      - 'src/pages/Dashboard.tsx'
+      - 'src/components/OrganizationManager.tsx'
+      - 'src/server/services/EcosystemAccessResolver.ts'
+      - 'src/server/services/MusicScaleHandoffService.ts'
+      - 'server.ts'
+      - 'firestore.rules'
+      - 'tests/firestore/organization_members.rules.test.ts'
+      - 'scripts/test_global_role_canonicalization.ts'
+      - 'scripts/test_mn_access_01_musicscale_resolver.ts'
+      - 'scripts/test_mn_access_02_musicscale_handoff.ts'
+      - '.github/workflows/rbac-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: millionsnest-rbac-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rbac:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Java for Firebase Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Canonical global role contract
+        run: npx tsx scripts/test_global_role_canonicalization.ts
+
+      - name: MusicScale access resolver contract
+        run: npx tsx scripts/test_mn_access_01_musicscale_resolver.ts
+
+      - name: MusicScale handoff contract
+        run: npx tsx scripts/test_mn_access_02_musicscale_handoff.ts
+
+      - name: Support tenant Firestore boundary
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-millionsnest-rbac-ci
+          "npx tsx --test --test-concurrency=1 tests/firestore/organization_members.rules.test.ts"
+
+      - name: Build
+        run: npm run build
