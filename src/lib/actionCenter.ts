@@ -1,3 +1,9 @@
+import {
+  collectActionSignals,
+  type ActionSignalType,
+  type EcosystemSignal
+} from './actionSignals.js';
+
 export type ActionPriority = 'low' | 'normal' | 'high' | 'urgent';
 
 export type ActionDestination =
@@ -11,10 +17,7 @@ export interface ReadOnlyHubAction {
   dedupeKey: string;
   fingerprint: string;
   sourceApp: 'hub' | 'musicscale';
-  signalType:
-    | 'organization_incomplete'
-    | 'pending_invites'
-    | 'musicscale_pending_responses';
+  signalType: ActionSignalType;
   priority: ActionPriority;
   titleKey: string;
   descriptionKey: string;
@@ -52,69 +55,97 @@ export interface ActionProjectionInput {
   };
 }
 
+function numberPayload(
+  signal: EcosystemSignal,
+  key: string
+): number {
+  const value = signal.payload[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
 /**
- * Action OS projection.
- *
- * Pure and read-only by design:
- * - no Firestore writes
- * - no billing/auth/RBAC mutations
- * - no AI dependency
- * - deterministic output for the same input
+ * Deterministic policy layer: normalized facts become user-visible actions only
+ * after permission and payload checks.
  */
-export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnlyHubAction[] {
-  const actions: ReadOnlyHubAction[] = [];
-
-  const organizationIncomplete = !input.organization?.isConfigured;
-
-  if (organizationIncomplete && input.permissions.canManageOrganization) {
-    actions.push({
-      id: 'hub:organization_incomplete',
-      dedupeKey: 'hub:organization_incomplete',
-      fingerprint: 'hub:organization_incomplete:v1',
-      sourceApp: 'hub',
-      signalType: 'organization_incomplete',
+export function projectSignalToAction(
+  signal: EcosystemSignal,
+  permissions: ActionProjectionInput['permissions']
+): ReadOnlyHubAction | null {
+  if (signal.signalType === 'organization_incomplete') {
+    if (!permissions.canManageOrganization) return null;
+    return {
+      id: signal.dedupeKey,
+      dedupeKey: signal.dedupeKey,
+      fingerprint: signal.fingerprint,
+      sourceApp: signal.sourceApp,
+      signalType: signal.signalType,
       priority: 'high',
       titleKey: 'workspace.actions.organization_incomplete.title',
       descriptionKey: 'workspace.actions.organization_incomplete.description',
       destination: { kind: 'hub', section: 'organization' }
-    });
+    };
   }
 
-  if (input.pendingInvitesCount > 0 && input.permissions.canManageMembers) {
-    actions.push({
-      id: 'hub:pending_invites',
-      dedupeKey: 'hub:pending_invites',
-      fingerprint: `hub:pending_invites:${input.pendingInvitesCount}`,
-      sourceApp: 'hub',
-      signalType: 'pending_invites',
+  if (signal.signalType === 'pending_invites') {
+    if (!permissions.canManageMembers) return null;
+    const count = numberPayload(signal, 'count');
+    if (count <= 0) return null;
+
+    return {
+      id: signal.dedupeKey,
+      dedupeKey: signal.dedupeKey,
+      fingerprint: signal.fingerprint,
+      sourceApp: signal.sourceApp,
+      signalType: signal.signalType,
       priority: 'normal',
       titleKey: 'workspace.actions.pending_invites.title',
       descriptionKey: 'workspace.actions.pending_invites.description',
-      translationParams: { count: input.pendingInvitesCount },
+      translationParams: { count },
       destination: { kind: 'hub', section: 'members' }
-    });
+    };
   }
 
-  const nextScale = input.musicScale.nextScale;
-  if (
-    input.musicScale.ready &&
-    nextScale?.responseSummaryAvailable === true &&
-    nextScale.pendingResponses > 0
-  ) {
-    actions.push({
-      id: `musicscale:pending_responses:${nextScale.id}`,
-      dedupeKey: `musicscale:pending_responses:${nextScale.id}`,
-      fingerprint: `musicscale:pending_responses:${nextScale.id}:${nextScale.pendingResponses}`,
-      sourceApp: 'musicscale',
-      signalType: 'musicscale_pending_responses',
+  if (signal.signalType === 'musicscale_pending_responses') {
+    const pendingResponses = numberPayload(signal, 'pendingResponses');
+    if (pendingResponses <= 0 || signal.sourceEntityType !== 'scale') return null;
+
+    return {
+      id: signal.dedupeKey,
+      dedupeKey: signal.dedupeKey,
+      fingerprint: signal.fingerprint,
+      sourceApp: signal.sourceApp,
+      signalType: signal.signalType,
       priority: 'high',
       titleKey: 'workspace.actions.musicscale_pending_responses.title',
       descriptionKey: 'workspace.actions.musicscale_pending_responses.description',
-      translationParams: { count: nextScale.pendingResponses },
-      destination: { kind: 'app', appId: 'musicscale', path: `/scales/${nextScale.id}` },
-      dueAtMs: nextScale.startsAtMs ?? null
-    });
+      translationParams: { count: pendingResponses },
+      destination: {
+        kind: 'app',
+        appId: 'musicscale',
+        path: `/scales/${signal.sourceEntityId}`
+      },
+      dueAtMs: signal.occurredAtMs ?? null
+    };
   }
+
+  return null;
+}
+
+/**
+ * Public Action OS projection for the Hub.
+ *
+ * Source facts are collected first; policy and permission logic are applied
+ * separately. This boundary lets NestJourney, Connect and future apps add
+ * adapters without teaching the Hub UI about each product.
+ */
+export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnlyHubAction[] {
+  const actions = collectActionSignals({
+    organization: input.organization,
+    pendingInvitesCount: input.pendingInvitesCount,
+    musicScale: input.musicScale
+  })
+    .map(signal => projectSignalToAction(signal, input.permissions))
+    .filter((action): action is ReadOnlyHubAction => action !== null);
 
   const rank: Record<ActionPriority, number> = {
     urgent: 4,
