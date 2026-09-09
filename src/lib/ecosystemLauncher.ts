@@ -68,7 +68,10 @@ export async function openEcosystemModule(
      throw new Error("Aplicativo não encontrado no catálogo.");
   }
 
-  let isSupportMode = false;
+  // The ecosystem systemRole is only a client hint; the handoff service re-resolves
+  // access server-side. This ensures canonical ecosystem_support sessions are marked
+  // correctly without making localStorage an authorization source.
+  let isSupportMode = String(profile?.systemRole || '').trim().toLowerCase() === 'ecosystem_support';
   try {
      const supportStr = deps.readSupportSession();
      if (supportStr) {
