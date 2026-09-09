@@ -1,0 +1,32 @@
+name: DNS Cutover Inventory
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/dns-cutover-inventory.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Print current web DNS
+        shell: bash
+        run: |
+          set -euo pipefail
+          for D in             millionsnest.com             www.millionsnest.com             musicscale.millionsnest.com             nestfinance.millionsnest.com             connect.millionsnest.com             nestjourney.millionsnest.com
+          do
+            echo "===== $D ====="
+            echo "A:"
+            dig +short A "$D" || true
+            echo "AAAA:"
+            dig +short AAAA "$D" || true
+            echo "CNAME:"
+            dig +short CNAME "$D" || true
+            echo
+          done
