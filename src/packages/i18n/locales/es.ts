@@ -850,6 +850,37 @@ export default {
         no_apps_desc: "Cuando se active un producto para tu organización, aparecerá aquí con el flujo completo de configuración.",
         view_products_action: "Ver productos",
       },
+      actions: {
+        eyebrow: "Hoy",
+        title: "Lo que necesita tu atención",
+        title_clear: "Todo está al día",
+        subtitle: "Prioridades reunidas automáticamente a partir de lo que ya ocurre en tus aplicaciones.",
+        count_one: "{{count}} cosa necesita tu atención",
+        count_other: "{{count}} cosas necesitan tu atención",
+        source_hub: "MillionsNest",
+        priority_high: "Prioridad alta",
+        priority_normal: "Acompañar",
+        open_action: "Ver ahora",
+        clear_description: "No encontramos ninguna pendiente importante conocida en este momento.",
+        clear_status: "Tu organización está tranquila",
+        clear_hint: "Cuando algo importante necesite una acción, aparecerá aquí automáticamente.",
+        organization_incomplete: {
+          title: "Completa los datos de la organización",
+          description: "Aún hay información esencial que debe revisarse para mantener organizado el ecosistema."
+        },
+        pending_invites: {
+          title_one: "{{count}} invitación sigue pendiente",
+          title_other: "{{count}} invitaciones siguen pendientes",
+          description_one: "Una persona invitada todavía no completó su entrada a la organización.",
+          description_other: "Hay personas invitadas que todavía no completaron su entrada a la organización."
+        },
+        musicscale_pending_responses: {
+          title_one: "{{count}} confirmación aún espera respuesta",
+          title_other: "{{count}} confirmaciones aún esperan respuesta",
+          description_one: "La próxima escala de MusicScale todavía tiene una participación sin confirmar.",
+          description_other: "La próxima escala de MusicScale todavía tiene participaciones sin confirmar."
+        }
+      },
       spaces_title: "Acceso rápido",
       apps_title: "Tus aplicaciones",
       open_app: "Abrir {{appName}}",
