@@ -1,4 +1,5 @@
 name: Cost Hygiene Audit
+# Verify manual cleanup policy
 
 on:
   push:
