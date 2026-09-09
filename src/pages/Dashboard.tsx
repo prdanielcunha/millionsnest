@@ -746,6 +746,11 @@ export function Dashboard() {
       }
       const data = await res.json();
       
+      if (data.action === 'customer_checkout_required') {
+         feedback.error(data.error || 'A nova contratação precisa ser concluída pelo responsável financeiro da organização.');
+         return;
+      }
+
       if (data.action === 'checkout_required') {
          const plan = subscription?.plan;
          if (!plan || !['starter', 'advanced', 'pro'].includes(plan)) {
@@ -2363,11 +2368,21 @@ export function Dashboard() {
     ? new Date(normalizeDateToMs(subscription.currentPeriodEnd)).toLocaleDateString('pt-BR') 
     : null;
 
+  const isGlobalTenantGovernanceSession = isGlobalAdmin && Boolean(adminSelectedOrgId);
+
   const handleAddonCheckout = async (lookupKey: string) => {
+    if (isGlobalTenantGovernanceSession) {
+      feedback.error('A compra de um novo complemento deve ser concluída pelo responsável financeiro da organização.');
+      return;
+    }
     navigate(`/checkout?plan=${lookupKey}`);
   };
 
   const handleSubscribe = async (lookupKey: string) => {
+    if (isGlobalTenantGovernanceSession) {
+      feedback.error('Você pode administrar a assinatura existente, mas uma nova contratação deve ser concluída pelo responsável financeiro da organização.');
+      return;
+    }
     const check = canPurchasePlanAgain({
       desiredPlan: lookupKey,
       existingSubscription: subscription,
@@ -3011,10 +3026,10 @@ export function Dashboard() {
                                  <Settings className="w-4 h-4 ml-1" /> Histórico de Faturas
                                </button>
                                <button 
-                                 onClick={() => navigate('/checkout')}
+                                 onClick={() => handleSubscribe(subscription?.plan ? `musicscale_${subscription.plan}_monthly` : 'musicscale_starter_monthly')}
                                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-[#2B85EB] text-white rounded-xl font-semibold hover:bg-[#2B85EB]/90 transition-all shadow-sm active:scale-95"
                                >
-                                 Assinar novamente
+                                 {isGlobalTenantGovernanceSession ? 'Solicitar nova contratação ao responsável' : 'Assinar novamente'}
                                </button>
                              </>
                            );
