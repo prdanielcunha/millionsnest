@@ -880,7 +880,13 @@ export default {
           title_other: "{{count}} confirmations are still awaiting a response",
           description_one: "The next MusicScale schedule still has one participation without confirmation.",
           description_other: "The next MusicScale schedule still has participations without confirmation."
-        }
+        },
+        musicscale_personal_confirmation: {
+          title_one: "Confirm your participation in the next schedule",
+          title_other: "Confirm your participations in the next schedule",
+          description_one: "Your response is still pending. Confirm whether you can serve.",
+          description_other: "{{count}} of your assignments are still awaiting a response. Confirm whether you can serve."
+        },
       },
       commitments: {
         eyebrow: "Your commitments",
