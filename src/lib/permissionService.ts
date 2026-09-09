@@ -53,6 +53,8 @@ export interface EcosystemPrivilegePolicy {
   hasFullProductEntitlements: boolean;
   hasPrioritySupport: boolean;
   canBypassSupportMembership: boolean;
+  canEnterAnyOrganization: boolean;
+  canOperateAnyOrganization: boolean;
   canManageGlobalGovernance: boolean;
 }
 
@@ -70,6 +72,8 @@ export function resolveEcosystemPrivilegePolicy(systemRole: string | undefined |
       hasFullProductEntitlements: true,
       hasPrioritySupport: true,
       canBypassSupportMembership: true,
+      canEnterAnyOrganization: true,
+      canOperateAnyOrganization: true,
       canManageGlobalGovernance: true
     };
   }
@@ -82,6 +86,8 @@ export function resolveEcosystemPrivilegePolicy(systemRole: string | undefined |
       hasFullProductEntitlements: true,
       hasPrioritySupport: true,
       canBypassSupportMembership: true,
+      canEnterAnyOrganization: true,
+      canOperateAnyOrganization: true,
       canManageGlobalGovernance: false
     };
   }
@@ -93,6 +99,8 @@ export function resolveEcosystemPrivilegePolicy(systemRole: string | undefined |
     hasFullProductEntitlements: false,
     hasPrioritySupport: false,
     canBypassSupportMembership: false,
+    canEnterAnyOrganization: false,
+    canOperateAnyOrganization: false,
     canManageGlobalGovernance: false
   };
 }
@@ -190,10 +198,13 @@ export function resolveEffectiveSupportAccess({
 }
 
 export function getEffectiveCapabilities(userProfile: any, organization?: any, appKey?: string) {
-  if (isGlobalPrivilegedUser(userProfile)) {
+  const policy = resolveEcosystemPrivilegePolicy(getSystemRole(userProfile));
+
+  if (policy.canManageGlobalGovernance) {
     return {
       canAccessAllApps: true,
       canManageAllOrganizations: true,
+      canSupportAllOrganizations: true,
       canBypassBilling: true,
       canUseAllFeatures: true,
       lifetimeAccess: true,
@@ -211,17 +222,46 @@ export function getEffectiveCapabilities(userProfile: any, organization?: any, a
     };
   }
 
+  if (policy.isEcosystemSupportStaff) {
+    return {
+      canAccessAllApps: true,
+      canManageAllOrganizations: false,
+      canSupportAllOrganizations: true,
+      canBypassBilling: true,
+      canUseAllFeatures: true,
+      lifetimeAccess: false,
+      ...(appKey === 'musicscale' ? {
+         'musicscale.access': true,
+         'musicscale.manageSongs': true,
+         'musicscale.manageScales': true,
+         'musicscale.useAI': true,
+         'musicscale.useGlobalLibrary': true,
+         'musicscale.cloneScales': true,
+         'musicscale.unlimitedImports': true
+      } : {})
+    };
+  }
+
   return {
     canAccessAllApps: false,
     canManageAllOrganizations: false,
+    canSupportAllOrganizations: false,
     canBypassBilling: false,
     canUseAllFeatures: false,
     lifetimeAccess: false
   };
 }
 
+export function canEnterAnyOrganization(profileOrRole: any) {
+  return resolveEcosystemPrivilegePolicy(getSystemRole(profileOrRole)).canEnterAnyOrganization;
+}
+
+export function canOperateAnyOrganization(profileOrRole: any) {
+  return resolveEcosystemPrivilegePolicy(getSystemRole(profileOrRole)).canOperateAnyOrganization;
+}
+
 export function canManageAnyOrganization(userProfile: any) {
-  return isGlobalPrivilegedUser(userProfile);
+  return resolveEcosystemPrivilegePolicy(getSystemRole(userProfile)).canManageGlobalGovernance;
 }
 
 export function canManageOrganization(userProfile: any, orgId: string) {
