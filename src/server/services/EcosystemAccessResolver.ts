@@ -174,7 +174,7 @@ export async function resolveEcosystemAppAccess(params: {
       isGlobalAccess: true,
       accessSource: 'global_system_role',
       systemRole,
-      roles: systemRole ? [systemRole] : [],
+      roles: systemRole ? [systemRole === 'admin' ? 'global_admin' : systemRole] : [],
       permissions: ['*'],
       scopes: { '*': ['*'] },
       decisionState: 'granted',
