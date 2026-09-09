@@ -51,6 +51,7 @@ interface EcosystemWorkspaceHomeProps {
       id: string;
       date: string;
       time?: string | null;
+      startsAtMs: number;
       status?: string | null;
       songCount: number;
       assignmentCount: number;
@@ -288,6 +289,7 @@ export function EcosystemWorkspaceHome({
         nextScale: musicScaleSummary.nextScale
           ? {
               id: musicScaleSummary.nextScale.id,
+              startsAtMs: musicScaleSummary.nextScale.startsAtMs,
               responseSummaryAvailable: musicScaleSummary.nextScale.responseSummaryAvailable,
               pendingResponses: musicScaleSummary.nextScale.responseCounts.pending || 0
             }
