@@ -1,0 +1,17 @@
+[
+  {
+    "name": "delete-old-container-versions",
+    "action": {"type": "Delete"},
+    "condition": {
+      "tagState": "any",
+      "olderThan": "7d"
+    }
+  },
+  {
+    "name": "keep-two-recent-per-app",
+    "action": {"type": "Keep"},
+    "mostRecentVersions": {
+      "keepCount": 2
+    }
+  }
+]
