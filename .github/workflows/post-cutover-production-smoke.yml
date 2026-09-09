@@ -1,0 +1,103 @@
+name: Post Cutover Production Smoke
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/post-cutover-production-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Verify DNS cutover
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expect_a () {
+            DOMAIN="$1"
+            EXPECTED="$2"
+            echo "===== DNS A: $DOMAIN ====="
+            FOUND="$(dig +short A "$DOMAIN" | tail -n1 | tr -d '[:space:]')"
+            echo "FOUND=$FOUND"
+            test "$FOUND" = "$EXPECTED"
+          }
+
+          expect_cname () {
+            DOMAIN="$1"
+            EXPECTED="$2"
+            echo "===== DNS CNAME: $DOMAIN ====="
+            FOUND="$(dig +short CNAME "$DOMAIN" | tail -n1 | sed 's/\.$//')"
+            echo "FOUND=$FOUND"
+            test "$FOUND" = "$EXPECTED"
+          }
+
+          expect_a "millionsnest.com" "199.36.158.100"
+          expect_cname "www.millionsnest.com" "mn-hub-555464791734.web.app"
+          expect_cname "musicscale.millionsnest.com" "mn-musicscale-555464791734.web.app"
+          expect_cname "nestfinance.millionsnest.com" "mn-nestfinance-555464791734.web.app"
+          expect_cname "connect.millionsnest.com" "mn-connect-555464791734.web.app"
+          expect_cname "nestjourney.millionsnest.com" "mn-nestjourney-555464791734.web.app"
+
+          echo "DNS_CUTOVER_OK"
+
+      - name: Smoke Hub root and www
+        shell: bash
+        run: |
+          set -euo pipefail
+          for URL in "https://millionsnest.com/" "https://www.millionsnest.com/"; do
+            echo "===== $URL ====="
+            curl --fail --silent --show-error --location               --retry 12 --retry-delay 3 --retry-all-errors               "$URL" -o /tmp/hub.html
+            grep -Eiq '<!doctype html|<html' /tmp/hub.html
+          done
+          echo "HUB_PRODUCTION_HTTPS_OK"
+
+      - name: Smoke Hub API and Stripe read path
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location             --retry 12 --retry-delay 3 --retry-all-errors             "https://www.millionsnest.com/api/v1/billing/products" -o /tmp/products.json
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/products.json','utf8'));if(!x||!Array.isArray(x.plans))process.exit(1);console.log('HUB_BILLING_READ_OK',x.plans.length);"
+
+      - name: Smoke MusicScale
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://musicscale.millionsnest.com"
+          curl --fail --silent --show-error --location             --retry 12 --retry-delay 3 --retry-all-errors             "$BASE/" -o /tmp/ms.html
+          grep -Eiq '<!doctype html|<html' /tmp/ms.html
+
+          STATUS="$(curl --silent --show-error --location             -o /tmp/ms-api.json -w '%{http_code}'             "$BASE/api/v1/ecosystem/access-context?organizationId=production-smoke")"
+          test "$STATUS" = "401"
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/ms-api.json','utf8'));if(!String(x.error||'').toLowerCase().includes('unauthorized'))process.exit(1);"
+          echo "MUSICSCALE_PRODUCTION_OK"
+
+      - name: Smoke NestFinance
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://nestfinance.millionsnest.com"
+          curl --fail --silent --show-error --location             --retry 12 --retry-delay 3 --retry-all-errors             "$BASE/" -o /tmp/nf.html
+          grep -Eiq '<!doctype html|<html' /tmp/nf.html
+
+          curl --fail --silent --show-error --location             "$BASE/api/system/release" -o /tmp/nf-release.json
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/nf-release.json','utf8'));if(x.app!=='nestfinance')process.exit(1);console.log('NESTFINANCE_PRODUCTION_OK');"
+
+      - name: Smoke Connect and NestJourney
+        shell: bash
+        run: |
+          set -euo pipefail
+          for URL in             "https://connect.millionsnest.com/"             "https://nestjourney.millionsnest.com/"
+          do
+            echo "===== $URL ====="
+            curl --fail --silent --show-error --location               --retry 12 --retry-delay 3 --retry-all-errors               "$URL" -o /tmp/static.html
+            grep -Eiq '<!doctype html|<html' /tmp/static.html
+          done
+          echo "CONNECT_NESTJOURNEY_PRODUCTION_OK"
