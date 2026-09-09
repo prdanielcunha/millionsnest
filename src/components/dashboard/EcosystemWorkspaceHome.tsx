@@ -67,6 +67,9 @@ interface EcosystemWorkspaceHomeProps {
       startsAtMs: number;
       songCount: number;
       functionNames: string[];
+      publishRevision: number;
+      responseSummaryAvailable: boolean;
+      pendingResponses: number;
     };
     updatedAtMs: number;
   };
@@ -276,6 +279,15 @@ export function EcosystemWorkspaceHome({
               id: musicScaleSummary.nextScale.id,
               responseSummaryAvailable: musicScaleSummary.nextScale.responseSummaryAvailable,
               pendingResponses: musicScaleSummary.nextScale.responseCounts.pending || 0
+            }
+          : null,
+        nextPersonalScale: musicScaleSummary.nextPersonalScale
+          ? {
+              id: musicScaleSummary.nextPersonalScale.id,
+              startsAtMs: musicScaleSummary.nextPersonalScale.startsAtMs,
+              publishRevision: musicScaleSummary.nextPersonalScale.publishRevision,
+              responseSummaryAvailable: musicScaleSummary.nextPersonalScale.responseSummaryAvailable,
+              pendingResponses: musicScaleSummary.nextPersonalScale.pendingResponses
             }
           : null
       }
