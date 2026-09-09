@@ -4,14 +4,14 @@
     "action": {"type": "Delete"},
     "condition": {
       "tagState": "any",
-      "olderThan": "14d"
+      "olderThan": "7d"
     }
   },
   {
-    "name": "keep-five-recent-per-app",
+    "name": "keep-two-recent-per-app",
     "action": {"type": "Keep"},
     "mostRecentVersions": {
-      "keepCount": 5
+      "keepCount": 2
     }
   }
 ]
