@@ -1,0 +1,69 @@
+name: Firebase Domain Readiness Check
+# Manual verification trigger 2
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/firebase-domain-readiness-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Check TXT propagation
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_txt () {
+            NAME="$1"
+            EXPECTED="$2"
+            echo "===== TXT:$NAME ====="
+            FOUND="$(dig +short TXT "$NAME" | tr -d '"' || true)"
+            echo "$FOUND"
+            echo "$FOUND" | grep -F "$EXPECTED" >/dev/null
+          }
+
+          check_txt "_acme-challenge.millionsnest.com" "D-OrFu1o2u51z4ArQVTzPYk-LTbtbhZuqdiX6Kq_iW8"
+          check_txt "_acme-challenge.www.millionsnest.com" "0ApjIK53ucEDXnOSC490vqTCoN3lf664ZrxvkvcYhSc"
+          check_txt "_acme-challenge.musicscale.millionsnest.com" "dHL3KE7LQsm2dST8hjyRxvLS8Y0TxM4872cLR5uino0"
+          check_txt "_acme-challenge.nestfinance.millionsnest.com" "Thu4O1SllLxSyXfvDH5B1PUkq5FKUkpwPpVnqbPchXw"
+          check_txt "_acme-challenge.connect.millionsnest.com" "0TxsFEGPV2pW9ft-jgUXzeqsshRakE_WmgeXbR1T0Uo"
+          check_txt "_acme-challenge.nestjourney.millionsnest.com" "CADK5zgaTg-2BX2BqMWRWAqiBPo2_cHOAZ0OY7JQbWI"
+          check_txt "millionsnest.com" "hosting-site=mn-hub-555464791734"
+
+          echo "ALL_REQUIRED_TXT_VISIBLE"
+
+      - name: Read Firebase custom-domain states
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+
+          show () {
+            SITE="$1"
+            DOMAIN="$2"
+            URL="https://firebasehosting.googleapis.com/v1beta1/projects/millionsnest/sites/$SITE/customDomains/$DOMAIN"
+            echo "===== DOMAIN:$DOMAIN ====="
+            curl --fail --silent --show-error               -H "Authorization: Bearer $TOKEN" "$URL"               | python3 -c 'import json,sys; x=json.load(sys.stdin); print("ownershipState="+str(x.get("ownershipState"))); print("hostState="+str(x.get("hostState"))); print("certState="+str((x.get("cert") or {}).get("state"))); print("reconciling="+str(x.get("reconciling"))); print("issues="+json.dumps(x.get("issues",[]),separators=(",",":")))'
+          }
+
+          show "mn-hub-555464791734" "millionsnest.com"
+          show "mn-hub-555464791734" "www.millionsnest.com"
+          show "mn-musicscale-555464791734" "musicscale.millionsnest.com"
+          show "mn-nestfinance-555464791734" "nestfinance.millionsnest.com"
+          show "mn-connect-555464791734" "connect.millionsnest.com"
+          show "mn-nestjourney-555464791734" "nestjourney.millionsnest.com"
