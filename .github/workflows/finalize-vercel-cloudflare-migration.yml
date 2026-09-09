@@ -1,4 +1,6 @@
 name: Finalize Vercel Cloudflare Migration
+# Vercel redirect cleanup trigger
+# Vercel token refresh trigger
 
 on:
   push:
@@ -81,7 +83,15 @@ jobs:
           remove_domain "prj_uNXRuXYTmbB062k0klWLhRfj8OLh" "musicscale.millionsnest.com"
           remove_domain "prj_z5h2rI0DSmSNoLj40FU7nA4jektP" "nestfinance.millionsnest.com"
           remove_domain "prj_AtXHj9MbpSoNUePtnS9U0tBhT3en" "connect.millionsnest.com"
-          remove_domain "prj_X15W5pqfVMo7ARQMcyixtBa1QmIr" "nestjourney.millionsnest.com"
+          echo "Removing NestJourney domain and its legacy Vercel redirects"
+          NJ_CODE="$(curl --silent --show-error -o /tmp/vercel-nj-remove.json -w '%{http_code}'             -X DELETE             -H "Authorization: Bearer $VERCEL_TOKEN"             -H "Content-Type: application/json"             -d '{"removeRedirects":true}'             "https://api.vercel.com/v9/projects/prj_X15W5pqfVMo7ARQMcyixtBa1QmIr/domains/nestjourney.millionsnest.com")"
+          if [ "$NJ_CODE" = "200" ] || [ "$NJ_CODE" = "204" ] || [ "$NJ_CODE" = "404" ]; then
+            echo "VERCEL_DOMAIN_REMOVED_OR_ABSENT nestjourney.millionsnest.com HTTP=$NJ_CODE"
+          else
+            cat /tmp/vercel-nj-remove.json
+            echo "Unexpected Vercel HTTP $NJ_CODE for nestjourney.millionsnest.com" >&2
+            exit 1
+          fi
 
           echo "VERCEL_CUSTOM_DOMAINS_CLEAN"
 
