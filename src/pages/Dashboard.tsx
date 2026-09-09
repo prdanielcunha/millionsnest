@@ -39,6 +39,10 @@ import { SupportHubProvider } from "../components/support/SupportHubContext.js";
 import { SupportHub } from "../components/support/SupportHub.js";
 import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js";
 import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
+import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "../lib/actionCenter.js";
+import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
+import { fetchActionPreferences, saveActionPreference } from "../services/actionCenterClient.js";
+import { trackActionOsInteraction, type ActionOsDismissCode } from "../lib/actionOsAnalytics.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -96,6 +100,7 @@ type MusicScaleHubSummary = {
     id: string;
     date: string;
     time?: string | null;
+    startsAtMs: number;
     status?: string | null;
     songCount: number;
     assignmentCount: number;
@@ -108,6 +113,17 @@ type MusicScaleHubSummary = {
       declined: number;
     };
   };
+  nextPersonalScale: null | {
+    id: string;
+    date: string;
+    time?: string | null;
+    startsAtMs: number;
+    songCount: number;
+    functionNames: string[];
+    publishRevision: number;
+    responseSummaryAvailable: boolean;
+    pendingResponses: number;
+  };
   updatedAtMs: number;
 };
 
@@ -118,6 +134,7 @@ const EMPTY_MUSICSCALE_SUMMARY: MusicScaleHubSummary = {
   scalesCount: 0,
   bandScalesCount: 0,
   nextScale: null,
+  nextPersonalScale: null,
   updatedAtMs: 0,
 };
 
@@ -196,7 +213,10 @@ export function Dashboard() {
 
   const [subscription, setSubscription] = useState<any>(null);
   const [musicScaleHubSummary, setMusicScaleHubSummary] = useState<MusicScaleHubSummary>(EMPTY_MUSICSCALE_SUMMARY);
+  const [musicScaleChangeNotifications, setMusicScaleChangeNotifications] = useState<MusicScaleChangeNotificationInput[]>([]);
   const [organization, setOrganization] = useState<any>(null);
+  const [actionPreferences, setActionPreferences] = useState<ActionPreference[]>([]);
+  const [actionPreferenceBusyKey, setActionPreferenceBusyKey] = useState<string | null>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
@@ -206,6 +226,31 @@ export function Dashboard() {
   const musicScaleProjectionAbortControllerRef = useRef<AbortController | null>(null);
   const musicScaleProjectionSeqRef = useRef<number>(0);
   const musicScaleExpectedOrgRef = useRef<string | null>(null);
+
+  const acknowledgeMusicScaleChange = async (
+    notificationId: string
+  ) => {
+    if (!activeContextOrgId || !notificationId) return;
+
+    try {
+      await updateDoc(
+        doc(
+          db,
+          `organizations/${activeContextOrgId}/notifications`,
+          notificationId
+        ),
+        {
+          isRead: true,
+          readAt: new Date().toISOString(),
+        }
+      );
+    } catch (error) {
+      console.warn(
+        '[Dashboard] Could not acknowledge MusicScale change notification:',
+        error
+      );
+    }
+  };
 
   const refreshMusicScaleAccessProjection = async (orgId: string) => {
     if (!user || !orgId) return;
@@ -513,6 +558,95 @@ export function Dashboard() {
     hasNestFinanceDevelopmentAccess &&
     nestFinanceLaunchEnabled &&
     !nestFinanceLaunching;
+
+  useEffect(() => {
+    if (!user || !activeContextOrgId) {
+      setActionPreferences([]);
+      return;
+    }
+
+    const orgId = activeContextOrgId;
+    const controller = new AbortController();
+    let active = true;
+
+    void (async () => {
+      try {
+        const token = await user.getIdToken();
+        const preferences = await fetchActionPreferences(token, orgId, controller.signal);
+        if (active && activeContextOrgId === orgId) {
+          setActionPreferences(preferences);
+        }
+      } catch (error: any) {
+        if (error?.name !== 'AbortError') {
+          console.warn('[ActionCenter] Failed to load personal preferences:', error);
+        }
+        if (active) setActionPreferences([]);
+      }
+    })();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [user, activeContextOrgId]);
+
+  const handleSetActionPreference = async (
+    action: ReadOnlyHubAction,
+    mode: ActionPreferenceMode,
+    dismissCode?: ActionOsDismissCode
+  ) => {
+    if (!user || !activeContextOrgId || actionPreferenceBusyKey) return;
+
+    const orgId = activeContextOrgId;
+    setActionPreferenceBusyKey(action.dedupeKey);
+
+    try {
+      const token = await user.getIdToken();
+      const snoozedUntilMs = mode === 'snoozed'
+        ? Date.now() + 24 * 60 * 60 * 1000
+        : null;
+
+      const preference = await saveActionPreference(token, orgId, {
+        dedupeKey: action.dedupeKey,
+        fingerprint: action.fingerprint,
+        mode,
+        snoozedUntilMs
+      });
+
+      if (!preference || activeContextOrgId !== orgId) return;
+
+      setActionPreferences(current => {
+        const withoutCurrent = current.filter(item => item.dedupeKey !== preference.dedupeKey);
+        return [...withoutCurrent, preference];
+      });
+
+      trackActionOsInteraction({
+        organizationId: orgId,
+        userId: user.uid,
+        kind: mode === 'snoozed'
+          ? 'action_snoozed'
+          : 'action_dismissed',
+        lane: 'action',
+        sourceApp: action.sourceApp,
+        signalType: action.signalType,
+        priority: action.priority,
+        ...(mode === 'dismissed'
+          ? { dismissCode: dismissCode || 'no_reason' }
+          : {}),
+      });
+
+      feedback.success(
+        mode === 'snoozed'
+          ? t('workspace.actions.snoozed_feedback', 'Adiado por 24 horas.')
+          : t('workspace.actions.dismissed_feedback', 'Ocultado da sua visão por enquanto.')
+      );
+    } catch (error) {
+      console.error('[ActionCenter] Failed to save personal preference:', error);
+      feedback.error(t('workspace.actions.preference_error', 'Não foi possível atualizar essa prioridade agora.'));
+    } finally {
+      setActionPreferenceBusyKey(null);
+    }
+  };
 
   useEffect(() => {
     if (isGlobalAdmin && adminSelectedOrgId && user) {
@@ -1470,6 +1604,7 @@ export function Dashboard() {
       setJoinRequests([]);
       setAuditLogs([]);
       setMusicScaleHubSummary(EMPTY_MUSICSCALE_SUMMARY);
+      setMusicScaleChangeNotifications([]);
       
       if (musicScaleProjectionAbortControllerRef.current) {
         musicScaleProjectionAbortControllerRef.current.abort();
@@ -1488,6 +1623,7 @@ export function Dashboard() {
     setPendingInvites([]);
     setJoinRequests([]);
     setAuditLogs([]);
+    setMusicScaleChangeNotifications([]);
     setLoadingSub(true);
     setMusicScaleProjection(null);
     setMusicScaleProjectionError(null);
@@ -1590,6 +1726,71 @@ export function Dashboard() {
   }, [user, activeContextOrgId]);
 
   useEffect(() => {
+    setMusicScaleChangeNotifications([]);
+
+    if (
+      !user ||
+      !activeContextOrgId ||
+      musicScaleProjection?.accessible !== true
+    ) {
+      return;
+    }
+
+    const orgId = activeContextOrgId;
+    const notificationsQuery = query(
+      collection(db, `organizations/${orgId}/notifications`),
+      where('recipientId', '==', user.uid),
+      where('isArchived', '==', false)
+    );
+
+    const unsubscribe = onSnapshot(
+      notificationsQuery,
+      snapshot => {
+        if (currentActiveOrgIdRef.current !== orgId) return;
+
+        const personalChanges = snapshot.docs
+          .map(notificationDoc => {
+            const data = notificationDoc.data() as any;
+            const createdAtMs =
+              typeof data?.createdAt?.toMillis === 'function'
+                ? data.createdAt.toMillis()
+                : typeof data?.createdAt === 'number'
+                  ? data.createdAt
+                  : null;
+
+            return {
+              id: notificationDoc.id,
+              type: String(data?.type || ''),
+              createdAtMs,
+              isRead: data?.isRead === true,
+              metadata: data?.metadata,
+            } satisfies MusicScaleChangeNotificationInput;
+          })
+          .filter(notification =>
+            notification.type === 'music_scale_changed'
+          );
+
+        setMusicScaleChangeNotifications(personalChanges);
+      },
+      error => {
+        if (currentActiveOrgIdRef.current === orgId) {
+          setMusicScaleChangeNotifications([]);
+        }
+        console.warn(
+          '[Dashboard] Personal MusicScale change listener failed:',
+          error
+        );
+      }
+    );
+
+    return () => unsubscribe();
+  }, [
+    user,
+    activeContextOrgId,
+    musicScaleProjection?.accessible,
+  ]);
+
+  useEffect(() => {
     if (!user || !activeContextOrgId || musicScaleProjection?.accessible !== true) {
       setMusicScaleHubSummary(EMPTY_MUSICSCALE_SUMMARY);
       return;
@@ -1602,13 +1803,16 @@ export function Dashboard() {
       bandScales: [] as any[],
       configuredMembersCount: 0,
       responseSummaryAvailable: false,
-      responseCounts: { pending: 0, accepted: 0, maybe: 0, declined: 0 }
+      responseCounts: { pending: 0, accepted: 0, maybe: 0, declined: 0 },
+      personalResponseSummaryAvailable: false,
+      personalPendingResponses: 0
     };
     let responsesUnsubscribe: (() => void) | null = null;
     let responseScaleId: string | null = null;
-    const currentMember = members.find(member => member.id === user.uid || member.uid === user.uid);
-    const currentRole = String(currentMember?.role || currentMember?.organizationRole || '').toLowerCase();
-    const canReadResponseSummary = isGlobalAdmin || currentRole === 'owner' || currentRole === 'admin';
+    let personalResponsesUnsubscribe: (() => void) | null = null;
+    let personalResponseScaleId: string | null = null;
+    const canReadResponseSummary =
+      musicScaleProjection?.canReadManagedScaleResponses === true;
 
     const publishSummary = () => {
       if (currentActiveOrgIdRef.current !== orgId) return;
@@ -1623,6 +1827,80 @@ export function Dashboard() {
       const activeAssignments = Array.isArray(nextScale?.eventAssignments)
         ? nextScale.eventAssignments.filter((assignment: any) => assignment?.active !== false)
         : [];
+
+      const nextPersonalScale = candidateScales.find(scale => {
+        const status = String(scale?.status || '').toLowerCase();
+        if (status === 'draft') return false;
+        if (!Array.isArray(scale?.eventAssignments)) return false;
+
+        return scale.eventAssignments.some((assignment: any) =>
+          assignment?.active !== false &&
+          assignment?.userId === user.uid
+        );
+      }) || null;
+
+      const personalAssignments = Array.isArray(nextPersonalScale?.eventAssignments)
+        ? nextPersonalScale.eventAssignments.filter((assignment: any) =>
+            assignment?.active !== false &&
+            assignment?.userId === user.uid
+          )
+        : [];
+
+      if (nextPersonalScale?.id !== personalResponseScaleId) {
+        personalResponsesUnsubscribe?.();
+        personalResponsesUnsubscribe = null;
+        personalResponseScaleId = nextPersonalScale?.id || null;
+        live.personalResponseSummaryAvailable = false;
+        live.personalPendingResponses = 0;
+
+        if (nextPersonalScale?.id) {
+          personalResponsesUnsubscribe = onSnapshot(
+            query(
+              collection(db, `scales/${nextPersonalScale.id}/responses`),
+              where('userId', '==', user.uid)
+            ),
+            responseSnapshot => {
+              const respondedAssignmentIds = new Set<string>();
+              let pending = 0;
+
+              responseSnapshot.docs.forEach(responseDoc => {
+                const data = responseDoc.data() as any;
+                if (data?.active === false) return;
+
+                respondedAssignmentIds.add(
+                  data.eventAssignmentId || responseDoc.id
+                );
+
+                const status = String(data.status || 'pending').toLowerCase();
+                if (
+                  status !== 'accepted' &&
+                  status !== 'maybe' &&
+                  status !== 'declined'
+                ) {
+                  pending += 1;
+                }
+              });
+
+              pending += personalAssignments.filter((assignment: any) =>
+                !respondedAssignmentIds.has(assignment.eventAssignmentId)
+              ).length;
+
+              live.personalResponseSummaryAvailable = true;
+              live.personalPendingResponses = pending;
+              publishSummary();
+            },
+            error => {
+              live.personalResponseSummaryAvailable = false;
+              live.personalPendingResponses = 0;
+              publishSummary();
+              console.warn(
+                '[Dashboard] MusicScale personal response listener failed:',
+                error
+              );
+            }
+          );
+        }
+      }
 
       if (nextScale?.id !== responseScaleId) {
         responsesUnsubscribe?.();
@@ -1684,12 +1962,34 @@ export function Dashboard() {
           id: nextScale.id,
           date: nextScale.date,
           time: nextScale.time || null,
+          startsAtMs: toEventEpoch(nextScale),
           status: nextScale.status || null,
           songCount: Array.isArray(nextScale.songIds) ? nextScale.songIds.length : 0,
           assignmentCount: activeAssignments.length,
           bandScaleId: nextScale.bandScaleId || null,
           responseSummaryAvailable: canReadResponseSummary && live.responseSummaryAvailable,
           responseCounts: { ...live.responseCounts }
+        } : null,
+        nextPersonalScale: nextPersonalScale ? {
+          id: nextPersonalScale.id,
+          date: nextPersonalScale.date,
+          time: nextPersonalScale.time || null,
+          startsAtMs: toEventEpoch(nextPersonalScale),
+          songCount: Array.isArray(nextPersonalScale.songIds)
+            ? nextPersonalScale.songIds.length
+            : 0,
+          functionNames: Array.from(new Set(
+            personalAssignments
+              .map((assignment: any) => String(assignment?.functionName || '').trim())
+              .filter(Boolean)
+          )),
+          publishRevision:
+            typeof nextPersonalScale.publishRevision === 'number' &&
+            Number.isFinite(nextPersonalScale.publishRevision)
+              ? nextPersonalScale.publishRevision
+              : 0,
+          responseSummaryAvailable: live.personalResponseSummaryAvailable,
+          pendingResponses: live.personalPendingResponses
         } : null,
         updatedAtMs: Date.now()
       });
@@ -1745,8 +2045,14 @@ export function Dashboard() {
     return () => {
       unsubscribers.forEach(unsubscribe => unsubscribe());
       responsesUnsubscribe?.();
+      personalResponsesUnsubscribe?.();
     };
-  }, [user, activeContextOrgId, musicScaleProjection?.accessible, isGlobalAdmin, members]);
+  }, [
+    user,
+    activeContextOrgId,
+    musicScaleProjection?.accessible,
+    musicScaleProjection?.canReadManagedScaleResponses
+  ]);
 
   useEffect(() => {
     fetch('/api/v1/billing/products')
@@ -2150,6 +2456,8 @@ export function Dashboard() {
                 onSelectWorkspace={handleSelectWorkspace}
                 onLaunchApp={(app, destinationPath) => handleLaunchEcosystemApp(app, currentUserPerms, destinationPath)}
                 musicScaleSummary={musicScaleHubSummary}
+                musicScaleChanges={musicScaleChangeNotifications}
+                onAcknowledgeMusicScaleChange={acknowledgeMusicScaleChange}
                 onOpenInviteModal={() => setIsInviteModalOpen(true)}
                 onNavigateToOrganizationMembers={() => navigate('/dashboard/organization/members')}
                 onNavigateToBilling={() => setActiveTab('billing')}
@@ -2160,6 +2468,17 @@ export function Dashboard() {
                   if (activeContextOrgId) {
                     refreshMusicScaleAccessProjection(activeContextOrgId);
                   }
+                }}
+                actionPreferences={actionPreferences}
+                actionPreferenceBusyKey={actionPreferenceBusyKey}
+                onSetActionPreference={handleSetActionPreference}
+                onActionOsInteraction={(interaction) => {
+                  if (!user || !activeContextOrgId) return;
+                  trackActionOsInteraction({
+                    organizationId: activeContextOrgId,
+                    userId: user.uid,
+                    ...interaction,
+                  });
                 }}
                 recentActivity={auditLogs.slice(0, 5).map(log => ({
                   id: log.id,
