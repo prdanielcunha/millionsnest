@@ -212,6 +212,10 @@ service cloud.firestore {
           checkOrgAccess(orgId) &&
           isOrgActive(orgId) &&
           hasValidAnalyticsEnvelope() &&
+          (
+            request.resource.data.eventType != 'action_os_interaction' ||
+            isValidOrganizationActionOsAnalytics()
+          ) &&
           request.resource.data.get('organizationId', '') == orgId &&
           request.resource.data.get('userId', '') in [
             request.auth.uid,
@@ -495,6 +499,73 @@ service cloud.firestore {
       request.resource.data.app.size() <= 64 &&
       request.resource.data.metadata is map &&
       request.resource.data.timestamp is timestamp;
+    }
+
+    function isValidOrganizationActionOsAnalytics() {
+      let data = request.resource.data;
+      let metadata = data.metadata;
+
+      return data.eventType == 'action_os_interaction' &&
+        data.app == 'millionsnest_core' &&
+        metadata.keys().hasAll([
+          'action',
+          'lane',
+          'sourceApp'
+        ]) &&
+        metadata.keys().hasOnly([
+          'action',
+          'lane',
+          'sourceApp',
+          'signalType',
+          'priority',
+          'dismissCode'
+        ]) &&
+        metadata.action in [
+          'action_opened',
+          'action_snoozed',
+          'action_dismissed',
+          'change_reviewed',
+          'commitment_opened'
+        ] &&
+        metadata.lane in [
+          'action',
+          'change',
+          'commitment'
+        ] &&
+        metadata.sourceApp in [
+          'hub',
+          'musicscale'
+        ] &&
+        (
+          !('signalType' in metadata) ||
+          (
+            metadata.signalType is string &&
+            metadata.signalType.size() > 0 &&
+            metadata.signalType.size() <= 80
+          )
+        ) &&
+        (
+          !('priority' in metadata) ||
+          metadata.priority in [
+            'low',
+            'normal',
+            'high',
+            'urgent'
+          ]
+        ) &&
+        (
+          !('dismissCode' in metadata) ||
+          (
+            metadata.action == 'action_dismissed' &&
+            metadata.dismissCode in [
+              'not_relevant',
+              'already_handled',
+              'not_my_responsibility',
+              'too_early',
+              'no_reason'
+            ]
+          )
+        );
     }
 
     function isValidPublicMusicScaleAnalytics() {
