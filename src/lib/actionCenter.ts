@@ -52,6 +52,13 @@ export interface ActionProjectionInput {
       responseSummaryAvailable: boolean;
       pendingResponses: number;
     };
+    nextPersonalScale?: null | {
+      id: string;
+      startsAtMs?: number | null;
+      publishRevision?: number | null;
+      responseSummaryAvailable: boolean;
+      pendingResponses: number;
+    };
   };
 }
 
@@ -102,6 +109,29 @@ export function projectSignalToAction(
       descriptionKey: 'workspace.actions.pending_invites.description',
       translationParams: { count },
       destination: { kind: 'hub', section: 'members' }
+    };
+  }
+
+  if (signal.signalType === 'musicscale_personal_confirmation') {
+    const pendingResponses = numberPayload(signal, 'pendingResponses');
+    if (pendingResponses <= 0 || signal.sourceEntityType !== 'scale') return null;
+
+    return {
+      id: signal.dedupeKey,
+      dedupeKey: signal.dedupeKey,
+      fingerprint: signal.fingerprint,
+      sourceApp: signal.sourceApp,
+      signalType: signal.signalType,
+      priority: 'high',
+      titleKey: 'workspace.actions.musicscale_personal_confirmation.title',
+      descriptionKey: 'workspace.actions.musicscale_personal_confirmation.description',
+      translationParams: { count: pendingResponses },
+      destination: {
+        kind: 'app',
+        appId: 'musicscale',
+        path: `/scales/${signal.sourceEntityId}`
+      },
+      dueAtMs: signal.occurredAtMs ?? null
     };
   }
 

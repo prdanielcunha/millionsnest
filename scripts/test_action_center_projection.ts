@@ -51,6 +51,77 @@ assert.deepEqual(pendingResponses[0]?.destination, {
   path: '/scales/scale-123'
 });
 
+const personalConfirmation = deriveReadOnlyHubActions({
+  ...baseInput,
+  musicScale: {
+    ready: true,
+    nextScale: null,
+    nextPersonalScale: {
+      id: 'scale-personal',
+      startsAtMs: 1_800_000_100_000,
+      publishRevision: 4,
+      responseSummaryAvailable: true,
+      pendingResponses: 1
+    }
+  }
+});
+
+assert.equal(personalConfirmation.length, 1);
+assert.equal(
+  personalConfirmation[0]?.signalType,
+  'musicscale_personal_confirmation'
+);
+assert.equal(personalConfirmation[0]?.priority, 'high');
+assert.equal(
+  personalConfirmation[0]?.fingerprint,
+  'musicscale:personal_confirmation:scale-personal:rev4:pending1'
+);
+assert.deepEqual(personalConfirmation[0]?.destination, {
+  kind: 'app',
+  appId: 'musicscale',
+  path: '/scales/scale-personal'
+});
+
+const noPersonalConfirmation = deriveReadOnlyHubActions({
+  ...baseInput,
+  musicScale: {
+    ready: true,
+    nextScale: null,
+    nextPersonalScale: {
+      id: 'scale-confirmed',
+      publishRevision: 2,
+      responseSummaryAvailable: true,
+      pendingResponses: 0
+    }
+  }
+});
+
+assert.deepEqual(
+  noPersonalConfirmation,
+  [],
+  'confirmed personal assignments must not create a Today action'
+);
+
+const unknownPersonalResponseState = deriveReadOnlyHubActions({
+  ...baseInput,
+  musicScale: {
+    ready: true,
+    nextScale: null,
+    nextPersonalScale: {
+      id: 'scale-loading',
+      publishRevision: 2,
+      responseSummaryAvailable: false,
+      pendingResponses: 1
+    }
+  }
+});
+
+assert.deepEqual(
+  unknownPersonalResponseState,
+  [],
+  'the Hub must fail quiet until the personal response state is known'
+);
+
 const multipleActions = deriveReadOnlyHubActions({
   organization: { isConfigured: false },
   permissions: {
@@ -145,6 +216,27 @@ const changedSourceAction = {
   fingerprint: 'musicscale:pending_responses:scale-123:2',
   translationParams: { count: 2 }
 };
+
+const personalSourceAction = personalConfirmation[0]!;
+const republishedPersonalAction = {
+  ...personalSourceAction,
+  fingerprint:
+    'musicscale:personal_confirmation:scale-personal:rev5:pending1'
+};
+
+assert.deepEqual(
+  applyActionPreferences(
+    [republishedPersonalAction],
+    [{
+      dedupeKey: personalSourceAction.dedupeKey,
+      fingerprint: personalSourceAction.fingerprint,
+      mode: 'dismissed'
+    }],
+    now
+  ),
+  [republishedPersonalAction],
+  'republishing a scale must resurface a still-pending personal confirmation'
+);
 
 assert.deepEqual(
   applyActionPreferences(

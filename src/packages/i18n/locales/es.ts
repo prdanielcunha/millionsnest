@@ -889,7 +889,13 @@ export default {
           title_other: "{{count}} confirmaciones aún esperan respuesta",
           description_one: "La próxima escala de MusicScale todavía tiene una participación sin confirmar.",
           description_other: "La próxima escala de MusicScale todavía tiene participaciones sin confirmar."
-        }
+        },
+        musicscale_personal_confirmation: {
+          title_one: "Confirma tu participación en la próxima escala",
+          title_other: "Confirma tus participaciones en la próxima escala",
+          description_one: "Tu respuesta sigue pendiente. Confirma si podrás servir.",
+          description_other: "{{count}} participaciones tuyas aún esperan respuesta. Confirma si podrás servir."
+        },
       },
       commitments: {
         eyebrow: "Tus compromisos",

@@ -67,6 +67,9 @@ interface EcosystemWorkspaceHomeProps {
       startsAtMs: number;
       songCount: number;
       functionNames: string[];
+      publishRevision: number;
+      responseSummaryAvailable: boolean;
+      pendingResponses: number;
     };
     updatedAtMs: number;
   };
@@ -277,6 +280,15 @@ export function EcosystemWorkspaceHome({
               responseSummaryAvailable: musicScaleSummary.nextScale.responseSummaryAvailable,
               pendingResponses: musicScaleSummary.nextScale.responseCounts.pending || 0
             }
+          : null,
+        nextPersonalScale: musicScaleSummary.nextPersonalScale
+          ? {
+              id: musicScaleSummary.nextPersonalScale.id,
+              startsAtMs: musicScaleSummary.nextPersonalScale.startsAtMs,
+              publishRevision: musicScaleSummary.nextPersonalScale.publishRevision,
+              responseSummaryAvailable: musicScaleSummary.nextPersonalScale.responseSummaryAvailable,
+              pendingResponses: musicScaleSummary.nextPersonalScale.pendingResponses
+            }
           : null
       }
     });
@@ -438,7 +450,10 @@ export function EcosystemWorkspaceHome({
         'path' in nextStep &&
         typeof nextStep.path === 'string' &&
         nextStep.path.startsWith('/scales/') &&
-        todayActions.some(action => action.signalType === 'musicscale_pending_responses'));
+        todayActions.some(action => action.signalType === 'musicscale_pending_responses')) ||
+      (nextStep.action === 'none' &&
+        nextStep.tone === 'success' &&
+        todayActions.length > 0);
 
     const handleTodayAction = (action: ReadOnlyHubAction) => {
       const destination = action.destination;
