@@ -821,6 +821,38 @@ export function Dashboard() {
     }
   };
 
+  const loadJoinRequestsViaBackend = async (orgId: string) => {
+    if (!user || !orgId) return [];
+    const token = await user.getIdToken();
+    const response = await fetch(
+      `/api/v1/organizations/${encodeURIComponent(orgId)}/join-requests`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+          'Cache-Control': 'no-store'
+        }
+      }
+    );
+
+    if (response.status === 403) return [];
+    if (!response.ok) throw new Error('JOIN_REQUESTS_LOAD_FAILED');
+
+    const data = await response.json();
+    return Array.isArray(data?.joinRequests) ? data.joinRequests : [];
+  };
+
+  const refreshJoinRequests = async (orgId: string) => {
+    try {
+      const requests = await loadJoinRequestsViaBackend(orgId);
+      if (currentActiveOrgIdRef.current === orgId) {
+        setJoinRequests(requests);
+      }
+    } catch (error) {
+      console.warn('[Dashboard] Failed to refresh join requests:', error);
+    }
+  };
+
   const loadOrganizationData = async (orgId: string, requestId: number) => {
     if (!user || !orgId) return;
     let coreReleased = false;
@@ -844,12 +876,7 @@ export function Dashboard() {
       );
 
       const joinRequestsPromise = withDashboardTimeout(
-        getDocs(
-          query(
-            collection(db, `organizations/${orgId}/join_requests`),
-            where('status', '==', 'pending')
-          )
-        ),
+        loadJoinRequestsViaBackend(orgId),
         6000,
         'Dashboard timeout loading join requests'
       );
@@ -1028,7 +1055,7 @@ export function Dashboard() {
 
       if (requestId === requestSequenceRef.current && orgId === currentActiveOrgIdRef.current) {
         if (joinRequestsResult.status === 'fulfilled') {
-          setJoinRequests(joinRequestsResult.value.docs.map(d => ({ id: d.id, ...d.data() })));
+          setJoinRequests(joinRequestsResult.value);
         } else {
           setJoinRequests([]);
           console.warn("Failed to load join requests");
@@ -1834,16 +1861,26 @@ export function Dashboard() {
       console.warn("[Dashboard] Real-time member update failed:", err);
     }));
 
-    const joinRequestQuery = query(
-      collection(db, `organizations/${orgId}/join_requests`),
-      where("status", "==", "pending")
-    );
-    unsubscribers.push(onSnapshot(joinRequestQuery, (snap) => {
-      if (currentActiveOrgIdRef.current !== orgId) return;
-      setJoinRequests(snap.docs.map(requestDoc => ({ id: requestDoc.id, ...requestDoc.data() })));
-    }, (err) => {
-      console.warn("[Dashboard] Real-time join request update failed:", err);
-    }));
+    let joinRequestRefreshTimer: ReturnType<typeof setInterval> | null = null;
+    if (isGlobalAdmin) {
+      void refreshJoinRequests(orgId);
+      joinRequestRefreshTimer = setInterval(() => {
+        void refreshJoinRequests(orgId);
+      }, 30000);
+    } else if (!isEcosystemSupport) {
+      const joinRequestQuery = query(
+        collection(db, `organizations/${orgId}/join_requests`),
+        where("status", "==", "pending")
+      );
+      unsubscribers.push(onSnapshot(joinRequestQuery, (snap) => {
+        if (currentActiveOrgIdRef.current !== orgId) return;
+        setJoinRequests(snap.docs.map(requestDoc => ({ id: requestDoc.id, ...requestDoc.data() })));
+      }, (err) => {
+        console.warn("[Dashboard] Real-time join request update failed:", err);
+      }));
+    } else {
+      setJoinRequests([]);
+    }
 
     const auditQuery = query(
       collection(db, `organizations/${orgId}/audit_logs`),
@@ -1859,6 +1896,7 @@ export function Dashboard() {
     }));
 
     return () => {
+      if (joinRequestRefreshTimer) clearInterval(joinRequestRefreshTimer);
       unsubscribers.forEach(unsubscribe => unsubscribe());
       if (musicScaleProjectionAbortControllerRef.current) {
         musicScaleProjectionAbortControllerRef.current.abort();
@@ -1868,7 +1906,7 @@ export function Dashboard() {
         musicScaleExpectedOrgRef.current = null;
       }
     };
-  }, [user, activeContextOrgId]);
+  }, [user, activeContextOrgId, isGlobalAdmin, isEcosystemSupport]);
 
   useEffect(() => {
     setMusicScaleChangeNotifications([]);
