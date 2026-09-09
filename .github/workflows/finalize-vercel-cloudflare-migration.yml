@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           TEAM_ID="team_qtUDx2cqVcgfKlO5T17JdqJP"
-          CODE="$(curl --silent --show-error -o /tmp/vercel-project.json -w '%{http_code}' -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v9/projects/prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju?teamId=$TEAM_ID")"
+          CODE="$(curl --silent --show-error -o /tmp/vercel-project.json -w '%{http_code}' -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v9/projects/prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju")"
           echo "VERCEL_PROJECT_CHECK_HTTP=$CODE"
           if [ "$CODE" != "200" ]; then
             python3 - <<'PY'
@@ -66,7 +66,7 @@ jobs:
             PROJECT="$1"
             DOMAIN="$2"
             echo "Removing $DOMAIN from Vercel project $PROJECT"
-            CODE="$(curl --silent --show-error               -o /tmp/vercel-remove.json               -w '%{http_code}'               -X DELETE               -H "Authorization: Bearer $VERCEL_TOKEN"               "https://api.vercel.com/v9/projects/$PROJECT/domains/$DOMAIN?teamId=$TEAM_ID")"
+            CODE="$(curl --silent --show-error               -o /tmp/vercel-remove.json               -w '%{http_code}'               -X DELETE               -H "Authorization: Bearer $VERCEL_TOKEN"               "https://api.vercel.com/v9/projects/$PROJECT/domains/$DOMAIN")"
             if [ "$CODE" = "200" ] || [ "$CODE" = "204" ] || [ "$CODE" = "404" ]; then
               echo "VERCEL_DOMAIN_REMOVED_OR_ABSENT $DOMAIN HTTP=$CODE"
             else
@@ -201,7 +201,7 @@ jobs:
           FAIL=0
           for PROJECT in             prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju             prj_uNXRuXYTmbB062k0klWLhRfj8OLh             prj_z5h2rI0DSmSNoLj40FU7nA4jektP             prj_AtXHj9MbpSoNUePtnS9U0tBhT3en             prj_X15W5pqfVMo7ARQMcyixtBa1QmIr
           do
-            curl --fail --silent --show-error               -H "Authorization: Bearer $VERCEL_TOKEN"               "https://api.vercel.com/v9/projects/$PROJECT/domains?teamId=$TEAM_ID&limit=100"               >/tmp/project-domains.json
+            curl --fail --silent --show-error               -H "Authorization: Bearer $VERCEL_TOKEN"               "https://api.vercel.com/v9/projects/$PROJECT/domains?limit=100"               >/tmp/project-domains.json
             python3 - <<'PY' || FAIL=1
           import json
           x=json.load(open('/tmp/project-domains.json'))
