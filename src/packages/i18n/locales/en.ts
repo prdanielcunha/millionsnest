@@ -841,6 +841,37 @@ export default {
         no_apps_desc: "When a product is activated for your organization, it will appear here with the full setup flow.",
         view_products_action: "View products",
       },
+      actions: {
+        eyebrow: "Today",
+        title: "What needs your attention",
+        title_clear: "Everything is on track",
+        subtitle: "Priorities gathered automatically from what is already happening across your apps.",
+        count_one: "{{count}} thing needs your attention",
+        count_other: "{{count}} things need your attention",
+        source_hub: "MillionsNest",
+        priority_high: "High priority",
+        priority_normal: "Keep an eye on",
+        open_action: "View now",
+        clear_description: "We did not find any known important pending item at this moment.",
+        clear_status: "Your organization looks good",
+        clear_hint: "When something important needs action, it will appear here automatically.",
+        organization_incomplete: {
+          title: "Complete your organization details",
+          description: "Some essential information still needs to be reviewed to keep the ecosystem organized."
+        },
+        pending_invites: {
+          title_one: "{{count}} invite is still pending",
+          title_other: "{{count}} invites are still pending",
+          description_one: "One invited person has not completed joining the organization yet.",
+          description_other: "Some invited people have not completed joining the organization yet."
+        },
+        musicscale_pending_responses: {
+          title_one: "{{count}} confirmation is still awaiting a response",
+          title_other: "{{count}} confirmations are still awaiting a response",
+          description_one: "The next MusicScale schedule still has one participation without confirmation.",
+          description_other: "The next MusicScale schedule still has participations without confirmation."
+        }
+      },
       spaces_title: "Quick access",
       apps_title: "Your apps",
       open_app: "Open {{appName}}",
