@@ -36,6 +36,20 @@ service cloud.firestore {
       return subActive || appActive || isSystemAdmin();
     }
 
+    function isOrganizationLifecycleActive(orgId) {
+      return exists(/databases/$(database)/documents/organizations/$(orgId)) &&
+        !(
+          get(/databases/$(database)/documents/organizations/$(orgId)).data.get('status', 'active')
+          in [
+            'archived',
+            'inactive',
+            'suspended',
+            'disabled'
+          ]
+        ) &&
+        get(/databases/$(database)/documents/organizations/$(orgId)).data.get('disabled', false) != true;
+    }
+
     function checkOrgAccess(orgId) {
       let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
       let isOwner = orgDoc != null && (
@@ -257,7 +271,7 @@ service cloud.firestore {
       match /analytics/{eventId} {
         allow create: if isAuthenticated() &&
           checkOrgAccess(orgId) &&
-          isOrgActive(orgId) &&
+          isOrganizationLifecycleActive(orgId) &&
           hasValidAnalyticsEnvelope() &&
           (
             request.resource.data.eventType != 'action_os_interaction' ||
