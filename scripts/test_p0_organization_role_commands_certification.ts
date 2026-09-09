@@ -56,7 +56,10 @@ assert('07 unauthorized same-role replay is still denied', r.statusCode === 403 
 await reset();
 await seedOrg(); await seedUser('actor', { systemRole: 'admin' }); await seedUser('target-1'); await seedMember('org-1', 'target-1', 'member');
 r = await call('actor', 'viewer');
-assert('08 systemRole admin is not global', r.statusCode === 403 && r.body.reasonCode === 'PERMISSION_DENIED');
+assert(
+  '08 legacy systemRole admin preserves global_admin compatibility',
+  r.statusCode === 200 && r.body.reasonCode === 'ROLE_UPDATED' && r.body.organizationRole === 'viewer'
+);
 
 for (const [i, role] of ['ceo', 'global_admin', 'ecosystem_owner', 'founder'].entries()) {
   await reset();
