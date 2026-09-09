@@ -18,6 +18,7 @@ export interface MusicScaleAccessProjection {
   decisionState: 'granted' | 'denied';
   denialReason: string | null;
   catalogState: MusicScaleCatalogState;
+  canReadManagedScaleResponses: boolean;
   entitlement: {
     canonicalStatus: 'active' | 'trialing' | 'inactive' | 'missing' | 'unknown';
     cancellationScheduled: boolean;
