@@ -137,7 +137,7 @@ export async function getActionPreferences(
   try {
     const db = (dependencies.getFirestore ?? getFirestore)();
     const authorization = await authorizeOrganization(db, organizationId, actorUid);
-    if (!authorization.allowed) {
+    if (authorization.allowed === false) {
       return res.status(authorization.status).json({
         success: false,
         reasonCode: authorization.reasonCode
@@ -228,7 +228,7 @@ export async function updateActionPreference(
   try {
     const db = (dependencies.getFirestore ?? getFirestore)();
     const authorization = await authorizeOrganization(db, organizationId, actorUid);
-    if (!authorization.allowed) {
+    if (authorization.allowed === false) {
       return res.status(authorization.status).json({
         success: false,
         reasonCode: authorization.reasonCode
