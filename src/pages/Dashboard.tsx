@@ -2179,7 +2179,7 @@ export function Dashboard() {
     );
   }
 
-  if (!activeContextOrgId && !isGlobalAdmin) {
+  if (!activeContextOrgId && !canCrossTenantAccess) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0B0F19]/70 p-7 text-center shadow-2xl">
