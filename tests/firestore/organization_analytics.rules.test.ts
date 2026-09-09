@@ -97,6 +97,26 @@ test('active member can append a valid self-attributed analytics event', async (
   );
 });
 
+test('active member can append privacy-safe structured Action OS dismiss feedback', async () => {
+  const db = env.authenticatedContext('member-1').firestore();
+
+  await assertSucceeds(
+    setDoc(
+      doc(db, 'organizations/org-1/analytics/dismiss-feedback'),
+      event('member-1', {
+        metadata: {
+          action: 'action_dismissed',
+          lane: 'action',
+          sourceApp: 'musicscale',
+          signalType: 'musicscale_pending_responses',
+          priority: 'high',
+          dismissCode: 'already_handled',
+        },
+      })
+    )
+  );
+});
+
 test('active member can append a valid anonymous-within-tenant analytics event', async () => {
   const db = env.authenticatedContext('member-1').firestore();
 
