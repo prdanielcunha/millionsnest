@@ -110,6 +110,12 @@ assert.match(
   'Dashboard summary must expose the personal commitment separately from nextScale'
 );
 
+assert.match(
+  dashboardSource,
+  /status === 'draft'/,
+  'Dashboard must not project draft scales as personal commitments'
+);
+
 const workspaceSource = readFileSync(
   resolve('src/components/dashboard/EcosystemWorkspaceHome.tsx'),
   'utf8'
