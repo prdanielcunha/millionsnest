@@ -100,6 +100,7 @@ type MusicScaleHubSummary = {
     id: string;
     date: string;
     time?: string | null;
+    startsAtMs: number;
     status?: string | null;
     songCount: number;
     assignmentCount: number;
@@ -1806,9 +1807,8 @@ export function Dashboard() {
     let responseScaleId: string | null = null;
     let personalResponsesUnsubscribe: (() => void) | null = null;
     let personalResponseScaleId: string | null = null;
-    const currentMember = members.find(member => member.id === user.uid || member.uid === user.uid);
-    const currentRole = String(currentMember?.role || currentMember?.organizationRole || '').toLowerCase();
-    const canReadResponseSummary = isGlobalAdmin || currentRole === 'owner' || currentRole === 'admin';
+    const canReadResponseSummary =
+      musicScaleProjection?.canReadManagedScaleResponses === true;
 
     const publishSummary = () => {
       if (currentActiveOrgIdRef.current !== orgId) return;
@@ -1958,6 +1958,7 @@ export function Dashboard() {
           id: nextScale.id,
           date: nextScale.date,
           time: nextScale.time || null,
+          startsAtMs: toEventEpoch(nextScale),
           status: nextScale.status || null,
           songCount: Array.isArray(nextScale.songIds) ? nextScale.songIds.length : 0,
           assignmentCount: activeAssignments.length,
@@ -2042,7 +2043,12 @@ export function Dashboard() {
       responsesUnsubscribe?.();
       personalResponsesUnsubscribe?.();
     };
-  }, [user, activeContextOrgId, musicScaleProjection?.accessible, isGlobalAdmin, members]);
+  }, [
+    user,
+    activeContextOrgId,
+    musicScaleProjection?.accessible,
+    musicScaleProjection?.canReadManagedScaleResponses
+  ]);
 
   useEffect(() => {
     fetch('/api/v1/billing/products')
