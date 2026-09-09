@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {
   applyActionPreferences,
-  deriveReadOnlyHubActions
+  deriveReadOnlyHubActions,
+  projectSignalToAction
 } from '../src/lib/actionCenter.js';
+import { collectActionSignals } from '../src/lib/actionSignals.js';
 
 const baseInput = {
   organization: { isConfigured: true },
@@ -156,6 +158,50 @@ assert.deepEqual(
   ),
   [changedSourceAction],
   'materially changed source must reappear even after a previous dismiss'
+);
+
+const adapterSignals = collectActionSignals({
+  organization: { isConfigured: false },
+  pendingInvitesCount: 2,
+  musicScale: {
+    ready: true,
+    nextScale: {
+      id: 'scale-adapter',
+      responseSummaryAvailable: true,
+      pendingResponses: 4
+    }
+  }
+});
+
+assert.equal(adapterSignals.length, 3, 'source adapters should collect three independent facts');
+assert.deepEqual(
+  adapterSignals.map(signal => signal.sourceApp),
+  ['hub', 'hub', 'musicscale'],
+  'source adapters must preserve product provenance'
+);
+
+const organizationSignal = adapterSignals.find(
+  signal => signal.signalType === 'organization_incomplete'
+)!;
+assert.equal(
+  projectSignalToAction(organizationSignal, {
+    canManageOrganization: false,
+    canManageMembers: true
+  }),
+  null,
+  'policy layer must independently enforce action visibility permissions'
+);
+
+const musicSignal = adapterSignals.find(
+  signal => signal.signalType === 'musicscale_pending_responses'
+)!;
+assert.equal(
+  projectSignalToAction(musicSignal, {
+    canManageOrganization: false,
+    canManageMembers: false
+  })?.destination.kind,
+  'app',
+  'MusicScale adapter output should remain product-agnostic until policy projection'
 );
 
 console.log('Action Center projection and preference checks passed.');
