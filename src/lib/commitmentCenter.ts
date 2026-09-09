@@ -37,14 +37,15 @@ export interface CommitmentProjectionInput {
  * being misclassified as a problem.
  */
 export function deriveReadOnlyHubCommitments(
-  input: CommitmentProjectionInput
+  input: CommitmentProjectionInput,
+  nowMs: number = Date.now()
 ): ReadOnlyHubCommitment[] {
   if (!input.musicScale.ready) return [];
 
   const scale = input.musicScale.nextPersonalScale;
   if (!scale?.id) return [];
   if (!Number.isFinite(scale.startsAtMs)) return [];
-  if (scale.startsAtMs < Date.now() - 6 * 60 * 60 * 1000) return [];
+  if (scale.startsAtMs < nowMs - 6 * 60 * 60 * 1000) return [];
 
   const functionNames = Array.from(
     new Set(
