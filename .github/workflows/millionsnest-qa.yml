@@ -46,6 +46,9 @@ jobs:
       - name: Action OS deterministic projection
         run: npx tsx scripts/test_action_center_projection.ts
 
+      - name: Action OS commitment projection
+        run: npx tsx scripts/test_commitment_center_projection.ts
+
       - name: Vercel release and CORS hygiene
         run: npx tsx scripts/test_vercel_release_hygiene.ts
 
