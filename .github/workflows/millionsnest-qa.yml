@@ -52,6 +52,9 @@ jobs:
       - name: Private notification rules contract
         run: npx tsx scripts/test_private_notification_rules.ts
 
+      - name: Action OS recent changes projection
+        run: npx tsx scripts/test_change_center_projection.ts
+
       - name: Vercel release and CORS hygiene
         run: npx tsx scripts/test_vercel_release_hygiene.ts
 
