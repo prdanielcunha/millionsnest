@@ -590,7 +590,7 @@ export function Dashboard() {
       active = false;
       controller.abort();
     };
-  }, [user, activeContextOrgId]);
+  }, [user, activeContextOrgId, isEcosystemSupport]);
 
   const handleSetActionPreference = async (
     action: ReadOnlyHubAction,
@@ -651,17 +651,36 @@ export function Dashboard() {
   };
 
   useEffect(() => {
-    if (canCrossTenantAccess && adminSelectedOrgId && user) {
-       createAuditLog({
-         actorUid: user.uid,
-         actorEmail: user.email || '',
-         actorSystemRole: profile?.systemRole,
-         action: 'admin_accessed_organization',
-         targetOrganizationId: adminSelectedOrgId,
-         source: isEcosystemSupport ? 'ecosystem_support' : 'global_admin'
-       });
-    }
-  }, [adminSelectedOrgId, canCrossTenantAccess, isEcosystemSupport, user?.uid]);
+    if (!canCrossTenantAccess || !adminSelectedOrgId || !user) return;
+
+    let cancelled = false;
+    void user.getIdToken()
+      .then(token => fetch(
+        `/api/admin/organizations/${encodeURIComponent(adminSelectedOrgId)}/access-session`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: '{}'
+        }
+      ))
+      .then(response => {
+        if (!cancelled && !response.ok) {
+          console.warn('[Dashboard] Cross-tenant access audit was rejected.');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          console.warn('[Dashboard] Cross-tenant access audit failed.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [adminSelectedOrgId, canCrossTenantAccess, user?.uid]);
 
   const openBillingPortal = async () => {
     if (!user) return;
@@ -872,10 +891,11 @@ export function Dashboard() {
       if (organizationResult.status === 'fulfilled' && organizationResult.value.exists()) {
         currentOrgData = { id: organizationResult.value.id, ...organizationResult.value.data() };
         
-        if (membersResult.status === 'fulfilled') {
+        if (membersResult.status === 'fulfilled' && !isEcosystemSupport) {
           baseMembers = membersResult.value.docs.map(d => ({ id: d.id, uid: d.id, ...d.data() }));
         } else {
-          // fallback global admin for members
+          // Cross-tenant support/admin uses the authenticated server endpoint so
+          // Support never needs broad read access to users/{uid}.
           if (canCrossTenantAccess) {
             try {
               const token = await withDashboardTimeout(user.getIdToken(), 6000, "Dashboard timeout getting token");
@@ -1666,23 +1686,43 @@ export function Dashboard() {
         ...memberDoc.data()
       })) as any[];
 
-      const enrichedMembers = await Promise.all(baseMembers.map(async (member) => {
-        if (member.displayName && member.email) return member;
+      let enrichedMembers = baseMembers;
+
+      if (isEcosystemSupport && user) {
         try {
-          const profileSnap = await getDoc(doc(db, "users", member.id));
-          if (!profileSnap.exists()) return member;
-          const profileData = profileSnap.data() as any;
-          return {
-            ...profileData,
-            ...member,
-            displayName: member.displayName || profileData.displayName || profileData.name || "Usuário",
-            email: member.email || profileData.email || "",
-            photoURL: member.photoURL || profileData.photoURL || ""
-          };
+          const token = await user.getIdToken();
+          const response = await fetch(
+            `/api/admin/organizations/${encodeURIComponent(orgId)}/members`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (response.ok) {
+            const payload = await response.json();
+            if (Array.isArray(payload?.members)) {
+              enrichedMembers = payload.members;
+            }
+          }
         } catch {
-          return member;
+          // Keep membership documents already delivered by the scoped listener.
         }
-      }));
+      } else {
+        enrichedMembers = await Promise.all(baseMembers.map(async (member) => {
+          if (member.displayName && member.email) return member;
+          try {
+            const profileSnap = await getDoc(doc(db, "users", member.id));
+            if (!profileSnap.exists()) return member;
+            const profileData = profileSnap.data() as any;
+            return {
+              ...profileData,
+              ...member,
+              displayName: member.displayName || profileData.displayName || profileData.name || "Usuário",
+              email: member.email || profileData.email || "",
+              photoURL: member.photoURL || profileData.photoURL || ""
+            };
+          } catch {
+            return member;
+          }
+        }));
+      }
 
       if (currentActiveOrgIdRef.current === orgId) {
         setMembers(enrichedMembers);
