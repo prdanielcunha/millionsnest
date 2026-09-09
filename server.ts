@@ -39,7 +39,7 @@ import { handleEcosystemAccessProjectionRequest } from './src/server/services/Ec
 import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
-import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy } from './src/lib/permissionService.js';
+import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy, canManageTenantMembers, canManageTenantBilling, canManageTenantSettings } from './src/lib/permissionService.js';
 import { canChangeSystemRole, isAssignableSystemRole, normalizeLegacySystemRole } from './src/lib/roleResolver.js';
 import { 
   MUSIC_SCALE_PLANS, 
@@ -800,7 +800,7 @@ async function startServer() {
         orgData.ownerUserId === decoded.uid ||
         orgData.owner_user_id === decoded.uid;
       const canReadInvites =
-        isGlobalPrivilegedRole(actorData.systemRole) ||
+        canManageTenantSettings(actorData.systemRole) ||
         actorIsOwner ||
         role === 'owner' ||
         role === 'admin' ||
@@ -2069,7 +2069,7 @@ async function startServer() {
       // Actor global role
       const actorUserDoc = await db.collection('users').doc(actorUid).get();
       const actorSystemRole = actorUserDoc.data()?.systemRole;
-      const isGlobalAdmin = isGlobalPrivilegedRole(actorSystemRole);
+      const isGlobalAdmin = canManageTenantMembers(actorSystemRole);
 
       // Actor local role
       const actorMemberDoc = await db.collection('organizations').doc(orgId).collection('members').doc(actorUid).get();
@@ -2142,6 +2142,19 @@ async function startServer() {
       if (legacyDoc.exists) {
         await legacyDocRef.set(memberUpdate, { merge: true });
       }
+
+      await db.collection(`organizations/${orgId}/audit_logs`).add({
+        action: 'organization.member.profile_updated',
+        actorUid,
+        actorSystemRole: actorSystemRole || null,
+        governanceScope: isGlobalAdmin ? 'ecosystem_global' : 'organization',
+        memberId,
+        changedFields: [
+          ...(displayName !== undefined ? ['displayName'] : []),
+          ...(photoURL !== undefined ? ['photoURL'] : [])
+        ],
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
 
       return res.json({ success: true });
     } catch (err) {
@@ -4737,7 +4750,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userRef.data();
-      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
+      if (!canManageTenantSettings(userData?.systemRole) || !canManageTenantBilling(userData?.systemRole)) {
          return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -5350,7 +5363,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const syncUserEmail = syncUserDoc.data()?.email;
       const syncSystemRole = syncUserDoc.data()?.systemRole || 'user';
       let isMember = false;
-      let isSystemAdmin = isCanonicalGlobalRole(syncSystemRole);
+      let isSystemAdmin = canManageTenantBilling(syncSystemRole);
       
       if (orgContext.organizations) {
          const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
@@ -6454,6 +6467,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       batch.set(auditRef, {
         action: 'organization.updated',
         actorUid: uid,
+        actorSystemRole: actorData.systemRole || null,
+        governanceScope: canManageTenantSettings(actorData.systemRole) ? 'ecosystem_global' : 'organization',
         changedFields: Object.keys(updateData).filter(key => key !== 'updatedAt'),
         timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
@@ -7356,7 +7371,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         role === 'admin' ||
         membership?.permissions?.['organization.billing.manage'] === true;
       const systemRole = confirmingUserDoc.exists ? confirmingUserDoc.data()?.systemRole : null;
-      const isGlobalAdmin = isGlobalPrivilegedRole(systemRole || '');
+      const isGlobalAdmin = canManageTenantBilling(systemRole || '');
 
       if (!canManageBilling && !isGlobalAdmin) {
         console.warn('[Checkout Confirm] Organization billing authorization rejected.', {
@@ -7837,7 +7852,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         membership?.permissions?.['organization.billing.manage'] === true;
 
       const systemRole = userDoc.data()?.systemRole || 'user';
-      const isSystemAdmin = isGlobalPrivilegedRole(systemRole);
+      const isSystemAdmin = canManageTenantBilling(systemRole);
 
       if (!canManageBilling && !isSystemAdmin) {
         return res.status(403).json({
@@ -7905,6 +7920,18 @@ async function autoRepairSingleOrganizationUser(uid: string) {
              eventCreatedTs: Math.floor(Date.now() / 1000),
              event_type: 'customer.subscription.updated'
          });
+
+         if (isSystemAdmin) {
+           await db.collection(`organizations/${organizationId}/audit_logs`).add({
+             action: 'organization.billing.reactivated',
+             actorUid: uid,
+             actorSystemRole: systemRole || null,
+             governanceScope: 'ecosystem_global',
+             organizationId,
+             stripeSubscriptionId,
+             timestamp: admin.firestore.FieldValue.serverTimestamp()
+           });
+         }
 
          return res.json({
             ok: true,
@@ -8002,17 +8029,29 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         customerId = subDoc.data()?.stripeCustomerId;
       }
 
-      if (!customerId && userDoc.exists) {
-        customerId = userDoc.data()?.stripeCustomerId;
-      }
-
+      // Never fall back to the global administrator's own Stripe identity while
+      // operating another tenant. Billing context must always resolve from the
+      // target organization (subscription first, then its authoritative owner).
       if (!customerId) {
-        const email = decodedToken.email || userDoc.data()?.email;
-        if (email) {
-          const stripeLookup = getStripe();
-          const customers = await stripeLookup.customers.list({ email, limit: 1 });
-          if (customers.data.length > 0) {
-            customerId = customers.data[0].id;
+        const orgSnap = await db.collection('organizations').doc(orgId).get();
+        const orgData = orgSnap.exists ? orgSnap.data() || {} : {};
+        const ownerUid = orgData.ownerUid || orgData.ownerUserId || orgData.ownerId || orgData.owner_user_id || null;
+        const ownerUserDoc = ownerUid
+          ? await db.collection('users').doc(String(ownerUid)).get()
+          : null;
+
+        if (ownerUserDoc?.exists) {
+          customerId = ownerUserDoc.data()?.stripeCustomerId;
+        }
+
+        if (!customerId) {
+          const ownerEmail = orgData.ownerEmail || (ownerUserDoc?.exists ? ownerUserDoc.data()?.email : null);
+          if (ownerEmail) {
+            const stripeLookup = getStripe();
+            const customers = await stripeLookup.customers.list({ email: ownerEmail, limit: 1 });
+            if (customers.data.length > 0) {
+              customerId = customers.data[0].id;
+            }
           }
         }
       }
@@ -8038,6 +8077,18 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         customer: customerId,
         return_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard`,
       });
+
+      if (isGlobalAdmin) {
+        await db.collection(`organizations/${orgId}/audit_logs`).add({
+          action: 'organization.billing.portal_opened',
+          actorUid: userId,
+          actorSystemRole: systemRole || null,
+          governanceScope: 'ecosystem_global',
+          organizationId: orgId,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+
       res.json({ url: session.url });
     } catch (e: any) {
       console.error('[Portal] Error creating portal session:', e);
