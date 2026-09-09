@@ -8,6 +8,7 @@ import { trackPublicHomeView } from "../lib/publicFunnelAnalytics.js";
 
 const SocialProof = lazy(() => import("../components/SocialProof.js").then((module) => ({ default: module.SocialProof })));
 const Problem = lazy(() => import("../components/Problem.js").then((module) => ({ default: module.Problem })));
+const ActionOsShowcase = lazy(() => import("../components/ActionOsShowcase.js").then((module) => ({ default: module.ActionOsShowcase })));
 const Flagship = lazy(() => import("../components/Flagship.js").then((module) => ({ default: module.Flagship })));
 const Ecosystem = lazy(() => import("../components/Ecosystem.js").then((module) => ({ default: module.Ecosystem })));
 const Vision = lazy(() => import("../components/Vision.js").then((module) => ({ default: module.Vision })));
@@ -57,6 +58,7 @@ export function Home() {
       <Suspense fallback={<SectionFallback />}>
         <SocialProof />
         <Problem />
+        <ActionOsShowcase />
         <Flagship />
         <Ecosystem />
         <Vision />
