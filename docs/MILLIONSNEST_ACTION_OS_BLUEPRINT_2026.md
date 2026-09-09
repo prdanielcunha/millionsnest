@@ -409,13 +409,54 @@ Current workflow for this initiative:
 
 No Google AI Studio dependency.
 
-## 20. Current implementation state and immediate next step
+## 20. Current implementation state
 
-Slice 1 is implemented in the Hub with a premium **Hoje / Today / Hoy** section backed by existing safe/read-only data. The deterministic projection currently covers organization readiness, pending invitations and MusicScale pending confirmations.
+The Hub already has a premium **Hoje / Today / Hoy** section backed by deterministic, permission-scoped signals. It currently covers organization readiness, pending invitations and MusicScale pending confirmations.
 
-The immediate next step is Slice 2A:
-- persist only user-scoped snooze/dismiss preferences for derived actions;
-- never let a UI click falsely mark a still-active source condition as resolved;
-- resurface dismissed/snoozed actions when their fingerprint materially changes;
-- keep all writes behind authenticated backend commands;
-- preserve zero paid AI/API dependency.
+User-scoped snooze/dismiss interaction state is also implemented behind authenticated backend commands. A source condition is never falsely marked resolved by a UI click, and materially changed fingerprints resurface automatically.
+
+The next semantic layer is **Commitments**: normal participation that matters to the current user but is not a problem. The first adapter projects the authenticated user's next MusicScale assignment from data already loaded by the Hub, without a new collection or paid service.
+
+## 21. Semantic lanes: Actions, Commitments and Changes
+
+The Hub must not flatten every fact into an alert. The product language is:
+
+### Actions — “Hoje”
+Something requires an intervention.
+
+Examples:
+- a scale has pending confirmations;
+- an invitation is still incomplete;
+- organization setup is missing;
+- a future app detects an overdue follow-up.
+
+Actions may be snoozed or hidden by the current user, but source truth always wins.
+
+### Commitments — “O que vem a seguir para você”
+The current user is expected to participate in something, even when everything is healthy.
+
+Examples:
+- a musician is scheduled for the next service;
+- a leader has a confirmed meeting or duty;
+- a future NestJourney user has a scheduled discipleship session.
+
+Commitments are informational and should never be presented as operational failure.
+
+### Changes — future adapter
+Previously known truth changed materially and the user may need to review it.
+
+Examples:
+- repertoire/key/order changed after preparation;
+- event time/location changed;
+- responsibility changed.
+
+Changes should only enter the Hub when the source app can expose an exact, permission-safe, user-relevant change contract. The Hub must not infer a change from timestamps or revision counters alone.
+
+This separation is a core product invariant. It reduces alert fatigue and lets MillionsNest become an operational layer without turning normal church life into a list of “problems”.
+
+## 22. Immediate next step
+
+1. Certify and merge the first Commitments lane into `main`.
+2. Keep MusicScale's exact Preparation Intelligence / change review inside MusicScale until a stable cross-app change adapter is defined.
+3. Add the next Action OS source only when it exposes a factual signal contract; do not hardcode app-specific UI cards.
+4. Validate weekly use with real organizations before adding generative intelligence or expensive infrastructure.
