@@ -1,12 +1,18 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
+import { EcosystemCommitments } from './EcosystemCommitments.js';
+import { EcosystemChanges } from './EcosystemChanges.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
+import { applyActionPreferences, deriveReadOnlyHubActions, type ActionPreference, type ActionPreferenceMode, type ReadOnlyHubAction } from '../../lib/actionCenter.js';
+import { deriveReadOnlyHubCommitments, type ReadOnlyHubCommitment } from '../../lib/commitmentCenter.js';
+import { deriveReadOnlyHubChanges, type MusicScaleChangeNotificationInput, type ReadOnlyHubChange } from '../../lib/changeCenter.js';
+import type { ActionOsDismissCode, ActionOsInteractionInput } from '../../lib/actionOsAnalytics.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
-  AlertCircle, CircleHelp, CreditCard, Rocket, BookOpen, UserPlus, ChevronRight
+  AlertCircle, CircleHelp, CreditCard, Rocket, BookOpen, UserPlus, ChevronRight, EyeOff
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSupportHub } from '../support/SupportHubContext.js';
@@ -45,6 +51,7 @@ interface EcosystemWorkspaceHomeProps {
       id: string;
       date: string;
       time?: string | null;
+      startsAtMs: number;
       status?: string | null;
       songCount: number;
       assignmentCount: number;
@@ -57,8 +64,21 @@ interface EcosystemWorkspaceHomeProps {
         declined: number;
       };
     };
+    nextPersonalScale: null | {
+      id: string;
+      date: string;
+      time?: string | null;
+      startsAtMs: number;
+      songCount: number;
+      functionNames: string[];
+      publishRevision: number;
+      responseSummaryAvailable: boolean;
+      pendingResponses: number;
+    };
     updatedAtMs: number;
   };
+  musicScaleChanges: MusicScaleChangeNotificationInput[];
+  onAcknowledgeMusicScaleChange: (notificationId: string) => void | Promise<void>;
   occupiedSlots: number;
   maxUsersLimit: number;
   onSelectWorkspace: (workspaceId: string) => void;
@@ -70,6 +90,16 @@ interface EcosystemWorkspaceHomeProps {
   activeSection: 'overview' | 'resources' | 'getting-started';
   onSelectMusicScaleSection: (section: 'overview' | 'resources' | 'getting-started') => void;
   onRetryMusicScaleAccess: () => void;
+  actionPreferences: ActionPreference[];
+  actionPreferenceBusyKey?: string | null;
+  onSetActionPreference: (
+    action: ReadOnlyHubAction,
+    mode: ActionPreferenceMode,
+    dismissCode?: ActionOsDismissCode
+  ) => void | Promise<void>;
+  onActionOsInteraction: (
+    interaction: Omit<ActionOsInteractionInput, 'organizationId' | 'userId'>
+  ) => void;
   recentActivity: Array<{
     id: string;
     label: string;
@@ -91,6 +121,8 @@ export function EcosystemWorkspaceHome({
   musicScaleAccess,
   musicScaleApp,
   musicScaleSummary,
+  musicScaleChanges,
+  onAcknowledgeMusicScaleChange,
   occupiedSlots,
   maxUsersLimit,
   onSelectWorkspace,
@@ -102,10 +134,26 @@ export function EcosystemWorkspaceHome({
   activeSection,
   onSelectMusicScaleSection,
   onRetryMusicScaleAccess,
+  actionPreferences,
+  actionPreferenceBusyKey,
+  onSetActionPreference,
+  onActionOsInteraction,
   recentActivity
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
   const { openHub } = useSupportHub();
+  const [dismissReasonActionKey, setDismissReasonActionKey] = React.useState<string | null>(null);
+
+  const dismissReasons: Array<{
+    code: ActionOsDismissCode;
+    labelKey: string;
+  }> = [
+    { code: 'not_relevant', labelKey: 'workspace.actions.dismiss_reason_not_relevant' },
+    { code: 'already_handled', labelKey: 'workspace.actions.dismiss_reason_already_handled' },
+    { code: 'not_my_responsibility', labelKey: 'workspace.actions.dismiss_reason_not_my_responsibility' },
+    { code: 'too_early', labelKey: 'workspace.actions.dismiss_reason_too_early' },
+    { code: 'no_reason', labelKey: 'workspace.actions.dismiss_reason_no_reason' },
+  ];
 
   // Selector UI
   const renderWorkspaceSelector = () => {
@@ -239,6 +287,52 @@ export function EcosystemWorkspaceHome({
         .replace(/[_-]/g, ' ')
         .replace(/\b\w/g, character => character.toUpperCase());
     };
+
+    const projectedTodayActions = deriveReadOnlyHubActions({
+      organization: {
+        isConfigured: Boolean(organization?.name && organization?.slug)
+      },
+      permissions: {
+        canManageOrganization,
+        canManageMembers
+      },
+      pendingInvitesCount: pendingInvites.length,
+      musicScale: {
+        ready: isMusicScaleReady && appSummaryReady,
+        nextScale: musicScaleSummary.nextScale
+          ? {
+              id: musicScaleSummary.nextScale.id,
+              startsAtMs: musicScaleSummary.nextScale.startsAtMs,
+              responseSummaryAvailable: musicScaleSummary.nextScale.responseSummaryAvailable,
+              pendingResponses: musicScaleSummary.nextScale.responseCounts.pending || 0
+            }
+          : null,
+        nextPersonalScale: musicScaleSummary.nextPersonalScale
+          ? {
+              id: musicScaleSummary.nextPersonalScale.id,
+              startsAtMs: musicScaleSummary.nextPersonalScale.startsAtMs,
+              publishRevision: musicScaleSummary.nextPersonalScale.publishRevision,
+              responseSummaryAvailable: musicScaleSummary.nextPersonalScale.responseSummaryAvailable,
+              pendingResponses: musicScaleSummary.nextPersonalScale.pendingResponses
+            }
+          : null
+      }
+    });
+    const todayActions = applyActionPreferences(projectedTodayActions, actionPreferences);
+    const hasSuppressedTodayActions = projectedTodayActions.length > todayActions.length;
+
+    const commitments = deriveReadOnlyHubCommitments({
+      musicScale: {
+        ready: isMusicScaleReady && appSummaryReady,
+        nextPersonalScale: musicScaleSummary.nextPersonalScale
+      }
+    });
+
+    const changes = deriveReadOnlyHubChanges(
+      isMusicScaleReady && appSummaryReady
+        ? musicScaleChanges
+        : []
+    );
 
     const attentionApp = operationalApps.find(experience => experience.needsAttention);
 
@@ -381,6 +475,99 @@ export function EcosystemWorkspaceHome({
                                   label: t('workspace.next_step.view_products_action', 'Ver produtos')
                                 };
 
+    const isNextStepRepresentedInToday =
+      (nextStep.action === 'organization' &&
+        todayActions.some(action => action.signalType === 'organization_incomplete')) ||
+      (nextStep.action === 'app' &&
+        'path' in nextStep &&
+        typeof nextStep.path === 'string' &&
+        nextStep.path.startsWith('/scales/') &&
+        todayActions.some(action => action.signalType === 'musicscale_pending_responses')) ||
+      (nextStep.action === 'none' &&
+        nextStep.tone === 'success' &&
+        todayActions.length > 0);
+
+    const handleTodayAction = (action: ReadOnlyHubAction) => {
+      onActionOsInteraction({
+        kind: 'action_opened',
+        lane: 'action',
+        sourceApp: action.sourceApp,
+        signalType: action.signalType,
+        priority: action.priority,
+      });
+
+      const destination = action.destination;
+
+      if (destination.kind === 'hub') {
+        if (destination.section === 'organization') onNavigateToOrganizationSettings();
+        if (destination.section === 'members') onNavigateToOrganizationMembers();
+        if (destination.section === 'billing') onNavigateToBilling();
+        return;
+      }
+
+      const experience = appExperiences.find(item => item.app.id === destination.appId);
+      if (experience?.app && experience.canOpen) {
+        onLaunchApp(experience.app, destination.path);
+        return;
+      }
+
+      if (destination.appId === 'musicscale') {
+        onSelectWorkspace('musicscale');
+      }
+    };
+
+    const handleChangeOpen = (change: ReadOnlyHubChange) => {
+      onActionOsInteraction({
+        kind: 'change_reviewed',
+        lane: 'change',
+        sourceApp: change.sourceApp,
+      });
+
+      void onAcknowledgeMusicScaleChange(
+        change.sourceNotificationId
+      );
+
+      const experience = appExperiences.find(
+        item => item.app.id === change.destination.appId
+      );
+
+      if (experience?.app && experience.canOpen) {
+        onLaunchApp(
+          experience.app,
+          change.destination.path
+        );
+        return;
+      }
+
+      if (change.destination.appId === 'musicscale') {
+        onSelectWorkspace('musicscale');
+      }
+    };
+
+    const handleCommitmentOpen = (commitment: ReadOnlyHubCommitment) => {
+      onActionOsInteraction({
+        kind: 'commitment_opened',
+        lane: 'commitment',
+        sourceApp: commitment.sourceApp,
+      });
+
+      const experience = appExperiences.find(
+        item => item.app.id === commitment.destination.appId
+      );
+
+      if (experience?.app && experience.canOpen) {
+        onLaunchApp(
+          experience.app,
+          commitment.destination.path
+        );
+        return;
+      }
+
+      if (commitment.destination.appId === 'musicscale') {
+        onSelectWorkspace('musicscale');
+      }
+    };
+
     const handleNextStep = () => {
       if (nextStep.action === 'billing') onNavigateToBilling();
       if (nextStep.action === 'invite') onOpenInviteModal();
@@ -505,6 +692,217 @@ export function EcosystemWorkspaceHome({
         </section>
 
         <section
+          aria-labelledby="hub-today-title"
+          className="relative overflow-hidden rounded-[1.9rem] border border-white/[0.08] bg-[#080A0F] p-5 shadow-[0_26px_80px_rgba(0,0,0,.24)] sm:p-6 md:p-7"
+        >
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#2B85EB]/10 blur-[90px]" />
+            <div className="absolute bottom-[-55%] left-[8%] h-56 w-56 rounded-full bg-emerald-400/[0.05] blur-[90px]" />
+          </div>
+
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-[#73B4FF] shadow-[0_0_18px_rgba(115,180,255,.55)]" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#86BEFF]">
+                  {t('workspace.actions.eyebrow')}
+                </p>
+              </div>
+              <h3 id="hub-today-title" className="text-2xl font-semibold tracking-[-0.035em] text-white md:text-3xl">
+                {todayActions.length > 0
+                  ? t('workspace.actions.title')
+                  : hasSuppressedTodayActions
+                    ? t('workspace.actions.title_paused')
+                    : t('workspace.actions.title_clear')}
+              </h3>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#8E99A8]">
+                {todayActions.length > 0
+                  ? t('workspace.actions.subtitle')
+                  : hasSuppressedTodayActions
+                    ? t('workspace.actions.paused_description')
+                    : t('workspace.actions.clear_description')}
+              </p>
+            </div>
+
+            {todayActions.length > 0 && (
+              <div className="shrink-0 rounded-full border border-white/[0.08] bg-white/[0.035] px-3.5 py-2 text-xs font-semibold text-white/80">
+                {t('workspace.actions.count', { count: todayActions.length })}
+              </div>
+            )}
+          </div>
+
+          {todayActions.length > 0 ? (
+            <div className="relative mt-6 space-y-2.5">
+              {todayActions.map((action, index) => {
+                const isMusicScaleAction = action.sourceApp === 'musicscale';
+                const highPriority = action.priority === 'high' || action.priority === 'urgent';
+
+                return (
+                  <article
+                    key={action.id}
+                    className="group grid gap-4 rounded-2xl border border-white/[0.065] bg-white/[0.022] p-4 transition-all hover:border-white/[0.12] hover:bg-white/[0.035] sm:grid-cols-[auto_1fr_auto] sm:items-center"
+                  >
+                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${
+                      isMusicScaleAction
+                        ? 'border-[#2B85EB]/20 bg-[#2B85EB]/10'
+                        : highPriority
+                          ? 'border-amber-400/15 bg-amber-400/[0.07]'
+                          : 'border-white/[0.08] bg-white/[0.035]'
+                    }`}>
+                      {isMusicScaleAction ? (
+                        <img src="/LogoIconMusicScale-1.png" alt="" className="h-6 w-6 object-contain" />
+                      ) : action.signalType === 'pending_invites' ? (
+                        <UserPlus className="h-4 w-4 text-[#9CC8FF]" />
+                      ) : (
+                        <AlertCircle className={`h-4 w-4 ${highPriority ? 'text-amber-300' : 'text-[#9CC8FF]'}`} />
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#687486]">
+                          {isMusicScaleAction ? 'MusicScale' : t('workspace.actions.source_hub')}
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${
+                          highPriority
+                            ? 'border-amber-400/15 bg-amber-400/[0.06] text-amber-300'
+                            : 'border-white/[0.07] bg-white/[0.025] text-[#8793A3]'
+                        }`}>
+                          {highPriority
+                            ? t('workspace.actions.priority_high')
+                            : t('workspace.actions.priority_normal')}
+                        </span>
+                        <span className="text-[9px] font-medium text-[#4F5968]">#{index + 1}</span>
+                      </div>
+                      <h4 className="text-[15px] font-semibold leading-snug text-white sm:text-base">
+                        {t(action.titleKey, action.translationParams ?? {})}
+                      </h4>
+                      <p className="mt-1 text-xs leading-relaxed text-[#8A95A4] sm:text-[13px]">
+                        {t(action.descriptionKey, action.translationParams ?? {})}
+                      </p>
+                    </div>
+
+                    <div className="flex w-full flex-col gap-2 sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => handleTodayAction(action)}
+                        className="min-h-[44px] w-full rounded-xl border border-white/[0.08] bg-white px-4 py-2.5 text-xs font-semibold text-[#07090D] transition-all hover:bg-[#F2F5F8] active:scale-[0.985] sm:min-w-[108px]"
+                      >
+                        <span className="inline-flex items-center justify-center gap-1.5">
+                          {t('workspace.actions.open_action')}
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </span>
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          disabled={actionPreferenceBusyKey === action.dedupeKey}
+                          onClick={() => onSetActionPreference(action, 'snoozed')}
+                          className="min-h-[36px] rounded-lg border border-white/[0.07] bg-white/[0.025] px-2.5 text-[10px] font-semibold text-[#A8B2C0] transition hover:bg-white/[0.055] hover:text-white disabled:cursor-wait disabled:opacity-40"
+                        >
+                          <span className="inline-flex items-center justify-center gap-1.5">
+                            <Clock className="h-3 w-3" />
+                            {t('workspace.actions.snooze_action')}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actionPreferenceBusyKey === action.dedupeKey}
+                          aria-expanded={dismissReasonActionKey === action.dedupeKey}
+                          onClick={() =>
+                            setDismissReasonActionKey(current =>
+                              current === action.dedupeKey ? null : action.dedupeKey
+                            )
+                          }
+                          className="min-h-[36px] rounded-lg border border-white/[0.07] bg-white/[0.025] px-2.5 text-[10px] font-semibold text-[#A8B2C0] transition hover:bg-white/[0.055] hover:text-white disabled:cursor-wait disabled:opacity-40"
+                        >
+                          <span className="inline-flex items-center justify-center gap-1.5">
+                            <EyeOff className="h-3 w-3" />
+                            {t('workspace.actions.dismiss_action')}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {dismissReasonActionKey === action.dedupeKey && (
+                      <div
+                        className="rounded-xl border border-white/[0.07] bg-black/[0.16] p-3 sm:col-start-2 sm:col-span-2"
+                        role="group"
+                        aria-label={t('workspace.actions.dismiss_prompt')}
+                      >
+                        <p className="mb-2 text-[10px] font-semibold text-[#8F9AAA]">
+                          {t('workspace.actions.dismiss_prompt')}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {dismissReasons.map(reason => (
+                            <button
+                              key={reason.code}
+                              type="button"
+                              disabled={actionPreferenceBusyKey === action.dedupeKey}
+                              onClick={async () => {
+                                await onSetActionPreference(
+                                  action,
+                                  'dismissed',
+                                  reason.code
+                                );
+                                setDismissReasonActionKey(null);
+                              }}
+                              className="min-h-[36px] rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 text-[10px] font-semibold text-[#A8B2C0] transition hover:bg-white/[0.06] hover:text-white disabled:cursor-wait disabled:opacity-40"
+                            >
+                              {t(reason.labelKey)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="relative mt-6 flex items-start gap-3 rounded-2xl border border-emerald-400/10 bg-emerald-400/[0.045] p-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-emerald-400/15 bg-emerald-400/[0.08]">
+                <Check className="h-4 w-4 text-emerald-300" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  {hasSuppressedTodayActions
+                    ? t('workspace.actions.paused_status')
+                    : t('workspace.actions.clear_status')}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-[#83908F]">
+                  {hasSuppressedTodayActions
+                    ? t('workspace.actions.paused_hint')
+                    : t('workspace.actions.clear_hint')}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {todayActions.length > 0 && (
+            <p className="relative mt-4 text-[10px] leading-relaxed text-[#5E6978]">
+              {t('workspace.actions.personal_preference_note')}
+            </p>
+          )}
+        </section>
+
+        {changes.length > 0 && (
+          <EcosystemChanges
+            changes={changes}
+            onOpen={handleChangeOpen}
+          />
+        )}
+
+        {commitments.length > 0 && (
+          <EcosystemCommitments
+            commitments={commitments}
+            onOpen={handleCommitmentOpen}
+          />
+        )}
+
+        {!isNextStepRepresentedInToday && (
+        <section
           aria-label={t('workspace.next_step.eyebrow', 'Próximo passo')}
           className={`relative overflow-hidden rounded-[1.75rem] border p-5 sm:p-6 md:p-7 flex flex-col md:flex-row md:items-center justify-between gap-5 ${
             nextStep.tone === 'warning'
@@ -541,6 +939,7 @@ export function EcosystemWorkspaceHome({
             </button>
           )}
         </section>
+        )}
 
         <section id="apps-overview" aria-labelledby="active-apps-title">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-4">
