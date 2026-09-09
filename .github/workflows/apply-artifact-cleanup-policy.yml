@@ -1,0 +1,33 @@
+name: Apply Artifact Cleanup Policy
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - "infra/artifact-registry-cleanup.json"
+      - ".github/workflows/apply-artifact-cleanup-policy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate as MillionsNest Infra Admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Apply cleanup policy
+        run: |
+          gcloud artifacts repositories set-cleanup-policies millionsnest-web             --project=millionsnest             --location=us-central1             --policy=infra/artifact-registry-cleanup.json             --no-dry-run
+
+      - name: Verify cleanup policy
+        run: |
+          gcloud artifacts repositories list-cleanup-policies millionsnest-web             --project=millionsnest             --location=us-central1

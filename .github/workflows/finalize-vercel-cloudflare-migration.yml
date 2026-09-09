@@ -1,0 +1,217 @@
+name: Finalize Vercel Cloudflare Migration
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/finalize-vercel-cloudflare-migration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate as MillionsNest Infra Admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Load external admin tokens
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERCEL_TOKEN="$(gcloud secrets versions access latest --secret=mn-vercel-admin-token --project=millionsnest)"
+          CLOUDFLARE_TOKEN="$(gcloud secrets versions access latest --secret=mn-cloudflare-dns-token --project=millionsnest)"
+          test -n "$VERCEL_TOKEN"
+          test -n "$CLOUDFLARE_TOKEN"
+          echo "::add-mask::$VERCEL_TOKEN"
+          echo "::add-mask::$CLOUDFLARE_TOKEN"
+          echo "VERCEL_TOKEN=$VERCEL_TOKEN" >> "$GITHUB_ENV"
+          echo "CLOUDFLARE_TOKEN=$CLOUDFLARE_TOKEN" >> "$GITHUB_ENV"
+          echo "EXTERNAL_TOKENS_LOADED"
+
+      - name: Validate Vercel token
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEAM_ID="team_qtUDx2cqVcgfKlO5T17JdqJP"
+          CODE="$(curl --silent --show-error -o /tmp/vercel-project.json -w '%{http_code}' -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v9/projects/prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju")"
+          echo "VERCEL_PROJECT_CHECK_HTTP=$CODE"
+          if [ "$CODE" != "200" ]; then
+            python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/vercel-project.json'))
+          e=x.get('error') or {}
+          print("VERCEL_ERROR_CODE=", e.get('code'))
+          print("VERCEL_ERROR_MESSAGE=", e.get('message'))
+          PY
+            exit 1
+          fi
+          echo "VERCEL_PROJECT_AUTH_OK"
+
+      - name: Remove MillionsNest custom domains from Vercel projects
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEAM_ID="team_qtUDx2cqVcgfKlO5T17JdqJP"
+
+          remove_domain() {
+            PROJECT="$1"
+            DOMAIN="$2"
+            echo "Removing $DOMAIN from Vercel project $PROJECT"
+            CODE="$(curl --silent --show-error               -o /tmp/vercel-remove.json               -w '%{http_code}'               -X DELETE               -H "Authorization: Bearer $VERCEL_TOKEN"               "https://api.vercel.com/v9/projects/$PROJECT/domains/$DOMAIN")"
+            if [ "$CODE" = "200" ] || [ "$CODE" = "204" ] || [ "$CODE" = "404" ]; then
+              echo "VERCEL_DOMAIN_REMOVED_OR_ABSENT $DOMAIN HTTP=$CODE"
+            else
+              cat /tmp/vercel-remove.json
+              echo "Unexpected Vercel HTTP $CODE for $DOMAIN" >&2
+              exit 1
+            fi
+          }
+
+          remove_domain "prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju" "millionsnest.com"
+          remove_domain "prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju" "www.millionsnest.com"
+          remove_domain "prj_uNXRuXYTmbB062k0klWLhRfj8OLh" "musicscale.millionsnest.com"
+          remove_domain "prj_z5h2rI0DSmSNoLj40FU7nA4jektP" "nestfinance.millionsnest.com"
+          remove_domain "prj_AtXHj9MbpSoNUePtnS9U0tBhT3en" "connect.millionsnest.com"
+          remove_domain "prj_X15W5pqfVMo7ARQMcyixtBa1QmIr" "nestjourney.millionsnest.com"
+
+          echo "VERCEL_CUSTOM_DOMAINS_CLEAN"
+
+      - name: Validate Cloudflare token and locate zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error             -H "Authorization: Bearer $CLOUDFLARE_TOKEN"             "https://api.cloudflare.com/client/v4/user/tokens/verify"             >/tmp/cf-verify.json
+
+          python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/cf-verify.json'))
+          assert x.get('success') is True, x
+          print("CLOUDFLARE_AUTH_OK")
+          PY
+
+          curl --fail --silent --show-error             -H "Authorization: Bearer $CLOUDFLARE_TOKEN"             "https://api.cloudflare.com/client/v4/zones?name=millionsnest.com&status=active"             >/tmp/cf-zone.json
+
+          ZONE_ID="$(python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/cf-zone.json'))
+          rows=x.get('result') or []
+          assert len(rows)==1, f"Expected exactly one active zone, got {len(rows)}"
+          print(rows[0]['id'])
+          PY
+          )"
+          echo "ZONE_ID=$ZONE_ID" >> "$GITHUB_ENV"
+          echo "CLOUDFLARE_ZONE_FOUND"
+
+      - name: Remove only residual Vercel TXT records from Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl --fail --silent --show-error             -H "Authorization: Bearer $CLOUDFLARE_TOKEN"             "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=TXT&per_page=500"             >/tmp/cf-txt.json
+
+          python3 - <<'PY' >/tmp/vercel-record-ids.txt
+          import json
+          x=json.load(open('/tmp/cf-txt.json'))
+          assert x.get('success') is True, x
+          for r in x.get('result') or []:
+              name=(r.get('name') or '').lower()
+              content=(r.get('content') or '').lower()
+              if name.startswith('_vercel.') or name == '_vercel.millionsnest.com' or 'vercel' in content:
+                  print(r['id'])
+          PY
+
+          COUNT="$(grep -c . /tmp/vercel-record-ids.txt || true)"
+          echo "VERCEL_TXT_RECORDS_FOUND=$COUNT"
+
+          while IFS= read -r RECORD_ID; do
+            [ -n "$RECORD_ID" ] || continue
+            curl --fail --silent --show-error               -X DELETE               -H "Authorization: Bearer $CLOUDFLARE_TOKEN"               "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID"               >/tmp/cf-delete.json
+            python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/cf-delete.json'))
+          assert x.get('success') is True, x
+          print("CLOUDFLARE_TXT_DELETED")
+          PY
+          done </tmp/vercel-record-ids.txt
+
+          echo "CLOUDFLARE_VERCEL_TXT_CLEAN"
+
+      - name: Verify critical mail and Firebase DNS still exists
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=== Firebase web DNS ==="
+          test "$(dig +short A millionsnest.com | tail -n1)" = "199.36.158.100"
+          test "$(dig +short CNAME www.millionsnest.com | sed 's/\.$//')" = "mn-hub-555464791734.web.app"
+          test "$(dig +short CNAME musicscale.millionsnest.com | sed 's/\.$//')" = "mn-musicscale-555464791734.web.app"
+          test "$(dig +short CNAME nestfinance.millionsnest.com | sed 's/\.$//')" = "mn-nestfinance-555464791734.web.app"
+          test "$(dig +short CNAME connect.millionsnest.com | sed 's/\.$//')" = "mn-connect-555464791734.web.app"
+          test "$(dig +short CNAME nestjourney.millionsnest.com | sed 's/\.$//')" = "mn-nestjourney-555464791734.web.app"
+
+          echo "=== Mail safety ==="
+          MX="$(dig +short MX millionsnest.com)"
+          SPF="$(dig +short TXT millionsnest.com | grep -i 'v=spf1' || true)"
+          test -n "$MX"
+          test -n "$SPF"
+          echo "MAIL_DNS_PRESERVED"
+
+          echo "=== Vercel TXT absence ==="
+          VTXT="$(dig +short TXT _vercel.millionsnest.com || true)"
+          test -z "$VTXT"
+          echo "VERCEL_TXT_PUBLICLY_ABSENT"
+
+      - name: Production HTTPS and API smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for URL in             "https://millionsnest.com/"             "https://www.millionsnest.com/"             "https://musicscale.millionsnest.com/"             "https://nestfinance.millionsnest.com/"             "https://connect.millionsnest.com/"             "https://nestjourney.millionsnest.com/"
+          do
+            echo "Smoke $URL"
+            curl --fail --silent --show-error --location               --retry 8 --retry-delay 2 --retry-all-errors               "$URL" -o /tmp/page.html
+            grep -Eiq '<!doctype html|<html' /tmp/page.html
+          done
+
+          curl --fail --silent --show-error --location             "https://www.millionsnest.com/api/v1/billing/products"             -o /tmp/products.json
+          node -e "const x=require('/tmp/products.json'); if(!Array.isArray(x.plans)) process.exit(1)"
+
+          MS_CODE="$(curl --silent --show-error --location             -o /tmp/ms.json -w '%{http_code}'             'https://musicscale.millionsnest.com/api/v1/ecosystem/access-context?organizationId=final-cleanup-smoke')"
+          test "$MS_CODE" = "401"
+
+          curl --fail --silent --show-error --location             "https://nestfinance.millionsnest.com/api/system/release"             -o /tmp/nf.json
+          node -e "const x=require('/tmp/nf.json'); if(x.app!=='nestfinance') process.exit(1)"
+
+          echo "FINAL_PRODUCTION_SMOKE_OK"
+
+      - name: Verify Vercel projects no longer list custom MillionsNest domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEAM_ID="team_qtUDx2cqVcgfKlO5T17JdqJP"
+          FAIL=0
+          for PROJECT in             prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju             prj_uNXRuXYTmbB062k0klWLhRfj8OLh             prj_z5h2rI0DSmSNoLj40FU7nA4jektP             prj_AtXHj9MbpSoNUePtnS9U0tBhT3en             prj_X15W5pqfVMo7ARQMcyixtBa1QmIr
+          do
+            curl --fail --silent --show-error               -H "Authorization: Bearer $VERCEL_TOKEN"               "https://api.vercel.com/v9/projects/$PROJECT/domains?limit=100"               >/tmp/project-domains.json
+            python3 - <<'PY' || FAIL=1
+          import json
+          x=json.load(open('/tmp/project-domains.json'))
+          rows=x.get('domains') or []
+          custom=[r.get('name','') for r in rows if r.get('name','').endswith('millionsnest.com')]
+          if custom:
+              print("CUSTOM_DOMAINS_STILL_PRESENT", custom)
+              raise SystemExit(1)
+          print("VERCEL_PROJECT_CUSTOM_DOMAINS_NONE")
+          PY
+          done
+          test "$FAIL" = "0"
+          echo "MILLIONSNEST_VERCEL_CLEAN"

@@ -1,0 +1,88 @@
+name: MusicScale Firebase Staging Certification
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/musicscale-firebase-staging-certification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: musicscale-firebase-staging-controller
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Confirm MusicScale Cloud Run readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          READY="$(gcloud run services describe musicscale-api --project millionsnest --region us-central1 --format='value(status.conditions[0].status)')"
+          test "$READY" = "True"
+          echo "MUSICSCALE_CLOUD_RUN_READY"
+
+      - name: Allow Firebase Hosting invocation
+        run: |
+          gcloud run services add-iam-policy-binding musicscale-api             --project millionsnest             --region us-central1             --member="allUsers"             --role="roles/run.invoker"             --quiet
+
+      - name: Clone exact MusicScale production
+        run: |
+          git clone --depth 1 --branch production https://github.com/prdanielcunha/musicscale.git /tmp/musicscale
+          cd /tmp/musicscale
+          echo "MUSICSCALE_SHA=$(git rev-parse HEAD)"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Validate and build MusicScale
+        working-directory: /tmp/musicscale
+        run: |
+          npm ci --no-audit --no-fund
+          npm run lint
+          npx tsx scripts/test_firebase_hosting_cloudrun_policy.ts
+          npm run build
+
+      - name: Deploy MusicScale Hosting
+        working-directory: /tmp/musicscale
+        run: npx -y firebase-tools@15.25.1 deploy --only hosting:musicscale --project millionsnest --non-interactive
+
+      - name: Smoke MusicScale SPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://mn-musicscale-555464791734.web.app"
+          curl --fail --silent --show-error --location --retry 6 --retry-delay 2 "$BASE/" -o /tmp/ms-index.html
+          grep -Eiq '<!doctype html|<html' /tmp/ms-index.html
+          echo "MUSICSCALE_FIREBASE_SPA_OK"
+
+      - name: Smoke MusicScale API rewrite without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://mn-musicscale-555464791734.web.app"
+          STATUS="$(curl --silent --show-error --location --retry 6 --retry-delay 2             -o /tmp/ms-access.json -w '%{http_code}'             "$BASE/api/v1/ecosystem/access-context?organizationId=staging-smoke")"
+          test "$STATUS" = "401"
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/ms-access.json','utf8'));if(!String(x.error||'').toLowerCase().includes('unauthorized'))process.exit(1);console.log('MUSICSCALE_FIREBASE_API_AUTH_BOUNDARY_OK');"
+
+      - name: Verify runtime secret bindings exist without reading values
+        run: |
+          gcloud run services describe musicscale-api             --project millionsnest             --region us-central1             --format='yaml(spec.template.spec.containers[0].env)' > /tmp/ms-env.yaml
+          grep -q "musicscale-gemini-api-key" /tmp/ms-env.yaml
+          grep -q "musicscale-stripe-secret-key" /tmp/ms-env.yaml
+          echo "MUSICSCALE_RUNTIME_SECRET_BINDINGS_OK"

@@ -1,0 +1,84 @@
+name: Firebase Staging Certification
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/firebase-staging-certification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: millionsnest-firebase-staging-certification
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    env:
+      VITE_FIREBASE_API_KEY: AIzaSyAhXY8TV8qoXz8Pd2u5jFHUTVssZmi3kMs
+      VITE_FIREBASE_AUTH_DOMAIN: millionsnest.firebaseapp.com
+      VITE_FIREBASE_PROJECT_ID: millionsnest
+      VITE_FIREBASE_STORAGE_BUCKET: millionsnest.firebasestorage.app
+      VITE_FIREBASE_MESSAGING_SENDER_ID: "555464791734"
+      VITE_FIREBASE_APP_ID: "1:555464791734:web:3059e8ac2b8089a1767817"
+      VITE_APP_URL: https://www.millionsnest.com
+      VITE_MUSICSCALE_APP_URL: https://musicscale.millionsnest.com/start
+      VITE_NESTFINANCE_LAUNCH_ENABLED: "true"
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Confirm Hub Cloud Run readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          READY="$(gcloud run services describe millionsnest-api --project millionsnest --region us-central1 --format='value(status.conditions[0].status)')"
+          test "$READY" = "True"
+          echo "MILLIONSNEST_CLOUD_RUN_READY"
+
+      - name: Allow Firebase Hosting invocation
+        run: |
+          gcloud run services add-iam-policy-binding millionsnest-api             --project millionsnest             --region us-central1             --member="allUsers"             --role="roles/run.invoker"             --quiet
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate and build
+        run: |
+          npm run lint
+          npx tsx scripts/test_firebase_hosting_cloudrun_policy.ts
+          npm run build
+
+      - name: Deploy Hub Hosting
+        run: npx -y firebase-tools@15.26.0 deploy --only hosting:hub --project millionsnest --non-interactive
+
+      - name: Smoke Hub SPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://mn-hub-555464791734.web.app"
+          curl --fail --silent --show-error --location --retry 6 --retry-delay 2 "$BASE/" -o /tmp/hub-index.html
+          grep -Eiq '<!doctype html|<html' /tmp/hub-index.html
+          echo "MILLIONSNEST_FIREBASE_SPA_OK"
+
+      - name: Smoke Hub API rewrite and Stripe read path
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://mn-hub-555464791734.web.app"
+          curl --fail --silent --show-error --location --retry 6 --retry-delay 2             "$BASE/api/v1/billing/products" -o /tmp/hub-products.json
+          node -e "const fs=require('fs');const raw=fs.readFileSync('/tmp/hub-products.json','utf8');const x=JSON.parse(raw);if(!x)process.exit(1);console.log('MILLIONSNEST_FIREBASE_API_OK');"

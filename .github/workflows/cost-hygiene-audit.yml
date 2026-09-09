@@ -1,0 +1,45 @@
+name: Cost Hygiene Audit
+# Verify manual cleanup policy
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/cost-hygiene-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Inventory Artifact Registry images
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "===== ARTIFACT REGISTRY IMAGES ====="
+          gcloud artifacts docker images list             us-central1-docker.pkg.dev/millionsnest/millionsnest-web             --include-tags             --format='table(package,version,createTime,updateTime,tags)' || true
+
+          echo
+          echo "===== CLEANUP POLICIES ====="
+          gcloud artifacts repositories list-cleanup-policies millionsnest-web             --project=millionsnest             --location=us-central1 || true
+
+      - name: Inventory Cloud Run scaling
+        shell: bash
+        run: |
+          set -euo pipefail
+          for SERVICE in millionsnest-api musicscale-api nestfinance-api; do
+            echo "===== $SERVICE ====="
+            gcloud run services describe "$SERVICE"               --project=millionsnest               --region=us-central1               --format='yaml(metadata.name,spec.template.metadata.annotations,spec.template.spec.containerConcurrency,spec.template.spec.containers[0].resources,status.url)'
+          done

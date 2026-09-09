@@ -1,0 +1,51 @@
+name: Infra Admin Verification
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/infra-admin-verification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate as MillionsNest Infra Admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Verify active principal
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ACTIVE_ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+          gcloud config set project millionsnest
+
+      - name: Verify admin read/write capabilities safely
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=== Artifact Registry cleanup policies ==="
+          gcloud artifacts repositories list-cleanup-policies millionsnest-web             --project=millionsnest             --location=us-central1
+
+          echo "=== Cloud Run services ==="
+          gcloud run services list             --project=millionsnest             --region=us-central1             --format='table(metadata.name,status.url)'
+
+          echo "=== Firebase Hosting sites ==="
+          TOKEN="$(gcloud auth print-access-token)"
+          curl --fail --silent --show-error             -H "Authorization: Bearer $TOKEN"             "https://firebasehosting.googleapis.com/v1beta1/projects/millionsnest/sites"             | python3 -c 'import json,sys; x=json.load(sys.stdin); print("sites=",len(x.get("sites",[])))'
+
+          echo "=== IAM self-binding read ==="
+          gcloud projects get-iam-policy millionsnest             --flatten="bindings[].members"             --filter="bindings.members:serviceAccount:mn-infra-admin@millionsnest.iam.gserviceaccount.com"             --format='value(bindings.role)' | sort
+
+          echo "MN_INFRA_ADMIN_VERIFIED"
