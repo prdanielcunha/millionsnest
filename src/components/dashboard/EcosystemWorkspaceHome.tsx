@@ -76,6 +76,7 @@ interface EcosystemWorkspaceHomeProps {
     updatedAtMs: number;
   };
   musicScaleChanges: MusicScaleChangeNotificationInput[];
+  onAcknowledgeMusicScaleChange: (notificationId: string) => void | Promise<void>;
   occupiedSlots: number;
   maxUsersLimit: number;
   onSelectWorkspace: (workspaceId: string) => void;
@@ -115,6 +116,7 @@ export function EcosystemWorkspaceHome({
   musicScaleApp,
   musicScaleSummary,
   musicScaleChanges,
+  onAcknowledgeMusicScaleChange,
   occupiedSlots,
   maxUsersLimit,
   onSelectWorkspace,
@@ -487,6 +489,10 @@ export function EcosystemWorkspaceHome({
     };
 
     const handleChangeOpen = (change: ReadOnlyHubChange) => {
+      void onAcknowledgeMusicScaleChange(
+        change.sourceNotificationId
+      );
+
       const experience = appExperiences.find(
         item => item.app.id === change.destination.appId
       );
