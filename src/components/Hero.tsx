@@ -77,7 +77,7 @@ export function Hero() {
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </button>
             <a
-              href="#produto"
+              href="#action-os-demo"
               className="inline-flex min-h-13 w-full items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-3.5 text-sm font-medium text-[#E8ECF2] backdrop-blur transition hover:border-white/20 hover:bg-white/[0.07] sm:w-auto"
             >
               {t('hero_cta_secondary')}
