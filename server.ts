@@ -39,7 +39,7 @@ import { handleEcosystemAccessProjectionRequest } from './src/server/services/Ec
 import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
-import { isCanonicalGlobalRole, isGlobalPrivilegedRole } from './src/lib/permissionService.js';
+import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization } from './src/lib/permissionService.js';
 import { canChangeSystemRole, isAssignableSystemRole, normalizeLegacySystemRole } from './src/lib/roleResolver.js';
 import { 
   MUSIC_SCALE_PLANS, 
@@ -2170,8 +2170,7 @@ async function startServer() {
       const userRef = await db!.collection('users').doc(decodedToken.uid).get();
       if (!userRef.exists) return res.status(403).json({ error: 'Forbidden' });
       const userData = userRef.data();
-      const isSystemAdmin = isGlobalPrivilegedRole(userData?.systemRole);
-      if (!isSystemAdmin) {
+      if (!canEnterAnyOrganization(userData?.systemRole)) {
          return res.status(403).json({ error: 'Acesso restrito' });
       }
 
@@ -4370,7 +4369,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const userSnap = await db!.collection('users').doc(decodedToken.uid).get();
       const userData = userSnap.data();
-      if (!isGlobalPrivilegedRole(userData?.systemRole)) {
+      if (!canEnterAnyOrganization(userData?.systemRole)) {
          return res.status(403).json({ error: 'Acesso restrito' });
       }
 
