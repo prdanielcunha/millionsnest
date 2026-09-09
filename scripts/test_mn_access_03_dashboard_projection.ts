@@ -249,6 +249,7 @@ async function runTests() {
       check(res._body.success, true);
       check(res._body.apps.musicscale.accessible, ct.expectedAccessible);
       check(res._body.apps.musicscale.catalogState, ct.expectedCatalog);
+      check(typeof res._body.apps.musicscale.canReadManagedScaleResponses, "boolean");
       
       // Privacy check
       verifyNoSensitiveData(res._body);
@@ -289,6 +290,54 @@ async function runTests() {
       check(capturedArgs.appId, "musicscale");
       assertionCount++;
       assert.ok(capturedArgs[field] === undefined || (field === 'uid' && capturedArgs[field] === "user123"), `Field ${field} leaked into resolver args`);
+    }
+
+    // MusicScale leadership capability must be server-derived and privacy-safe.
+    for (const leadershipCase of [
+      {
+        organizationRole: 'leader',
+        permissions: [],
+        expected: true
+      },
+      {
+        organizationRole: 'member',
+        permissions: ['scaleResponses.readManaged'],
+        expected: true
+      },
+      {
+        organizationRole: 'member',
+        permissions: [],
+        expected: false
+      }
+    ]) {
+      const res = new FakeResponse();
+      const req = new FakeRequest("Bearer token1", { organizationId: "org1" });
+      await handleEcosystemAccessProjectionRequest(req as any, res as any, {
+        verifyIdToken: async () => ({ uid: "user123" } as any),
+        getDb: () => fakeDb,
+        resolveAccess: async () => ({
+          accessible: true,
+          isGlobalAccess: false,
+          accessSource: 'organization_membership',
+          organizationRole: leadershipCase.organizationRole,
+          permissions: leadershipCase.permissions,
+          denialReason: null,
+          entitlement: {
+            canonicalStatus: 'active',
+            cancellationScheduled: false
+          }
+        }),
+        logger: { log: () => {}, info: () => {}, error: () => {}, warn: () => {} },
+        now: () => FIXED_NOW
+      } as any);
+
+      check(res._status, 200);
+      check(
+        res._body.apps.musicscale.canReadManagedScaleResponses,
+        leadershipCase.expected,
+        'managed response capability must follow canonical MusicScale leadership semantics'
+      );
+      verifyNoSensitiveData(res._body);
     }
 
     // Invalid body tests
