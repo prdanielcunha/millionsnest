@@ -1,7 +1,8 @@
 export type ActionSignalType =
   | 'organization_incomplete'
   | 'pending_invites'
-  | 'musicscale_pending_responses';
+  | 'musicscale_pending_responses'
+  | 'musicscale_personal_confirmation';
 
 export interface EcosystemSignal {
   sourceApp: 'hub' | 'musicscale';
@@ -24,6 +25,13 @@ export interface ActionSignalCollectionInput {
     nextScale: null | {
       id: string;
       startsAtMs?: number | null;
+      responseSummaryAvailable: boolean;
+      pendingResponses: number;
+    };
+    nextPersonalScale?: null | {
+      id: string;
+      startsAtMs?: number | null;
+      publishRevision?: number | null;
       responseSummaryAvailable: boolean;
       pendingResponses: number;
     };
@@ -81,6 +89,35 @@ export function collectActionSignals(
       occurredAtMs: nextScale.startsAtMs ?? null,
       payload: {
         pendingResponses: nextScale.pendingResponses
+      }
+    });
+  }
+
+
+  const nextPersonalScale = input.musicScale.nextPersonalScale;
+  if (
+    input.musicScale.ready &&
+    nextPersonalScale?.responseSummaryAvailable === true &&
+    nextPersonalScale.pendingResponses > 0
+  ) {
+    const revision =
+      typeof nextPersonalScale.publishRevision === 'number' &&
+      Number.isFinite(nextPersonalScale.publishRevision)
+        ? nextPersonalScale.publishRevision
+        : 0;
+
+    signals.push({
+      sourceApp: 'musicscale',
+      signalType: 'musicscale_personal_confirmation',
+      sourceEntityType: 'scale',
+      sourceEntityId: nextPersonalScale.id,
+      dedupeKey: `musicscale:personal_confirmation:${nextPersonalScale.id}`,
+      fingerprint:
+        `musicscale:personal_confirmation:${nextPersonalScale.id}:rev${revision}:pending${nextPersonalScale.pendingResponses}`,
+      occurredAtMs: nextPersonalScale.startsAtMs ?? null,
+      payload: {
+        pendingResponses: nextPersonalScale.pendingResponses,
+        publishRevision: revision
       }
     });
   }
