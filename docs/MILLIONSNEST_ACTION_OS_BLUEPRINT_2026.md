@@ -415,7 +415,13 @@ The Hub already has a premium **Hoje / Today / Hoy** section backed by determini
 
 User-scoped snooze/dismiss interaction state is also implemented behind authenticated backend commands. A source condition is never falsely marked resolved by a UI click, and materially changed fingerprints resurface automatically.
 
-The next semantic layer is **Commitments**: normal participation that matters to the current user but is not a problem. The first adapter projects the authenticated user's next MusicScale assignment from data already loaded by the Hub, without a new collection or paid service.
+The first **Commitments** lane is now implemented in `main`: normal participation that matters to the current user but is not a problem. Its first adapter projects the authenticated user's next MusicScale assignment from data already loaded by the Hub, without a new collection or paid service.
+
+The next Action OS refinement is personal responsibility on top of that commitment. A MusicScale assignment can therefore produce two different truths at the same time:
+- **Commitment:** “you are scheduled”;
+- **Action:** “you still need to confirm”.
+
+Leader-wide pending confirmations remain a third, separate responsibility. This prevents a pastor who is also a musician from losing either their personal task or their leadership view.
 
 ## 21. Semantic lanes: Actions, Commitments and Changes
 
@@ -456,7 +462,18 @@ This separation is a core product invariant. It reduces alert fatigue and lets M
 
 ## 22. Immediate next step
 
-1. Certify and merge the first Commitments lane into `main`.
+1. Certify the personal MusicScale confirmation signal in **Hoje**, using only the authenticated user's own response records.
 2. Keep MusicScale's exact Preparation Intelligence / change review inside MusicScale until a stable cross-app change adapter is defined.
 3. Add the next Action OS source only when it exposes a factual signal contract; do not hardcode app-specific UI cards.
 4. Validate weekly use with real organizations before adding generative intelligence or expensive infrastructure.
+
+### Current invariant for the same event
+
+One event may appear in more than one semantic lane only when the meanings are different:
+
+- **Hoje:** “I must do something.”
+- **Compromissos:** “I am participating.”
+- **Leadership action:** “My team needs something from me.”
+- **Mudanças:** “Something I previously knew changed.”
+
+That is intentional context, not duplicated UI.
