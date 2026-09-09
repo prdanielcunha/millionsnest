@@ -213,7 +213,8 @@ async function resolveJoinRequest(req: Request, res: Response, command: Command,
       ]);
       if (!orgSnap.exists) return { reasonCode: 'ORGANIZATION_NOT_FOUND' };
       if (orgSnap.data()?.status !== 'active') return { reasonCode: 'ORGANIZATION_INACTIVE' };
-      const globalAuthority = canManageTenantMembers(actorSnap.data()?.systemRole);
+      const actorSystemRole = actorSnap.data()?.systemRole;
+      const globalAuthority = canManageTenantMembers(actorSystemRole);
       if (!globalAuthority && !hasOrganizationAuthority(actorUid, orgSnap.data()!, actorMemberSnap.data())) return { reasonCode: 'PERMISSION_DENIED' };
       if (!requestSnap.exists) return { reasonCode: 'JOIN_REQUEST_NOT_FOUND' };
 
@@ -336,6 +337,8 @@ async function resolveJoinRequest(req: Request, res: Response, command: Command,
       transaction.set(db.doc(`organizations/${organizationId}/audit_logs/join_request_${requestId}_g${generation}_${finalStatus}`), {
         action: `join_request.${finalStatus}`,
         actorUid,
+        actorSystemRole: actorSystemRole || null,
+        governanceScope: globalAuthority ? 'ecosystem_global' : 'organization',
         requestId,
         requestGeneration: generation,
         requesterUid,
