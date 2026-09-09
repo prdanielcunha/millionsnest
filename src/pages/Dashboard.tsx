@@ -110,6 +110,14 @@ type MusicScaleHubSummary = {
       declined: number;
     };
   };
+  nextPersonalScale: null | {
+    id: string;
+    date: string;
+    time?: string | null;
+    startsAtMs: number;
+    songCount: number;
+    functionNames: string[];
+  };
   updatedAtMs: number;
 };
 
@@ -120,6 +128,7 @@ const EMPTY_MUSICSCALE_SUMMARY: MusicScaleHubSummary = {
   scalesCount: 0,
   bandScalesCount: 0,
   nextScale: null,
+  nextPersonalScale: null,
   updatedAtMs: 0,
 };
 
@@ -1701,6 +1710,21 @@ export function Dashboard() {
         ? nextScale.eventAssignments.filter((assignment: any) => assignment?.active !== false)
         : [];
 
+      const nextPersonalScale = candidateScales.find(scale => {
+        if (!Array.isArray(scale?.eventAssignments)) return false;
+        return scale.eventAssignments.some((assignment: any) =>
+          assignment?.active !== false &&
+          assignment?.userId === user.uid
+        );
+      }) || null;
+
+      const personalAssignments = Array.isArray(nextPersonalScale?.eventAssignments)
+        ? nextPersonalScale.eventAssignments.filter((assignment: any) =>
+            assignment?.active !== false &&
+            assignment?.userId === user.uid
+          )
+        : [];
+
       if (nextScale?.id !== responseScaleId) {
         responsesUnsubscribe?.();
         responsesUnsubscribe = null;
@@ -1767,6 +1791,20 @@ export function Dashboard() {
           bandScaleId: nextScale.bandScaleId || null,
           responseSummaryAvailable: canReadResponseSummary && live.responseSummaryAvailable,
           responseCounts: { ...live.responseCounts }
+        } : null,
+        nextPersonalScale: nextPersonalScale ? {
+          id: nextPersonalScale.id,
+          date: nextPersonalScale.date,
+          time: nextPersonalScale.time || null,
+          startsAtMs: toEventEpoch(nextPersonalScale),
+          songCount: Array.isArray(nextPersonalScale.songIds)
+            ? nextPersonalScale.songIds.length
+            : 0,
+          functionNames: Array.from(new Set(
+            personalAssignments
+              .map((assignment: any) => String(assignment?.functionName || '').trim())
+              .filter(Boolean)
+          ))
         } : null,
         updatedAtMs: Date.now()
       });
