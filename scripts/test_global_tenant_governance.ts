@@ -61,6 +61,9 @@ assert.equal(server.includes("action: 'organization.billing.portal_opened'"), tr
 assert.equal(server.includes('canManageTenantSettings(actorData.systemRole)'), true, 'organization settings must honor global tenant settings governance');
 assert.equal(server.includes('const billingSubjectUid = isSystemAdmin ? targetOwnerUid : uid'), true, 'global billing reconciliation must mutate the tenant billing owner, never the operator');
 assert.equal(server.includes('userId: billingSubjectUid'), true, 'reactivation must project subscription state to the tenant billing subject');
+assert.equal(server.includes('let syncBillingEmail = syncUserEmail'), true, 'Stripe sync must start from an explicit billing identity');
+assert.equal(server.includes('syncBillingEmail = targetOrgData.ownerEmail'), true, 'global Stripe sync must resolve email from the target tenant');
+assert.equal(server.includes("action: 'organization.billing.synced'"), true, 'global Stripe sync must be audited');
 assert.equal(server.includes("code: 'GLOBAL_CHECKOUT_REQUIRES_TENANT_CUSTOMER'"), true, 'global cross-tenant checkout must remain customer-bound');
 
 const portalStart = server.indexOf("app.post('/api/v1/billing/portal'");
