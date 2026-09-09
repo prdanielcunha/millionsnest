@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { isCanonicalGlobalRole, canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
+import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -108,7 +108,7 @@ export async function resolveEcosystemAppAccess(params: {
 
   const systemRole = userData.systemRole;
   const privilegePolicy = resolveEcosystemPrivilegePolicy(systemRole);
-  const hasGlobalRole = isCanonicalGlobalRole(systemRole);
+  const hasGlobalRole = privilegePolicy.canManageGlobalGovernance;
 
   // Etapa 2 — papel global validation
   // Load target organization
