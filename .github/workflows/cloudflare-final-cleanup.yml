@@ -1,0 +1,74 @@
+name: Cloudflare Final Cleanup
+on:
+  push:
+    branches: [ production ]
+    paths: [".github/workflows/cloudflare-final-cleanup.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+      - name: Load token
+        run: |
+          set -euo pipefail
+          T="$(gcloud secrets versions access latest --secret=mn-cloudflare-dns-token --project=millionsnest)"
+          test -n "$T"
+          echo "::add-mask::$T"
+          echo "CF_TOKEN=$T" >> "$GITHUB_ENV"
+      - name: Validate and find zone
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer $CF_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify > /tmp/v.json
+          python3 - <<'PY'
+import json
+x=json.load(open('/tmp/v.json')); assert x.get('success') is True, x
+print("CLOUDFLARE_TOKEN_OK")
+PY
+          curl -fsS -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/zones?name=millionsnest.com&status=active" > /tmp/z.json
+          Z="$(python3 - <<'PY'
+import json
+x=json.load(open('/tmp/z.json')); rows=x.get('result') or []; assert len(rows)==1, len(rows); print(rows[0]['id'])
+PY
+)"
+          echo "ZONE_ID=$Z" >> "$GITHUB_ENV"
+          echo "CLOUDFLARE_ZONE_OK"
+      - name: Delete only Vercel TXT leftovers
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=TXT&per_page=500" > /tmp/t.json
+          python3 - <<'PY' > /tmp/ids
+import json
+x=json.load(open('/tmp/t.json')); assert x.get('success') is True
+for r in x.get('result') or []:
+  n=(r.get('name') or '').lower()
+  c=(r.get('content') or '').lower()
+  if n.startswith('_vercel.') or n=='_vercel.millionsnest.com' or ('vercel' in c and 'verification' in c):
+    print(r['id'])
+PY
+          echo "VERCEL_TXT_COUNT=$(grep -c . /tmp/ids || true)"
+          while read -r ID; do
+            [ -z "$ID" ] && continue
+            curl -fsS -X DELETE -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$ID" > /tmp/x.json
+            python3 - <<'PY'
+import json
+x=json.load(open('/tmp/x.json')); assert x.get('success') is True, x
+print("VERCEL_TXT_DELETED")
+PY
+          done < /tmp/ids
+          echo "CLOUDFLARE_VERCEL_TXT_CLEAN"
+      - name: Verify protected DNS
+        run: |
+          set -euo pipefail
+          test "$(dig +short A millionsnest.com | tail -n1)" = "199.36.158.100"
+          test "$(dig +short CNAME www.millionsnest.com | sed 's/\.$//')" = "mn-hub-555464791734.web.app"
+          test -n "$(dig +short MX millionsnest.com)"
+          test -n "$(dig +short TXT millionsnest.com | grep -i 'v=spf1' || true)"
+          echo "MAIL_AND_FIREBASE_DNS_PRESERVED"
