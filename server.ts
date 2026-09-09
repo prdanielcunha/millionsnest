@@ -1320,6 +1320,92 @@ async function startServer() {
 
   app.post('/api/v1/invitations/accept', express.json(), (req, res) => acceptInvitation(req, res));
   app.post('/api/v1/organizations/:organizationId/join-requests', express.json({ limit: '8kb' }), (req, res) => createJoinRequest(req, res));
+  app.get('/api/v1/organizations/:organizationId/join-requests', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      let decodedToken: any;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(authHeader.slice(7));
+      } catch {
+        return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+      }
+
+      const organizationId = String(req.params.organizationId || '').trim();
+      if (!organizationId || organizationId.length > 256 || organizationId.includes('/')) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_REQUEST_PATH' });
+      }
+
+      const dbInstance = getDb();
+      if (!dbInstance) {
+        return res.status(503).json({ success: false, reasonCode: 'DATABASE_UNAVAILABLE' });
+      }
+
+      const actorUid = decodedToken.uid;
+      const [actorUserSnap, actorMemberSnap, orgSnap] = await Promise.all([
+        dbInstance.collection('users').doc(actorUid).get(),
+        dbInstance.collection('organizations').doc(organizationId).collection('members').doc(actorUid).get(),
+        dbInstance.collection('organizations').doc(organizationId).get()
+      ]);
+
+      if (!orgSnap.exists) {
+        return res.status(404).json({ success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' });
+      }
+
+      const actorSystemRole = actorUserSnap.data()?.systemRole;
+      const actorGlobal = canManageTenantMembers(actorSystemRole);
+      const actorMembership = actorMemberSnap.exists ? actorMemberSnap.data() || {} : {};
+      const membershipStatus = String(actorMembership.status || '').trim().toLowerCase();
+      const membershipRole = String(actorMembership.organizationRole || actorMembership.role || '').trim().toLowerCase();
+      const actorLocalAdmin =
+        (membershipStatus === 'active' || membershipStatus === 'ativo') &&
+        (membershipRole === 'owner' || membershipRole === 'admin');
+
+      const orgData = orgSnap.data() || {};
+      const actorMetadataOwner = [
+        orgData.ownerUid,
+        orgData.ownerUserId,
+        orgData.ownerId,
+        orgData.owner_user_id
+      ].some(value => String(value || '').trim() === actorUid);
+
+      if (!actorGlobal && !actorLocalAdmin && !actorMetadataOwner) {
+        return res.status(403).json({ success: false, reasonCode: 'PERMISSION_DENIED' });
+      }
+
+      const requestsSnap = await dbInstance
+        .collection('organizations')
+        .doc(organizationId)
+        .collection('join_requests')
+        .where('status', '==', 'pending')
+        .limit(100)
+        .get();
+
+      const joinRequests = requestsSnap.docs.map(requestDoc => {
+        const data = requestDoc.data() || {};
+        return {
+          id: requestDoc.id,
+          requestId: data.requestId || requestDoc.id,
+          requesterUid: data.requesterUid || requestDoc.id,
+          email: data.email || null,
+          displayName: data.displayName || null,
+          photoURL: data.photoURL || null,
+          status: data.status || 'pending',
+          generation: data.generation || 1,
+          requestedAt: data.requestedAt || null,
+          createdAt: data.createdAt || null
+        };
+      });
+
+      return res.json({ success: true, joinRequests });
+    } catch (error) {
+      console.error('[JoinRequestList] Failed', error);
+      return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
+    }
+  });
   app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/approve', express.json({ limit: '8kb' }), (req, res) => approveJoinRequest(req, res));
   app.post('/api/v1/organizations/:organizationId/join-requests/:requestId/reject', express.json({ limit: '8kb' }), (req, res) => rejectJoinRequest(req, res));
   app.delete('/api/v1/organizations/:organizationId/members/:memberId', (req, res) => removeOrganizationMember(req, res));
