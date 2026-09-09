@@ -8,6 +8,7 @@ import type { HubAppExperience } from '../../lib/hubAppExperience.js';
 import { applyActionPreferences, deriveReadOnlyHubActions, type ActionPreference, type ActionPreferenceMode, type ReadOnlyHubAction } from '../../lib/actionCenter.js';
 import { deriveReadOnlyHubCommitments, type ReadOnlyHubCommitment } from '../../lib/commitmentCenter.js';
 import { deriveReadOnlyHubChanges, type MusicScaleChangeNotificationInput, type ReadOnlyHubChange } from '../../lib/changeCenter.js';
+import type { ActionOsInteractionInput } from '../../lib/actionOsAnalytics.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -94,6 +95,9 @@ interface EcosystemWorkspaceHomeProps {
     action: ReadOnlyHubAction,
     mode: ActionPreferenceMode
   ) => void | Promise<void>;
+  onActionOsInteraction: (
+    interaction: Omit<ActionOsInteractionInput, 'organizationId' | 'userId'>
+  ) => void;
   recentActivity: Array<{
     id: string;
     label: string;
@@ -131,6 +135,7 @@ export function EcosystemWorkspaceHome({
   actionPreferences,
   actionPreferenceBusyKey,
   onSetActionPreference,
+  onActionOsInteraction,
   recentActivity
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
@@ -468,6 +473,14 @@ export function EcosystemWorkspaceHome({
         todayActions.length > 0);
 
     const handleTodayAction = (action: ReadOnlyHubAction) => {
+      onActionOsInteraction({
+        kind: 'action_opened',
+        lane: 'action',
+        sourceApp: action.sourceApp,
+        signalType: action.signalType,
+        priority: action.priority,
+      });
+
       const destination = action.destination;
 
       if (destination.kind === 'hub') {
@@ -489,6 +502,12 @@ export function EcosystemWorkspaceHome({
     };
 
     const handleChangeOpen = (change: ReadOnlyHubChange) => {
+      onActionOsInteraction({
+        kind: 'change_reviewed',
+        lane: 'change',
+        sourceApp: change.sourceApp,
+      });
+
       void onAcknowledgeMusicScaleChange(
         change.sourceNotificationId
       );
@@ -511,6 +530,12 @@ export function EcosystemWorkspaceHome({
     };
 
     const handleCommitmentOpen = (commitment: ReadOnlyHubCommitment) => {
+      onActionOsInteraction({
+        kind: 'commitment_opened',
+        lane: 'commitment',
+        sourceApp: commitment.sourceApp,
+      });
+
       const experience = appExperiences.find(
         item => item.app.id === commitment.destination.appId
       );
