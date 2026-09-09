@@ -1,9 +1,11 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
+import { EcosystemCommitments } from './EcosystemCommitments.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
 import { applyActionPreferences, deriveReadOnlyHubActions, type ActionPreference, type ActionPreferenceMode, type ReadOnlyHubAction } from '../../lib/actionCenter.js';
+import { deriveReadOnlyHubCommitments, type ReadOnlyHubCommitment } from '../../lib/commitmentCenter.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -57,6 +59,14 @@ interface EcosystemWorkspaceHomeProps {
         maybe: number;
         declined: number;
       };
+    };
+    nextPersonalScale: null | {
+      id: string;
+      date: string;
+      time?: string | null;
+      startsAtMs: number;
+      songCount: number;
+      functionNames: string[];
     };
     updatedAtMs: number;
   };
@@ -273,6 +283,13 @@ export function EcosystemWorkspaceHome({
     const todayActions = applyActionPreferences(projectedTodayActions, actionPreferences);
     const hasSuppressedTodayActions = projectedTodayActions.length > todayActions.length;
 
+    const commitments = deriveReadOnlyHubCommitments({
+      musicScale: {
+        ready: isMusicScaleReady && appSummaryReady,
+        nextPersonalScale: musicScaleSummary.nextPersonalScale
+      }
+    });
+
     const attentionApp = operationalApps.find(experience => experience.needsAttention);
 
     const nextStep = attentionApp?.state === 'payment_issue'
@@ -440,6 +457,24 @@ export function EcosystemWorkspaceHome({
       }
 
       if (destination.appId === 'musicscale') {
+        onSelectWorkspace('musicscale');
+      }
+    };
+
+    const handleCommitmentOpen = (commitment: ReadOnlyHubCommitment) => {
+      const experience = appExperiences.find(
+        item => item.app.id === commitment.destination.appId
+      );
+
+      if (experience?.app && experience.canOpen) {
+        onLaunchApp(
+          experience.app,
+          commitment.destination.path
+        );
+        return;
+      }
+
+      if (commitment.destination.appId === 'musicscale') {
         onSelectWorkspace('musicscale');
       }
     };
@@ -725,6 +760,13 @@ export function EcosystemWorkspaceHome({
             </p>
           )}
         </section>
+
+        {commitments.length > 0 && (
+          <EcosystemCommitments
+            commitments={commitments}
+            onOpen={handleCommitmentOpen}
+          />
+        )}
 
         {!isNextStepRepresentedInToday && (
         <section
