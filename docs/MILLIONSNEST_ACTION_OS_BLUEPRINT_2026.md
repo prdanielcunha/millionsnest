@@ -417,11 +417,13 @@ User-scoped snooze/dismiss interaction state is also implemented behind authenti
 
 The first **Commitments** lane is now implemented in `main`: normal participation that matters to the current user but is not a problem. Its first adapter projects the authenticated user's next MusicScale assignment from data already loaded by the Hub, without a new collection or paid service.
 
-The next Action OS refinement is personal responsibility on top of that commitment. A MusicScale assignment can therefore produce two different truths at the same time:
+Personal responsibility on top of that commitment is also implemented in `main`. A MusicScale assignment can therefore produce two different truths at the same time:
 - **Commitment:** “you are scheduled”;
 - **Action:** “you still need to confirm”.
 
 Leader-wide pending confirmations remain a third, separate responsibility. This prevents a pastor who is also a musician from losing either their personal task or their leadership view.
+
+The next semantic lane under certification is **Changes**. The first adapter consumes only recipient-scoped `music_scale_changed` notifications produced by MusicScale itself, including its deterministic `preparationChangeSummary`. The Hub does not infer changes from timestamps or guess what changed.
 
 ## 21. Semantic lanes: Actions, Commitments and Changes
 
@@ -448,24 +450,33 @@ Examples:
 
 Commitments are informational and should never be presented as operational failure.
 
-### Changes — future adapter
-Previously known truth changed materially and the user may need to review it.
+### Changes — “O que mudou recentemente”
+Previously known truth changed materially and the user may need to review it. The first MusicScale adapter is implemented behind the current certification branch.
 
 Examples:
 - repertoire/key/order changed after preparation;
 - event time/location changed;
 - responsibility changed.
 
-Changes should only enter the Hub when the source app can expose an exact, permission-safe, user-relevant change contract. The Hub must not infer a change from timestamps or revision counters alone.
+Changes only enter the Hub when the source app exposes an exact, permission-safe, user-relevant change contract. The Hub does not infer a change from timestamps or revision counters alone.
+
+For MusicScale:
+- the source is the user's own `music_scale_changed` notification;
+- `preparationChangeSummary.codes` supplies the factual change categories;
+- `functionsChanged` covers assignment-function changes;
+- the Hub shows only recent changes (14-day horizon, maximum 3 cards);
+- clicking **Review change** marks only that source notification as read and then deep-links to MusicScale for exact details;
+- another organization member cannot read the notification merely because they belong to the same tenant.
 
 This separation is a core product invariant. It reduces alert fatigue and lets MillionsNest become an operational layer without turning normal church life into a list of “problems”.
 
 ## 22. Immediate next step
 
-1. Certify the personal MusicScale confirmation signal in **Hoje**, using only the authenticated user's own response records.
-2. Keep MusicScale's exact Preparation Intelligence / change review inside MusicScale until a stable cross-app change adapter is defined.
-3. Add the next Action OS source only when it exposes a factual signal contract; do not hardcode app-specific UI cards.
-4. Validate weekly use with real organizations before adding generative intelligence or expensive infrastructure.
+1. Certify and merge the private MusicScale **Changes** adapter and notification-rule hardening into `main`.
+2. Keep exact song-level review inside MusicScale; the Hub summarizes only source-owned change categories and deep-links to the specialist app.
+3. Add lightweight Action OS quality telemetry for pilot validation (surfaced/opened/snoozed/dismissed, without sensitive pastoral inference) before expanding to another app.
+4. Add the next source only when NestJourney, Connect or another product exposes a factual signal/commitment/change contract; do not hardcode app-specific UI cards.
+5. Validate weekly use with real organizations before adding generative intelligence or expensive infrastructure.
 
 ### Current invariant for the same event
 
