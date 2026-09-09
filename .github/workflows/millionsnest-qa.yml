@@ -43,6 +43,9 @@ jobs:
       - name: Lint and typecheck
         run: npm run lint
 
+      - name: Action OS deterministic projection
+        run: npx tsx scripts/test_action_center_projection.ts
+
       - name: Vercel release and CORS hygiene
         run: npx tsx scripts/test_vercel_release_hygiene.ts
 
