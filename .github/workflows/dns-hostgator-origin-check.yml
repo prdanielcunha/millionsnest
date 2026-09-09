@@ -1,0 +1,29 @@
+name: DNS HostGator Origin Check
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/dns-hostgator-origin-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Resolve HostGator service origin
+        shell: bash
+        run: |
+          set -euo pipefail
+          for D in             br186.hostgator.com.br             mail.millionsnest.com             webdisk.millionsnest.com             whm.millionsnest.com             autoconfig.millionsnest.com             autodiscover.millionsnest.com
+          do
+            echo "===== $D ====="
+            echo "A:"
+            dig +short A "$D" || true
+            echo "CNAME:"
+            dig +short CNAME "$D" || true
+          done
