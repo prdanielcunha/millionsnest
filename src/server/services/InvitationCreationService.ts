@@ -14,7 +14,7 @@ import {
   normalizeInvitationTemporalMs
 } from './InvitationAcceptanceServerPolicy.js';
 import { normalizeInvitationEmail, isInvitationRole, InvitationRole } from './InvitationAcceptancePlanner.js';
-import { isCanonicalGlobalRole } from '../../lib/permissionService.js';
+import { canManageTenantMembers } from '../../lib/permissionService.js';
 
 export type InvitationCreationDependencies = {
   verifyIdToken?: (token: string) => Promise<{ uid: string }>;
@@ -70,7 +70,7 @@ export async function createInvitation(
       const userData = userSnap.data() || {};
       const globalRole = userData.systemRole;
       
-      const isGlobalAdmin = isCanonicalGlobalRole(globalRole);
+      const isGlobalAdmin = canManageTenantMembers(globalRole);
       
       let membershipData: any = {};
       let membershipExists = false;
