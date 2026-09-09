@@ -42,7 +42,7 @@ import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
 import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "../lib/actionCenter.js";
 import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
 import { fetchActionPreferences, saveActionPreference } from "../services/actionCenterClient.js";
-import { trackActionOsInteraction } from "../lib/actionOsAnalytics.js";
+import { trackActionOsInteraction, type ActionOsDismissCode } from "../lib/actionOsAnalytics.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -592,7 +592,8 @@ export function Dashboard() {
 
   const handleSetActionPreference = async (
     action: ReadOnlyHubAction,
-    mode: ActionPreferenceMode
+    mode: ActionPreferenceMode,
+    dismissCode?: ActionOsDismissCode
   ) => {
     if (!user || !activeContextOrgId || actionPreferenceBusyKey) return;
 
@@ -629,6 +630,9 @@ export function Dashboard() {
         sourceApp: action.sourceApp,
         signalType: action.signalType,
         priority: action.priority,
+        ...(mode === 'dismissed'
+          ? { dismissCode: dismissCode || 'no_reason' }
+          : {}),
       });
 
       feedback.success(
