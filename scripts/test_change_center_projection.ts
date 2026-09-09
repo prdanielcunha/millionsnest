@@ -161,6 +161,18 @@ assert.match(
   'Dashboard must only pass factual MusicScale change notifications to the Changes projection'
 );
 
+assert.match(
+  dashboardSource,
+  /isRead:\s*true/,
+  'reviewing a change in the Hub must acknowledge the source notification'
+);
+
+assert.match(
+  dashboardSource,
+  /readAt:\s*new Date\(\)\.toISOString\(\)/,
+  'change acknowledgement must preserve the canonical notification read timestamp'
+);
+
 const workspaceSource = readFileSync(
   resolve('src/components/dashboard/EcosystemWorkspaceHome.tsx'),
   'utf8'
@@ -176,6 +188,12 @@ assert.match(
   workspaceSource,
   /<EcosystemChanges/,
   'Hub workspace must render Changes as a separate semantic lane'
+);
+
+assert.match(
+  workspaceSource,
+  /onAcknowledgeMusicScaleChange\(\s*change\.sourceNotificationId/,
+  'opening a change must acknowledge the exact source notification'
 );
 
 for (const language of ['pt', 'en', 'es']) {
