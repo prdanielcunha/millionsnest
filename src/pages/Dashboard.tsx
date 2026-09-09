@@ -39,6 +39,8 @@ import { SupportHubProvider } from "../components/support/SupportHubContext.js";
 import { SupportHub } from "../components/support/SupportHub.js";
 import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js";
 import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
+import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "../lib/actionCenter.js";
+import { fetchActionPreferences, saveActionPreference } from "../services/actionCenterClient.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -197,6 +199,8 @@ export function Dashboard() {
   const [subscription, setSubscription] = useState<any>(null);
   const [musicScaleHubSummary, setMusicScaleHubSummary] = useState<MusicScaleHubSummary>(EMPTY_MUSICSCALE_SUMMARY);
   const [organization, setOrganization] = useState<any>(null);
+  const [actionPreferences, setActionPreferences] = useState<ActionPreference[]>([]);
+  const [actionPreferenceBusyKey, setActionPreferenceBusyKey] = useState<string | null>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
@@ -513,6 +517,79 @@ export function Dashboard() {
     hasNestFinanceDevelopmentAccess &&
     nestFinanceLaunchEnabled &&
     !nestFinanceLaunching;
+
+  useEffect(() => {
+    if (!user || !activeContextOrgId) {
+      setActionPreferences([]);
+      return;
+    }
+
+    const orgId = activeContextOrgId;
+    const controller = new AbortController();
+    let active = true;
+
+    void (async () => {
+      try {
+        const token = await user.getIdToken();
+        const preferences = await fetchActionPreferences(token, orgId, controller.signal);
+        if (active && activeContextOrgId === orgId) {
+          setActionPreferences(preferences);
+        }
+      } catch (error: any) {
+        if (error?.name !== 'AbortError') {
+          console.warn('[ActionCenter] Failed to load personal preferences:', error);
+        }
+        if (active) setActionPreferences([]);
+      }
+    })();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [user, activeContextOrgId]);
+
+  const handleSetActionPreference = async (
+    action: ReadOnlyHubAction,
+    mode: ActionPreferenceMode
+  ) => {
+    if (!user || !activeContextOrgId || actionPreferenceBusyKey) return;
+
+    const orgId = activeContextOrgId;
+    setActionPreferenceBusyKey(action.dedupeKey);
+
+    try {
+      const token = await user.getIdToken();
+      const snoozedUntilMs = mode === 'snoozed'
+        ? Date.now() + 24 * 60 * 60 * 1000
+        : null;
+
+      const preference = await saveActionPreference(token, orgId, {
+        dedupeKey: action.dedupeKey,
+        fingerprint: action.fingerprint,
+        mode,
+        snoozedUntilMs
+      });
+
+      if (!preference || activeContextOrgId !== orgId) return;
+
+      setActionPreferences(current => {
+        const withoutCurrent = current.filter(item => item.dedupeKey !== preference.dedupeKey);
+        return [...withoutCurrent, preference];
+      });
+
+      feedback.success(
+        mode === 'snoozed'
+          ? t('workspace.actions.snoozed_feedback', 'Adiado por 24 horas.')
+          : t('workspace.actions.dismissed_feedback', 'Ocultado da sua visão por enquanto.')
+      );
+    } catch (error) {
+      console.error('[ActionCenter] Failed to save personal preference:', error);
+      feedback.error(t('workspace.actions.preference_error', 'Não foi possível atualizar essa prioridade agora.'));
+    } finally {
+      setActionPreferenceBusyKey(null);
+    }
+  };
 
   useEffect(() => {
     if (isGlobalAdmin && adminSelectedOrgId && user) {
@@ -2161,6 +2238,9 @@ export function Dashboard() {
                     refreshMusicScaleAccessProjection(activeContextOrgId);
                   }
                 }}
+                actionPreferences={actionPreferences}
+                actionPreferenceBusyKey={actionPreferenceBusyKey}
+                onSetActionPreference={handleSetActionPreference}
                 recentActivity={auditLogs.slice(0, 5).map(log => ({
                   id: log.id,
                   label: humanizeAuditAction(log.action),
