@@ -41,13 +41,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error             -H "Authorization: Bearer $VERCEL_TOKEN"             "https://api.vercel.com/v2/user"             >/tmp/vercel-user.json
-          python3 - <<'PY'
+          TEAM_ID="team_qtUDx2cqVcgfKlO5T17JdqJP"
+          CODE="$(curl --silent --show-error -o /tmp/vercel-project.json -w '%{http_code}' -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v9/projects/prj_zEnQaiSnoYWbexI7gMnA1vDfj7Ju?teamId=$TEAM_ID")"
+          echo "VERCEL_PROJECT_CHECK_HTTP=$CODE"
+          if [ "$CODE" != "200" ]; then
+            python3 - <<'PY'
           import json
-          x=json.load(open('/tmp/vercel-user.json'))
-          u=x.get('user') or x
-          print("VERCEL_AUTH_OK", bool(u.get('id') or u.get('uid') or u.get('username')))
+          x=json.load(open('/tmp/vercel-project.json'))
+          e=x.get('error') or {}
+          print("VERCEL_ERROR_CODE=", e.get('code'))
+          print("VERCEL_ERROR_MESSAGE=", e.get('message'))
           PY
+            exit 1
+          fi
+          echo "VERCEL_PROJECT_AUTH_OK"
 
       - name: Remove MillionsNest custom domains from Vercel projects
         shell: bash
