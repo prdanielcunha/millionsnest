@@ -17,6 +17,7 @@ type MembershipState =
 
 const CANONICAL_ORGANIZATION_ROLES = new Set<CanonicalRole>(['owner', 'admin', 'manager', 'member', 'viewer']);
 const INACTIVE_STATUSES = new Set(['suspended', 'inactive', 'removed', 'revoked', 'deleted']);
+const INACTIVE_ORGANIZATION_STATUSES = new Set(['archived', 'inactive', 'suspended', 'disabled']);
 
 function isSafeDocumentId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 256 &&
@@ -44,6 +45,17 @@ function classifyMembership(data: FirebaseFirestore.DocumentData | undefined): M
 function organizationOwnerMatches(organization: FirebaseFirestore.DocumentData, uid: string): boolean {
   return organization.ownerUid === uid || organization.ownerId === uid ||
     organization.owner_user_id === uid || organization.ownerUserId === uid;
+}
+
+function isOrganizationLifecycleActive(
+  organization: FirebaseFirestore.DocumentData
+): boolean {
+  const status = typeof organization.status === 'string'
+    ? organization.status.trim().toLowerCase()
+    : '';
+  return organization.archived !== true &&
+    organization.disabled !== true &&
+    !INACTIVE_ORGANIZATION_STATUSES.has(status);
 }
 
 function statusFor(reasonCode: string): number {
@@ -142,7 +154,7 @@ export async function removeOrganizationMember(
 
       if (!orgSnap.exists) return { success: false as const, reasonCode: 'ORGANIZATION_NOT_FOUND' };
       const organization = orgSnap.data() ?? {};
-      if (organization.status !== 'active') return { success: false as const, reasonCode: 'ORGANIZATION_INACTIVE' };
+      if (!isOrganizationLifecycleActive(organization)) return { success: false as const, reasonCode: 'ORGANIZATION_INACTIVE' };
 
       const actorSystemRole = actorUserSnap.data()?.systemRole;
       const actorGlobal = canManageTenantMembers(actorSystemRole);
@@ -188,7 +200,7 @@ export async function removeOrganizationMember(
       const activeRemainingOrganizationIds: string[] = [];
       for (const candidate of remainingCandidates) {
         const candidateOrgSnap = await transaction.get(db.doc(`organizations/${candidate.organizationId}`));
-        if (candidateOrgSnap.exists && candidateOrgSnap.data()?.status === 'active') {
+        if (candidateOrgSnap.exists && isOrganizationLifecycleActive(candidateOrgSnap.data() ?? {})) {
           activeRemainingOrganizationIds.push(candidate.organizationId);
         }
       }

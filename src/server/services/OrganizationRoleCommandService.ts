@@ -20,6 +20,7 @@ type MembershipState =
 const CANONICAL_ROLES = new Set<CanonicalRole>(['owner', 'admin', 'manager', 'member', 'viewer']);
 const ASSIGNABLE_ROLES = new Set<AssignableRole>(['admin', 'manager', 'member', 'viewer']);
 const INACTIVE_STATUSES = new Set(['suspended', 'inactive', 'removed', 'revoked', 'deleted']);
+const INACTIVE_ORGANIZATION_STATUSES = new Set(['archived', 'inactive', 'suspended', 'disabled']);
 
 function isSafeDocumentId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 256 &&
@@ -54,9 +55,34 @@ function classifyMembership(data: FirebaseFirestore.DocumentData | undefined): M
   return { state: 'active', role };
 }
 
+function resolveRepairableInconsistentRole(
+  data: FirebaseFirestore.DocumentData | undefined
+): CanonicalRole | null {
+  if (!data) return null;
+  const status = typeof data.status === 'string' ? data.status.trim().toLowerCase() : '';
+  if (INACTIVE_STATUSES.has(status) || (status && status !== 'active')) return null;
+
+  // A repair is intentionally conservative: the membership document must
+  // already carry at least one recognizable organization role. Global
+  // governance may normalize conflicting legacy fields, but it must never
+  // turn an arbitrary/corrupt document into an active membership.
+  return normalizeExistingRole(data.organizationRole) ?? normalizeExistingRole(data.role);
+}
+
 function organizationOwnerMatches(organization: FirebaseFirestore.DocumentData, uid: string): boolean {
   return organization.ownerUid === uid || organization.ownerId === uid ||
     organization.owner_user_id === uid || organization.ownerUserId === uid;
+}
+
+function isOrganizationLifecycleActive(
+  organization: FirebaseFirestore.DocumentData
+): boolean {
+  const status = typeof organization.status === 'string'
+    ? organization.status.trim().toLowerCase()
+    : '';
+  return organization.archived !== true &&
+    organization.disabled !== true &&
+    !INACTIVE_ORGANIZATION_STATUSES.has(status);
 }
 
 function statusFor(reasonCode: string): number {
@@ -152,34 +178,58 @@ export async function updateOrganizationMemberRole(
 
       if (!orgSnap.exists) return { success: false as const, reasonCode: 'ORGANIZATION_NOT_FOUND' };
       const organization = orgSnap.data() ?? {};
-      if (organization.status !== 'active') return { success: false as const, reasonCode: 'ORGANIZATION_INACTIVE' };
+      if (!isOrganizationLifecycleActive(organization)) return { success: false as const, reasonCode: 'ORGANIZATION_INACTIVE' };
 
-      const targetMembership = classifyMembership(targetMemberSnap.data());
-      if (targetMembership.state === 'absent') return { success: false as const, reasonCode: 'MEMBERSHIP_NOT_FOUND' };
-      if (targetMembership.state === 'inactive') return { success: false as const, reasonCode: 'MEMBERSHIP_INACTIVE' };
-      if (targetMembership.state === 'inconsistent') return { success: false as const, reasonCode: 'MEMBERSHIP_STATE_INCONSISTENT' };
-      // The authoritative owner is defined by organization metadata and must
-      // only change through the dedicated ownership-transfer flow. A member
-      // document that says "owner" but is not the metadata owner is treated as
-      // a repairable legacy mismatch and is handled by roleDecision below.
-      if (organizationOwnerMatches(organization, memberId)) {
-        return { success: false as const, reasonCode: 'OWNER_ROLE_REQUIRES_TRANSFER' };
-      }
       const actorSystemRole = actorUserSnap.data()?.systemRole;
       const actorGlobal = canManageTenantMembers(actorSystemRole);
       const actorMetadataOwner = organizationOwnerMatches(organization, actorUid);
       const actorMembership = classifyMembership(actorMemberSnap.data());
+
+      const targetData = targetMemberSnap.data();
+      const targetMembership = classifyMembership(targetData);
+      if (targetMembership.state === 'absent') return { success: false as const, reasonCode: 'MEMBERSHIP_NOT_FOUND' };
+      if (targetMembership.state === 'inactive') return { success: false as const, reasonCode: 'MEMBERSHIP_INACTIVE' };
+
+      // The authoritative owner is defined by organization metadata and must
+      // only change through the dedicated ownership-transfer flow. This check
+      // runs before any legacy-field repair so governance can never bypass
+      // ownership transfer semantics.
+      if (organizationOwnerMatches(organization, memberId)) {
+        return { success: false as const, reasonCode: 'OWNER_ROLE_REQUIRES_TRANSFER' };
+      }
+
+      const canRepairLegacyMembership =
+        actorGlobal ||
+        actorMetadataOwner ||
+        (actorMembership.state === 'active' && actorMembership.role === 'owner');
+
+      const repairableTargetRole =
+        targetMembership.state === 'inconsistent'
+          ? resolveRepairableInconsistentRole(targetData)
+          : null;
+
+      if (targetMembership.state === 'inconsistent' && (!canRepairLegacyMembership || !repairableTargetRole)) {
+        return { success: false as const, reasonCode: 'MEMBERSHIP_STATE_INCONSISTENT' };
+      }
+
+      const currentTargetRole =
+        targetMembership.state === 'active'
+          ? targetMembership.role
+          : repairableTargetRole!;
+
       const decision = roleDecision({
         actorGlobal,
         actorMetadataOwner,
         actorMembership,
-        targetRole: targetMembership.role,
+        targetRole: currentTargetRole,
         newRole: newRole as AssignableRole
       });
       if (decision.allowed === false) return { success: false as const, reasonCode: decision.reasonCode };
 
-      if (targetMembership.role === newRole) {
-        return { success: true as const, reasonCode: 'ALREADY_ROLE', previousOrganizationRole: targetMembership.role, organizationRole: newRole };
+      const repairingLegacyMembership = targetMembership.state === 'inconsistent';
+
+      if (!repairingLegacyMembership && currentTargetRole === newRole) {
+        return { success: true as const, reasonCode: 'ALREADY_ROLE', previousOrganizationRole: currentTargetRole, organizationRole: newRole };
       }
 
       const permissions = getDefaultPermissions(newRole);
@@ -204,16 +254,18 @@ export async function updateOrganizationMemberRole(
         governanceScope: actorGlobal ? 'ecosystem_global' : 'organization',
         memberId,
         organizationId,
-        previousOrganizationRole: targetMembership.role,
+        previousOrganizationRole: currentTargetRole,
         organizationRole: newRole,
+        repairedLegacyMembership: repairingLegacyMembership,
         timestamp: FieldValue.serverTimestamp()
       });
 
       return {
         success: true as const,
         reasonCode: 'ROLE_UPDATED',
-        previousOrganizationRole: targetMembership.role,
-        organizationRole: newRole
+        previousOrganizationRole: currentTargetRole,
+        organizationRole: newRole,
+        repairedLegacyMembership: repairingLegacyMembership
       };
     });
 

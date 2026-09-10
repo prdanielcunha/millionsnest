@@ -688,6 +688,22 @@ export default {
     error_plan: "Please select a primary plan."
   },
   dashboard: {
+    governance: {
+      ecosystem_label: "Ecosystem",
+      ecosystem_role_aria: "Ecosystem role for {{name}}",
+      member_fallback: "member",
+      system_role_update_failed: "We could not change this person's global role.",
+      system_role_updated: "Global role updated successfully.",
+      system_role_updated_ceo: "Global role updated: Ecosystem CEO.",
+      system_roles: {
+        user: "Standard User",
+        ecosystem_support: "Ecosystem Support",
+        global_admin: "Global Administrator",
+        ecosystem_owner: "Ecosystem Owner",
+        founder: "Founder",
+        ceo: "Ecosystem CEO"
+      }
+    },
     support: {
       actions: {
         need_help: "I need help",

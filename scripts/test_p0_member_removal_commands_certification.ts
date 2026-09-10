@@ -203,6 +203,12 @@ result = await call('owner-1');
 assert('41 inactive organization blocks removal mutation', result.statusCode === 409 && result.body.reasonCode === 'ORGANIZATION_INACTIVE');
 
 await reset();
+await seedOrg('org-1', 'owner-1', 'trialing'); await seedUser('owner-1'); await seedMember('org-1', 'owner-1', 'owner'); await seedUser('target-1'); await seedMember('org-1', 'target-1');
+await seedLegacy('org-1', 'target-1');
+result = await call('owner-1');
+assert('41b trialing organization remains administratively active for removal', result.statusCode === 200 && result.body.reasonCode === 'MEMBER_REMOVED');
+
+await reset();
 await seedUser('actor', { systemRole: 'ceo' });
 result = await call('actor');
 assert('42 missing organization returns 404', result.statusCode === 404 && result.body.reasonCode === 'ORGANIZATION_NOT_FOUND');

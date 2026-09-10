@@ -1248,6 +1248,8 @@ export function Dashboard() {
           code.includes('OWNER_ROLE_REQUIRES_TRANSFER')
         ) {
           feedback.error('Esse nível de acesso precisa de uma ação administrativa específica.');
+        } else if (code.includes('MEMBERSHIP_STATE_INCONSISTENT')) {
+          feedback.error('O cadastro dessa pessoa está em um formato antigo e precisa ser normalizado antes da alteração.');
         } else {
           feedback.error('Não foi possível alterar o nível de acesso dessa pessoa.');
         }
@@ -1277,6 +1279,51 @@ export function Dashboard() {
     } catch (e) {
       console.error("Erro ao atualizar função", e);
       feedback.error("Não foi possível alterar o nível de acesso dessa pessoa.");
+    }
+  };
+
+  const handleUpdateMemberSystemRole = async (memberId: string, newRole: string) => {
+    if (!user || !isGlobalAdmin || memberId === user.uid) return;
+
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `/api/admin/users/${encodeURIComponent(memberId)}/role`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ newRole })
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || data?.success !== true) {
+        feedback.error(
+          data?.message ||
+          data?.error ||
+          t('governance.system_role_update_failed')
+        );
+        return;
+      }
+
+      const canonicalSystemRole = newRole === 'user' ? null : newRole;
+      setMembers(previous => previous.map(member =>
+        member.id === memberId
+          ? { ...member, systemRole: canonicalSystemRole }
+          : member
+      ));
+
+      feedback.success(
+        canonicalSystemRole === 'ceo'
+          ? t('governance.system_role_updated_ceo')
+          : t('governance.system_role_updated')
+      );
+    } catch (error) {
+      console.error('[Dashboard] Failed to update ecosystem role', error);
+      feedback.error(t('governance.system_role_update_failed'));
     }
   };
 
@@ -2731,6 +2778,7 @@ export function Dashboard() {
                 profile={profile}
                 onSaveOrg={handleSaveOrg}
                 handleUpdateMemberRole={handleUpdateMemberRole}
+                handleUpdateMemberSystemRole={handleUpdateMemberSystemRole}
                 handleRemoveMember={handleRemoveMember}
                 onEditMember={(member) => {
                   setEditingMember(member);
