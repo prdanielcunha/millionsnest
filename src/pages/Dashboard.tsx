@@ -2874,7 +2874,7 @@ export function Dashboard() {
                   <div className="flex items-center justify-between pb-6 border-b border-white/5 min-w-0">
                     <div className="min-w-0">
                       <p className="text-xs font-bold uppercase tracking-widest text-[#A0A7B5] mb-2">Email</p>
-                      <p className="text-base font-semibold text-[#F5F7FA] break-all">{user.email}</p>
+                      <p className="text-base font-semibold text-[#F5F7FA] break-words [overflow-wrap:anywhere]">{user.email}</p>
                     </div>
                   </div>
 

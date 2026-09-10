@@ -514,7 +514,8 @@ Dismiss feedback is optional and structured only. The Hub never sends a free-tex
 
 ## 23. Immediate next step
 
-1. Promote the certified 7-day preparation / managed-response capability release through `main` and then `production` only after CI is clean.
+0. Complete the Hub Visual Release Gate before any new commercial promotion: members/roles, account, app launcher, invitations, sales landing, guided demo, checkout and admin data surfaces must be readable and bounded across narrow, tablet and desktop layouts. Human identity must never collapse to character-by-character vertical text.
+1. Promote the certified 7-day preparation / managed-response capability release through `main` and then `production` only after CI is clean and the Visual Release Gate is green.
 2. Run the first real pilot with the Action / Commitment / Change lanes and use explicit interaction plus structured-dismiss telemetry to measure usefulness and false positives.
 3. Keep exact song-level review inside MusicScale; the Hub summarizes only source-owned change categories and deep-links to the specialist app.
 4. Do not infer whether a musician "prepared" from app opens, time-on-screen or similar surveillance proxies. If preparation acknowledgement is ever needed, it must be an explicit user action.
