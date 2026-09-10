@@ -3,6 +3,7 @@ import { useNavigate, Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation, Trans } from "react-i18next";
 import { Navbar } from "../components/Navbar.js";
+import { MusicScaleGuidedDemo } from "../components/MusicScaleGuidedDemo.js";
 import { Footer } from "../components/Footer.js";
 import { Pricing } from "../components/Pricing.js";
 import { Play, CheckCircle2, CalendarDays, Music, Bell, Library, Mic2, Instagram, ArrowRight, XCircle, LayoutDashboard, ChevronRight, ChevronDown } from "lucide-react";
@@ -452,57 +453,19 @@ export function MusicScaleLanding() {
             </p>
           </div>
           
-          <div className="grid lg:grid-cols-12 gap-12 lg:gap-20 items-center">
-            <div className="lg:col-span-8">
-               {/* Premium Mockup Guided Demo */}
-               <div className="aspect-[4/3] sm:aspect-video rounded-[2rem] bg-[#0B0F19] border border-white/10 overflow-hidden relative group shadow-2xl">
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#2B85EB]/20 via-transparent to-transparent opacity-60" />
-                  <img src="/telas.png" alt="MusicScale em Ação" className="absolute inset-0 w-full h-full object-cover object-top opacity-80" />
-                  
-                  {/* Honest guided demo: no fake play button while there is no video. */}
-                  <div className="absolute inset-0 bg-black/45 flex flex-col items-center justify-center z-10 transition-colors group-hover:bg-black/35 px-6 text-center">
-                    <div className="w-16 h-16 rounded-full bg-[#2B85EB]/90 border border-white/20 flex items-center justify-center text-white mb-5 shadow-[0_0_30px_rgba(43,133,235,0.35)]">
-                      <span className="text-xl font-bold">{activeDemoStep + 1}</span>
-                    </div>
-                    <p className="text-xs font-bold tracking-widest uppercase text-[#8EC5FF] mb-2">
-                      {t('musicscale:demo_guided_label', 'Demonstração guiada')} · {activeDemoStep + 1}/{demoSteps.length}
-                    </p>
-                    <h3 className="text-2xl md:text-3xl font-bold text-white mb-3">{demoSteps[activeDemoStep].title}</h3>
-                    <p className="text-sm md:text-base text-white/75 max-w-md">{demoSteps[activeDemoStep].desc}</p>
-                  </div>
-               </div>
-            </div>
-            
-            <div className="lg:col-span-4 flex flex-col gap-8">
-               {demoSteps.map((item, i) => (
-                 <button
-                   type="button"
-                   key={item.step}
-                   onClick={() => {
-                     setActiveDemoStep(i);
-                     analytics.track('app_usage', {
-                       app: 'musicscale',
-                       userId: user?.uid,
-                       organizationId: organization?.id,
-                       metadata: { action: 'sales_demo_step_selected', step: i + 1 }
-                     });
-                   }}
-                   aria-pressed={activeDemoStep === i}
-                   className={`flex gap-6 group text-left rounded-2xl p-2 -m-2 transition-colors ${activeDemoStep === i ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}
-                 >
-                   <div className="flex flex-col items-center">
-                     <div className={`w-10 h-10 rounded-full border flex items-center justify-center text-sm font-bold transition-colors shadow-inner ${activeDemoStep === i ? 'bg-[#2B85EB]/15 border-[#2B85EB] text-[#8EC5FF]' : 'bg-white/5 border-white/10 text-[#A0A7B5] group-hover:border-[#2B85EB] group-hover:text-[#2B85EB]'}`}>
-                       {item.step}
-                     </div>
-                     {i !== demoSteps.length - 1 && <div className="w-px h-full bg-gradient-to-b from-white/10 to-transparent my-2" />}
-                   </div>
-                   <div className="pt-1.5 pb-2">
-                     <h4 className={`text-lg font-semibold mb-1.5 transition-colors ${activeDemoStep === i ? 'text-[#8EC5FF]' : 'text-white group-hover:text-[#2B85EB]'}`}>{item.title}</h4>
-                     <p className="text-sm text-[#A0A7B5] leading-relaxed">{item.desc}</p>
-                   </div>
-                 </button>
-               ))}
-            </div>
+          <MusicScaleGuidedDemo
+            steps={demoSteps}
+            activeStep={activeDemoStep}
+            onSelectStep={(index) => {
+              setActiveDemoStep(index);
+              analytics.track('app_usage', {
+                app: 'musicscale',
+                userId: user?.uid,
+                organizationId: organization?.id,
+                metadata: { action: 'sales_demo_step_selected', step: index + 1 }
+              });
+            }}
+          />
           </div>
         </div>
       </section>
