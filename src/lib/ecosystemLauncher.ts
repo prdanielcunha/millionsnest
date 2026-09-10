@@ -1,3 +1,5 @@
+import { isAllowedAppDestinationPath } from './appExperienceRegistry.js';
+
 export interface EcosystemLauncherDependencies {
   getIdToken: () => Promise<string>;
   fetchFn: typeof fetch;
@@ -172,25 +174,8 @@ export async function openEcosystemModule(
   const encodedContext = btoa(JSON.stringify(context));
   const targetUrl = new URL(app.url);
   if (destinationPath) {
-    const allowedMusicScalePaths = [
-      '/',
-      '/songs',
-      '/scales',
-      '/band-scales',
-      '/users',
-      '/roles',
-      '/profile',
-      '/plan-usage',
-      '/library',
-      '/notifications'
-    ];
     const cleanDestinationPath = destinationPath.trim();
-    if (
-      moduleKey !== 'musicscale' ||
-      !allowedMusicScalePaths.some(path =>
-        cleanDestinationPath === path || cleanDestinationPath.startsWith(`${path}/`)
-      )
-    ) {
+    if (!isAllowedAppDestinationPath(moduleKey, cleanDestinationPath)) {
       throw new Error('Destino do aplicativo inválido.');
     }
     targetUrl.pathname = cleanDestinationPath;
