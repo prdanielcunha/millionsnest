@@ -100,6 +100,9 @@ assert.equal(
 );
 
 const organizationManager = readFileSync('src/components/OrganizationManager.tsx', 'utf8');
+const ptLocale = readFileSync('src/packages/i18n/locales/pt.ts', 'utf8');
+const enLocale = readFileSync('src/packages/i18n/locales/en.ts', 'utf8');
+const esLocale = readFileSync('src/packages/i18n/locales/es.ts', 'utf8');
 assert.equal(
   organizationManager.includes("isCrossTenantSupportSession = isEcosystemSupport && Boolean(adminSelectedOrgId)"),
   true,
@@ -127,9 +130,9 @@ assert.equal(
   'organization team UI must use canonical assignable ecosystem roles'
 );
 assert.equal(
-  organizationManager.includes('Cargo do ecossistema de'),
+  organizationManager.includes("governance.ecosystem_role_aria"),
   true,
-  'organization team UI must separate ecosystem role from organization access'
+  'organization team UI must separate ecosystem role from organization access through i18n'
 );
 assert.equal(
   dashboard.includes('/api/admin/users/${encodeURIComponent(memberId)}/role'),
@@ -141,6 +144,24 @@ assert.equal(
   true,
   'CEO promotion must be treated as an explicit ecosystem role outcome'
 );
+
+for (const [locale, source] of [['pt', ptLocale], ['en', enLocale], ['es', esLocale]] as const) {
+  assert.equal(
+    source.includes('system_role_updated_ceo:'),
+    true,
+    `${locale} must translate the CEO promotion feedback`
+  );
+  assert.equal(
+    source.includes('ecosystem_role_aria:'),
+    true,
+    `${locale} must translate the ecosystem-role accessibility label`
+  );
+  assert.equal(
+    source.includes('system_roles: {'),
+    true,
+    `${locale} must expose canonical ecosystem role labels`
+  );
+}
 
 const ecosystemLauncher = readFileSync('src/lib/ecosystemLauncher.ts', 'utf8');
 assert.equal(
