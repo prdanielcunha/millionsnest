@@ -116,7 +116,19 @@ await reset();
 await seedOrg('org-1', 'owner-1'); await seedUser('owner-1'); await seedMember('org-1', 'owner-1', 'owner'); await seedUser('target-1');
 await db.doc('organizations/org-1/members/target-1').set({ uid: 'target-1', organizationId: 'org-1', role: 'member', organizationRole: 'admin', status: 'active' });
 result = await call('owner-1');
-assert('19 inconsistent canonical role fails closed', result.statusCode === 409 && result.body.reasonCode === 'MEMBERSHIP_STATE_INCONSISTENT');
+assert('19 authoritative owner can remove repairable inconsistent member', result.statusCode === 200 && result.body.reasonCode === 'MEMBER_REMOVED');
+
+await reset();
+await seedOrg('org-1', 'metadata-owner'); await seedUser('ceo-1', { systemRole: 'ceo' }); await seedUser('target-1');
+await db.doc('organizations/org-1/members/target-1').set({ uid: 'target-1', organizationId: 'org-1', role: 'member', organizationRole: 'admin', status: 'active' });
+result = await call('ceo-1');
+assert('19b CEO can remove repairable inconsistent member cross-tenant', result.statusCode === 200 && result.body.reasonCode === 'MEMBER_REMOVED');
+
+await reset();
+await seedOrg('org-1', 'metadata-owner'); await seedUser('admin-1'); await seedMember('org-1', 'admin-1', 'admin'); await seedUser('target-1');
+await db.doc('organizations/org-1/members/target-1').set({ uid: 'target-1', organizationId: 'org-1', role: 'member', organizationRole: 'admin', status: 'active' });
+result = await call('admin-1');
+assert('19c local admin cannot remove inconsistent member', result.statusCode === 409 && result.body.reasonCode === 'MEMBERSHIP_STATE_INCONSISTENT');
 
 await reset();
 await seedOrg('org-1', 'metadata-owner'); await seedUser('legacy-actor'); await seedLegacy('org-1', 'legacy-actor', 'owner'); await seedUser('target-1'); await seedMember('org-1', 'target-1');
