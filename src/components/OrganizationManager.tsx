@@ -835,8 +835,8 @@ export function OrganizationManager({
 
                <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
                   {members.map((member: any, i: number) => (
-                    <div key={member.id} className={`flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between ${i !== members.length - 1 ? 'border-b border-white/5' : ''}`}>
-                      <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
+                    <div key={member.id} data-hub-member-row className={`flex flex-col gap-5 p-4 sm:p-5 ${i !== members.length - 1 ? 'border-b border-white/5' : ''}`}>
+                      <div className="flex w-full min-w-0 items-start gap-3">
                         <div className="w-10 h-10 shrink-0 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
                           {member.photoURL ? <img src={member.photoURL} alt="" className="w-full h-full rounded-xl object-cover" /> : member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
                         </div>
@@ -844,12 +844,12 @@ export function OrganizationManager({
                           <span className="text-sm font-semibold text-[#F5F7FA] break-words">
                             {member.displayName || 'Usuário'} {member.id === user?.uid && '(Você)'}
                           </span>
-                          <span className="text-xs text-[#A0A7B5] break-all">{member.email}</span>
+                          <span title={member.email || ''} className="block max-w-full truncate text-xs text-[#A0A7B5]">{member.email}</span>
                         </div>
                       </div>
                       
                       {(currentUserPerms['organization.roles.manage'] || isGlobalAdmin) ? (
-                        <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 sm:w-auto sm:justify-end">
+                        <div data-hub-member-controls className="flex w-full min-w-0 flex-wrap items-end gap-3 border-t border-white/[0.06] pt-4">
                           {(() => {
                             const inherited = roleInheritsLiveConduct(member.organizationRole ?? member.role);
                             const enabled = inherited || liveConductorByMember[member.id] === true;
@@ -867,7 +867,7 @@ export function OrganizationManager({
                                       ? 'Remover permissão individual de condução'
                                       : 'Permitir condução ao vivo sem liberar gestão de escalas'
                                 }
-                                className={`h-8 px-3 rounded-full border inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-all ${
+                                className={`min-h-[40px] px-3.5 rounded-xl border inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-all ${
                                   enabled
                                     ? 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300'
                                     : 'border-white/[0.08] bg-white/[0.025] text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/[0.05]'
@@ -906,7 +906,7 @@ export function OrganizationManager({
                                 onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
                                 disabled={!canEditRole}
                                 aria-label={`Nível de acesso de ${member.displayName || member.email || 'membro'}`}
-                                className="min-w-0 max-w-full flex-1 sm:flex-none bg-[#0B0F19] border border-white/10 text-[#F5F7FA] text-xs font-medium rounded-lg px-3 py-2 outline-none focus:border-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="min-h-[40px] min-w-[160px] max-w-full flex-1 bg-[#0B0F19] border border-white/10 text-[#F5F7FA] text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-[#2B85EB] disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {!currentIsCanonicalOption && (
                                   <option value={rawRole} disabled={canEditRole}>
@@ -931,7 +931,7 @@ export function OrganizationManager({
                             const isSavingSystemRole = globalRoleSavingId === member.id;
 
                             return (
-                              <div className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.045] px-2.5 py-2 sm:w-auto">
+                              <div className="flex min-h-[40px] min-w-[220px] max-w-full flex-1 items-center gap-2 rounded-xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.045] px-2.5 py-2">
                                 <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-[#7DB7FA]">
                                   {t('governance.ecosystem_label')}
                                 </span>
@@ -942,7 +942,7 @@ export function OrganizationManager({
                                   aria-label={t('governance.ecosystem_role_aria', {
                                     name: member.displayName || member.email || t('governance.member_fallback')
                                   })}
-                                  className="min-w-0 flex-1 rounded-lg border border-white/[0.08] bg-[#080B10] px-2.5 py-1.5 text-[11px] font-semibold text-[#F5F7FA] outline-none focus:border-[#2B85EB] disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[170px]"
+                                  className="min-w-[150px] flex-1 rounded-lg border border-white/[0.08] bg-[#080B10] px-2.5 py-1.5 text-[11px] font-semibold text-[#F5F7FA] outline-none focus:border-[#2B85EB] disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {systemRoleOptions.map(role => (
                                     <option key={role} value={role}>
@@ -960,7 +960,9 @@ export function OrganizationManager({
                               {onEditMember && (
                                 <button
                                    onClick={() => onEditMember(member)}
-                                   className="text-xs text-[#A0A7B5] hover:text-[#F5F7FA] font-medium p-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded bg-white/5 hover:bg-white/10"
+                                   aria-label={`Editar ${member.displayName || member.email || 'membro'}`}
+                                   title="Editar pessoa"
+                                   className="min-h-[40px] min-w-[40px] text-xs text-[#A0A7B5] hover:text-[#F5F7FA] font-medium p-2 transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded-xl bg-white/5 hover:bg-white/10"
                                 >
                                    <Edit2 className="w-3.5 h-3.5" />
                                 </button>
@@ -969,7 +971,7 @@ export function OrganizationManager({
                                 <button
                                   type="button"
                                   onClick={() => onTransferOwnership(member)}
-                                  className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border border-[#2B85EB]/25 bg-[#2B85EB]/10 text-[#6EAFFF] hover:bg-[#2B85EB]/15 transition-colors"
+                                  className="min-h-[40px] text-[11px] font-semibold px-3 py-2 rounded-xl border border-[#2B85EB]/25 bg-[#2B85EB]/10 text-[#6EAFFF] hover:bg-[#2B85EB]/15 transition-colors"
                                 >
                                   Tornar dono
                                 </button>
@@ -977,7 +979,7 @@ export function OrganizationManager({
                               <button
                                  onClick={() => handleRemoveMember(member.id)}
                                  disabled={String(member?.organizationRole ?? member?.role ?? '').toLowerCase() === 'owner'}
-                                 className="text-xs text-red-500/70 hover:text-red-500 font-medium px-2 py-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                 className="min-h-[40px] text-xs text-red-400/80 hover:text-red-300 font-medium px-3 py-2 rounded-xl hover:bg-red-500/[0.06] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                               >
                                  {member.id === user?.uid ? 'Sair' : 'Remover'}
                               </button>
@@ -1005,19 +1007,19 @@ export function OrganizationManager({
                        const isOld = invite.status === 'pending' && invite.createdAt && invite.createdAt.toMillis && (Date.now() - invite.createdAt.toMillis() > 7 * 24 * 60 * 60 * 1000);
                        const showAsExpired = isExpired || isOld;
                        return (
-                       <div key={invite.id} className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${i !== pendingInvites.length - 1 ? 'border-b border-white/5' : ''}`}>
+                       <div key={invite.id} className={`flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between ${i !== pendingInvites.length - 1 ? 'border-b border-white/5' : ''}`}>
                          <div className="flex min-w-0 flex-1 items-center gap-3">
                            <div className="flex min-w-0 flex-1 flex-col">
                              <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
                                Status: <span className={showAsExpired ? "text-red-400" : "text-[#10B981]"}>{showAsExpired ? 'Expirado' : 'Aguardando'}</span>
                              </span>
-                             <span className="text-xs text-[#A0A7B5] break-all">{invite.email || invite.emailNormalized || 'E-mail protegido'}</span>
+                             <span className="text-xs text-[#A0A7B5] break-words [overflow-wrap:anywhere]">{invite.email || invite.emailNormalized || 'E-mail protegido'}</span>
                              <span className="text-xs text-[#A0A7B5]">Acesso: {getOrganizationRoleLabel(String(invite.role || 'member'), organizationRoleLocale)}</span>
                            </div>
                          </div>
                          
                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
-                           <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+                           <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
                              <button
                                type="button"
                                disabled={reissuingInviteId === invite.id}
@@ -1048,19 +1050,19 @@ export function OrganizationManager({
                    <p className="text-xs text-[#A0A7B5] mb-4">Usuários aguardando aprovação para ingressar na organização como membro padrão.</p>
                    <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
                      {joinRequests.map((req: any, i: number) => (
-                       <div key={req.id} className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${i !== joinRequests.length - 1 ? 'border-b border-white/5' : ''}`}>
+                       <div key={req.id} className={`flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between ${i !== joinRequests.length - 1 ? 'border-b border-white/5' : ''}`}>
                          <div className="flex min-w-0 flex-1 items-center gap-3">
                            <div className="w-10 h-10 shrink-0 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
                              {req.photoURL ? <img src={req.photoURL} alt="" className="w-full h-full rounded-xl object-cover" /> : req.displayName?.charAt(0) || req.email?.charAt(0) || '?'}
                            </div>
                            <div className="flex min-w-0 flex-1 flex-col">
                              <span className="text-sm font-semibold text-[#F5F7FA] break-words">{req.displayName || 'Usuário Indefinido'}</span>
-                             <span className="text-xs text-[#A0A7B5] break-all">{req.email || req.id}</span>
+                             <span className="text-xs text-[#A0A7B5] break-words [overflow-wrap:anywhere]">{req.email || req.id}</span>
                            </div>
                          </div>
                          
                          {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
-                           <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+                           <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
                               <button onClick={() => handleRejectJoinRequest && handleRejectJoinRequest(req.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 rounded-lg">
                                 Recusar
                               </button>
@@ -1136,7 +1138,7 @@ export function OrganizationManager({
 
                       return (
                         <div key={app.id} className="bg-[#050505] rounded-2xl border border-white/5 p-4 sm:p-5">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             <div className="flex items-center gap-3 min-w-0">
                               <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
                                 {app.id === 'musicscale' ? (
@@ -1163,7 +1165,7 @@ export function OrganizationManager({
                               </div>
                             </div>
 
-                            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                            <div className="flex flex-col lg:flex-row gap-2 shrink-0">
                               <button
                                 type="button"
                                 onClick={() => onOpenApp?.(app)}

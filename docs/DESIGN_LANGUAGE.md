@@ -54,7 +54,14 @@ Profundidade não é alcançada com sombras cinzas que flutuam, mas com luzes in
   - **Permitido:** Em topbars e backgrounds fixos de containers principais translúcidos.
   - **Proibido:** Dentro de listas de renderização repedida (ex: 50 itens numa lista de membros, NUNCA devem ter backdrop blur individualmente).
 
-## 7. Overlays e Modais
+## 7. Responsividade e identidade humana
+
+- Breakpoints devem considerar a largura **útil do container**, não apenas a largura total da janela. Em áreas com sidebar, nunca compacte identidade humana para preservar controles administrativos na mesma linha.
+- Nome, e-mail, organização e outros identificadores humanos não usam `break-all`. Prefira `truncate` com `title`, `break-words` ou `overflow-wrap:anywhere`, conforme o contexto.
+- Listas administrativas com muitos controles devem separar visualmente **identidade** e **ações/permissões**, permitindo wrap independente.
+- Nenhuma superfície visível ao cliente é considerada pronta só porque TypeScript/build passaram; ela precisa cumprir o Visual Release Gate.
+
+## 8. Overlays e Modais
 
 - Modais devem centralizar a atenção em fundos escuros.
 - O overlay de fundo (*backdrop*) deve ter `bg-black/80` (quase opaco), preferido em relação a blur pesado (`backdrop-blur`). O usuário deve focar no modal, não se esforçar para enxergar o que sobrou atrás do vidro arranhado.
