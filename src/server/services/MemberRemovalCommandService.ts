@@ -33,6 +33,27 @@ function canonicalRole(data: FirebaseFirestore.DocumentData | undefined): Canoni
   return CANONICAL_ORGANIZATION_ROLES.has(candidate) ? candidate : null;
 }
 
+function repairableCanonicalRole(
+  data: FirebaseFirestore.DocumentData | undefined,
+): CanonicalRole | null {
+  if (!data) return null;
+  const role = typeof data.role === 'string' ? data.role.trim().toLowerCase() : '';
+  const organizationRole = typeof data.organizationRole === 'string'
+    ? data.organizationRole.trim().toLowerCase()
+    : '';
+
+  // Any owner marker stays protected even when the legacy fields disagree.
+  if (role === 'owner' || organizationRole === 'owner') return 'owner';
+
+  if (CANONICAL_ORGANIZATION_ROLES.has(organizationRole as CanonicalRole)) {
+    return organizationRole as CanonicalRole;
+  }
+  if (CANONICAL_ORGANIZATION_ROLES.has(role as CanonicalRole)) {
+    return role as CanonicalRole;
+  }
+  return null;
+}
+
 function classifyMembership(data: FirebaseFirestore.DocumentData | undefined): MembershipState {
   if (!data) return { state: 'absent' };
   const status = typeof data.status === 'string' ? data.status.trim().toLowerCase() : '';
@@ -164,12 +185,34 @@ export async function removeOrganizationMember(
         (actorMembership.state === 'active' && (actorMembership.role === 'owner' || actorMembership.role === 'admin'));
       if (!actorHasBaseAuthority) return { success: false as const, reasonCode: 'PERMISSION_DENIED' };
 
-      const targetMembership = classifyMembership(targetMemberSnap.data());
+      const targetData = targetMemberSnap.data();
+      const targetMembership = classifyMembership(targetData);
       if (targetMembership.state === 'inactive') return { success: false as const, reasonCode: 'MEMBERSHIP_INACTIVE' };
-      if (targetMembership.state === 'inconsistent') return { success: false as const, reasonCode: 'MEMBERSHIP_STATE_INCONSISTENT' };
 
-      if (targetMembership.state === 'active') {
-        if (organizationOwnerMatches(organization, memberId) || targetMembership.role === 'owner') {
+      const actorCanRepairLegacyTarget =
+        actorGlobal ||
+        actorIsOrganizationOwner ||
+        (actorMembership.state === 'active' && actorMembership.role === 'owner');
+
+      const repairableTargetRole =
+        targetMembership.state === 'inconsistent'
+          ? repairableCanonicalRole(targetData)
+          : null;
+
+      if (
+        targetMembership.state === 'inconsistent' &&
+        (!actorCanRepairLegacyTarget || !repairableTargetRole)
+      ) {
+        return { success: false as const, reasonCode: 'MEMBERSHIP_STATE_INCONSISTENT' };
+      }
+
+      const targetRole =
+        targetMembership.state === 'active'
+          ? targetMembership.role
+          : repairableTargetRole;
+
+      if (targetRole) {
+        if (organizationOwnerMatches(organization, memberId) || targetRole === 'owner') {
           return { success: false as const, reasonCode: 'OWNER_REMOVAL_REQUIRES_TRANSFER' };
         }
         const authorization = canRemoveTarget({
@@ -177,7 +220,7 @@ export async function removeOrganizationMember(
           actorGlobal,
           actorIsOrganizationOwner,
           actorMembership,
-          targetRole: targetMembership.role
+          targetRole
         });
         if (authorization.allowed === false) {
           return { success: false as const, reasonCode: authorization.reasonCode };
@@ -220,7 +263,7 @@ export async function removeOrganizationMember(
         ? oldOrganizationId
         : activeOrganizationId;
 
-      if (targetMembership.state === 'active') transaction.delete(targetMemberRef);
+      if (targetMembership.state === 'active' || targetMembership.state === 'inconsistent') transaction.delete(targetMemberRef);
       if (legacyUidOrgSnap.exists) transaction.delete(legacyUidOrgRef);
       if (legacyOrgUidSnap.exists) transaction.delete(legacyOrgUidRef);
 
@@ -239,7 +282,7 @@ export async function removeOrganizationMember(
         transaction.delete(bootstrapLockRef);
       }
 
-      if (targetMembership.state === 'active') {
+      if (targetMembership.state === 'active' || targetMembership.state === 'inconsistent') {
         const auditId = `member_${memberId}_${membershipInstanceKey(targetMemberSnap.data()!)}_removed`;
         transaction.set(db.doc(`organizations/${organizationId}/audit_logs/${auditId}`), {
           action: 'organization.member.removed',
@@ -248,7 +291,8 @@ export async function removeOrganizationMember(
           governanceScope: actorGlobal ? 'ecosystem_global' : 'organization',
           memberId,
           organizationId,
-          previousOrganizationRole: targetMembership.role,
+          previousOrganizationRole: targetRole,
+          repairedLegacyMembership: targetMembership.state === 'inconsistent',
           resultingActiveOrganizationId: activeOrganizationId,
           timestamp: FieldValue.serverTimestamp()
         });
@@ -256,7 +300,7 @@ export async function removeOrganizationMember(
 
       return {
         success: true as const,
-        reasonCode: targetMembership.state === 'active' ? 'MEMBER_REMOVED' : 'ALREADY_REMOVED',
+        reasonCode: targetMembership.state === 'active' || targetMembership.state === 'inconsistent' ? 'MEMBER_REMOVED' : 'ALREADY_REMOVED',
         organizationId,
         memberId,
         activeOrganizationId,
