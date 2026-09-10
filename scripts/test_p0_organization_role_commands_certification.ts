@@ -107,7 +107,14 @@ await reset();
 await seedOrg('org-1', 'owner-1'); await seedUser('owner-1'); await seedMember('org-1', 'owner-1', 'owner'); await seedUser('target-1');
 await db.doc('organizations/org-1/members/target-1').set({ uid: 'target-1', organizationId: 'org-1', role: 'member', organizationRole: 'admin', status: 'active' });
 r = await call('owner-1', 'viewer');
-assert('20 inconsistent canonical membership fails closed', r.statusCode === 409 && r.body.reasonCode === 'MEMBERSHIP_STATE_INCONSISTENT');
+const repairedInconsistent = (await db.doc('organizations/org-1/members/target-1').get()).data()!;
+assert('20 authoritative owner can normalize conflicting active legacy roles', r.statusCode === 200 && r.body.reasonCode === 'ROLE_UPDATED' && r.body.repairedLegacyMembership === true && repairedInconsistent.role === 'viewer' && repairedInconsistent.organizationRole === 'viewer');
+
+await reset();
+await seedOrg('org-1', 'metadata-owner'); await seedUser('admin-1'); await seedMember('org-1', 'admin-1', 'admin'); await seedUser('target-1');
+await db.doc('organizations/org-1/members/target-1').set({ uid: 'target-1', organizationId: 'org-1', role: 'member', organizationRole: 'admin', status: 'active' });
+r = await call('admin-1', 'viewer');
+assert('20b local admin cannot normalize conflicting legacy roles', r.statusCode === 409 && r.body.reasonCode === 'MEMBERSHIP_STATE_INCONSISTENT');
 
 await reset();
 await seedOrg('org-1', 'owner-1'); await seedUser('owner-1'); await seedMember('org-1', 'owner-1', 'owner'); await seedUser('target-1');
