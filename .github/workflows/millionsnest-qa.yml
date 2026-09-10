@@ -130,6 +130,9 @@ jobs:
       - name: Global role canonicalization contract
         run: npx tsx scripts/test_global_role_canonicalization.ts
 
+      - name: CEO people governance contract
+        run: npx tsx scripts/test_ceo_people_governance_contract.ts
+
       - name: MusicScale access resolver contract
         run: npx tsx scripts/test_mn_access_01_musicscale_resolver.ts
 
