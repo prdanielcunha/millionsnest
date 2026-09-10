@@ -46,6 +46,9 @@ jobs:
       - name: Lint and typecheck
         run: npm run lint
 
+      - name: Hub app experience regression guard
+        run: npx tsx scripts/test_hub_app_experience_framework.ts
+
       - name: MusicScale Action OS access projection
         run: npx tsx scripts/test_mn_access_03_dashboard_projection.ts
 
