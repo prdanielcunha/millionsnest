@@ -103,6 +103,9 @@ jobs:
       - name: Hub narrow viewport polish
         run: npx tsx scripts/test_hub_narrow_viewports.ts
 
+      - name: Hub visual release gate
+        run: npx tsx scripts/test_hub_visual_release_gate.ts
+
       - name: Hub CEO stale-owner repair affordance
         run: npx tsx scripts/test_hub_stale_owner_ui_policy.ts
 
