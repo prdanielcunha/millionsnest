@@ -7,6 +7,7 @@ const guide = readFileSync('src/components/dashboard/MusicScaleGuideCenter.tsx',
 const organization = readFileSync('src/components/OrganizationManager.tsx', 'utf8');
 const inviteModal = readFileSync('src/components/InviteModal.tsx', 'utf8');
 const launcher = readFileSync('src/lib/ecosystemLauncher.ts', 'utf8');
+const appExperienceRegistry = readFileSync('src/lib/appExperienceRegistry.ts', 'utf8');
 const server = readFileSync('server.ts', 'utf8');
 const rules = readFileSync('firestore.rules', 'utf8');
 const locales = ['pt', 'en', 'es'].map(function (lang) {
@@ -41,9 +42,12 @@ assert.match(workspace, /if \(!experience\.plan\) return null;/, 'unknown app pl
 assert.equal(workspace.includes("t('workspace.plan_starter', 'Starter')"), false, 'unknown plan fallback must not be Starter');
 
 for (const route of ['/songs', '/scales', '/band-scales', '/users', '/profile', '/plan-usage']) {
-  assert.ok(launcher.includes("'" + route + "'"), 'launcher must safely allow MusicScale deep link: ' + route);
+  assert.ok(appExperienceRegistry.includes("'" + route + "'"), 'registry must safely allow MusicScale deep link: ' + route);
 }
+assert.match(launcher, /isAllowedAppDestinationPath/, 'launcher must validate deep links through the canonical app experience registry');
 assert.match(launcher, /Destino do aplicativo inválido/, 'deep links must fail closed');
+assert.match(appExperienceRegistry, /cleanPath\.includes\('\:\/\/'\)/, 'destination registry must reject absolute external URLs');
+assert.match(appExperienceRegistry, /cleanPath\.includes\('\\\\'\)/, 'destination registry must reject backslash paths');
 
 assert.equal(organization.includes('Cargos e Capabilities'), false, 'customer roles must not expose capabilities jargon');
 assert.equal(organization.includes('Actor:'), false, 'customer audit must not expose raw actor IDs');
@@ -93,4 +97,4 @@ for (const locale of locales) {
   }
 }
 
-console.log('PASS complete Hub: realtime, app summary, safe administration, invitations, deep links and privacy');
+console.log('PASS complete Hub: realtime, app summary, safe administration, invitations, registry-backed deep links and privacy');
