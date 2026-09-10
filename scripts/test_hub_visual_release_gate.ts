@@ -10,11 +10,17 @@ const admin = read('src/pages/EcosystemAdmin.tsx');
 const landing = read('src/pages/MusicScaleLanding.tsx');
 const guidedDemo = read('src/components/MusicScaleGuidedDemo.tsx');
 const checkout = read('src/pages/Checkout.tsx');
+const styles = read('src/index.css');
 
 assert.equal(organization.includes('break-all\">{member.email}'), false, 'member email cannot use break-all');
 assert.ok(organization.includes('data-hub-member-row'), 'member rows must remain structurally identifiable');
 assert.ok(organization.includes('data-hub-member-controls'), 'member controls must remain separated from identity');
 assert.equal(organization.includes('data-hub-member-row className={`flex flex-col gap-4 p-4 sm:flex-row'), false, 'member rows cannot switch horizontal at viewport sm');
+assert.ok(styles.includes('[data-hub-member-controls] > div > select'), 'nested ecosystem-role select must have a containment rule');
+assert.ok(styles.includes('min-width: 0 !important;'), 'nested ecosystem-role select must be allowed to shrink inside its flex item');
+assert.ok(styles.includes('[data-hub-member-controls] > div {'), 'ecosystem governance control must have its own bounded flex item');
+assert.ok(styles.includes('overflow: hidden;'), 'nested governance controls must not paint over adjacent actions');
+assert.ok(styles.includes('input,\nselect,\ntextarea {\n  max-width: 100%;'), 'form controls must stay bounded by their containing surface');
 assert.ok(dashboard.includes('[overflow-wrap:anywhere]\">{user.email}'), 'account email must stay readable');
 assert.ok(invite.includes('max-h-[calc(100dvh'), 'invite modal must use dynamic viewport height');
 assert.ok(invite.includes('w-full sm:max-w-md'), 'invite modal must fit phones');
@@ -30,4 +36,4 @@ for (const visual of ['CreateScaleVisual', 'RepertoireVisual', 'NotificationsVis
   assert.ok(guidedDemo.includes(`function ${visual}`), `guided demo must contain ${visual}`);
 }
 assert.ok(checkout.includes('max-w-'), 'checkout must retain bounded content width');
-console.log('PASS Hub visual release gate: structural overflow, identity and product-proof protections are present');
+console.log('PASS Hub visual release gate: structural overflow, identity, nested control containment and product-proof protections are present');
