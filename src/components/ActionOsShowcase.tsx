@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowUpRight,
@@ -33,12 +33,29 @@ export function ActionOsShowcase() {
   const reduceMotion = useReducedMotion();
   const [activeLane, setActiveLane] = useState<DemoLane>("today");
   const [device, setDevice] = useState<DemoDevice>("desktop");
+  const [isNarrowViewport, setIsNarrowViewport] = useState(() =>
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 639px)").matches
+  );
 
-  const isCompact = device === "mobile";
-  const isTablet = device === "tablet";
-  const frameWidth = device === "desktop"
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const syncViewport = () => setIsNarrowViewport(query.matches);
+    syncViewport();
+    query.addEventListener("change", syncViewport);
+    return () => query.removeEventListener("change", syncViewport);
+  }, []);
+
+  // A real phone must never inherit the desktop demo state. The device
+  // selector is intentionally hidden below sm, so the viewport becomes
+  // authoritative there instead of leaving a 180px desktop sidebar squeezed
+  // inside a narrow screen.
+  const effectiveDevice: DemoDevice = isNarrowViewport ? "mobile" : device;
+  const isCompact = effectiveDevice === "mobile";
+  const isTablet = effectiveDevice === "tablet";
+  const frameWidth = effectiveDevice === "desktop"
     ? "max-w-[1180px]"
-    : device === "tablet"
+    : effectiveDevice === "tablet"
       ? "max-w-[820px]"
       : "max-w-[430px]";
 
@@ -213,20 +230,20 @@ export function ActionOsShowcase() {
       : renderCommitments();
 
   return (
-    <section id="action-os-demo" className="relative overflow-hidden border-y border-white/[0.06] bg-[#040608] py-24 md:py-32">
+    <section id="action-os-demo" className="relative overflow-hidden border-y border-white/[0.06] bg-[#040608] py-16 sm:py-24 md:py-32">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute left-1/2 top-12 h-[440px] w-[900px] -translate-x-1/2 rounded-full bg-[#2B85EB]/[0.08] blur-[150px]" />
         <div className="absolute inset-0 opacity-[0.18]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px)", backgroundSize: "56px 56px", maskImage: "linear-gradient(to bottom,transparent,black 18%,black 82%,transparent)" }} />
       </div>
 
-      <div className="relative mx-auto max-w-7xl px-5 sm:px-6">
+      <div className="relative mx-auto w-full max-w-7xl px-4 sm:px-6">
         <div className="grid gap-8 lg:grid-cols-[1fr_.56fr] lg:items-end">
           <div className="max-w-4xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#6EAFFF]/20 bg-[#6EAFFF]/[0.065] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#BFD9FF]">
               <ShieldCheck className="h-3.5 w-3.5" />
               {t("action_demo_eyebrow")}
             </div>
-            <h2 className="mt-5 text-4xl font-semibold leading-[1.01] tracking-[-0.055em] text-white md:text-6xl">
+            <h2 className="mt-5 text-[2.15rem] font-semibold leading-[1.03] tracking-[-0.05em] text-white sm:text-4xl md:text-6xl">
               <Trans i18nKey="landing:action_demo_title" components={{ 1: <span className="text-[#8D98A8]" /> }} />
             </h2>
             <p className="mt-6 max-w-3xl text-base leading-relaxed text-[#8D98A8] md:text-lg">
@@ -245,8 +262,8 @@ export function ActionOsShowcase() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap gap-2" role="tablist" aria-label={t("action_demo_lane_selector")}>
+        <div className="mt-8 flex flex-col gap-3 sm:mt-10 md:flex-row md:items-center md:justify-between">
+          <div className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 pb-1 no-scrollbar sm:flex-wrap" role="tablist" aria-label={t("action_demo_lane_selector")}>
             {laneOrder.map(lane => (
               <button
                 key={lane}
@@ -254,7 +271,7 @@ export function ActionOsShowcase() {
                 role="tab"
                 aria-selected={activeLane === lane}
                 onClick={() => setActiveLane(lane)}
-                className={`min-h-[40px] rounded-full border px-4 text-[11px] font-semibold transition ${activeLane === lane
+                className={`min-h-[40px] shrink-0 rounded-full border px-4 text-[11px] font-semibold transition ${activeLane === lane
                   ? "border-[#6EAFFF]/30 bg-[#2B85EB]/12 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08)]"
                   : "border-white/[0.07] bg-white/[0.02] text-[#7E8999] hover:bg-white/[0.045] hover:text-white"}`}
               >
@@ -285,7 +302,7 @@ export function ActionOsShowcase() {
           </div>
         </div>
 
-        <motion.div layout className={`mx-auto mt-5 w-full transition-[max-width] duration-500 ${frameWidth}`}>
+        <motion.div layout className={`mx-auto mt-5 min-w-0 w-full transition-[max-width] duration-500 ${frameWidth}`}>
           <div className="relative overflow-hidden rounded-[32px] border border-white/[0.10] bg-white/[0.035] p-2.5 shadow-[0_50px_130px_rgba(0,0,0,.55)] backdrop-blur-2xl sm:p-3">
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,.08),transparent_18%,transparent_72%,rgba(43,133,235,.08))]" />
             <div className="relative overflow-hidden rounded-[24px] border border-white/[0.07] bg-[#05070B]">

@@ -27,6 +27,8 @@ assert.match(actionDemo, /action_demo_lane_today/, 'public demo must show the To
 assert.match(actionDemo, /action_demo_lane_changes/, 'public demo must show the Changes lane');
 assert.match(actionDemo, /action_demo_lane_commitments/, 'public demo must show the preparation/commitments lane');
 assert.match(actionDemo, /useReducedMotion/, 'public demo motion must respect reduced-motion accessibility');
+assert.match(actionDemo, /matchMedia\("\(max-width: 639px\)"\)/, 'real phone viewport must explicitly force the mobile demo state');
+assert.match(actionDemo, /effectiveDevice: DemoDevice = isNarrowViewport \? "mobile" : device/, 'hidden device selector must never leave a desktop sidebar active on a phone');
 
 assert.match(shell, /sticky top-2/, 'Hub topbar must visibly float inside the workspace');
 assert.match(shell, /rounded-\[20px\]/, 'Hub topbar must have the Design 3 rounded shell');

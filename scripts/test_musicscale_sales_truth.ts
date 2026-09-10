@@ -4,6 +4,7 @@ import { MUSIC_SCALE_PLANS } from '../src/lib/musicScalePlans.js';
 
 const pricing = readFileSync('src/components/Pricing.tsx', 'utf8');
 const landing = readFileSync('src/pages/MusicScaleLanding.tsx', 'utf8');
+const guidedDemo = readFileSync('src/components/MusicScaleGuidedDemo.tsx', 'utf8');
 const engine = readFileSync('src/packages/i18n/engine.ts', 'utf8');
 const pt = readFileSync('src/packages/i18n/locales/pt.ts', 'utf8');
 const en = readFileSync('src/packages/i18n/locales/en.ts', 'utf8');
@@ -71,5 +72,13 @@ for (const [lang, source] of [['pt', pt], ['en', en], ['es', es]] as const) {
   assert.match(source, /pricing_team_payment_title:/, `${lang} must translate the team-level pricing headline`);
 }
 assert.match(landing, /isGlobalPrivilegedUser\(profile\)/, 'landing global-role checks must use the canonical helper');
+assert.match(landing, /MusicScaleGuidedDemo/, 'sales landing must use the step-specific guided product demo');
+assert.equal(landing.includes('/* Premium Mockup Guided Demo */'), false, 'legacy guided demo shell that reused the same screenshot must be removed');
+assert.equal(guidedDemo.includes('telas.png'), false, 'step-specific guided demo component must not reuse the generic landing screenshot');
+for (const visual of ['CreateScaleVisual', 'RepertoireVisual', 'NotificationsVisual', 'ConfirmationsVisual', 'PerformanceVisual']) {
+  assert.match(guidedDemo, new RegExp(`function ${visual}\\(`), `guided demo must include a distinct ${visual} product state`);
+}
+assert.match(guidedDemo, /lg:hidden/, 'guided demo must provide a dedicated compact mobile step navigator');
+assert.match(guidedDemo, /overflow-x-auto/, 'mobile guided demo controls must scroll horizontally instead of overflowing the viewport');
 
 console.log('PASS MusicScale sales truth and i18n contract');
