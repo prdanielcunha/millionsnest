@@ -12,6 +12,12 @@ import {
   normalizeExistingOrganizationRole
 } from '../lib/organizationRoles.js';
 import { getMemberRoleUiPolicy } from '../lib/organizationMemberRoleUiPolicy.js';
+import {
+  ASSIGNABLE_SYSTEM_ROLES,
+  canChangeSystemRole,
+  getSystemRoleLabel,
+  normalizeLegacySystemRole
+} from '../lib/roleResolver.js';
 import { feedback } from '../packages/ui/feedback.js';
 import type { HubAppExperience } from '../lib/hubAppExperience.js';
 import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
@@ -78,6 +84,7 @@ export function OrganizationManager({
   profile,
   onSaveOrg,
   handleUpdateMemberRole,
+  handleUpdateMemberSystemRole,
   handleRemoveMember,
   onEditMember,
   onTransferOwnership,
@@ -107,7 +114,9 @@ export function OrganizationManager({
 }: any) {
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
   const canCrossTenantAccess = canEnterAnyOrganization(profile);
-  const isEcosystemSupport = resolveEcosystemPrivilegePolicy(profile?.systemRole).isEcosystemSupportStaff;
+  const ecosystemPrivilegePolicy = resolveEcosystemPrivilegePolicy(profile?.systemRole);
+  const isEcosystemSupport = ecosystemPrivilegePolicy.isEcosystemSupportStaff;
+  const canManageGlobalGovernance = ecosystemPrivilegePolicy.canManageGlobalGovernance;
   const isCrossTenantSupportSession = isEcosystemSupport && Boolean(adminSelectedOrgId);
   const [activeTab, setActiveTabInternal] = useState<OrgTab>(
     (initialTab as OrgTab) || (isCrossTenantSupportSession ? 'members' : 'settings')
@@ -117,6 +126,7 @@ export function OrganizationManager({
   const [liveConductorByMember, setLiveConductorByMember] = useState<Record<string, boolean>>({});
   const [liveConductorSavingId, setLiveConductorSavingId] = useState<string | null>(null);
   const [liveConductorError, setLiveConductorError] = useState<string | null>(null);
+  const [globalRoleSavingId, setGlobalRoleSavingId] = useState<string | null>(null);
   const [reissuingInviteId, setReissuingInviteId] = useState<string | null>(null);
   const [inviteActionMessage, setInviteActionMessage] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -347,6 +357,36 @@ export function OrganizationManager({
     ['owner', 'admin', 'leader'].includes(
       String(role || '').trim().toLowerCase(),
     );
+
+  const getSystemRoleOptionsForMember = (member: any) => {
+    const actorRole = String(
+      normalizeLegacySystemRole(profile?.systemRole || 'user') || 'user',
+    );
+    const targetRole = String(
+      normalizeLegacySystemRole(member?.systemRole || 'user') || 'user',
+    );
+
+    return ASSIGNABLE_SYSTEM_ROLES.filter((candidate) =>
+      candidate === targetRole ||
+      canChangeSystemRole(actorRole, targetRole, candidate).allowed
+    );
+  };
+
+  const handleChangeMemberSystemRole = async (member: any, nextRole: string) => {
+    if (
+      !canManageGlobalGovernance ||
+      typeof handleUpdateMemberSystemRole !== 'function' ||
+      !member?.id ||
+      member.id === user?.uid
+    ) return;
+
+    setGlobalRoleSavingId(member.id);
+    try {
+      await handleUpdateMemberSystemRole(member.id, nextRole);
+    } finally {
+      setGlobalRoleSavingId(null);
+    }
+  };
 
   const handleToggleLiveConduct = async (member: any) => {
     if (!organization?.id || !user || roleInheritsLiveConduct(member?.role)) return;
@@ -880,6 +920,37 @@ export function OrganizationManager({
                             );
                           })()}
                           
+                          {canManageGlobalGovernance && member.id !== user?.uid && typeof handleUpdateMemberSystemRole === 'function' && (() => {
+                            const currentSystemRole = String(
+                              normalizeLegacySystemRole(member?.systemRole || 'user') || 'user',
+                            );
+                            const systemRoleOptions = getSystemRoleOptionsForMember(member);
+                            const systemRoleEditable = systemRoleOptions.some(role => role !== currentSystemRole);
+                            const isSavingSystemRole = globalRoleSavingId === member.id;
+
+                            return (
+                              <div className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.045] px-2.5 py-2 sm:w-auto">
+                                <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-[#7DB7FA]">
+                                  Ecossistema
+                                </span>
+                                <select
+                                  value={currentSystemRole}
+                                  onChange={(event) => void handleChangeMemberSystemRole(member, event.target.value)}
+                                  disabled={!systemRoleEditable || isSavingSystemRole}
+                                  aria-label={`Cargo do ecossistema de ${member.displayName || member.email || 'membro'}`}
+                                  className="min-w-0 flex-1 rounded-lg border border-white/[0.08] bg-[#080B10] px-2.5 py-1.5 text-[11px] font-semibold text-[#F5F7FA] outline-none focus:border-[#2B85EB] disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[170px]"
+                                >
+                                  {systemRoleOptions.map(role => (
+                                    <option key={role} value={role}>
+                                      {getSystemRoleLabel(role)}
+                                    </option>
+                                  ))}
+                                </select>
+                                {isSavingSystemRole && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#77B5FF]" />}
+                              </div>
+                            );
+                          })()}
+
                           {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
                             <>
                               {onEditMember && (
