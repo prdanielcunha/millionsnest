@@ -116,6 +116,32 @@ assert.equal(
   'support app view must hide plan and billing controls'
 );
 
+assert.equal(
+  organizationManager.includes('canManageGlobalGovernance'),
+  true,
+  'organization team UI must gate ecosystem-role controls on canonical global governance'
+);
+assert.equal(
+  organizationManager.includes('ASSIGNABLE_SYSTEM_ROLES'),
+  true,
+  'organization team UI must use canonical assignable ecosystem roles'
+);
+assert.equal(
+  organizationManager.includes('Cargo do ecossistema de'),
+  true,
+  'organization team UI must separate ecosystem role from organization access'
+);
+assert.equal(
+  dashboard.includes('/api/admin/users/${encodeURIComponent(memberId)}/role'),
+  true,
+  'organization team UI must delegate ecosystem-role writes to the audited canonical server route'
+);
+assert.equal(
+  dashboard.includes("canonicalSystemRole === 'ceo'"),
+  true,
+  'CEO promotion must be treated as an explicit ecosystem role outcome'
+);
+
 const ecosystemLauncher = readFileSync('src/lib/ecosystemLauncher.ts', 'utf8');
 assert.equal(
   ecosystemLauncher.includes("String(profile?.systemRole || '').trim().toLowerCase() === 'ecosystem_support'"),
