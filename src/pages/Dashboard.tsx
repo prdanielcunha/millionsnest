@@ -1304,7 +1304,7 @@ export function Dashboard() {
         feedback.error(
           data?.message ||
           data?.error ||
-          'Não foi possível alterar o cargo global dessa pessoa.'
+          t('governance.system_role_update_failed')
         );
         return;
       }
@@ -1318,12 +1318,12 @@ export function Dashboard() {
 
       feedback.success(
         canonicalSystemRole === 'ceo'
-          ? 'Cargo global atualizado: CEO do Ecossistema.'
-          : 'Cargo global atualizado com sucesso.'
+          ? t('governance.system_role_updated_ceo')
+          : t('governance.system_role_updated')
       );
     } catch (error) {
       console.error('[Dashboard] Failed to update ecosystem role', error);
-      feedback.error('Não foi possível alterar o cargo global dessa pessoa.');
+      feedback.error(t('governance.system_role_update_failed'));
     }
   };
 
