@@ -79,7 +79,7 @@ assert.ok(rules.includes('match /scales/{scaleId}/responseHistory/{historyId}'),
 assert.match(rules, /match \/invites\/\{inviteId\} \{[\s\S]*allow read, create, update, delete: if false;/, 'invitation secrets must stay backend-only');
 
 assert.match(guide, /completedByStep/, 'all onboarding steps must derive completion from live state');
-assert.match(guide, /nextStepId/, 'onboarding must identify one next step');
+assert.match(guide, /const nextStep = GUIDE_STEPS\.find/, 'onboarding must identify one next incomplete step');
 assert.match(guide, /pathForStep/, 'onboarding actions must deep-link to the right MusicScale area');
 
 for (const locale of locales) {
