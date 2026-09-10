@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Building2, Users, LayoutGrid, CreditCard, ShieldCheck, Settings, Check, X, Loader2, Link, Copy, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PremiumEmptyState } from '../packages/ui/empty-state.js';
@@ -112,6 +113,7 @@ export function OrganizationManager({
   appExperiences = [],
   onOpenApp
 }: any) {
+  const { t } = useTranslation(['dashboard']);
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
   const canCrossTenantAccess = canEnterAnyOrganization(profile);
   const ecosystemPrivilegePolicy = resolveEcosystemPrivilegePolicy(profile?.systemRole);
@@ -931,13 +933,15 @@ export function OrganizationManager({
                             return (
                               <div className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.045] px-2.5 py-2 sm:w-auto">
                                 <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-[#7DB7FA]">
-                                  Ecossistema
+                                  {t('governance.ecosystem_label')}
                                 </span>
                                 <select
                                   value={currentSystemRole}
                                   onChange={(event) => void handleChangeMemberSystemRole(member, event.target.value)}
                                   disabled={!systemRoleEditable || isSavingSystemRole}
-                                  aria-label={`Cargo do ecossistema de ${member.displayName || member.email || 'membro'}`}
+                                  aria-label={t('governance.ecosystem_role_aria', {
+                                    name: member.displayName || member.email || t('governance.member_fallback')
+                                  })}
                                   className="min-w-0 flex-1 rounded-lg border border-white/[0.08] bg-[#080B10] px-2.5 py-1.5 text-[11px] font-semibold text-[#F5F7FA] outline-none focus:border-[#2B85EB] disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[170px]"
                                 >
                                   {systemRoleOptions.map(role => (
