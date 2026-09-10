@@ -946,7 +946,7 @@ export function OrganizationManager({
                                 >
                                   {systemRoleOptions.map(role => (
                                     <option key={role} value={role}>
-                                      {getSystemRoleLabel(role)}
+                                      {t(`governance.system_roles.${role}`, { defaultValue: getSystemRoleLabel(role) })}
                                     </option>
                                   ))}
                                 </select>
