@@ -466,7 +466,6 @@ export function MusicScaleLanding() {
               });
             }}
           />
-          </div>
         </div>
       </section>
 
