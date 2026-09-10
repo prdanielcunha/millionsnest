@@ -25,6 +25,7 @@ on:
       - 'tests/firestore/organization_members.rules.test.ts'
       - 'scripts/test_global_role_canonicalization.ts'
       - 'scripts/test_global_tenant_governance.ts'
+      - 'scripts/test_ceo_people_governance_contract.ts'
       - 'scripts/test_mn_access_01_musicscale_resolver.ts'
       - 'scripts/test_mn_access_02_musicscale_handoff.ts'
       - '.github/workflows/rbac-qa.yml'
@@ -68,6 +69,9 @@ jobs:
 
       - name: Global tenant governance contract
         run: npx tsx scripts/test_global_tenant_governance.ts
+
+      - name: CEO people governance contract
+        run: npx tsx scripts/test_ceo_people_governance_contract.ts
 
       - name: MusicScale access resolver contract
         run: npx tsx scripts/test_mn_access_01_musicscale_resolver.ts

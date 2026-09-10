@@ -1480,6 +1480,7 @@ export function Dashboard() {
       ).toLowerCase();
       const targetIsAuthoritativeOwner =
         Boolean(authoritativeOwnerUid) && authoritativeOwnerUid === editingMember.id;
+      let persistedOrganizationRole = originalRole;
 
       if (
         editingMember.id !== user.uid &&
@@ -1516,6 +1517,9 @@ export function Dashboard() {
         if (!roleResponse.ok || roleData?.success !== true) {
           throw new Error(roleData?.reasonCode || 'ROLE_UPDATE_FAILED');
         }
+        persistedOrganizationRole = String(
+          roleData?.organizationRole || roleData?.targetRole || editingMemberRole
+        ).toLowerCase();
         if (useOwnershipRepair) {
           setOrganization((previous: any) => previous ? {
             ...previous,
@@ -1550,8 +1554,8 @@ export function Dashboard() {
         ...member,
         displayName: editingMemberName.trim(),
         photoURL: editingMemberPhoto.trim(),
-        role: editingMemberRole || originalRole,
-        organizationRole: editingMemberRole || originalRole
+        role: persistedOrganizationRole,
+        organizationRole: persistedOrganizationRole
       } : member));
       setEditingMember(null);
       feedback.success("Dados do membro atualizados.");
