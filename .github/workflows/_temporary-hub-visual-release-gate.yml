@@ -49,11 +49,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Commit tested patch
+      - name: Commit tested product patch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/_temporary-hub-visual-release-gate.yml scripts/_apply_visual_hotfix.py
-          git add src/components/OrganizationManager.tsx src/pages/Dashboard.tsx scripts/test_hub_narrow_viewports.ts scripts/test_hub_visual_release_gate.ts .github/workflows/millionsnest-qa.yml docs/DESIGN_LANGUAGE.md docs/MILLIONSNEST_ACTION_OS_BLUEPRINT_2026.md docs/HUB_VISUAL_RELEASE_GATE.md
+          git add src/components/OrganizationManager.tsx src/pages/Dashboard.tsx scripts/test_hub_narrow_viewports.ts scripts/test_hub_visual_release_gate.ts docs/DESIGN_LANGUAGE.md docs/MILLIONSNEST_ACTION_OS_BLUEPRINT_2026.md docs/HUB_VISUAL_RELEASE_GATE.md
           git commit -m "fix: harden Hub visual release gate"
           git push origin HEAD:fix/hub-visual-release-gate
