@@ -704,6 +704,22 @@ export default {
     error_plan: "Por favor, selecione um plano principal."
   },
   dashboard: {
+    governance: {
+      ecosystem_label: "Ecossistema",
+      ecosystem_role_aria: "Cargo do ecossistema de {{name}}",
+      member_fallback: "membro",
+      system_role_update_failed: "Não foi possível alterar o cargo global dessa pessoa.",
+      system_role_updated: "Cargo global atualizado com sucesso.",
+      system_role_updated_ceo: "Cargo global atualizado: CEO do Ecossistema.",
+      system_roles: {
+        user: "Usuário Padrão",
+        ecosystem_support: "Suporte do Ecossistema",
+        global_admin: "Administrador Global",
+        ecosystem_owner: "Proprietário do Ecossistema",
+        founder: "Fundador",
+        ceo: "CEO do Ecossistema"
+      }
+    },
     support: {
       actions: {
         need_help: "Preciso de ajuda",
