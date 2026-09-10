@@ -73,7 +73,8 @@ for (const [lang, source] of [['pt', pt], ['en', en], ['es', es]] as const) {
 }
 assert.match(landing, /isGlobalPrivilegedUser\(profile\)/, 'landing global-role checks must use the canonical helper');
 assert.match(landing, /MusicScaleGuidedDemo/, 'sales landing must use the step-specific guided product demo');
-assert.equal(landing.includes('src="/telas.png"'), false, 'guided sales demo must not reuse the same generic screenshot for every step');
+assert.equal(landing.includes('/* Premium Mockup Guided Demo */'), false, 'legacy guided demo shell that reused the same screenshot must be removed');
+assert.equal(guidedDemo.includes('telas.png'), false, 'step-specific guided demo component must not reuse the generic landing screenshot');
 for (const visual of ['CreateScaleVisual', 'RepertoireVisual', 'NotificationsVisual', 'ConfirmationsVisual', 'PerformanceVisual']) {
   assert.match(guidedDemo, new RegExp(`function ${visual}\\(`), `guided demo must include a distinct ${visual} product state`);
 }
