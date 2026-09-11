@@ -150,11 +150,42 @@ export function resolveInstalledHubApps(
     .sort((a, b) => (a.app.order || 99) - (b.app.order || 99));
 }
 
+function projectAdministrativePilotIntoCurrentHubSession(
+  experiences: HubAppExperience[],
+  organization: any,
+): void {
+  if (!organization || typeof organization !== 'object') return;
+
+  const connectExperience = experiences.find(experience => experience.app.id === 'connect');
+  if (
+    !connectExperience ||
+    connectExperience.state !== 'administrative' ||
+    connectExperience.canOpen !== true
+  ) {
+    return;
+  }
+
+  // The current Dashboard launcher still checks organization.enabledApps before
+  // invoking the canonical handoff. For the founder/admin pilot, project the
+  // already-authorized catalog decision into this in-memory Hub session only.
+  // This does not write Firestore, grant tenant membership, or bypass the server:
+  // create-handoff and Connect both revalidate the global identity + organization.
+  const enabledApps = Array.isArray(organization.enabledApps)
+    ? organization.enabledApps.filter((value: unknown): value is string => typeof value === 'string')
+    : [];
+  if (!enabledApps.includes('connect')) {
+    organization.enabledApps = [...enabledApps, 'connect'];
+  }
+}
+
 export function resolveHubAppCatalog(
   apps: EcosystemApp[],
   params: Omit<Parameters<typeof resolveHubAppExperience>[0], 'app'>
 ): HubAppExperience[] {
-  return apps
+  const experiences = apps
     .map(app => resolveHubAppExperience({ ...params, app }))
     .sort((a, b) => (a.app.order || 99) - (b.app.order || 99));
+
+  projectAdministrativePilotIntoCurrentHubSession(experiences, params.organization);
+  return experiences;
 }
