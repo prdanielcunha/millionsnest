@@ -6,6 +6,7 @@ import { PremiumEmptyState } from '../packages/ui/empty-state.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { normalizeSlug } from '../lib/slug.js';
 import { isGlobalPrivilegedUser, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy } from '../lib/permissionService.js';
+import { getAdminHomeOrganizationLabel, isAdminOrganizationVisible } from '../lib/adminOrganizationSelector.js';
 import {
   getInviteableOrganizationRolesForActor,
   getOrganizationRoleDescription,
@@ -546,8 +547,15 @@ export function OrganizationManager({
             }}
             className="bg-[#050505] text-[#F5F7FA] text-sm rounded-xl px-4 py-2.5 border border-white/10 outline-none w-full sm:w-auto sm:min-w-[250px]"
           >
-             <option value={profile?.organizationId || ''}>Voltar à sua organização</option>
-             {adminOrgs.filter(o => o.id !== profile?.organizationId).map(org => (
+             <option value={profile?.organizationId || ''}>
+               {getAdminHomeOrganizationLabel({
+                 homeOrganizationId: profile?.organizationId,
+                 selectedOrganizationId: adminSelectedOrgId,
+                 currentOrganizationName: organization?.name,
+                 organizations: adminOrgs
+               })}
+             </option>
+             {adminOrgs.filter(o => isAdminOrganizationVisible(o, profile?.organizationId)).map(org => (
                <option key={org.id} value={org.id}>{org.name} {org.slug ? `(${org.slug})` : ''}</option>
              ))}
           </select>
