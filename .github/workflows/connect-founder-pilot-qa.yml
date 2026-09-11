@@ -11,8 +11,10 @@ on:
       - 'src/lib/appExperienceRegistry.ts'
       - 'src/lib/ecosystemLauncher.ts'
       - 'src/server/services/ConnectHandoffService.ts'
+      - 'src/server/services/ConnectSessionContextService.ts'
       - 'scripts/test_connect_founder_pilot.ts'
       - 'scripts/test_connect_handoff.ts'
+      - 'scripts/test_connect_selected_org_context.ts'
       - '.github/workflows/connect-founder-pilot-qa.yml'
   push:
     branches:
@@ -24,8 +26,10 @@ on:
       - 'src/lib/appExperienceRegistry.ts'
       - 'src/lib/ecosystemLauncher.ts'
       - 'src/server/services/ConnectHandoffService.ts'
+      - 'src/server/services/ConnectSessionContextService.ts'
       - 'scripts/test_connect_founder_pilot.ts'
       - 'scripts/test_connect_handoff.ts'
+      - 'scripts/test_connect_selected_org_context.ts'
       - '.github/workflows/connect-founder-pilot-qa.yml'
 
 permissions:
@@ -48,5 +52,7 @@ jobs:
         run: npx tsx scripts/test_connect_founder_pilot.ts
       - name: Preserve Connect handoff contract
         run: npx tsx scripts/test_connect_handoff.ts
+      - name: Pin selected organization during Connect session bootstrap
+        run: npx tsx scripts/test_connect_selected_org_context.ts
       - name: Build Hub
         run: npm run build
