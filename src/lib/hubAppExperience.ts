@@ -89,11 +89,6 @@ export function resolveHubAppExperience(params: {
     };
   }
 
-  // Controlled Connect founder/admin pilot: keep the public catalog in beta and
-  // unavailable to normal organizations, while allowing canonical global admins
-  // to exercise the real handoff after the live Core is certified in production.
-  // The launcher/server still revalidate identity and organization; this is only
-  // a Hub presentation decision and never an authorization boundary.
   if (
     app.id === 'connect' &&
     app.status === 'beta' &&
@@ -150,11 +145,37 @@ export function resolveInstalledHubApps(
     .sort((a, b) => (a.app.order || 99) - (b.app.order || 99));
 }
 
+function projectAdministrativePilotIntoCurrentHubSession(
+  experiences: HubAppExperience[],
+  organization: any,
+): void {
+  if (!organization || typeof organization !== 'object') return;
+
+  const connectExperience = experiences.find(experience => experience.app.id === 'connect');
+  if (
+    !connectExperience ||
+    connectExperience.state !== 'administrative' ||
+    connectExperience.canOpen !== true
+  ) {
+    return;
+  }
+
+  const enabledApps = Array.isArray(organization.enabledApps)
+    ? organization.enabledApps.filter((value: unknown): value is string => typeof value === 'string')
+    : [];
+  if (!enabledApps.includes('connect')) {
+    organization.enabledApps = [...enabledApps, 'connect'];
+  }
+}
+
 export function resolveHubAppCatalog(
   apps: EcosystemApp[],
   params: Omit<Parameters<typeof resolveHubAppExperience>[0], 'app'>
 ): HubAppExperience[] {
-  return apps
+  const experiences = apps
     .map(app => resolveHubAppExperience({ ...params, app }))
     .sort((a, b) => (a.app.order || 99) - (b.app.order || 99));
+
+  projectAdministrativePilotIntoCurrentHubSession(experiences, params.organization);
+  return experiences;
 }
