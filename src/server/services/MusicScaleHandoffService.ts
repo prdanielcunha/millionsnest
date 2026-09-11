@@ -1,4 +1,5 @@
 import { resolveEcosystemAppAccess } from './EcosystemAccessResolver.js';
+import { handleConnectHandoffRequest } from './ConnectHandoffService.js';
 
 export type HandoffRequestLike = {
   headers: {
@@ -38,6 +39,18 @@ export async function handleMusicScaleHandoffRequest(
   res: HandoffResponseLike,
   dependencies: MusicScaleHandoffDependencies
 ): Promise<unknown> {
+  // Preserve the existing public handoff route while delegating Connect to its
+  // own identity-only service. MusicScale behavior below remains unchanged.
+  if (req.body && typeof req.body === 'object' && (req.body as any).appId === 'connect') {
+    return handleConnectHandoffRequest(req, res, {
+      verifyIdToken: dependencies.verifyIdToken,
+      getDb: () => dependencies.getDb() as any,
+      createCustomToken: dependencies.createCustomToken,
+      now: dependencies.now,
+      logger: dependencies.logger,
+    });
+  }
+
   // Always set no-cache headers for all responses
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Pragma', 'no-cache');
