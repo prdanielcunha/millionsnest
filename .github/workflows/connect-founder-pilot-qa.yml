@@ -1,0 +1,50 @@
+name: Connect Founder Pilot QA
+
+on:
+  pull_request:
+    branches:
+      - main
+      - production
+    paths:
+      - 'src/lib/apps.ts'
+      - 'src/lib/hubAppExperience.ts'
+      - 'src/lib/appExperienceRegistry.ts'
+      - 'src/lib/ecosystemLauncher.ts'
+      - 'src/server/services/ConnectHandoffService.ts'
+      - 'scripts/test_connect_founder_pilot.ts'
+      - '.github/workflows/connect-founder-pilot-qa.yml'
+  push:
+    branches:
+      - main
+      - production
+    paths:
+      - 'src/lib/apps.ts'
+      - 'src/lib/hubAppExperience.ts'
+      - 'src/lib/appExperienceRegistry.ts'
+      - 'src/lib/ecosystemLauncher.ts'
+      - 'src/server/services/ConnectHandoffService.ts'
+      - 'scripts/test_connect_founder_pilot.ts'
+      - '.github/workflows/connect-founder-pilot-qa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run lint
+      - name: Founder pilot boundary
+        run: npx tsx scripts/test_connect_founder_pilot.ts
+      - name: Preserve Connect handoff contract
+        run: npx tsx scripts/test_connect_handoff_contract.ts
+      - name: Build Hub
+        run: npm run build
