@@ -1,0 +1,37 @@
+name: Connect Handoff QA
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "src/server/services/ConnectHandoffService.ts"
+      - "src/server/services/MusicScaleHandoffService.ts"
+      - "src/lib/ecosystemLauncher.ts"
+      - "scripts/test_connect_handoff.ts"
+      - "scripts/test_mn_access_02_musicscale_handoff.ts"
+      - ".github/workflows/connect-handoff-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hub-connect-handoff-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - name: Preserve MusicScale handoff contract
+        run: npx tsx scripts/test_mn_access_02_musicscale_handoff.ts
+      - name: Validate Connect handoff contract
+        run: npx tsx scripts/test_connect_handoff.ts
+      - run: npm run build

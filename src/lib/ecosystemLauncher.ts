@@ -14,6 +14,13 @@ export interface EcosystemLauncherDependencies {
   }>>;
 }
 
+const appDisplayName = (moduleKey: string) =>
+  moduleKey === 'musicscale'
+    ? 'MusicScale'
+    : moduleKey === 'connect'
+      ? 'MillionsNest Connect'
+      : 'aplicativo';
+
 export async function openEcosystemModule(
   moduleKey: string,
   user: any,
@@ -34,6 +41,7 @@ export async function openEcosystemModule(
 
   const expectedUid = user.uid.trim();
   const expectedOrganizationId = organization.id.trim();
+  const displayName = appDisplayName(moduleKey);
 
   const deps: EcosystemLauncherDependencies = {
     loadApps: injectedDependencies?.loadApps || (async () => {
@@ -70,9 +78,8 @@ export async function openEcosystemModule(
      throw new Error("Aplicativo não encontrado no catálogo.");
   }
 
-  // The ecosystem systemRole is only a client hint; the handoff service re-resolves
-  // access server-side. This ensures canonical ecosystem_support sessions are marked
-  // correctly without making localStorage an authorization source.
+  // The ecosystem systemRole is only a client hint; every target app handoff
+  // re-resolves access server-side. localStorage is never an authorization source.
   let isSupportMode = String(profile?.systemRole || '').trim().toLowerCase() === 'ecosystem_support';
   try {
      const supportStr = deps.readSupportSession();
@@ -109,7 +116,7 @@ export async function openEcosystemModule(
       if (err.name === 'AbortError') {
         throw new Error('Tempo limite esgotado. Verifique sua conexão e tente novamente.');
       }
-      throw new Error('Não foi possível preparar o acesso ao MusicScale.');
+      throw new Error(`Não foi possível preparar o acesso ao ${displayName}.`);
     }
     
     clearTimeout(timeoutId);
@@ -124,24 +131,23 @@ export async function openEcosystemModule(
       }
       
       if (response.status === 401) {
-        throw new Error('Sua sessão expirou. Entre novamente e tente abrir o MusicScale.');
+        throw new Error(`Sua sessão expirou. Entre novamente e tente abrir o ${displayName}.`);
       } else if (response.status === 403) {
-        if (errorData.reason === 'SUBSCRIPTION_PAYMENT_REQUIRED') {
+        if (moduleKey === 'musicscale' && errorData.reason === 'SUBSCRIPTION_PAYMENT_REQUIRED') {
           throw new Error('Existe uma pendência no pagamento desta organização.');
-        } else {
-          throw new Error('Não encontramos um acesso ativo ao MusicScale para esta organização.');
         }
+        throw new Error(`Não encontramos um acesso ativo ao ${displayName} para esta organização.`);
       } else if (response.status === 500 || response.status === 503) {
-        throw new Error('O MusicScale está temporariamente indisponível. Tente novamente em instantes.');
+        throw new Error(`O ${displayName} está temporariamente indisponível. Tente novamente em instantes.`);
       } else {
-        throw new Error('Não foi possível preparar o acesso ao MusicScale.');
+        throw new Error(`Não foi possível preparar o acesso ao ${displayName}.`);
       }
     }
     
     try {
       handoff = await response.json();
     } catch(e) {
-      throw new Error('A resposta de acesso ao MusicScale é inválida. Tente novamente.');
+      throw new Error(`A resposta de acesso ao ${displayName} é inválida. Tente novamente.`);
     }
     
     break;
@@ -150,7 +156,7 @@ export async function openEcosystemModule(
   const validationNow = deps.now();
 
   if (!handoff || typeof handoff !== 'object' || 
-       handoff.appId !== 'musicscale' || 
+       handoff.appId !== moduleKey || 
        handoff.protocolVersion !== '1.0.0' || 
        handoff.orgId !== expectedOrganizationId || 
        handoff.uid !== expectedUid || 
@@ -158,7 +164,7 @@ export async function openEcosystemModule(
       typeof handoff.expiresAt !== 'number' || !Number.isFinite(handoff.expiresAt) || 
        handoff.expiresAt <= validationNow || handoff.expiresAt > validationNow + 600000 ||
       typeof handoff.supportMode !== 'boolean') {
-    throw new Error('A resposta de acesso ao MusicScale é inválida. Tente novamente.');
+    throw new Error(`A resposta de acesso ao ${displayName} é inválida. Tente novamente.`);
   }
 
   const context = {
