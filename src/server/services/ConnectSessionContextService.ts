@@ -29,6 +29,12 @@ function sanitizeString(val: unknown): string | null {
   return null;
 }
 
+function sanitizeOrganizationId(val: unknown): string | null {
+  const value = sanitizeString(val);
+  if (!value || value.length > 256 || value.includes('/') || value.includes('\\')) return null;
+  return value;
+}
+
 function sanitizeStringArray(val: unknown): string[] {
   const result = new Set<string>();
   if (Array.isArray(val)) {
@@ -114,6 +120,20 @@ export async function handleConnectSessionContextRequest(
       return res.status(401).json({ success: false, code: 'UNAUTHORIZED', error: 'Authentication required.' });
     }
 
+    const rawRequestedOrganizationId = typeof req.query?.organizationId === 'string'
+      ? req.query.organizationId
+      : null;
+    const requestedOrganizationId = rawRequestedOrganizationId === null
+      ? null
+      : sanitizeOrganizationId(rawRequestedOrganizationId);
+    if (rawRequestedOrganizationId !== null && !requestedOrganizationId) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_ORGANIZATION_ID',
+        error: 'A valid organizationId is required.'
+      });
+    }
+
     let decoded: admin.auth.DecodedIdToken;
     try {
       decoded = await deps.verifyIdToken(token);
@@ -161,6 +181,10 @@ export async function handleConnectSessionContextRequest(
 
     const potentialOrgIds = new Set<string>();
     getCandidateIdsFromUser(userData).forEach(id => potentialOrgIds.add(id));
+    // The organization selected in the Hub handoff is a routing hint, never authority.
+    // Add it to the candidate set so this endpoint can independently revalidate the
+    // exact tenant the user opened instead of silently falling back to a stale profile pointer.
+    if (requestedOrganizationId) potentialOrgIds.add(requestedOrganizationId);
 
     try {
       const legacyMembersSnap = await db.collection('organization_members').where('uid', '==', uid).limit(MAX_CANDIDATE_ORGANIZATIONS).get();
@@ -273,15 +297,27 @@ export async function handleConnectSessionContextRequest(
 
     authorizedOrganizationCount = authorizedOrganizations.length;
 
-    const requestedActiveId = sanitizeString(userData.activeOrganizationId);
-    const requestedPrimaryId = sanitizeString(userData.primaryOrganizationId);
+    if (requestedOrganizationId) {
+      const requestedOrganization = authorizedOrganizations.find(o => o.id === requestedOrganizationId);
+      if (!requestedOrganization) {
+        return res.status(403).json({
+          success: false,
+          code: 'ORGANIZATION_ACCESS_DENIED',
+          error: 'Access to the requested organization is not allowed.'
+        });
+      }
+      activeOrganizationIdResolved = requestedOrganizationId;
+    } else {
+      const requestedActiveId = sanitizeString(userData.activeOrganizationId);
+      const requestedPrimaryId = sanitizeString(userData.primaryOrganizationId);
 
-    if (requestedActiveId && authorizedOrganizations.some(o => o.id === requestedActiveId)) {
-      activeOrganizationIdResolved = requestedActiveId;
-    } else if (requestedPrimaryId && authorizedOrganizations.some(o => o.id === requestedPrimaryId)) {
-      activeOrganizationIdResolved = requestedPrimaryId;
-    } else if (authorizedOrganizations.length > 0) {
-      activeOrganizationIdResolved = authorizedOrganizations[0].id;
+      if (requestedActiveId && authorizedOrganizations.some(o => o.id === requestedActiveId)) {
+        activeOrganizationIdResolved = requestedActiveId;
+      } else if (requestedPrimaryId && authorizedOrganizations.some(o => o.id === requestedPrimaryId)) {
+        activeOrganizationIdResolved = requestedPrimaryId;
+      } else if (authorizedOrganizations.length > 0) {
+        activeOrganizationIdResolved = authorizedOrganizations[0].id;
+      }
     }
 
     const activeOrganization = activeOrganizationIdResolved
