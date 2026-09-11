@@ -12,6 +12,7 @@ on:
       - 'src/lib/ecosystemLauncher.ts'
       - 'src/server/services/ConnectHandoffService.ts'
       - 'scripts/test_connect_founder_pilot.ts'
+      - 'scripts/test_connect_handoff.ts'
       - '.github/workflows/connect-founder-pilot-qa.yml'
   push:
     branches:
@@ -24,6 +25,7 @@ on:
       - 'src/lib/ecosystemLauncher.ts'
       - 'src/server/services/ConnectHandoffService.ts'
       - 'scripts/test_connect_founder_pilot.ts'
+      - 'scripts/test_connect_handoff.ts'
       - '.github/workflows/connect-founder-pilot-qa.yml'
 
 permissions:
@@ -45,6 +47,6 @@ jobs:
       - name: Founder pilot boundary
         run: npx tsx scripts/test_connect_founder_pilot.ts
       - name: Preserve Connect handoff contract
-        run: npx tsx scripts/test_connect_handoff_contract.ts
+        run: npx tsx scripts/test_connect_handoff.ts
       - name: Build Hub
         run: npm run build
