@@ -89,6 +89,29 @@ export function resolveHubAppExperience(params: {
     };
   }
 
+  // Controlled Connect founder/admin pilot: keep the public catalog in beta and
+  // unavailable to normal organizations, while allowing canonical global admins
+  // to exercise the real handoff after the live Core is certified in production.
+  // The launcher/server still revalidate identity and organization; this is only
+  // a Hub presentation decision and never an authorization boundary.
+  if (
+    app.id === 'connect' &&
+    app.status === 'beta' &&
+    isGlobalAdmin === true &&
+    typeof app.url === 'string' &&
+    app.url.trim().length > 0
+  ) {
+    return {
+      app,
+      installed: true,
+      canOpen: true,
+      state: 'administrative',
+      plan: null,
+      needsAttention: false,
+      isOperational: true
+    };
+  }
+
   if (!catalogOperational) {
     const state: HubAppState = app.status === 'coming_soon' ? 'coming_soon' : 'development';
     return {
