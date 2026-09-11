@@ -82,6 +82,8 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     shortDescription: 'Infraestrutura de integração do ecossistema',
     icon: 'Network',
     iconAsset: '/brand/connect/v2/connect-mark-color.svg',
+    url: ((typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_CONNECT_APP_URL : undefined) || 'https://mn-connect-555464791734.web.app',
+    operationalUrl: ((typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_CONNECT_APP_URL : undefined) || 'https://mn-connect-555464791734.web.app',
     status: 'beta',
     primaryAction: 'disabled',
     badgeLabelKey: 'ecosystem_status_infrastructure',
