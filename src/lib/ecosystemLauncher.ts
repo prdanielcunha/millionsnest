@@ -11,15 +11,18 @@ export interface EcosystemLauncherDependencies {
   loadApps: () => Promise<Array<{
     id: string;
     url?: string;
+    handoffEntryPath?: string;
+    handoffConsumesGlobally?: boolean;
   }>>;
 }
 
-const appDisplayName = (moduleKey: string) =>
-  moduleKey === 'musicscale'
-    ? 'MusicScale'
-    : moduleKey === 'connect'
-      ? 'MillionsNest Connect'
-      : 'aplicativo';
+const appDisplayName = (moduleKey: string) => {
+  if (moduleKey === 'musicscale') return 'MusicScale';
+  if (moduleKey === 'connect') return 'MillionsNest Connect';
+  if (moduleKey === 'nestfinance') return 'NestFinance';
+  if (moduleKey === 'nestjourney') return 'NestJourney';
+  return 'aplicativo';
+};
 
 export async function openEcosystemModule(
   moduleKey: string,
@@ -32,11 +35,11 @@ export async function openEcosystemModule(
 ) {
   if (!user || typeof user !== 'object' || typeof user.uid !== 'string' || user.uid.trim() === '') {
     console.error('[EcosystemLaunch] Missing required user data');
-    throw new Error("Sessão inválida ou dados incompletos. Tente recarregar a página.");
+    throw new Error('Sessão inválida ou dados incompletos. Tente recarregar a página.');
   }
   if (!organization || typeof organization !== 'object' || typeof organization.id !== 'string' || organization.id.trim() === '') {
     console.error('[EcosystemLaunch] Missing required organization data');
-    throw new Error("Sessão inválida ou dados incompletos. Tente recarregar a página.");
+    throw new Error('Sessão inválida ou dados incompletos. Tente recarregar a página.');
   }
 
   const expectedUid = user.uid.trim();
@@ -50,7 +53,7 @@ export async function openEcosystemModule(
     }),
     getIdToken: injectedDependencies?.getIdToken || (async () => {
       const { auth } = await import('../lib/firebase.js');
-      if (!auth || !auth.currentUser) throw new Error("Usuário não autenticado");
+      if (!auth || !auth.currentUser) throw new Error('Usuário não autenticado');
       return await auth.currentUser.getIdToken();
     }),
     fetchFn: injectedDependencies?.fetchFn || globalThis.fetch.bind(globalThis),
@@ -58,7 +61,7 @@ export async function openEcosystemModule(
     assign: injectedDependencies?.assign || ((url) => window.location.assign(url)),
     now: injectedDependencies?.now || (() => Date.now()),
     readSupportSession: injectedDependencies?.readSupportSession || (() => {
-      try { return localStorage.getItem('mn_support_session'); } catch (e) { return null; }
+      try { return localStorage.getItem('mn_support_session'); } catch { return null; }
     }),
     markPerformance: injectedDependencies?.markPerformance || ((name) => {
       window.performance?.mark?.(name);
@@ -68,28 +71,26 @@ export async function openEcosystemModule(
   let apps;
   try {
     apps = await deps.loadApps();
-  } catch (e) {
-    throw new Error("Não foi possível carregar o catálogo de aplicativos.");
+  } catch {
+    throw new Error('Não foi possível carregar o catálogo de aplicativos.');
   }
 
   const app = (apps || []).find(a => a.id === moduleKey);
   if (!app || typeof app.url !== 'string' || app.url.trim() === '') {
-     console.error('[EcosystemLaunch] App not found or invalid URL', { moduleKey });
-     throw new Error("Aplicativo não encontrado no catálogo.");
+    console.error('[EcosystemLaunch] App not found or invalid URL', { moduleKey });
+    throw new Error('Aplicativo não encontrado no catálogo.');
   }
 
-  // The ecosystem systemRole is only a client hint; every target app handoff
-  // re-resolves access server-side. localStorage is never an authorization source.
   let isSupportMode = String(profile?.systemRole || '').trim().toLowerCase() === 'ecosystem_support';
   try {
-     const supportStr = deps.readSupportSession();
-     if (supportStr) {
-        const supportObj = JSON.parse(supportStr);
-        if (supportObj?.active && supportObj?.targetOrganizationId === expectedOrganizationId) {
-           isSupportMode = true;
-        }
-     }
-  } catch (e) {}
+    const supportStr = deps.readSupportSession();
+    if (supportStr) {
+      const supportObj = JSON.parse(supportStr);
+      if (supportObj?.active && supportObj?.targetOrganizationId === expectedOrganizationId) {
+        isSupportMode = true;
+      }
+    }
+  } catch {}
 
   const idToken = await deps.getIdToken();
   deps.markPerformance('handoff_started');
@@ -99,95 +100,103 @@ export async function openEcosystemModule(
   for (let attempt = 1; attempt <= maxRequests; attempt++) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
-    
+
     let response;
     try {
       response = await deps.fetchFn('/api/ecosystem/create-handoff', {
-          method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${idToken}`
-          },
-          body: JSON.stringify({ appId: moduleKey, orgId: expectedOrganizationId, supportMode: isSupportMode }),
-          signal: controller.signal
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ appId: moduleKey, orgId: expectedOrganizationId, supportMode: isSupportMode }),
+        signal: controller.signal
       });
     } catch (err: any) {
       clearTimeout(timeoutId);
-      if (err.name === 'AbortError') {
-        throw new Error('Tempo limite esgotado. Verifique sua conexão e tente novamente.');
-      }
+      if (err.name === 'AbortError') throw new Error('Tempo limite esgotado. Verifique sua conexão e tente novamente.');
       throw new Error(`Não foi possível preparar o acesso ao ${displayName}.`);
     }
-    
+
     clearTimeout(timeoutId);
     if (!response.ok) {
       let errorData: any = {};
-      try {
-        errorData = await response.json();
-      } catch (e) {}
+      try { errorData = await response.json(); } catch {}
+
       if (errorData.retryable === true && attempt < maxRequests && [403, 500, 503].includes(response.status)) {
         await deps.sleep(1000);
         continue;
       }
-      
+
       if (response.status === 401) {
         throw new Error(`Sua sessão expirou. Entre novamente e tente abrir o ${displayName}.`);
-      } else if (response.status === 403) {
+      }
+      if (response.status === 403) {
         if (moduleKey === 'musicscale' && errorData.reason === 'SUBSCRIPTION_PAYMENT_REQUIRED') {
           throw new Error('Existe uma pendência no pagamento desta organização.');
         }
         throw new Error(`Não encontramos um acesso ativo ao ${displayName} para esta organização.`);
-      } else if (response.status === 500 || response.status === 503) {
-        throw new Error(`O ${displayName} está temporariamente indisponível. Tente novamente em instantes.`);
-      } else {
-        throw new Error(`Não foi possível preparar o acesso ao ${displayName}.`);
       }
+      if (response.status === 500 || response.status === 503) {
+        throw new Error(`O ${displayName} está temporariamente indisponível. Tente novamente em instantes.`);
+      }
+      throw new Error(`Não foi possível preparar o acesso ao ${displayName}.`);
     }
-    
+
     try {
       handoff = await response.json();
-    } catch(e) {
+    } catch {
       throw new Error(`A resposta de acesso ao ${displayName} é inválida. Tente novamente.`);
     }
-    
     break;
   }
 
   const validationNow = deps.now();
-
-  if (!handoff || typeof handoff !== 'object' || 
-       handoff.appId !== moduleKey || 
-       handoff.protocolVersion !== '1.0.0' || 
-       handoff.orgId !== expectedOrganizationId || 
-       handoff.uid !== expectedUid || 
-       !handoff.customToken || typeof handoff.customToken !== 'string' || handoff.customToken.trim() === '' || handoff.customToken.length > 16384 ||
-      typeof handoff.expiresAt !== 'number' || !Number.isFinite(handoff.expiresAt) || 
-       handoff.expiresAt <= validationNow || handoff.expiresAt > validationNow + 600000 ||
-      typeof handoff.supportMode !== 'boolean') {
+  if (
+    !handoff || typeof handoff !== 'object' ||
+    handoff.appId !== moduleKey ||
+    handoff.protocolVersion !== '1.0.0' ||
+    handoff.orgId !== expectedOrganizationId ||
+    handoff.uid !== expectedUid ||
+    !handoff.customToken || typeof handoff.customToken !== 'string' || handoff.customToken.trim() === '' || handoff.customToken.length > 16384 ||
+    typeof handoff.expiresAt !== 'number' || !Number.isFinite(handoff.expiresAt) ||
+    handoff.expiresAt <= validationNow || handoff.expiresAt > validationNow + 600000 ||
+    typeof handoff.supportMode !== 'boolean'
+  ) {
     throw new Error(`A resposta de acesso ao ${displayName} é inválida. Tente novamente.`);
   }
 
   const context = {
-      appId: handoff.appId,
-      orgId: handoff.orgId,
-      userId: handoff.uid,
-      customToken: handoff.customToken,
-      expiresAt: handoff.expiresAt,
-      supportMode: handoff.supportMode,
-      protocolVersion: handoff.protocolVersion
+    appId: handoff.appId,
+    orgId: handoff.orgId,
+    userId: handoff.uid,
+    customToken: handoff.customToken,
+    expiresAt: handoff.expiresAt,
+    supportMode: handoff.supportMode,
+    protocolVersion: handoff.protocolVersion
   };
-  
+
   const encodedContext = btoa(JSON.stringify(context));
   const targetUrl = new URL(app.url);
+
   if (destinationPath) {
     const cleanDestinationPath = destinationPath.trim();
     if (!isAllowedAppDestinationPath(moduleKey, cleanDestinationPath)) {
       throw new Error('Destino do aplicativo inválido.');
     }
-    targetUrl.pathname = cleanDestinationPath;
+
+    if (app.handoffConsumesGlobally === false && app.handoffEntryPath) {
+      targetUrl.pathname = app.handoffEntryPath;
+      targetUrl.searchParams.set('returnTo', cleanDestinationPath);
+    } else {
+      targetUrl.pathname = cleanDestinationPath;
+    }
+  } else if (app.handoffEntryPath && app.handoffConsumesGlobally === false) {
+    targetUrl.pathname = app.handoffEntryPath;
   }
+
   targetUrl.searchParams.set('ecosystem_ctx', encodedContext);
-  
+
   deps.markPerformance('handoff_completed');
   deps.assign(targetUrl.toString());
 }

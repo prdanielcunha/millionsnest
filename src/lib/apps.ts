@@ -1,3 +1,6 @@
+export type EcosystemDomainStatus = 'configured' | 'setup_required' | 'reserved';
+export type EcosystemAuthMode = 'hub_handoff';
+
 export interface EcosystemApp {
   id: string;
   name: string;
@@ -16,6 +19,15 @@ export interface EcosystemApp {
   order?: number;
   category: 'core' | 'community' | 'beta';
   requiredPlan?: 'free' | 'starter' | 'pro' | 'enterprise';
+  canonicalOrigin?: string;
+  hubLaunchRoute?: string;
+  handoffEntryPath?: string;
+  handoffConsumesGlobally?: boolean;
+  authMode?: EcosystemAuthMode;
+  domainStatus?: EcosystemDomainStatus;
+  hostingTarget?: string;
+  firebaseHostingSite?: string;
+  directEntrySso?: boolean;
 }
 
 export const ECOSYSTEM_APPS: EcosystemApp[] = [
@@ -34,6 +46,15 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     order: 1,
     category: 'core',
     requiredPlan: 'free',
+    canonicalOrigin: 'https://musicscale.millionsnest.com',
+    hubLaunchRoute: '/apps/musicscale/launch',
+    handoffEntryPath: '/start',
+    handoffConsumesGlobally: true,
+    authMode: 'hub_handoff',
+    domainStatus: 'configured',
+    hostingTarget: 'musicscale',
+    firebaseHostingSite: 'mn-musicscale-555464791734',
+    directEntrySso: true,
   },
   {
     id: 'nestfinance',
@@ -48,6 +69,17 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     order: 2,
     category: 'beta',
     requiredPlan: 'free',
+    url: 'https://mn-nestfinance-555464791734.web.app/auth/handoff',
+    operationalUrl: 'https://mn-nestfinance-555464791734.web.app/auth/handoff',
+    canonicalOrigin: 'https://nestfinance.millionsnest.com',
+    hubLaunchRoute: '/apps/nestfinance/launch',
+    handoffEntryPath: '/auth/handoff',
+    handoffConsumesGlobally: false,
+    authMode: 'hub_handoff',
+    domainStatus: 'setup_required',
+    hostingTarget: 'nestfinance',
+    firebaseHostingSite: 'mn-nestfinance-555464791734',
+    directEntrySso: true,
   },
   {
     id: 'nestlocal',
@@ -61,6 +93,11 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     order: 3,
     category: 'beta',
     requiredPlan: 'free',
+    canonicalOrigin: 'https://nestlocal.millionsnest.com',
+    hubLaunchRoute: '/apps/nestlocal/launch',
+    authMode: 'hub_handoff',
+    domainStatus: 'reserved',
+    directEntrySso: false,
   },
   {
     id: 'nestjourney',
@@ -74,6 +111,17 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     order: 4,
     category: 'beta',
     requiredPlan: 'free',
+    url: 'https://mn-nestjourney-555464791734.web.app/',
+    operationalUrl: 'https://mn-nestjourney-555464791734.web.app/',
+    canonicalOrigin: 'https://nestjourney.millionsnest.com',
+    hubLaunchRoute: '/apps/nestjourney/launch',
+    handoffEntryPath: '/',
+    handoffConsumesGlobally: true,
+    authMode: 'hub_handoff',
+    domainStatus: 'setup_required',
+    hostingTarget: 'nestjourney',
+    firebaseHostingSite: 'mn-nestjourney-555464791734',
+    directEntrySso: true,
   },
   {
     id: 'connect',
@@ -90,6 +138,15 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     order: 5,
     category: 'beta',
     requiredPlan: 'free',
+    canonicalOrigin: 'https://connect.millionsnest.com',
+    hubLaunchRoute: '/connect/launch',
+    handoffEntryPath: '/',
+    handoffConsumesGlobally: true,
+    authMode: 'hub_handoff',
+    domainStatus: 'configured',
+    hostingTarget: 'connect',
+    firebaseHostingSite: 'mn-connect-555464791734',
+    directEntrySso: true,
   }
 ];
 
@@ -99,4 +156,8 @@ export function getAvailableApps(_installedAppIds: string[]): EcosystemApp[] {
 
 export function getInstalledApps(installedAppIds: string[]): EcosystemApp[] {
   return ECOSYSTEM_APPS.filter(app => installedAppIds.includes(app.id));
+}
+
+export function getEcosystemApp(appId: string): EcosystemApp | undefined {
+  return ECOSYSTEM_APPS.find(app => app.id === appId);
 }
