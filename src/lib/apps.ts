@@ -85,7 +85,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     url: ((typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_CONNECT_APP_URL : undefined) || 'https://connect.millionsnest.com',
     operationalUrl: ((typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_CONNECT_APP_URL : undefined) || 'https://connect.millionsnest.com',
     status: 'beta',
-    primaryAction: 'open',
+    primaryAction: 'disabled',
     badgeLabelKey: 'ecosystem_status_infrastructure',
     order: 5,
     category: 'beta',
