@@ -1,0 +1,45 @@
+name: Connect Official Domain SSO Patch
+
+on:
+  push:
+    branches:
+      - feature/connect-official-domain-sso-01
+    paths:
+      - .github/workflows/connect-official-domain-sso-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feature/connect-official-domain-sso-01
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply official-domain SSO patch
+        run: python .github/scripts/apply_connect_official_domain_sso.py
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Validate focused SSO contract
+        run: npx tsx scripts/test_connect_official_launch.ts
+      - name: Validate Hub
+        run: |
+          npm run lint
+          npx tsx scripts/test_connect_handoff.ts
+          npm run build
+      - name: Commit verified product changes and remove one-shot files
+        run: |
+          rm .github/workflows/connect-official-domain-sso-patch.yml
+          rm .github/scripts/apply_connect_official_domain_sso.py
+          rm -rf dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Enable official Connect domain with secure Hub SSO"
+          git push origin HEAD:feature/connect-official-domain-sso-01
