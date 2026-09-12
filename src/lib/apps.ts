@@ -75,8 +75,9 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     order: 2,
     category: 'beta',
     requiredPlan: 'free',
-    url: 'https://nestfinance.millionsnest.com/auth/handoff',
-    operationalUrl: 'https://nestfinance.millionsnest.com/auth/handoff',
+    // Keep the certified Firebase Hosting origin operational until custom DNS/SSL is provisioned.
+    url: 'https://mn-nestfinance-555464791734.web.app/auth/handoff',
+    operationalUrl: 'https://mn-nestfinance-555464791734.web.app/auth/handoff',
     canonicalOrigin: 'https://nestfinance.millionsnest.com',
     hubLaunchRoute: '/apps/nestfinance/launch',
     handoffEntryPath: '/auth/handoff',
