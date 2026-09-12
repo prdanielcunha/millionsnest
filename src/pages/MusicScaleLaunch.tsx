@@ -45,14 +45,15 @@ export function MusicScaleLaunch() {
       name: canonicalContext?.activeOrganization?.name || 'Organização MillionsNest',
     };
 
+    // MusicScale's catalog URL is already the canonical /start gateway. Do not
+    // override it with a destination path here: the launcher will append only
+    // the short-lived handoff and preserve /start.
     void openEcosystemModule(
       'musicscale',
       user,
       profile,
       organization,
       canonicalContext,
-      undefined,
-      '/start',
     ).catch((launchError) => {
       launchStartedRef.current = false;
       setError(
