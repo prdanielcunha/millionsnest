@@ -14,13 +14,8 @@ export interface AppExperienceDefinition {
 }
 
 /**
- * Canonical Hub -> app navigation contract.
- *
- * The Hub references semantic destination ids instead of scattering app routes
- * across UI components. When an app changes an internal route, only this
- * registry needs to change. Apps that are not operational yet intentionally
- * expose no destinations; their three-section experience becomes actionable
- * only when the app publishes its real route contract.
+ * Canonical Hub -> app navigation contract. The same allowlist is also used by
+ * direct-entry SSO so a return path can never become an open redirect.
  */
 export const APP_EXPERIENCE_REGISTRY: Readonly<Record<string, AppExperienceDefinition>> = {
   musicscale: {
@@ -28,6 +23,7 @@ export const APP_EXPERIENCE_REGISTRY: Readonly<Record<string, AppExperienceDefin
     sections: APP_EXPERIENCE_SECTIONS,
     destinations: {
       home: '/',
+      start: '/start',
       repertoire: '/songs',
       songs: '/songs',
       chords: '/songs',
@@ -49,7 +45,35 @@ export const APP_EXPERIENCE_REGISTRY: Readonly<Record<string, AppExperienceDefin
   nestfinance: {
     appId: 'nestfinance',
     sections: APP_EXPERIENCE_SECTIONS,
-    destinations: {}
+    destinations: {
+      home: '/',
+      finance: '/finance',
+      setup: '/finance/setup',
+      settings: '/finance/settings',
+      accounts: '/finance/settings/accounts',
+      entities: '/finance/settings/entities',
+      funds: '/finance/settings/funds',
+      categories: '/finance/settings/categories',
+      count: '/finance/count',
+      count_forms: '/finance/count/forms',
+      capture: '/finance/capture',
+      balance: '/finance/balance',
+      inbox: '/finance/inbox',
+      reports: '/finance/reports',
+      audit: '/finance/audit',
+      more: '/finance/more',
+      transactions: '/finance/transactions',
+      transaction_new: '/finance/transactions/new',
+      review: '/finance/review'
+    },
+    dynamicDestinations: {
+      count_session: '/finance/count/:id',
+      count_form: '/finance/count/forms/:id',
+      capture_review: '/finance/count/captures/:id',
+      inbox_evidence: '/finance/inbox/:id',
+      transaction: '/finance/transactions/:id',
+      review_transaction: '/finance/review/:id'
+    }
   },
   nestlocal: {
     appId: 'nestlocal',
@@ -59,14 +83,12 @@ export const APP_EXPERIENCE_REGISTRY: Readonly<Record<string, AppExperienceDefin
   nestjourney: {
     appId: 'nestjourney',
     sections: APP_EXPERIENCE_SECTIONS,
-    destinations: {}
+    destinations: { home: '/' }
   },
   connect: {
     appId: 'connect',
     sections: APP_EXPERIENCE_SECTIONS,
-    destinations: {
-      home: '/'
-    }
+    destinations: { home: '/' }
   }
 };
 
@@ -99,7 +121,7 @@ export function isAllowedAppDestinationPath(appId: string, candidatePath: string
   if (!definition) return false;
 
   const cleanPath = String(candidatePath || '').trim();
-  if (!cleanPath.startsWith('/') || cleanPath.includes('://') || cleanPath.includes('\\')) return false;
+  if (!cleanPath.startsWith('/') || cleanPath.startsWith('//') || cleanPath.includes('://') || cleanPath.includes('\\')) return false;
 
   const staticPaths = Object.values(definition.destinations);
   if (staticPaths.some(path => cleanPath === path)) return true;
