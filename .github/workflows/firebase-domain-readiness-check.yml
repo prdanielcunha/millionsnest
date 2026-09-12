@@ -1,5 +1,5 @@
 name: Firebase Domain Readiness Check
-# Certified ecosystem-domain verification: DNS + Firebase state + public HTTPS
+# Certified ecosystem-domain verification: DNS + Firebase state + Auth allowlist + public HTTPS
 
 on:
   push:
@@ -87,6 +87,36 @@ jobs:
           require_ready "mn-nestjourney-555464791734" "nestjourney.millionsnest.com"
 
           echo "ALL_FIREBASE_CUSTOM_DOMAINS_READY"
+
+      - name: Require Firebase Authentication authorized domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://identitytoolkit.googleapis.com/admin/v2/projects/millionsnest/config" \
+            > /tmp/firebase-auth-config.json
+
+          python3 <<'PY'
+          import json
+          required = {
+              'millionsnest.com',
+              'www.millionsnest.com',
+              'musicscale.millionsnest.com',
+              'nestfinance.millionsnest.com',
+              'connect.millionsnest.com',
+              'nestjourney.millionsnest.com',
+          }
+          with open('/tmp/firebase-auth-config.json', encoding='utf-8') as f:
+              config = json.load(f)
+          actual = set(config.get('authorizedDomains') or [])
+          print('authorizedDomains=' + ','.join(sorted(actual)))
+          missing = sorted(required - actual)
+          if missing:
+              raise SystemExit('Missing Firebase Auth authorized domains: ' + ', '.join(missing))
+          print('ALL_OFFICIAL_DOMAINS_AUTHORIZED_IN_FIREBASE_AUTH')
+          PY
 
       - name: Public HTTPS smoke for every official domain
         shell: bash
