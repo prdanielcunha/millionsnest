@@ -93,10 +93,54 @@ jobs:
         run: |
           set -euo pipefail
           TOKEN="$(gcloud auth print-access-token)"
-          curl --fail --silent --show-error \
+
+          # Prefer the private admin config when the deploy identity has firebaseauth.configs.get.
+          # If that least-privilege permission is intentionally absent, derive the public Web API
+          # key from Firebase Management and query the public Identity Toolkit project config.
+          if curl --fail --silent --show-error \
             -H "Authorization: Bearer $TOKEN" \
             "https://identitytoolkit.googleapis.com/admin/v2/projects/millionsnest/config" \
-            > /tmp/firebase-auth-config.json
+            > /tmp/firebase-auth-config.json; then
+            echo "Firebase Auth config verified through admin API."
+          else
+            echo "Admin config read is not granted to deploy identity; using public Firebase Auth config fallback."
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $TOKEN" \
+              "https://firebase.googleapis.com/v1beta1/projects/millionsnest/webApps?pageSize=100" \
+              > /tmp/firebase-webapps.json
+
+            APP_NAME="$(python3 - <<'PY'
+          import json
+          with open('/tmp/firebase-webapps.json', encoding='utf-8') as f:
+              data = json.load(f)
+          apps = data.get('apps') or []
+          if not apps:
+              raise SystemExit('No Firebase Web App found for public Auth config verification')
+          print(apps[0]['name'])
+          PY
+            )"
+
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $TOKEN" \
+              "https://firebase.googleapis.com/v1beta1/${APP_NAME}/config" \
+              > /tmp/firebase-webapp-config.json
+
+            API_KEY="$(python3 - <<'PY'
+          import json
+          with open('/tmp/firebase-webapp-config.json', encoding='utf-8') as f:
+              config = json.load(f)
+          key = config.get('apiKey')
+          if not key:
+              raise SystemExit('Firebase Web App config did not expose an API key')
+          print(key)
+          PY
+            )"
+
+            curl --fail --silent --show-error \
+              --get --data-urlencode "key=${API_KEY}" \
+              "https://identitytoolkit.googleapis.com/v1/projects" \
+              > /tmp/firebase-auth-config.json
+          fi
 
           python3 <<'PY'
           import json
@@ -110,7 +154,7 @@ jobs:
           }
           with open('/tmp/firebase-auth-config.json', encoding='utf-8') as f:
               config = json.load(f)
-          actual = set(config.get('authorizedDomains') or [])
+          actual = set(config.get('authorizedDomains') or config.get('authorized_domains') or [])
           print('authorizedDomains=' + ','.join(sorted(actual)))
           missing = sorted(required - actual)
           if missing:
