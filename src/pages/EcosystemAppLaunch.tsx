@@ -1,26 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { getEcosystemApp } from '../lib/apps.js';
+import { isAllowedAppDestinationPath } from '../lib/appExperienceRegistry.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
-import { resolveCanonicalConnectOrganizationId } from '../lib/connectLaunchPolicy.js';
+import {
+  buildEcosystemLoginPath,
+  resolveCanonicalConnectOrganizationId,
+} from '../lib/connectLaunchPolicy.js';
 
 /**
- * Canonical Hub-side entry point for every ecosystem product.
+ * Canonical Hub-side entry point for ecosystem products.
  *
- * Target apps never need a shared long-lived cookie. When direct entry finds no
- * local Firebase session, it sends the browser here. The Hub reuses its own
- * session, re-resolves the active organization and creates a short-lived app
- * handoff through the existing ecosystem launcher.
+ * Target apps do not share long-lived cookies or refresh tokens. Direct entry
+ * without a local Firebase session returns here; the Hub reuses its own session,
+ * re-resolves organization/access and issues a short-lived handoff.
  */
 export function EcosystemAppLaunch() {
   const { appId = '' } = useParams();
   const app = useMemo(() => getEcosystemApp(appId), [appId]);
   const { user, profile, canonicalContext, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const launchStartedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+
+  const requestedDestination = useMemo(() => {
+    if (!app) return undefined;
+    const candidate = new URLSearchParams(location.search).get('returnTo');
+    if (!candidate) return undefined;
+    return isAllowedAppDestinationPath(app.id, candidate) ? candidate : undefined;
+  }, [app, location.search]);
 
   useEffect(() => {
     if (loading) return;
@@ -36,8 +47,7 @@ export function EcosystemAppLaunch() {
     }
 
     if (!user) {
-      const resumePath = app.hubLaunchRoute || `/apps/${encodeURIComponent(app.id)}/launch`;
-      navigate(`/login?redirect=${encodeURIComponent(resumePath)}`, { replace: true });
+      navigate(buildEcosystemLoginPath(app.id, requestedDestination), { replace: true });
       return;
     }
 
@@ -70,6 +80,8 @@ export function EcosystemAppLaunch() {
       profile,
       organization,
       canonicalContext,
+      undefined,
+      requestedDestination,
     ).catch((launchError) => {
       launchStartedRef.current = false;
       setError(
@@ -78,7 +90,7 @@ export function EcosystemAppLaunch() {
           : `Não foi possível preparar o acesso seguro ao ${app.name}.`,
       );
     });
-  }, [app, canonicalContext, loading, navigate, profile, user]);
+  }, [app, canonicalContext, loading, navigate, profile, requestedDestination, user]);
 
   const appName = app?.name || 'aplicativo';
 
@@ -96,7 +108,7 @@ export function EcosystemAppLaunch() {
         </p>
         {app?.domainStatus === 'setup_required' ? (
           <p className="mx-auto mt-4 max-w-sm rounded-xl border border-amber-400/15 bg-amber-400/[0.05] px-3 py-2 text-xs leading-5 text-amber-100/70">
-            O domínio oficial deste produto está reservado e ainda precisa concluir a configuração de DNS/SSL. Enquanto isso, o acesso seguro usa o endereço Firebase Hosting certificado.
+            O domínio oficial deste produto está reservado e ainda precisa concluir DNS/SSL. Até a ativação, o acesso seguro pode usar o endereço Firebase Hosting certificado.
           </p>
         ) : null}
         {error ? (
