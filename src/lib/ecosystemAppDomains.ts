@@ -44,7 +44,7 @@ export const ECOSYSTEM_APP_DOMAINS: readonly EcosystemAppDomainDefinition[] = [
     canonicalOrigin: 'https://musicscale.millionsnest.com',
     entryPath: '/start',
     hubLaunchPath: '/musicscale/launch',
-    repository: 'prdanielcunha/musicscale_millionsnest',
+    repository: 'prdanielcunha/musicscale',
     domainStatus: 'live',
     ssoStatus: 'live',
     firebaseHosting: true,
