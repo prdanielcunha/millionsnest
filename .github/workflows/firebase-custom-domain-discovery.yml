@@ -1,4 +1,5 @@
 name: Firebase Custom Domain Discovery
+# Verification trigger: ecosystem domain completion 2026-09-12
 
 on:
   push:
@@ -28,8 +29,17 @@ jobs:
         run: |
           set -euo pipefail
           TOKEN="$(gcloud auth print-access-token)"
-          for SITE in             millionsnest             mn-hub-555464791734             mn-musicscale-555464791734             mn-nestfinance-555464791734             mn-connect-555464791734             mn-nestjourney-555464791734
+          for SITE in \
+            millionsnest \
+            mn-hub-555464791734 \
+            mn-musicscale-555464791734 \
+            mn-nestfinance-555464791734 \
+            mn-connect-555464791734 \
+            mn-nestjourney-555464791734
           do
             echo "===== SITE:$SITE ====="
-            curl --fail --silent --show-error               -H "Authorization: Bearer $TOKEN"               "https://firebasehosting.googleapis.com/v1beta1/projects/millionsnest/sites/$SITE/customDomains?pageSize=100"               | python3 -c 'import json,sys; x=json.load(sys.stdin); print(json.dumps(x,indent=2,sort_keys=True))'
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $TOKEN" \
+              "https://firebasehosting.googleapis.com/v1beta1/projects/millionsnest/sites/$SITE/customDomains?pageSize=100" \
+              | python3 -c 'import json,sys; x=json.load(sys.stdin); print(json.dumps(x,indent=2,sort_keys=True))'
           done
