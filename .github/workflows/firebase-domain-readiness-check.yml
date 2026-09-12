@@ -95,7 +95,9 @@ jobs:
           smoke () {
             DOMAIN="$1"
             echo "===== HTTPS:$DOMAIN ====="
-            STATUS="$(curl --silent --show-error --location --max-time 30 --output /tmp/domain-home.html --write-out '%{http_code}' "https://$DOMAIN/")"
+            echo "A=$(dig +short A "$DOMAIN" | tr '\n' ',' | sed 's/,$//')"
+            echo "AAAA=$(dig +short AAAA "$DOMAIN" | tr '\n' ',' | sed 's/,$//')"
+            STATUS="$(curl --silent --show-error --location --http1.1 --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 60 --output /tmp/domain-home.html --write-out '%{http_code}' "https://$DOMAIN/")"
             echo "status=$STATUS"
             test "$STATUS" = "200"
             grep -Eiq '<!doctype html|<html' /tmp/domain-home.html
