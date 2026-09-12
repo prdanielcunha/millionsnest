@@ -7,7 +7,7 @@ const connect = ECOSYSTEM_APPS.find(app => app.id === 'connect');
 assert.ok(connect, 'Connect must remain registered exactly once in the ecosystem catalog');
 assert.equal(connect.status, 'beta', 'Connect public catalog state must remain beta during founder pilot');
 assert.equal(connect.primaryAction, 'disabled', 'Connect must not become generally launchable from public catalog metadata');
-assert.equal(connect.url, 'https://mn-connect-555464791734.web.app', 'Connect must use the canonical Firebase Hosting origin');
+assert.equal(connect.url, 'https://connect.millionsnest.com', 'Connect must use the official canonical origin');
 assert.equal(connect.operationalUrl, connect.url, 'Connect operational origin must match the canonical pilot origin');
 
 const organization = { id: 'org-1', apps: {}, enabledApps: [] as string[] };

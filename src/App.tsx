@@ -34,6 +34,7 @@ const EcosystemAdmin = lazy(() => import('./pages/EcosystemAdmin.js').then(modul
 const EcosystemDataConsole = lazy(() => import('./pages/EcosystemDataConsole.js').then(module => ({ default: module.EcosystemDataConsole })));
 const OrganizationPublicPage = lazy(() => import('./pages/OrganizationPublicPage.js').then(module => ({ default: module.OrganizationPublicPage })));
 const MusicScaleLanding = lazy(() => import('./pages/MusicScaleLanding.js').then(module => ({ default: module.MusicScaleLanding })));
+const ConnectLaunch = lazy(() => import('./pages/ConnectLaunch.js').then(module => ({ default: module.ConnectLaunch })));
 
 function LoadingFallback() {
   return (
@@ -88,6 +89,7 @@ export default function App() {
                 <Route path="/ecosystem/data-console" element={<EcosystemDataConsole />} />
                 <Route path="/upgrade" element={<Checkout />} />
                 <Route path="/checkout" element={<Checkout />} />
+                <Route path="/connect/launch" element={<ConnectLaunch />} />
                 <Route path="/musicscale" element={<MusicScaleLanding />} />
                 <Route path="/termos-de-uso" element={<Terms />} />
                 <Route path="/politica-de-privacidade" element={<Privacy />} />
