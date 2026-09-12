@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
@@ -8,10 +8,12 @@ import { Loader2 } from "lucide-react";
 import { parseInvitationRedirectPath } from "../lib/InvitationRedirectPolicy.js";
 import { useTranslation } from "react-i18next";
 import { MillionsNestLogo } from "../components/MillionsNestLogo.js";
+import { resolveSafePostLoginPath } from "../lib/connectLaunchPolicy.js";
 
 export function Login() {
   const { user, profile, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation(['auth']);
   
   const [isLogin, setIsLogin] = useState(true);
@@ -39,6 +41,12 @@ export function Login() {
       }
       
       if (profile) {
+          const safeNext = resolveSafePostLoginPath(location.search);
+          if (safeNext) {
+            navigate(safeNext, { replace: true });
+            return;
+          }
+
           // UX Optimized: Check if user was trying to buy something before login
           const purchaseIntent = sessionStorage.getItem('purchase_intent');
           if (purchaseIntent) {
@@ -49,7 +57,7 @@ export function Login() {
           }
       }
     }
-  }, [user, profile, authLoading, navigate]);
+  }, [user, profile, authLoading, navigate, location.search]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
