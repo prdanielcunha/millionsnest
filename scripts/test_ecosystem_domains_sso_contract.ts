@@ -15,11 +15,13 @@ for (const id of ['musicscale', 'connect', 'nestfinance', 'nestjourney']) {
   assert.equal(app.authMode, 'hub_handoff');
   assert.ok(app.hubLaunchRoute?.startsWith('/'));
   assert.ok(app.firebaseHostingSite?.startsWith('mn-'));
+  assert.equal(app.domainStatus, 'configured', `${id} must use a certified official domain`);
 }
 
 assert.equal(byId.get('nestlocal')?.directEntrySso, false, 'NestLocal must not be launchable before a real app/site exists');
-assert.equal(byId.get('nestfinance')?.domainStatus, 'setup_required');
-assert.equal(byId.get('nestjourney')?.domainStatus, 'setup_required');
+assert.equal(byId.get('nestlocal')?.domainStatus, 'reserved');
+assert.equal(byId.get('nestfinance')?.url, 'https://nestfinance.millionsnest.com/auth/handoff');
+assert.equal(byId.get('nestjourney')?.url, 'https://nestjourney.millionsnest.com/');
 
 assert.equal(
   resolveSafePostLoginPath('?next=%2Fapps%2Fmusicscale%2Flaunch'),
@@ -71,11 +73,13 @@ async function captureLaunch(appId: 'nestfinance' | 'musicscale', destinationPat
 }
 
 const nestFinanceLaunch = await captureLaunch('nestfinance', '/finance/reports');
+assert.equal(nestFinanceLaunch.origin, 'https://nestfinance.millionsnest.com');
 assert.equal(nestFinanceLaunch.pathname, '/auth/handoff');
 assert.equal(nestFinanceLaunch.searchParams.get('returnTo'), '/finance/reports');
 assert.ok(nestFinanceLaunch.searchParams.get('ecosystem_ctx'));
 
 const musicScaleLaunch = await captureLaunch('musicscale', '/songs');
+assert.equal(musicScaleLaunch.origin, 'https://musicscale.millionsnest.com');
 assert.equal(musicScaleLaunch.pathname, '/songs');
 assert.equal(musicScaleLaunch.searchParams.get('returnTo'), null);
 assert.ok(musicScaleLaunch.searchParams.get('ecosystem_ctx'));
