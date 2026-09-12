@@ -25,11 +25,11 @@ Nunca implementar SSO compartilhando refresh token, service-account JSON, senha 
 | Hub | `www.millionsnest.com` | `mn-hub-555464791734` | operacional | autoridade de sessão/handoff |
 | MusicScale | `musicscale.millionsnest.com` | `mn-musicscale-555464791734` | `configured` | `/apps/musicscale/launch` → `/start` |
 | Connect | `connect.millionsnest.com` | `mn-connect-555464791734` | `configured` | `/connect/launch` |
-| NestFinance | `nestfinance.millionsnest.com` | `mn-nestfinance-555464791734` | `setup_required` até smoke DNS/SSL | `/apps/nestfinance/launch` → `/auth/handoff` |
-| NestJourney | `nestjourney.millionsnest.com` | `mn-nestjourney-555464791734` | `setup_required` até smoke DNS/SSL | `/apps/nestjourney/launch` → gate global |
+| NestFinance | `nestfinance.millionsnest.com` | `mn-nestfinance-555464791734` | `configured` | `/apps/nestfinance/launch` → `/auth/handoff` |
+| NestJourney | `nestjourney.millionsnest.com` | `mn-nestjourney-555464791734` | `configured` | `/apps/nestjourney/launch` → gate global |
 | NestLocal | `nestlocal.millionsnest.com` | ainda sem site/repositório canônico | `reserved` | habilitar somente quando houver app/site reais |
 
-`configured` significa que o produto está ligado no código. A única prova de domínio operacional é DNS + SSL ativos e smoke HTTPS depois do deploy.
+`configured` significa que o domínio foi ligado no código **depois** de ownership, host, certificado e HTTPS do CustomDomain terem sido certificados. O workflow `firebase-domain-readiness-check.yml` é o gate canônico e deve continuar verde; existência do recurso Firebase, sozinha, não é prova suficiente.
 
 ## Provisionamento de domínio no Firebase
 
@@ -38,7 +38,7 @@ O repositório do Hub já possui `.github/workflows/firebase-custom-domain-prepa
 Para um domínio novo ou ainda pendente:
 
 1. **Confirmar o site Firebase Hosting.** No projeto `millionsnest`, cada produto deve ter seu próprio site e target em `.firebaserc`/`firebase.json`. Não reutilizar o Hosting de outro app.
-2. **Criar/consultar o CustomDomain.** Use o workflow de preparação existente ou Firebase Console → Hosting → site correto → Add custom domain. Para NestFinance use `nestfinance.millionsnest.com`; para NestJourney use `nestjourney.millionsnest.com`.
+2. **Criar/consultar o CustomDomain.** Use o workflow de preparação existente ou Firebase Console → Hosting → site correto → Add custom domain.
 3. **Copiar somente os registros retornados pelo Firebase.** O Firebase pode pedir TXT e depois A/AAAA/CNAME. Nunca hardcode IP/CNAME antigo neste documento ou no código.
 4. **Aplicar no DNS de `millionsnest.com`.** Durante provisionamento do certificado, evitar proxy/CDN intermediário salvo configuração já validada.
 5. **Esperar ownership, host e SSL ficarem saudáveis.** Não mudar `domainStatus` para `configured` antes disso.
