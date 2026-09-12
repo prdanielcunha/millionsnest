@@ -1,0 +1,57 @@
+name: Connect Official Domain Check
+
+on:
+  push:
+    branches:
+      - ops/connect-official-domain-check-01
+    paths:
+      - .github/workflows/connect-official-domain-check.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - name: Read Firebase Connect custom-domain state
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          URL="https://firebasehosting.googleapis.com/v1beta1/projects/millionsnest/sites/mn-connect-555464791734/customDomains/connect.millionsnest.com"
+          curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$URL" > /tmp/connect-domain.json
+          python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/connect-domain.json'))
+          print('DOMAIN_NAME='+str(x.get('name')))
+          print('OWNERSHIP_STATE='+str(x.get('ownershipState')))
+          print('HOST_STATE='+str(x.get('hostState')))
+          print('RECONCILING='+str(x.get('reconciling')))
+          print('CERT_STATE='+str((x.get('cert') or {}).get('state')))
+          print('ISSUES='+json.dumps(x.get('issues',[]), separators=(',',':')))
+          print('DNS_DESIRED='+json.dumps((x.get('requiredDnsUpdates') or {}).get('desired',[]), separators=(',',':')))
+          PY
+      - name: Check public DNS and HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import socket
+          host='connect.millionsnest.com'
+          try:
+              infos=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
+              addresses=sorted({item[4][0] for item in infos})
+              print('PUBLIC_ADDRESSES='+','.join(addresses))
+          except Exception as exc:
+              print('DNS_ERROR='+repr(exc))
+              raise
+          PY
+          curl --fail --silent --show-error --max-time 20 -I https://connect.millionsnest.com/ | sed -n '1,12p'
