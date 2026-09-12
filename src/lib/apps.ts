@@ -22,6 +22,7 @@ export interface EcosystemApp {
   canonicalOrigin?: string;
   hubLaunchRoute?: string;
   handoffEntryPath?: string;
+  handoffConsumesGlobally?: boolean;
   authMode?: EcosystemAuthMode;
   domainStatus?: EcosystemDomainStatus;
   hostingTarget?: string;
@@ -48,6 +49,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     canonicalOrigin: 'https://musicscale.millionsnest.com',
     hubLaunchRoute: '/apps/musicscale/launch',
     handoffEntryPath: '/start',
+    handoffConsumesGlobally: true,
     authMode: 'hub_handoff',
     domainStatus: 'configured',
     hostingTarget: 'musicscale',
@@ -72,6 +74,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     canonicalOrigin: 'https://nestfinance.millionsnest.com',
     hubLaunchRoute: '/apps/nestfinance/launch',
     handoffEntryPath: '/auth/handoff',
+    handoffConsumesGlobally: false,
     authMode: 'hub_handoff',
     domainStatus: 'setup_required',
     hostingTarget: 'nestfinance',
@@ -113,6 +116,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     canonicalOrigin: 'https://nestjourney.millionsnest.com',
     hubLaunchRoute: '/apps/nestjourney/launch',
     handoffEntryPath: '/',
+    handoffConsumesGlobally: true,
     authMode: 'hub_handoff',
     domainStatus: 'setup_required',
     hostingTarget: 'nestjourney',
@@ -137,6 +141,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     canonicalOrigin: 'https://connect.millionsnest.com',
     hubLaunchRoute: '/connect/launch',
     handoffEntryPath: '/',
+    handoffConsumesGlobally: true,
     authMode: 'hub_handoff',
     domainStatus: 'configured',
     hostingTarget: 'connect',
