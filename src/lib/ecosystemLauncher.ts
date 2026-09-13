@@ -1,4 +1,5 @@
 import { isAllowedAppDestinationPath } from './appExperienceRegistry.js';
+import { resolveTrustedEcosystemReturnOrigin } from './connectLaunchPolicy.js';
 
 export interface EcosystemLauncherDependencies {
   getIdToken: () => Promise<string>;
@@ -31,7 +32,8 @@ export async function openEcosystemModule(
   organization: any,
   currentUserData: any,
   injectedDependencies?: Partial<EcosystemLauncherDependencies>,
-  destinationPath?: string
+  destinationPath?: string,
+  returnOrigin?: string,
 ) {
   if (!user || typeof user !== 'object' || typeof user.uid !== 'string' || user.uid.trim() === '') {
     console.error('[EcosystemLaunch] Missing required user data');
@@ -177,7 +179,8 @@ export async function openEcosystemModule(
   };
 
   const encodedContext = btoa(JSON.stringify(context));
-  const targetUrl = new URL(app.url);
+  const trustedReturnOrigin = resolveTrustedEcosystemReturnOrigin(moduleKey, returnOrigin);
+  const targetUrl = new URL(trustedReturnOrigin || app.url);
 
   if (destinationPath) {
     const cleanDestinationPath = destinationPath.trim();
