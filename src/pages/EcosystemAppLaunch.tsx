@@ -8,6 +8,7 @@ import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import {
   buildEcosystemLoginPath,
   resolveCanonicalConnectOrganizationId,
+  resolveTrustedEcosystemReturnOrigin,
 } from '../lib/connectLaunchPolicy.js';
 
 /**
@@ -33,6 +34,12 @@ export function EcosystemAppLaunch() {
     return isAllowedAppDestinationPath(app.id, candidate) ? candidate : undefined;
   }, [app, location.search]);
 
+  const requestedReturnOrigin = useMemo(() => {
+    if (!app) return undefined;
+    const candidate = new URLSearchParams(location.search).get('returnOrigin');
+    return resolveTrustedEcosystemReturnOrigin(app.id, candidate) || undefined;
+  }, [app, location.search]);
+
   useEffect(() => {
     if (loading) return;
 
@@ -47,7 +54,7 @@ export function EcosystemAppLaunch() {
     }
 
     if (!user) {
-      navigate(buildEcosystemLoginPath(app.id, requestedDestination), { replace: true });
+      navigate(buildEcosystemLoginPath(app.id, requestedDestination, requestedReturnOrigin), { replace: true });
       return;
     }
 
@@ -82,6 +89,7 @@ export function EcosystemAppLaunch() {
       canonicalContext,
       undefined,
       requestedDestination,
+      requestedReturnOrigin,
     ).catch((launchError) => {
       launchStartedRef.current = false;
       setError(
@@ -90,7 +98,7 @@ export function EcosystemAppLaunch() {
           : `Não foi possível preparar o acesso seguro ao ${app.name}.`,
       );
     });
-  }, [app, canonicalContext, loading, navigate, profile, requestedDestination, user]);
+  }, [app, canonicalContext, loading, navigate, profile, requestedDestination, requestedReturnOrigin, user]);
 
   const appName = app?.name || 'aplicativo';
 
