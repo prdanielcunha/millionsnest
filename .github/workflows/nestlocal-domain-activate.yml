@@ -90,6 +90,16 @@ jobs:
                   raise SystemExit(f'Firebase returned an out-of-scope DNS name: {name}')
               seen.add(key)
               lines.append('\t'.join(key))
+          # Firebase occasionally reports HOST_UNHOSTED before populating
+          # requiredDnsUpdates for an already-owned parent domain. The isolated
+          # Hosting site's canonical CNAME is deterministic and matches the
+          # established pattern used by the other MillionsNest subdomains.
+          if not lines and data.get('hostState') == 'HOST_UNHOSTED':
+              lines.append('\t'.join((
+                  'nestlocal.millionsnest.com',
+                  'CNAME',
+                  'mn-nestlocal-555464791734.web.app',
+              )))
           Path('/tmp/nestlocal-dns.tsv').write_text('\n'.join(lines) + ('\n' if lines else ''))
           public = {
               'ownershipState': data.get('ownershipState'),
