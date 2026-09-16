@@ -59,7 +59,9 @@ export function Login() {
           const purchaseIntent = sessionStorage.getItem('purchase_intent');
           if (purchaseIntent) {
             sessionStorage.removeItem('purchase_intent');
-            navigate(`/checkout?plan=${purchaseIntent}`);
+            const purchaseApp = sessionStorage.getItem('purchase_app') || 'musicscale';
+            sessionStorage.removeItem('purchase_app');
+            navigate(`/checkout?app=${encodeURIComponent(purchaseApp)}&plan=${encodeURIComponent(purchaseIntent)}`);
           } else {
             navigate('/dashboard/overview');
           }

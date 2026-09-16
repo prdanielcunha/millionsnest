@@ -60,6 +60,10 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!authLoading && !user) {
+      const params = new URLSearchParams(window.location.search);
+      const requestedPlan = params.get('plan');
+      if (requestedPlan) sessionStorage.setItem('purchase_intent', requestedPlan);
+      sessionStorage.setItem('purchase_app', checkoutApp);
       const next = `${window.location.pathname}${window.location.search}`;
       navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true });
       return;
