@@ -12,6 +12,9 @@ if ('serviceWorker' in navigator) {
     console.error('SW Unregistration error:', err);
   });
 }
+if ('caches' in window) {
+  caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))).catch(() => {});
+}
 
 createRoot(document.getElementById('root')!).render(
     <App />

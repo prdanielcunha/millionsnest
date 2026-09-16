@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { signInWithRedirect, getRedirectResult, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import { motion } from "framer-motion";
@@ -21,6 +21,14 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!auth) return;
+    getRedirectResult(auth).catch((err: any) => {
+      setError(err?.message || t("google_error"));
+      setLoading(false);
+    });
+  }, [t]);
 
   useEffect(() => {
     // invite_org_id injection removed to prevent blindly trusting invalid organization ids bypassing Join.tsx validations
@@ -92,7 +100,8 @@ export function Login() {
 
     setLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      sessionStorage.setItem('mn_auth_started_at', String(Date.now()));
+      await signInWithRedirect(auth, googleProvider);
     } catch (err: any) {
       setError(err.message || t("google_error"));
       setLoading(false);

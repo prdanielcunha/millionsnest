@@ -60,7 +60,8 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate('/login');
+      const next = `${window.location.pathname}${window.location.search}`;
+      navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true });
       return;
     }
     
@@ -497,11 +498,17 @@ export default function Checkout() {
                                <ul className="space-y-4 pt-6 border-t border-white/5 relative z-10 w-full text-left mt-0 flex-1">
                                    {checkoutApp === 'nestlocal' ? (
                                        <>
-                                         {((isStarter
+                                         {(Array.isArray((isStarter
                                            ? t('nestlocal.features.essential', { returnObjects: true })
                                            : isAdvanced
                                              ? t('nestlocal.features.growth', { returnObjects: true })
-                                             : t('nestlocal.features.pro', { returnObjects: true })) as string[]).map((item, i) => (
+                                             : t('nestlocal.features.pro', { returnObjects: true })))
+                                           ? (isStarter
+                                             ? t('nestlocal.features.essential', { returnObjects: true })
+                                             : isAdvanced
+                                               ? t('nestlocal.features.growth', { returnObjects: true })
+                                               : t('nestlocal.features.pro', { returnObjects: true })) as string[]
+                                           : []).map((item, i) => (
                                            <React.Fragment key={i}><FeatureItem text={item} /></React.Fragment>
                                          ))}
                                        </>
