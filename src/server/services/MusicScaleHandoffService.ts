@@ -27,6 +27,7 @@ export type MusicScaleHandoffDependencies = {
 const STANDARD_HANDOFF_APPS = new Set<EcosystemAppId>([
   'musicscale',
   'nestfinance',
+  'nestlocal',
   'nestjourney',
 ]);
 

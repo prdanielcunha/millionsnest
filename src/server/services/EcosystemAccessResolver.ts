@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
 
-export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestjourney';
+export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
 
 export type CanonicalAppAccessState = 'granted' | 'denied';
@@ -263,6 +263,56 @@ export async function resolveEcosystemAppAccess(params: {
       roles: memberAccess?.roles || [organizationRole],
       permissions: memberAccess?.permissions || [],
       scopes: memberAccess?.scopes || {},
+      decisionState: 'granted'
+    };
+  }
+
+  if (appId === 'nestlocal') {
+    const subDoc = await db.collection('subscriptions').doc(organizationId).get();
+    const appSubscription = subDoc.exists ? subDoc.data()?.apps?.nestlocal : null;
+    const orgAppAccess = orgData.apps?.nestlocal;
+    const subscriptionStatus = String(appSubscription?.status || '').toLowerCase();
+    const organizationAppStatus = String(orgAppAccess?.status || '').toLowerCase();
+    const paymentIssueStatuses = ['past_due', 'unpaid', 'incomplete', 'paused'];
+    const activeStatuses = ['active', 'trialing'];
+
+    if (!appSubscription) {
+      return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_NOT_FOUND };
+    }
+    if (paymentIssueStatuses.includes(subscriptionStatus)) {
+      return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_PAYMENT_REQUIRED };
+    }
+    if (!activeStatuses.includes(subscriptionStatus)) {
+      return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_INACTIVE };
+    }
+    if (!activeStatuses.includes(organizationAppStatus)) {
+      return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.ENTITLEMENT_INACTIVE };
+    }
+
+    const memberAccess = memData.appAccess?.nestlocal;
+    const normalizedOrganizationRole = String(organizationRole).toLowerCase();
+    const isOwner = normalizedOrganizationRole === 'owner';
+    if (!isOwner && memberAccess?.enabled !== true) {
+      return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.MEMBER_APP_ACCESS_DISABLED };
+    }
+    const canManage = isOwner
+      || memData.permissions?.['nestlocal.manage'] === true
+      || memberAccess?.permissions?.includes?.('nestlocal.manage');
+    if (!canManage) {
+      return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.PERMISSION_DENIED };
+    }
+
+    return {
+      appId,
+      organizationId,
+      accessible: true,
+      isGlobalAccess: false,
+      accessSource: 'organization_membership',
+      systemRole,
+      organizationRole,
+      roles: memberAccess?.roles || [organizationRole],
+      permissions: memberAccess?.permissions || ['nestlocal.manage'],
+      scopes: memberAccess?.scopes || { nestlocal: ['manage'] },
       decisionState: 'granted'
     };
   }

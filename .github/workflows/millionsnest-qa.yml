@@ -151,6 +151,9 @@ jobs:
       - name: MusicScale one-trial-per-organization contract
         run: npx tsx scripts/test_music_scale_trial_history.ts
 
+      - name: NestLocal SaaS billing and entitlement contract
+        run: npx tsx scripts/test_nestlocal_saas_billing_contract.ts
+
       - name: Checkout confirmation tenant-binding contract
         run: npx tsx scripts/test_checkout_confirm_tenant_binding.ts
 

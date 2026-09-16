@@ -78,7 +78,14 @@ export const APP_EXPERIENCE_REGISTRY: Readonly<Record<string, AppExperienceDefin
   nestlocal: {
     appId: 'nestlocal',
     sections: APP_EXPERIENCE_SECTIONS,
-    destinations: {}
+    destinations: {
+      home: '/',
+      requests: '/?view=requests',
+      agenda: '/?view=agenda',
+      services: '/?view=services',
+      automation: '/?view=automation',
+      page: '/?view=page'
+    }
   },
   nestjourney: {
     appId: 'nestjourney',

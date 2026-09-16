@@ -685,7 +685,20 @@ export default {
     monthly_period: "month",
     yearly_period: "year",
     one_time_badge: "One-Time Payment",
-    error_plan: "Please select a primary plan."
+    error_plan: "Please select a primary plan.",
+    nestlocal: {
+      title: "Turn requests into an organized operation.",
+      subtitle: "Your service page, guided quotes, and request inbox. Try it free for 7 days and cancel anytime.",
+      essential: "Essential",
+      growth: "Growth",
+      scope_title: "Subscription per business",
+      scope_description: "The plan belongs to the selected business and unlocks NestLocal for the included team.",
+      features: {
+        essential: ["1 user", "Public service page", "Guided quotes", "Up to 100 requests per month", "Requests, customers, and schedule in one place"],
+        growth: ["Up to 3 users", "Everything in Essential", "Up to 500 requests per month", "Operational automations", "Opportunity tracking"],
+        pro: ["Up to 10 users", "Everything in Growth", "Fair-use requests", "Advanced features", "Priority access to new features"]
+      }
+    }
   },
   dashboard: {
     governance: {

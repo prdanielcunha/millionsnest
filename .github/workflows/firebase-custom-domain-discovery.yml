@@ -35,7 +35,8 @@ jobs:
             mn-musicscale-555464791734 \
             mn-nestfinance-555464791734 \
             mn-connect-555464791734 \
-            mn-nestjourney-555464791734
+            mn-nestjourney-555464791734 \
+            mn-nestlocal-555464791734
           do
             echo "===== SITE:$SITE ====="
             curl --fail --silent --show-error \

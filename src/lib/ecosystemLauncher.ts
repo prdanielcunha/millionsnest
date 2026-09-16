@@ -21,6 +21,7 @@ const appDisplayName = (moduleKey: string) => {
   if (moduleKey === 'musicscale') return 'MusicScale';
   if (moduleKey === 'connect') return 'MillionsNest Connect';
   if (moduleKey === 'nestfinance') return 'NestFinance';
+  if (moduleKey === 'nestlocal') return 'NestLocal';
   if (moduleKey === 'nestjourney') return 'NestJourney';
   return 'aplicativo';
 };

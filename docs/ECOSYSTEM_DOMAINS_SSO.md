@@ -27,13 +27,13 @@ Nunca implementar SSO compartilhando refresh token, service-account JSON, senha 
 | Connect | `connect.millionsnest.com` | `mn-connect-555464791734` | `configured` | `/connect/launch` |
 | NestFinance | `nestfinance.millionsnest.com` | `mn-nestfinance-555464791734` | `configured` | `/apps/nestfinance/launch` → `/auth/handoff` |
 | NestJourney | `nestjourney.millionsnest.com` | `mn-nestjourney-555464791734` | `configured` | `/apps/nestjourney/launch` → gate global |
-| NestLocal | `nestlocal.millionsnest.com` | ainda sem site/repositório canônico | `reserved` | habilitar somente quando houver app/site reais |
+| NestLocal | `nestlocal.millionsnest.com` | `mn-nestlocal-555464791734` | `setup_required` até DNS/SSL; fallback ativo | `/apps/nestlocal/launch` → `/` |
 
 `configured` significa que o domínio foi ligado no código **depois** de ownership, host, certificado e HTTPS do CustomDomain terem sido certificados. O workflow `firebase-domain-readiness-check.yml` é o gate canônico e deve continuar verde; existência do recurso Firebase, sozinha, não é prova suficiente.
 
 ## Provisionamento de domínio no Firebase
 
-O repositório do Hub já possui `.github/workflows/firebase-custom-domain-prepare.yml`, que conhece Hub, MusicScale, NestFinance, Connect e NestJourney. Ele cria/consulta recursos CustomDomain no Firebase **sem inventar registros DNS** e imprime os valores exigidos pelo Firebase.
+O repositório do Hub possui `.github/workflows/firebase-custom-domain-prepare.yml`, que conhece todos os sites, incluindo NestLocal. Ele cria/consulta recursos CustomDomain no Firebase **sem inventar registros DNS** e imprime os valores exigidos pelo Firebase. O workflow dedicado `nestlocal-domain-activate.yml` aplica somente os registros retornados pelo Firebase para `nestlocal.millionsnest.com` no Cloudflare, sempre sem proxy durante a emissão do certificado.
 
 Para um domínio novo ou ainda pendente:
 

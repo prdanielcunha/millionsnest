@@ -20,7 +20,8 @@ export async function resolveSubscriptionPurchaseEligibility(
   stripe: Stripe,
   db: any,
   organizationId: string,
-  stripeCustomerId?: string
+  stripeCustomerId?: string,
+  appId: 'musicscale' | 'nestlocal' = 'musicscale'
 ): Promise<SubscriptionPurchaseEligibility> {
   const managementUrl = '/dashboard/billing';
   let canonicalSubscriptionStatus: string | null = null;
@@ -35,14 +36,15 @@ export async function resolveSubscriptionPurchaseEligibility(
 
     if (subDoc.exists) {
       const data = subDoc.data();
-      canonicalSubscriptionStatus = data?.status || null;
-      canonicalSubscriptionId = data?.stripeSubscriptionId || data?.id || null;
+      const appSubscription = data?.apps?.[appId] || null;
+      canonicalSubscriptionStatus = appSubscription?.status || (appId === 'musicscale' ? data?.status : null) || null;
+      canonicalSubscriptionId = appSubscription?.stripeSubscriptionId || (appId === 'musicscale' ? (data?.stripeSubscriptionId || data?.id) : null) || null;
     }
 
     if (orgDoc.exists) {
-      const musicscaleStatus = orgDoc.data()?.apps?.musicscale?.status;
+      const appStatus = orgDoc.data()?.apps?.[appId]?.status;
       if (canonicalSubscriptionStatus === 'active' || canonicalSubscriptionStatus === 'trialing') {
-        if (musicscaleStatus === 'active' || musicscaleStatus === 'trialing') {
+        if (appStatus === 'active' || appStatus === 'trialing') {
           entitlementMaterialized = true;
         }
       }
@@ -91,7 +93,7 @@ export async function resolveSubscriptionPurchaseEligibility(
   for (const sub of subscriptions.data) {
     // Multi-tenant check
     const isCanonical = canonicalSubscriptionId && sub.id === canonicalSubscriptionId;
-    const isAppMatch = sub.metadata?.app === 'musicscale';
+    const isAppMatch = sub.metadata?.app === appId;
     const isOrgMatch = (sub.metadata?.organizationId === organizationId || sub.metadata?.orgId === organizationId || sub.metadata?.uid === organizationId);
     
     // We consider it relevant if it's explicitly matched or if it's the canonical one.

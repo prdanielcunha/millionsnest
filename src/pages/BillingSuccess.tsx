@@ -8,45 +8,47 @@ import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 export default function BillingSuccess() {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get('session_id');
+  const requestedApp = searchParams.get('app') === 'nestlocal' ? 'nestlocal' : 'musicscale';
   const navigate = useNavigate();
   const { user, profile, loading } = useAuth();
   
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [message, setMessage] = useState('Seu pagamento foi confirmado. Estamos preparando o MusicScale para sua organização.');
+  const [message, setMessage] = useState(`Seu pagamento foi confirmado. Estamos preparando o ${requestedApp === 'nestlocal' ? 'NestLocal' : 'MusicScale'} para sua organização.`);
   const [retryCount, setRetryCount] = useState(0);
   const [confirmedOrganizationId, setConfirmedOrganizationId] = useState<string | null>(null);
-  const [launchingMusicScale, setLaunchingMusicScale] = useState(false);
+  const [launchingApp, setLaunchingApp] = useState(false);
+  const [confirmedApp, setConfirmedApp] = useState<'musicscale' | 'nestlocal'>(requestedApp);
   const autoLaunchAttemptedRef = useRef(false);
 
-  const launchMusicScale = useCallback(async (organizationId: string | null) => {
+  const launchPurchasedApp = useCallback(async (organizationId: string | null) => {
     if (!user || !organizationId) {
       navigate('/dashboard');
       return;
     }
 
     autoLaunchAttemptedRef.current = true;
-    setLaunchingMusicScale(true);
+    setLaunchingApp(true);
     try {
       analytics.track('app_usage', {
-        app: 'musicscale',
+        app: confirmedApp,
         userId: user.uid,
         organizationId,
         metadata: { action: 'post_checkout_launch', source: 'billing_success' }
       });
 
       await openEcosystemModule(
-        'musicscale',
+        confirmedApp,
         user,
         profile,
         { id: organizationId },
         {}
       );
     } catch (error) {
-      console.warn('[BillingSuccess] Direct MusicScale launch failed; keeping recovery UI available.', error);
-      setMessage('Sua assinatura está ativa. Não conseguimos abrir o MusicScale automaticamente; tente novamente pelo botão abaixo.');
-      setLaunchingMusicScale(false);
+      console.warn('[BillingSuccess] Direct app launch failed; keeping recovery UI available.', error);
+      setMessage(`Sua assinatura está ativa. Não conseguimos abrir o ${confirmedApp === 'nestlocal' ? 'NestLocal' : 'MusicScale'} automaticamente; tente novamente pelo botão abaixo.`);
+      setLaunchingApp(false);
     }
-  }, [navigate, profile, user]);
+  }, [confirmedApp, navigate, profile, user]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -80,7 +82,9 @@ export default function BillingSuccess() {
 
         if (data.ok && data.action === 'subscription_ready') {
           setStatus('success');
-          setMessage('Tudo certo. O MusicScale já está disponível.');
+          const purchasedApp = data.app === 'nestlocal' ? 'nestlocal' : 'musicscale';
+          setConfirmedApp(purchasedApp);
+          setMessage(`Tudo certo. O ${purchasedApp === 'nestlocal' ? 'NestLocal' : 'MusicScale'} já está disponível.`);
 
           const organizationId = data.organizationId || null;
           setConfirmedOrganizationId(organizationId);
@@ -88,7 +92,7 @@ export default function BillingSuccess() {
           const analyticsKey = `mn_checkout_completed_${sessionId}`;
           if (!sessionStorage.getItem(analyticsKey)) {
             analytics.track('checkout_completed', {
-              app: 'musicscale',
+              app: purchasedApp,
               userId: user?.uid,
               organizationId: organizationId || undefined,
               metadata: { source: 'billing_confirmation' }
@@ -132,12 +136,12 @@ export default function BillingSuccess() {
 
     const timer = window.setTimeout(() => {
       if (!autoLaunchAttemptedRef.current) {
-        void launchMusicScale(confirmedOrganizationId);
+        void launchPurchasedApp(confirmedOrganizationId);
       }
     }, 1200);
 
     return () => window.clearTimeout(timer);
-  }, [status, confirmedOrganizationId, user, launchMusicScale]);
+  }, [status, confirmedOrganizationId, user, launchPurchasedApp]);
 
   return (
     <div className="min-h-screen bg-[#0A0D14] flex flex-col items-center justify-center p-6">
@@ -165,18 +169,18 @@ export default function BillingSuccess() {
             </p>
             <div className="w-full flex flex-col gap-3">
               <button
-                onClick={() => void launchMusicScale(confirmedOrganizationId)}
-                disabled={launchingMusicScale}
+                onClick={() => void launchPurchasedApp(confirmedOrganizationId)}
+                disabled={launchingApp}
                 className="w-full flex items-center justify-center gap-2 bg-[#2B85EB] hover:bg-[#2B85EB]/90 disabled:opacity-60 text-white font-semibold py-3 px-6 rounded-xl transition-all"
               >
-                {launchingMusicScale ? (
+                {launchingApp ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Abrindo MusicScale...
+                    Abrindo {confirmedApp === 'nestlocal' ? 'NestLocal' : 'MusicScale'}...
                   </>
                 ) : (
                   <>
-                    Abrir MusicScale
+                    Abrir {confirmedApp === 'nestlocal' ? 'NestLocal' : 'MusicScale'}
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}

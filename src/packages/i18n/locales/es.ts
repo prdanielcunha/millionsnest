@@ -694,7 +694,20 @@ export default {
     monthly_period: "mes",
     yearly_period: "año",
     one_time_badge: "Pago Único",
-    error_plan: "Por favor, seleccione un plan principal."
+    error_plan: "Por favor, seleccione un plan principal.",
+    nestlocal: {
+      title: "Convierte solicitudes en una operación organizada.",
+      subtitle: "Tu página de servicios, presupuestos guiados y bandeja de solicitudes. Pruébalo gratis durante 7 días y cancela cuando quieras.",
+      essential: "Esencial",
+      growth: "Crecimiento",
+      scope_title: "Suscripción por negocio",
+      scope_description: "El plan pertenece al negocio seleccionado y habilita NestLocal para el equipo incluido.",
+      features: {
+        essential: ["1 usuario", "Página pública de servicios", "Presupuestos guiados", "Hasta 100 solicitudes al mes", "Solicitudes, clientes y agenda en un solo lugar"],
+        growth: ["Hasta 3 usuarios", "Todo lo de Esencial", "Hasta 500 solicitudes al mes", "Automatizaciones operativas", "Seguimiento de oportunidades"],
+        pro: ["Hasta 10 usuarios", "Todo lo de Crecimiento", "Solicitudes con uso razonable", "Funciones avanzadas", "Prioridad en nuevas funciones"]
+      }
+    }
   },
   dashboard: {
     governance: {

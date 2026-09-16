@@ -22,8 +22,10 @@ for (const id of ['musicscale', 'connect', 'nestfinance', 'nestjourney']) {
   assert.equal(app.domainStatus, 'configured', `${id} must use a certified official domain`);
 }
 
-assert.equal(byId.get('nestlocal')?.directEntrySso, false, 'NestLocal must not be launchable before a real app/site exists');
-assert.equal(byId.get('nestlocal')?.domainStatus, 'reserved');
+assert.equal(byId.get('nestlocal')?.directEntrySso, true, 'NestLocal must use the Hub handoff on its live Firebase fallback');
+assert.equal(byId.get('nestlocal')?.domainStatus, 'setup_required');
+assert.equal(byId.get('nestlocal')?.url, 'https://nestlocal.web.app/');
+assert.equal(byId.get('nestlocal')?.canonicalOrigin, 'https://nestlocal.millionsnest.com');
 assert.equal(byId.get('nestfinance')?.url, 'https://nestfinance.millionsnest.com/auth/handoff');
 assert.equal(byId.get('nestjourney')?.url, 'https://nestjourney.millionsnest.com/');
 
@@ -36,7 +38,7 @@ assert.equal(
   '/apps/nestfinance/launch?returnTo=%2Ffinance%2Freports'
 );
 assert.equal(resolveSafePostLoginPath('?next=https%3A%2F%2Fevil.example'), null);
-assert.equal(resolveSafePostLoginPath('?next=%2Fapps%2Fnestlocal%2Flaunch'), null);
+assert.equal(resolveSafePostLoginPath('?next=%2Fapps%2Fnestlocal%2Flaunch'), '/apps/nestlocal/launch');
 
 const previewOrigin = 'https://mn-musicscale-555464791734--main-review-kwai2lc4.web.app';
 assert.equal(resolveTrustedEcosystemReturnOrigin('musicscale', previewOrigin), previewOrigin);

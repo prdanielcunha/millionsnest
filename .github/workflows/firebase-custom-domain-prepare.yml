@@ -59,6 +59,7 @@ jobs:
           create_domain "mn-nestfinance-555464791734" "nestfinance.millionsnest.com"
           create_domain "mn-connect-555464791734" "connect.millionsnest.com"
           create_domain "mn-nestjourney-555464791734" "nestjourney.millionsnest.com"
+          create_domain "mn-nestlocal-555464791734" "nestlocal.millionsnest.com"
 
       - name: Wait for Firebase reconciliation
         run: sleep 10
@@ -83,3 +84,4 @@ jobs:
           show_domain "mn-nestfinance-555464791734" "nestfinance.millionsnest.com"
           show_domain "mn-connect-555464791734" "connect.millionsnest.com"
           show_domain "mn-nestjourney-555464791734" "nestjourney.millionsnest.com"
+          show_domain "mn-nestlocal-555464791734" "nestlocal.millionsnest.com"

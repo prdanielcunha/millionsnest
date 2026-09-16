@@ -1,7 +1,7 @@
 export const CONNECT_OFFICIAL_URL = 'https://connect.millionsnest.com';
 export const CONNECT_HUB_LAUNCH_PATH = '/connect/launch';
 
-const ECOSYSTEM_LAUNCH_PATH = /^\/apps\/(musicscale|nestfinance|nestjourney)\/launch$/;
+const ECOSYSTEM_LAUNCH_PATH = /^\/apps\/(musicscale|nestfinance|nestlocal|nestjourney)\/launch$/;
 const MUSICSCALE_MAIN_PREVIEW_HOST = /^mn-musicscale-555464791734--main-review-[a-z0-9-]+\.web\.app$/;
 
 export function resolveTrustedEcosystemReturnOrigin(
