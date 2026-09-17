@@ -53,6 +53,7 @@ export interface ActionProjectionInput {
   permissions: {
     canManageOrganization: boolean;
     canManageMembers: boolean;
+    canReadManagedMusicScaleResponses?: boolean;
   };
   pendingInvitesCount: number;
   musicScale: {
@@ -200,6 +201,16 @@ export function projectEvidenceBackedSignalToAction(
   permissions: ActionProjectionInput['permissions']
 ): EvidenceBackedReadOnlyHubAction | null {
   if (!hasCoherentSignalEvidence(signal)) return null;
+
+  // Managed MusicScale response summaries are ministry-level operational data.
+  // The strict projector requires the explicit backend-projected capability;
+  // ecosystem administration alone is not a substitute for domain authority.
+  if (
+    signal.signalType === 'musicscale_pending_responses' &&
+    permissions.canReadManagedMusicScaleResponses !== true
+  ) {
+    return null;
+  }
 
   const action = projectSignalToAction(signal, permissions);
   if (!action) return null;
