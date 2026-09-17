@@ -14,12 +14,15 @@ on:
       - 'src/lib/hubLensAuthorization.ts'
       - 'src/lib/lensActionProjection.ts'
       - 'src/lib/adaptiveWorkspaceModel.ts'
+      - 'src/lib/currentAdaptiveWorkspace.ts'
+      - 'src/components/dashboard/HubLensSwitcher.tsx'
       - 'scripts/test_fact_contract.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
       - 'scripts/test_hub_lens_authorization.ts'
       - 'scripts/test_lens_action_projection.ts'
       - 'scripts/test_adaptive_workspace_model.ts'
+      - 'scripts/test_current_adaptive_workspace.ts'
       - 'scripts/test_intelligence_i18n.ts'
       - '.github/workflows/church-intelligence-foundation-qa.yml'
   workflow_dispatch:
@@ -66,6 +69,9 @@ jobs:
 
       - name: Adaptive workspace read model
         run: npx tsx scripts/test_adaptive_workspace_model.ts
+
+      - name: Current Hub adaptive workspace bridge
+        run: npx tsx scripts/test_current_adaptive_workspace.ts
 
       - name: Church Intelligence PT/EN/ES coverage
         run: npx tsx scripts/test_intelligence_i18n.ts
