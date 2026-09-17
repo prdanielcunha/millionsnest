@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  resolveActiveHubLens,
   resolveAvailableHubLenses,
   resolveDefaultHubLens
 } from '../src/lib/lensResolver.js';
@@ -13,6 +14,11 @@ assert.deepEqual(
   ['my_today'],
   'an ordinary user must not receive domain lenses without prior authorization'
 );
+assert.equal(
+  resolveActiveHubLens('worship', memberLenses),
+  'my_today',
+  'a stale Lens selection must not survive after its authorization disappears'
+);
 
 const ceoLenses = resolveAvailableHubLenses({
   systemRole: 'ceo',
@@ -24,6 +30,12 @@ assert.deepEqual(
   'global governance must not automatically expose pastoral, Journey, worship or finance lenses'
 );
 assert.equal(ceoLenses[1]?.source, 'global_governance');
+assert.equal(resolveActiveHubLens('administration', ceoLenses), 'administration');
+assert.equal(
+  resolveActiveHubLens('finance', ceoLenses),
+  'my_today',
+  'global governance must not preserve an unavailable finance selection'
+);
 
 const responsibilityWithoutAuthorization = resolveAvailableHubLenses({
   systemRole: 'user',
@@ -50,6 +62,8 @@ assert.deepEqual(
 );
 assert.equal(worshipLeaderLenses[1]?.preferred, true);
 assert.equal(resolveDefaultHubLens(worshipLeaderLenses), 'worship');
+assert.equal(resolveActiveHubLens(undefined, worshipLeaderLenses), 'worship');
+assert.equal(resolveActiveHubLens('my_today', worshipLeaderLenses), 'my_today');
 
 const missingAppLenses = resolveAvailableHubLenses({
   systemRole: 'user',
@@ -91,6 +105,11 @@ assert.equal(
   resolveDefaultHubLens(multiResponsibilityLenses),
   'pastoral',
   'the default may prefer an explicit responsibility while My Today remains available'
+);
+assert.equal(
+  resolveActiveHubLens('not-a-real-lens', multiResponsibilityLenses),
+  'pastoral',
+  'invalid persisted values must fall back to the current authorized default'
 );
 
 const authorizedAdminLenses = resolveAvailableHubLenses({
