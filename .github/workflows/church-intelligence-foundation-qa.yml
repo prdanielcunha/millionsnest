@@ -6,7 +6,10 @@ on:
       - production
     paths:
       - 'src/packages/events/**'
+      - 'src/lib/actionCenter.ts'
+      - 'src/lib/actionSignals.ts'
       - 'scripts/test_fact_contract.ts'
+      - 'scripts/test_action_center_evidence_projection.ts'
       - '.github/workflows/church-intelligence-foundation-qa.yml'
   workflow_dispatch:
 
@@ -37,6 +40,9 @@ jobs:
 
       - name: Canonical fact and evidence contract
         run: npx tsx scripts/test_fact_contract.ts
+
+      - name: Evidence-first Action Center projection
+        run: npx tsx scripts/test_action_center_evidence_projection.ts
 
       - name: Typecheck
         run: npx tsc --noEmit
