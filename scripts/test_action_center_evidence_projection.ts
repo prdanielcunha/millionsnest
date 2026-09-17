@@ -11,7 +11,8 @@ const baseInput = {
   organization: { isConfigured: true },
   permissions: {
     canManageOrganization: true,
-    canManageMembers: true
+    canManageMembers: true,
+    canReadManagedMusicScaleResponses: true
   },
   pendingInvitesCount: 0,
   musicScale: {
@@ -95,9 +96,19 @@ const validSignal = strictSignals[0]!;
 assert.ok(
   projectEvidenceBackedSignalToAction(validSignal, {
     canManageOrganization: false,
-    canManageMembers: false
+    canManageMembers: false,
+    canReadManagedMusicScaleResponses: true
   }),
-  'a valid evidence-backed MusicScale signal should project normally'
+  'a valid evidence-backed managed MusicScale signal should project with explicit domain capability'
+);
+assert.equal(
+  projectEvidenceBackedSignalToAction(validSignal, {
+    canManageOrganization: true,
+    canManageMembers: true,
+    canReadManagedMusicScaleResponses: false
+  }),
+  null,
+  'ecosystem or organization administration must not substitute for managed MusicScale response authority'
 );
 
 const crossTenantSignal = {
@@ -110,7 +121,8 @@ const crossTenantSignal = {
 assert.equal(
   projectEvidenceBackedSignalToAction(crossTenantSignal, {
     canManageOrganization: true,
-    canManageMembers: true
+    canManageMembers: true,
+    canReadManagedMusicScaleResponses: true
   }),
   null,
   'cross-tenant evidence must fail closed before becoming a visible action'
@@ -126,7 +138,8 @@ const mismatchedSourceSignal = {
 assert.equal(
   projectEvidenceBackedSignalToAction(mismatchedSourceSignal, {
     canManageOrganization: true,
-    canManageMembers: true
+    canManageMembers: true,
+    canReadManagedMusicScaleResponses: true
   }),
   null,
   'evidence from a different source app must not substantiate a signal'
@@ -142,10 +155,36 @@ const mismatchedEntitySignal = {
 assert.equal(
   projectEvidenceBackedSignalToAction(mismatchedEntitySignal, {
     canManageOrganization: true,
-    canManageMembers: true
+    canManageMembers: true,
+    canReadManagedMusicScaleResponses: true
   }),
   null,
   'evidence for a different entity must not substantiate a signal'
+);
+
+const personalSignal = collectEvidenceBackedActionSignals({
+  organizationId,
+  organization: { isConfigured: true },
+  pendingInvitesCount: 0,
+  musicScale: {
+    ready: true,
+    nextScale: null,
+    nextPersonalScale: {
+      id: 'scale-personal',
+      responseSummaryAvailable: true,
+      pendingResponses: 1
+    }
+  }
+}).find(signal => signal.signalType === 'musicscale_personal_confirmation');
+
+assert.ok(personalSignal);
+assert.ok(
+  projectEvidenceBackedSignalToAction(personalSignal!, {
+    canManageOrganization: false,
+    canManageMembers: false,
+    canReadManagedMusicScaleResponses: false
+  }),
+  'personal confirmation must remain available without ministry-level managed-response authority'
 );
 
 assert.deepEqual(
