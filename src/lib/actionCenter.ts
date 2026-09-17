@@ -3,10 +3,6 @@ import {
   type ActionSignalType,
   type EcosystemSignal
 } from './actionSignals.js';
-import {
-  hasValidFactEvidence,
-  type FactEvidenceReference
-} from '../packages/events/factContract.js';
 
 export type ActionPriority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -20,7 +16,6 @@ export interface ReadOnlyHubAction {
   id: string;
   dedupeKey: string;
   fingerprint: string;
-  organizationId: string;
   sourceApp: 'hub' | 'musicscale';
   signalType: ActionSignalType;
   priority: ActionPriority;
@@ -28,7 +23,6 @@ export interface ReadOnlyHubAction {
   descriptionKey: string;
   translationParams?: Record<string, string | number>;
   destination: ActionDestination;
-  evidence: readonly FactEvidenceReference[];
   dueAtMs?: number | null;
   createdAtMs?: number | null;
 }
@@ -42,7 +36,6 @@ export interface ActionPreference {
 }
 
 export interface ActionProjectionInput {
-  organizationId: string;
   organization?: {
     isConfigured: boolean;
   } | null;
@@ -77,35 +70,21 @@ function numberPayload(
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-function actionProvenance(signal: EcosystemSignal) {
-  return {
-    organizationId: signal.organizationId,
-    sourceApp: signal.sourceApp,
-    evidence: signal.evidence
-  } as const;
-}
-
 /**
  * Deterministic policy layer: normalized facts become user-visible actions only
- * after evidence, tenant scope, permission and payload checks.
- *
- * NO SOURCE -> NO CLAIM is enforced here even if an adapter is accidentally
- * changed later: an unscoped or unsupported signal cannot become a Hub action.
+ * after permission and payload checks.
  */
 export function projectSignalToAction(
   signal: EcosystemSignal,
   permissions: ActionProjectionInput['permissions']
 ): ReadOnlyHubAction | null {
-  if (!signal.organizationId?.trim()) return null;
-  if (!hasValidFactEvidence(signal.evidence, signal.organizationId)) return null;
-
   if (signal.signalType === 'organization_incomplete') {
     if (!permissions.canManageOrganization) return null;
     return {
       id: signal.dedupeKey,
       dedupeKey: signal.dedupeKey,
       fingerprint: signal.fingerprint,
-      ...actionProvenance(signal),
+      sourceApp: signal.sourceApp,
       signalType: signal.signalType,
       priority: 'high',
       titleKey: 'workspace.actions.organization_incomplete.title',
@@ -123,7 +102,7 @@ export function projectSignalToAction(
       id: signal.dedupeKey,
       dedupeKey: signal.dedupeKey,
       fingerprint: signal.fingerprint,
-      ...actionProvenance(signal),
+      sourceApp: signal.sourceApp,
       signalType: signal.signalType,
       priority: 'normal',
       titleKey: 'workspace.actions.pending_invites.title',
@@ -141,7 +120,7 @@ export function projectSignalToAction(
       id: signal.dedupeKey,
       dedupeKey: signal.dedupeKey,
       fingerprint: signal.fingerprint,
-      ...actionProvenance(signal),
+      sourceApp: signal.sourceApp,
       signalType: signal.signalType,
       priority: 'high',
       titleKey: 'workspace.actions.musicscale_personal_confirmation.title',
@@ -164,7 +143,7 @@ export function projectSignalToAction(
       id: signal.dedupeKey,
       dedupeKey: signal.dedupeKey,
       fingerprint: signal.fingerprint,
-      ...actionProvenance(signal),
+      sourceApp: signal.sourceApp,
       signalType: signal.signalType,
       priority: 'high',
       titleKey: 'workspace.actions.musicscale_pending_responses.title',
@@ -191,7 +170,6 @@ export function projectSignalToAction(
  */
 export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnlyHubAction[] {
   const actions = collectActionSignals({
-    organizationId: input.organizationId,
     organization: input.organization,
     pendingInvitesCount: input.pendingInvitesCount,
     musicScale: input.musicScale
