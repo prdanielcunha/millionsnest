@@ -8,8 +8,10 @@ on:
       - 'src/packages/events/**'
       - 'src/lib/actionCenter.ts'
       - 'src/lib/actionSignals.ts'
+      - 'src/lib/lensResolver.ts'
       - 'scripts/test_fact_contract.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
+      - 'scripts/test_lens_resolver.ts'
       - '.github/workflows/church-intelligence-foundation-qa.yml'
   workflow_dispatch:
 
@@ -43,6 +45,9 @@ jobs:
 
       - name: Evidence-first Action Center projection
         run: npx tsx scripts/test_action_center_evidence_projection.ts
+
+      - name: Adaptive Lens authorization projection
+        run: npx tsx scripts/test_lens_resolver.ts
 
       - name: Typecheck
         run: npx tsc --noEmit
