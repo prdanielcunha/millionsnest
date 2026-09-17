@@ -6,6 +6,7 @@ import {
   type EvidenceBackedReadOnlyHubAction
 } from './actionCenter.js';
 import {
+  resolveActiveHubLens,
   resolveAvailableHubLenses,
   resolveDefaultHubLens,
   type HubLensAuthorizationProjection,
@@ -20,6 +21,7 @@ export interface AdaptiveWorkspaceModelInput extends EvidenceBackedActionProject
   responsibilities?: readonly HubResponsibility[];
   authorizedDomains?: HubLensAuthorizationProjection;
   availableAppIds?: readonly string[];
+  requestedLens?: HubLensId | string | null;
   actionPreferences?: readonly ActionPreference[];
   nowMs?: number;
 }
@@ -28,7 +30,9 @@ export interface AdaptiveWorkspaceModel {
   organizationId: string;
   lenses: readonly ResolvedHubLens[];
   defaultLens: HubLensId;
+  activeLens: HubLensId;
   actions: readonly EvidenceBackedReadOnlyHubAction[];
+  actionsForActiveLens: readonly EvidenceBackedReadOnlyHubAction[];
   actionsByLens: Readonly<Record<HubLensId, readonly EvidenceBackedReadOnlyHubAction[]>>;
 }
 
@@ -68,6 +72,7 @@ export function buildAdaptiveWorkspaceModel(
     availableAppIds: input.availableAppIds
   });
   const defaultLens = resolveDefaultHubLens(lenses);
+  const activeLens = resolveActiveHubLens(input.requestedLens, lenses);
 
   const projectedActions = organizationId
     ? deriveEvidenceBackedHubActions({
@@ -97,7 +102,9 @@ export function buildAdaptiveWorkspaceModel(
     organizationId,
     lenses,
     defaultLens,
+    activeLens,
     actions,
+    actionsForActiveLens: actionsByLens[activeLens],
     actionsByLens
   };
 }
