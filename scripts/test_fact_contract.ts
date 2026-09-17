@@ -52,6 +52,15 @@ assert.equal(
   'evidence without an identifiable source must fail closed'
 );
 
+assert.equal(
+  isFactEvidenceReferenceValid({
+    ...evidence,
+    sourceKind: 'unknown_transport' as FactEvidenceReference['sourceKind']
+  }),
+  false,
+  'unknown evidence transports must fail closed at runtime'
+);
+
 const canonicalFact: CanonicalFact<'musicscale.schedule.created'> = {
   schemaVersion: CANONICAL_FACT_SCHEMA_VERSION,
   factId: 'fact-001',
@@ -111,6 +120,24 @@ assert.equal(
   }),
   false,
   'an identified human actor must have a non-empty actor id'
+);
+
+assert.equal(
+  isCanonicalFactValid({
+    ...canonicalFact,
+    metadata: null as unknown as Record<string, unknown>
+  }),
+  false,
+  'malformed metadata must fail closed instead of entering intelligence pipelines'
+);
+
+assert.equal(
+  isCanonicalFactValid({
+    ...canonicalFact,
+    idempotencyKey: ''
+  }),
+  false,
+  'an explicitly provided idempotency key must be non-empty'
 );
 
 console.log('Canonical fact and evidence contract checks passed.');
