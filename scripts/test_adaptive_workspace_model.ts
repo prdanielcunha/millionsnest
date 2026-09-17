@@ -9,6 +9,7 @@ const worshipWorkspace = buildAdaptiveWorkspaceModel({
     worship: true
   },
   availableAppIds: ['musicscale'],
+  requestedLens: 'my_today',
   organization: { isConfigured: true },
   permissions: {
     canManageOrganization: false,
@@ -39,6 +40,7 @@ assert.deepEqual(
   ['my_today', 'worship']
 );
 assert.equal(worshipWorkspace.defaultLens, 'worship');
+assert.equal(worshipWorkspace.activeLens, 'my_today');
 assert.equal(worshipWorkspace.actions.length, 2);
 assert.ok(
   worshipWorkspace.actions.every(action => action.organizationId === 'org-adaptive-1')
@@ -47,6 +49,10 @@ assert.deepEqual(
   worshipWorkspace.actionsByLens.my_today.map(action => action.signalType).sort(),
   ['musicscale_pending_responses', 'musicscale_personal_confirmation'].sort(),
   'My Today should compose all already-authorized actions across the current responsibilities'
+);
+assert.deepEqual(
+  worshipWorkspace.actionsForActiveLens.map(action => action.signalType).sort(),
+  worshipWorkspace.actionsByLens.my_today.map(action => action.signalType).sort()
 );
 assert.equal(worshipWorkspace.actionsByLens.worship.length, 2);
 assert.deepEqual(
@@ -64,6 +70,7 @@ const dismissedWorkspace = buildAdaptiveWorkspaceModel({
   responsibilities: ['worship_leadership'],
   authorizedDomains: { worship: true },
   availableAppIds: ['musicscale'],
+  requestedLens: 'worship',
   organization: { isConfigured: true },
   permissions: {
     canManageOrganization: false,
@@ -94,14 +101,17 @@ const dismissedWorkspace = buildAdaptiveWorkspaceModel({
   }]
 });
 
+assert.equal(dismissedWorkspace.activeLens, 'worship');
 assert.equal(dismissedWorkspace.actions.length, 1);
 assert.equal(dismissedWorkspace.actions[0]?.signalType, 'musicscale_personal_confirmation');
 assert.equal(dismissedWorkspace.actionsByLens.worship.length, 1);
+assert.equal(dismissedWorkspace.actionsForActiveLens.length, 1);
 
 const administrativeWorkspace = buildAdaptiveWorkspaceModel({
   organizationId: 'org-adaptive-2',
   systemRole: 'ceo',
   availableAppIds: ['musicscale', 'nestjourney', 'nestfinance'],
+  requestedLens: 'worship',
   organization: { isConfigured: false },
   permissions: {
     canManageOrganization: true,
@@ -124,6 +134,11 @@ assert.deepEqual(
   ['my_today', 'administration'],
   'CEO should not gain sensitive domain lenses merely from global governance'
 );
+assert.equal(
+  administrativeWorkspace.activeLens,
+  'my_today',
+  'stale worship selection must be dropped when worship domain authority is unavailable'
+);
 assert.deepEqual(
   administrativeWorkspace.actions.map(action => action.signalType).sort(),
   ['organization_incomplete', 'pending_invites'].sort(),
@@ -134,12 +149,17 @@ assert.ok(
     action => action.sourceApp === 'hub'
   )
 );
+assert.deepEqual(
+  administrativeWorkspace.actionsForActiveLens.map(action => action.signalType).sort(),
+  administrativeWorkspace.actions.map(action => action.signalType).sort()
+);
 
 const noTenantWorkspace = buildAdaptiveWorkspaceModel({
   organizationId: '   ',
   systemRole: 'user',
   authorizedDomains: { worship: true },
   availableAppIds: ['musicscale'],
+  requestedLens: 'worship',
   organization: { isConfigured: true },
   permissions: {
     canManageOrganization: false,
@@ -157,7 +177,9 @@ const noTenantWorkspace = buildAdaptiveWorkspaceModel({
   }
 });
 assert.equal(noTenantWorkspace.organizationId, '');
+assert.equal(noTenantWorkspace.activeLens, 'worship');
 assert.deepEqual(noTenantWorkspace.actions, []);
 assert.deepEqual(noTenantWorkspace.actionsByLens.my_today, []);
+assert.deepEqual(noTenantWorkspace.actionsForActiveLens, []);
 
 console.log('Adaptive workspace read model checks passed.');
