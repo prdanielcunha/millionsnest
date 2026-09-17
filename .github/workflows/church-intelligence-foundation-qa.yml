@@ -9,9 +9,11 @@ on:
       - 'src/lib/actionCenter.ts'
       - 'src/lib/actionSignals.ts'
       - 'src/lib/lensResolver.ts'
+      - 'src/lib/hubLensAuthorization.ts'
       - 'scripts/test_fact_contract.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
+      - 'scripts/test_hub_lens_authorization.ts'
       - '.github/workflows/church-intelligence-foundation-qa.yml'
   workflow_dispatch:
 
@@ -48,6 +50,9 @@ jobs:
 
       - name: Adaptive Lens authorization projection
         run: npx tsx scripts/test_lens_resolver.ts
+
+      - name: Current Hub lens authority adapter
+        run: npx tsx scripts/test_hub_lens_authorization.ts
 
       - name: Typecheck
         run: npx tsc --noEmit
