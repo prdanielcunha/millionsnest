@@ -7,7 +7,8 @@ const actions = deriveEvidenceBackedHubActions({
   organization: { isConfigured: false },
   permissions: {
     canManageOrganization: true,
-    canManageMembers: true
+    canManageMembers: true,
+    canReadManagedMusicScaleResponses: true
   },
   pendingInvitesCount: 2,
   musicScale: {
@@ -57,7 +58,8 @@ const unauthorizedActions = deriveEvidenceBackedHubActions({
   organization: { isConfigured: false },
   permissions: {
     canManageOrganization: false,
-    canManageMembers: false
+    canManageMembers: false,
+    canReadManagedMusicScaleResponses: false
   },
   pendingInvitesCount: 4,
   musicScale: {
