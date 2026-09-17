@@ -140,3 +140,21 @@ export function resolveDefaultHubLens(lenses: readonly ResolvedHubLens[]): HubLe
 
   return preferredDomainLens?.id ?? 'my_today';
 }
+
+/**
+ * Reconciles a previously selected Lens with the current authorization set.
+ * A stale persisted/UI selection can never keep a Lens alive after authority,
+ * responsibility or product availability changes.
+ */
+export function resolveActiveHubLens(
+  requestedLens: HubLensId | string | null | undefined,
+  lenses: readonly ResolvedHubLens[]
+): HubLensId {
+  const available = new Set(lenses.map(lens => lens.id));
+
+  if (requestedLens && available.has(requestedLens as HubLensId)) {
+    return requestedLens as HubLensId;
+  }
+
+  return resolveDefaultHubLens(lenses);
+}
