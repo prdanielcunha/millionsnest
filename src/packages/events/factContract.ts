@@ -61,6 +61,20 @@ export interface CanonicalFact<
   idempotencyKey?: string | null;
 }
 
+const VALID_SOURCE_KINDS = new Set<FactSourceKind>([
+  'firestore_document',
+  'firestore_query',
+  'backend_api',
+  'runtime_projection',
+  'system_event'
+]);
+
+const VALID_ACTOR_TYPES = new Set<FactActorType>([
+  'user',
+  'system',
+  'service'
+]);
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -69,12 +83,17 @@ function isFiniteTimestamp(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export function isFactEvidenceReferenceValid(
   evidence: FactEvidenceReference | null | undefined
 ): evidence is FactEvidenceReference {
   if (!evidence) return false;
   if (!isNonEmptyString(evidence.organizationId)) return false;
   if (!isNonEmptyString(evidence.sourceApp)) return false;
+  if (!VALID_SOURCE_KINDS.has(evidence.sourceKind)) return false;
   if (!isNonEmptyString(evidence.sourceRef)) return false;
   if (!isNonEmptyString(evidence.entityType)) return false;
   if (!isNonEmptyString(evidence.entityId)) return false;
@@ -89,7 +108,10 @@ export function isFactEvidenceReferenceValid(
 
   if (
     evidence.fieldPaths !== undefined &&
-    evidence.fieldPaths.some(fieldPath => !isNonEmptyString(fieldPath))
+    (
+      !Array.isArray(evidence.fieldPaths) ||
+      evidence.fieldPaths.some(fieldPath => !isNonEmptyString(fieldPath))
+    )
   ) {
     return false;
   }
@@ -121,12 +143,20 @@ export function isCanonicalFactValid(
   if (!isNonEmptyString(fact.entity?.id)) return false;
   if (!isFiniteTimestamp(fact.occurredAtMs)) return false;
   if (!isFiniteTimestamp(fact.recordedAtMs)) return false;
-  if (!fact.actor || !['user', 'system', 'service'].includes(fact.actor.type)) return false;
+  if (!fact.actor || !VALID_ACTOR_TYPES.has(fact.actor.type)) return false;
   if (fact.actor.id !== undefined && fact.actor.id !== null && !isNonEmptyString(fact.actor.id)) {
     return false;
   }
   if (!isFactEvidenceReferenceValid(fact.source)) return false;
   if (fact.source.organizationId !== fact.organizationId) return false;
+  if (!isPlainRecord(fact.metadata)) return false;
+  if (
+    fact.idempotencyKey !== undefined &&
+    fact.idempotencyKey !== null &&
+    !isNonEmptyString(fact.idempotencyKey)
+  ) {
+    return false;
+  }
 
   return true;
 }
