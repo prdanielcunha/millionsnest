@@ -96,7 +96,7 @@ interface EcosystemWorkspaceHomeProps {
         functionName: string;
         count: number;
       }>;
-      repertoireContent: MusicScaleRepertoireContentSnapshot;
+      repertoireContent: MusicScaleRepertoireContentSnapshot | null;
     };
     recentAssignmentDistribution: MusicScaleAssignmentDistributionSnapshot | null;
     nextPersonalScale: null | {
