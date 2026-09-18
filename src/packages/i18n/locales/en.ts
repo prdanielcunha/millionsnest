@@ -992,6 +992,14 @@ export default {
         resolution_in_progress: "In progress",
         resolution_start_error: "We will open MusicScale, but we could not register resolution tracking.",
         resolution_cleared_feedback: "Resolved: the signal no longer appears in the source.",
+        nbma: {
+          recommended: "Recommended now",
+          continue_resolution: "Continue the work already in progress at this same priority level.",
+          urgent_priority: "This is the most important urgent action available now.",
+          high_priority: "This is the high-priority action currently first in the queue.",
+          due_soon: "This action is due soon and should be handled first.",
+          next_in_queue: "This is the next step in the canonical priority order."
+        },
         snooze_action: "Snooze 24h",
         dismiss_action: "Hide",
         dismiss_prompt: "Why isn't this useful right now? (optional)",
