@@ -1,4 +1,6 @@
 import type { FactEvidenceReference } from '../packages/events/factContract.js';
+import { projectCurrentMusicScaleFacts } from './musicScaleFactProjection.js';
+import { collectMusicScaleSignalsFromFacts } from './factSignalAdapter.js';
 
 export type ActionSignalType =
   | 'organization_incomplete'
@@ -214,7 +216,17 @@ export function collectEvidenceBackedActionSignals(
   const organizationId = input.organizationId.trim();
   if (!organizationId) return [];
 
-  return collectActionSignals(input).map(signal => {
+  // Hub-owned facts remain on the transitional adapter for now. MusicScale is
+  // the first real product migrated through Canonical Facts -> Signals.
+  const hubSignals = collectActionSignals({
+    organization: input.organization,
+    pendingInvitesCount: input.pendingInvitesCount,
+    musicScale: {
+      ready: false,
+      nextScale: null,
+      nextPersonalScale: null
+    }
+  }).map(signal => {
     const normalizedSignal: EcosystemSignal =
       signal.signalType === 'organization_incomplete'
         ? { ...signal, sourceEntityId: organizationId }
@@ -224,6 +236,18 @@ export function collectEvidenceBackedActionSignals(
       ...normalizedSignal,
       organizationId,
       evidence: [buildSignalEvidence(normalizedSignal, input)]
-    };
+    } satisfies EvidenceBackedEcosystemSignal;
   });
+
+  const musicScaleFacts = projectCurrentMusicScaleFacts({
+    organizationId,
+    ready: input.musicScale.ready,
+    observedAtMs: input.musicScale.observedAtMs,
+    nextScale: input.musicScale.nextScale,
+    nextPersonalScale: input.musicScale.nextPersonalScale
+  });
+
+  const musicScaleSignals = collectMusicScaleSignalsFromFacts(musicScaleFacts);
+
+  return [...hubSignals, ...musicScaleSignals];
 }
