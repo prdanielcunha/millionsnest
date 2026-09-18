@@ -188,7 +188,9 @@ const deniedAccess = buildCurrentAdaptiveWorkspace({
 assert.deepEqual(deniedAccess.lenses.map(lens => lens.id), ['my_today']);
 assert.deepEqual(deniedAccess.actions, []);
 
-const financeOnlyOrganization = buildCurrentAdaptiveWorkspace({
+// FUTURE ARCHITECTURE FIXTURE: simulates a later NestFinance entitlement.
+// NestFinance is not built/operational in the current product catalog.
+const futureFinanceOnlyOrganization = buildCurrentAdaptiveWorkspace({
   organizationId: 'org-current-adaptive',
   systemRole: 'user',
   appExperiences: [appExperience('nestfinance')],
@@ -209,14 +211,14 @@ const financeOnlyOrganization = buildCurrentAdaptiveWorkspace({
 });
 
 assert.deepEqual(
-  financeOnlyOrganization.lenses.map(lens => lens.id),
+  futureFinanceOnlyOrganization.lenses.map(lens => lens.id),
   ['my_today'],
-  'buying NestFinance without MusicScale must not expose the Worship Lens'
+  'a future NestFinance entitlement must not expose the Worship Lens'
 );
 assert.deepEqual(
-  financeOnlyOrganization.actions,
+  futureFinanceOnlyOrganization.actions,
   [],
-  'stale MusicScale read models must not leak into My Today for a NestFinance-only organization'
+  'future non-MusicScale product sessions must not inherit stale MusicScale actions'
 );
 
 const conflictingMusicScaleState = buildCurrentAdaptiveWorkspace({
