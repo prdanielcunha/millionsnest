@@ -62,6 +62,34 @@ jobs:
           done
           echo "HUB_PRODUCTION_HTTPS_OK"
 
+      - name: Verify live SPA cache freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for PATHNAME in "/" "/login" "/dashboard/overview"; do
+            echo "===== CACHE HEADERS: $PATHNAME ====="
+            curl --fail --silent --show-error --head \
+              "https://www.millionsnest.com$PATHNAME" \
+              -o /tmp/headers.txt
+            cat /tmp/headers.txt
+            CACHE_CONTROL="$(grep -i '^cache-control:' /tmp/headers.txt | tail -n1 | tr -d '\r' || true)"
+            echo "CACHE_CONTROL=$CACHE_CONTROL"
+            echo "$CACHE_CONTROL" | grep -qi 'no-cache'
+            echo "$CACHE_CONTROL" | grep -qi 'no-store'
+          done
+
+          curl --fail --silent --show-error "https://www.millionsnest.com/" -o /tmp/live-index.html
+          ASSET="$(grep -oE '/assets/[^"[:space:]]+\.js' /tmp/live-index.html | head -n1)"
+          test -n "$ASSET"
+          echo "===== IMMUTABLE ASSET: $ASSET ====="
+          curl --fail --silent --show-error --head \
+            "https://www.millionsnest.com$ASSET" \
+            -o /tmp/asset-headers.txt
+          cat /tmp/asset-headers.txt
+          ASSET_CACHE="$(grep -i '^cache-control:' /tmp/asset-headers.txt | tail -n1 | tr -d '\r' || true)"
+          echo "$ASSET_CACHE" | grep -qi 'immutable'
+
       - name: Diagnose Firebase Auth reserved endpoints
         continue-on-error: true
         shell: bash
