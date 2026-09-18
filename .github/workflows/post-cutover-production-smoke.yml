@@ -62,6 +62,129 @@ jobs:
           done
           echo "HUB_PRODUCTION_HTTPS_OK"
 
+      - name: Verify live SPA cache freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for PATHNAME in "/" "/login" "/dashboard/overview"; do
+            echo "===== CACHE HEADERS: $PATHNAME ====="
+            curl --fail --silent --show-error --head \
+              "https://www.millionsnest.com$PATHNAME" \
+              -o /tmp/headers.txt
+            cat /tmp/headers.txt
+            CACHE_CONTROL="$(grep -i '^cache-control:' /tmp/headers.txt | tail -n1 | tr -d '\r' || true)"
+            echo "CACHE_CONTROL=$CACHE_CONTROL"
+            echo "$CACHE_CONTROL" | grep -qi 'no-cache'
+            echo "$CACHE_CONTROL" | grep -qi 'no-store'
+          done
+
+          curl --fail --silent --show-error "https://www.millionsnest.com/" -o /tmp/live-index.html
+          ASSET="$(grep -oE '/assets/[^"[:space:]]+\.js' /tmp/live-index.html | head -n1)"
+          test -n "$ASSET"
+          echo "===== IMMUTABLE ASSET: $ASSET ====="
+          curl --fail --silent --show-error --head \
+            "https://www.millionsnest.com$ASSET" \
+            -o /tmp/asset-headers.txt
+          cat /tmp/asset-headers.txt
+          ASSET_CACHE="$(grep -i '^cache-control:' /tmp/asset-headers.txt | tail -n1 | tr -d '\r' || true)"
+          echo "$ASSET_CACHE" | grep -qi 'immutable'
+
+      - name: Diagnose Firebase Auth reserved endpoints
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check_host () {
+            BASE="$1"
+            SAFE="$(echo "$BASE" | tr -cd '[:alnum:]')"
+            echo "===== FIREBASE AUTH DIAGNOSTICS: $BASE ====="
+
+            INIT_META="$(curl --silent --show-error --max-time 20 \
+              -o "/tmp/${SAFE}-init.json" \
+              -w '%{http_code}|%{content_type}|%{remote_ip}|%{time_total}' \
+              "$BASE/__/firebase/init.json" || true)"
+            echo "INIT=$INIT_META"
+            head -c 500 "/tmp/${SAFE}-init.json" 2>/dev/null || true
+            echo
+
+            HANDLER_META="$(curl --silent --show-error --max-time 20 \
+              -o "/tmp/${SAFE}-handler.html" \
+              -w '%{http_code}|%{content_type}|%{remote_ip}|%{time_total}|%{redirect_url}' \
+              "$BASE/__/auth/handler" || true)"
+            echo "HANDLER=$HANDLER_META"
+            head -c 300 "/tmp/${SAFE}-handler.html" 2>/dev/null || true
+            echo
+          }
+
+          check_host "https://millionsnest.com"
+          check_host "https://www.millionsnest.com"
+          check_host "https://mn-hub-555464791734.web.app"
+
+          node <<'NODE'
+          const fs = require('fs');
+          for (const name of [
+            'httpsmillionsnestcom-init.json',
+            'httpswwwmillionsnestcom-init.json',
+            'httpsmnhub555464791734webapp-init.json'
+          ]) {
+            const p = '/tmp/' + name;
+            if (!fs.existsSync(p)) continue;
+            try {
+              const x = JSON.parse(fs.readFileSync(p, 'utf8'));
+              console.log('FIREBASE_INIT', name, {
+                projectId: x.projectId,
+                authDomain: x.authDomain,
+                appId: x.appId
+              });
+            } catch (error) {
+              console.log('FIREBASE_INIT_PARSE_FAILED', name, String(error));
+            }
+          }
+          NODE
+
+      - name: Diagnose public Firebase Auth project configuration
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          inspect_key () {
+            LABEL="$1"
+            KEY="$2"
+            echo "===== IDENTITY TOOLKIT PUBLIC CONFIG: $LABEL ====="
+            META="$(curl --silent --show-error --max-time 20 \
+              -o "/tmp/idtk-${LABEL}.json" \
+              -w '%{http_code}|%{content_type}|%{time_total}' \
+              "https://identitytoolkit.googleapis.com/v1/projects?key=${KEY}" || true)"
+            echo "META=$META"
+            node - "/tmp/idtk-${LABEL}.json" <<'NODE'
+          const fs = require('fs');
+          const p = process.argv[2];
+          try {
+            const x = JSON.parse(fs.readFileSync(p, 'utf8'));
+            console.log(JSON.stringify({
+              projectId: x.projectId,
+              authorizedDomains: x.authorizedDomains || [],
+              error: x.error ? {
+                code: x.error.code,
+                status: x.error.status,
+                message: x.error.message
+              } : null
+            }, null, 2));
+          } catch (error) {
+            console.log('IDENTITY_TOOLKIT_PARSE_FAILED', String(error));
+          }
+          NODE
+          }
+
+          BUILD_KEY="AIzaSyAhXY8TV8qoXz8Pd2u5jFHUTVssZmi3kMs"
+          HOSTED_KEY="$(node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/httpswwwmillionsnestcom-init.json','utf8')); process.stdout.write(String(x.apiKey||''));")"
+
+          inspect_key "build" "$BUILD_KEY"
+          inspect_key "hosted" "$HOSTED_KEY"
+
       - name: Smoke Hub API and Stripe read path
         continue-on-error: true
         shell: bash

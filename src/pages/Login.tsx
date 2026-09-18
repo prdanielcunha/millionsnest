@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { signInWithRedirect, getRedirectResult, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { signInWithPopup, getRedirectResult, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import { motion } from "framer-motion";
@@ -103,7 +103,8 @@ export function Login() {
     setLoading(true);
     try {
       sessionStorage.setItem('mn_auth_started_at', String(Date.now()));
-      await signInWithRedirect(auth, googleProvider);
+      await signInWithPopup(auth, googleProvider);
+      setLoading(false);
     } catch (err: any) {
       setError(err.message || t("google_error"));
       setLoading(false);
