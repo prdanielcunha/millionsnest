@@ -17,6 +17,8 @@ on:
       - 'src/lib/adaptiveEntitlements.ts'
       - 'src/lib/currentAdaptiveWorkspace.ts'
       - 'src/components/dashboard/HubLensSwitcher.tsx'
+      - 'src/pages/Dashboard.tsx'
+      - 'src/components/dashboard/EcosystemWorkspaceHome.tsx'
       - 'scripts/test_fact_contract.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
@@ -24,6 +26,7 @@ on:
       - 'scripts/test_lens_action_projection.ts'
       - 'scripts/test_adaptive_workspace_model.ts'
       - 'scripts/test_adaptive_entitlements.ts'
+      - 'scripts/test_adaptive_home_integration.ts'
       - 'scripts/test_current_adaptive_workspace.ts'
       - 'scripts/test_intelligence_i18n.ts'
       - '.github/workflows/church-intelligence-foundation-qa.yml'
@@ -74,6 +77,9 @@ jobs:
 
       - name: Per-product adaptive entitlements
         run: npx tsx scripts/test_adaptive_entitlements.ts
+
+      - name: Adaptive Home entitlement integration
+        run: npx tsx scripts/test_adaptive_home_integration.ts
 
       - name: Current Hub adaptive workspace bridge
         run: npx tsx scripts/test_current_adaptive_workspace.ts
