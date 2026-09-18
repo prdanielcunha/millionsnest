@@ -61,6 +61,9 @@ jobs:
       - name: Tool Gateway safety and approvals
         run: npx tsx scripts/test_tool_gateway.ts
 
+      - name: Human Tool Approval lifecycle
+        run: npx tsx scripts/test_tool_approval_gateway.ts
+
       - name: Action OS privacy-safe pilot telemetry
         run: npx tsx scripts/test_action_os_pilot_telemetry.ts
 
