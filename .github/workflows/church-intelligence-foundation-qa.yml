@@ -14,9 +14,12 @@ on:
       - 'src/lib/actionCenter.ts'
       - 'src/lib/actionResolution.ts'
       - 'src/lib/nextBestMinistryAction.ts'
+      - 'src/lib/toolGateway.ts'
+      - 'src/lib/actionToolGatewayBridge.ts'
       - 'src/lib/actionSignals.ts'
       - 'src/services/actionCenterClient.ts'
       - 'src/server/services/ActionResolutionCommandService.ts'
+      - 'src/server/services/ToolGatewayService.ts'
       - 'src/lib/factSignalAdapter.ts'
       - 'src/lib/musicScaleFactProjection.ts'
       - 'src/lib/musicScaleLeaderIntelligence.ts'
@@ -48,6 +51,7 @@ on:
       - 'scripts/test_musicscale_repertoire_intelligence.ts'
       - 'scripts/test_action_resolution_loop.ts'
       - 'scripts/test_next_best_ministry_action.ts'
+      - 'scripts/test_tool_gateway.ts'
       - 'scripts/test_evidence_backed_timeline.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
@@ -111,6 +115,9 @@ jobs:
 
       - name: Explainable Next Best Ministry Action
         run: npx tsx scripts/test_next_best_ministry_action.ts
+
+      - name: Tool Gateway safety and approvals
+        run: npx tsx scripts/test_tool_gateway.ts
 
       - name: Evidence-backed commitments and changes
         run: npx tsx scripts/test_evidence_backed_timeline.ts
