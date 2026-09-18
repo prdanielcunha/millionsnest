@@ -6,7 +6,8 @@ import {
 
 export type MusicScaleCanonicalFactEventType =
   | 'musicscale.scale.response_summary_observed'
-  | 'musicscale.scale.personal_confirmation_observed';
+  | 'musicscale.scale.personal_confirmation_observed'
+  | 'musicscale.scale.personal_commitment_observed';
 
 export interface MusicScaleFactProjectionInput {
   organizationId: string;
@@ -21,7 +22,11 @@ export interface MusicScaleFactProjectionInput {
   };
   nextPersonalScale?: null | {
     id: string;
+    date?: string | null;
+    time?: string | null;
     startsAtMs?: number | null;
+    songCount?: number | null;
+    functionNames?: readonly string[] | null;
     publishRevision?: number | null;
     responseSummaryAvailable: boolean;
     pendingResponses: number;
@@ -39,6 +44,16 @@ export interface MusicScalePersonalConfirmationFactMetadata
   publishRevision: number;
 }
 
+export interface MusicScalePersonalCommitmentFactMetadata
+  extends Record<string, unknown> {
+  date: string;
+  time: string | null;
+  startsAtMs: number;
+  songCount: number;
+  functionNames: string[];
+  publishRevision: number;
+}
+
 export type MusicScaleCanonicalFact =
   | CanonicalFact<
       'musicscale.scale.response_summary_observed',
@@ -47,6 +62,10 @@ export type MusicScaleCanonicalFact =
   | CanonicalFact<
       'musicscale.scale.personal_confirmation_observed',
       MusicScalePersonalConfirmationFactMetadata
+    >
+  | CanonicalFact<
+      'musicscale.scale.personal_commitment_observed',
+      MusicScalePersonalCommitmentFactMetadata
     >;
 
 function finiteNonNegative(value: unknown): number | null {
@@ -59,6 +78,21 @@ function cleanId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const clean = value.trim();
   return clean ? clean : null;
+}
+
+function cleanText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const clean = value.trim();
+  return clean ? clean : null;
+}
+
+function normalizeFunctionNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(
+    value
+      .map(item => typeof item === 'string' ? item.trim() : '')
+      .filter(Boolean)
+  ));
 }
 
 function projectionTimestamp(input: MusicScaleFactProjectionInput): number {
@@ -190,6 +224,73 @@ function buildPersonalConfirmationFact(
   return isCanonicalFactValid(fact) ? fact : null;
 }
 
+function buildPersonalCommitmentFact(
+  input: MusicScaleFactProjectionInput,
+  scale: NonNullable<MusicScaleFactProjectionInput['nextPersonalScale']>
+): MusicScaleCanonicalFact | null {
+  const organizationId = cleanId(input.organizationId);
+  const scaleId = cleanId(scale.id);
+  const date = cleanText(scale.date);
+  const startsAtMs = finiteNonNegative(scale.startsAtMs);
+  if (!organizationId || !scaleId || !date || startsAtMs === null) {
+    return null;
+  }
+
+  const observedAtMs = finiteNonNegative(input.observedAtMs);
+  const timestamp = projectionTimestamp(input);
+  const time = cleanText(scale.time);
+  const songCount = Math.floor(finiteNonNegative(scale.songCount) ?? 0);
+  const functionNames = normalizeFunctionNames(scale.functionNames);
+  const publishRevision = Math.floor(
+    finiteNonNegative(scale.publishRevision) ?? 0
+  );
+  const roleFingerprint = functionNames.join('|') || 'none';
+  const idempotencyKey =
+    `musicscale:${organizationId}:scale:${scaleId}:personal-commitment:rev-${publishRevision}:start-${startsAtMs}:songs-${songCount}:roles-${roleFingerprint}`;
+
+  const fact: MusicScaleCanonicalFact = {
+    schemaVersion: CANONICAL_FACT_SCHEMA_VERSION,
+    factId: idempotencyKey,
+    organizationId,
+    eventType: 'musicscale.scale.personal_commitment_observed',
+    actor: { type: 'system' },
+    occurredAtMs: observedAtMs ?? timestamp,
+    recordedAtMs: timestamp,
+    source: {
+      organizationId,
+      sourceApp: 'musicscale',
+      sourceKind: 'runtime_projection',
+      sourceRef: 'musicscale.read_model.personal_schedule_commitment',
+      entityType: 'scale',
+      entityId: scaleId,
+      fieldPaths: [
+        'date',
+        'time',
+        'startsAtMs',
+        'songCount',
+        'functionNames',
+        'publishRevision'
+      ],
+      ...(observedAtMs !== null ? { observedAtMs } : {})
+    },
+    entity: {
+      type: 'scale',
+      id: scaleId
+    },
+    metadata: {
+      date,
+      time,
+      startsAtMs,
+      songCount,
+      functionNames,
+      publishRevision
+    },
+    idempotencyKey
+  };
+
+  return isCanonicalFactValid(fact) ? fact : null;
+}
+
 /**
  * Current MusicScale -> Unified Fact Stream adapter.
  *
@@ -210,8 +311,17 @@ export function projectCurrentMusicScaleFacts(
   }
 
   if (input.nextPersonalScale) {
-    const fact = buildPersonalConfirmationFact(input, input.nextPersonalScale);
-    if (fact) facts.push(fact);
+    const confirmationFact = buildPersonalConfirmationFact(
+      input,
+      input.nextPersonalScale
+    );
+    if (confirmationFact) facts.push(confirmationFact);
+
+    const commitmentFact = buildPersonalCommitmentFact(
+      input,
+      input.nextPersonalScale
+    );
+    if (commitmentFact) facts.push(commitmentFact);
   }
 
   return facts;
