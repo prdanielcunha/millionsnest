@@ -695,7 +695,7 @@ export default {
     starts_after_trial: "Inicia após o período de 7 dias grátis.",
     savings: "Você economiza",
     cta: "Iniciar Teste de 7 Dias",
-    encrypted: "Transação criptografada by Stripe",
+    encrypted: "Transação segura processada pela Stripe",
     cancel_info: "Cancele a qualquer momento antes do trial acabar e não seja cobrado.",
     loading: "Carregando catálogo premium...",
     monthly_period: "mês",
@@ -743,7 +743,7 @@ export default {
     },
     nestlocal: {
       title: "Transforme pedidos em uma operação organizada.",
-      subtitle: "Sua página de serviços, orçamento guiado e caixa de pedidos. Teste por 7 dias e cancele quando quiser.",
+      subtitle: "Sua página de serviços, orçamento guiado e caixa de pedidos em um plano para a sua empresa.",
       essential: "Essencial",
       growth: "Crescimento",
       scope_title: "Assinatura por negócio",
