@@ -7,12 +7,13 @@ import { HubLensSwitcher } from './HubLensSwitcher.js';
 import { HubAppLaunchpad } from './HubAppLaunchpad.js';
 import { ActionResolutionObserver } from './ActionResolutionObserver.js';
 import { MusicScaleDistributionSnapshot } from './MusicScaleDistributionSnapshot.js';
+import { AskMillionsNest } from './AskMillionsNest.js';
 import { buildCurrentAdaptiveWorkspace } from '../../lib/currentAdaptiveWorkspace.js';
 import type { HubLensId } from '../../lib/lensResolver.js';
 import type { CurrentMusicScaleLensAuthority } from '../../lib/hubLensAuthorization.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
-import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from '../../lib/actionCenter.js';
+import type { ActionDestination, ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from '../../lib/actionCenter.js';
 import {
   deriveEvidenceBackedHubCommitments,
   type ReadOnlyHubCommitment
@@ -654,6 +655,28 @@ export function EcosystemWorkspaceHome({
       }
     };
 
+    const handleAskDestination = (destination: ActionDestination) => {
+      if (destination.kind === 'hub') {
+        if (destination.section === 'organization') onNavigateToOrganizationSettings();
+        if (destination.section === 'members') onNavigateToOrganizationMembers();
+        if (destination.section === 'billing') onNavigateToBilling();
+        return;
+      }
+
+      const experience = appExperiences.find(
+        item => item.app.id === destination.appId
+      );
+
+      if (experience?.app && experience.canOpen) {
+        onLaunchApp(experience.app, destination.path);
+        return;
+      }
+
+      if (destination.appId === 'musicscale') {
+        onSelectWorkspace('musicscale');
+      }
+    };
+
     const handleChangeOpen = (change: ReadOnlyHubChange) => {
       onActionOsInteraction({
         kind: 'change_reviewed',
@@ -877,6 +900,45 @@ export function EcosystemWorkspaceHome({
           lenses={adaptiveWorkspace.lenses}
           activeLens={adaptiveWorkspace.activeLens}
           onChange={setRequestedLens}
+        />
+
+        <AskMillionsNest
+          organizationId={organizationId}
+          activeLens={adaptiveWorkspace.activeLens}
+          lenses={adaptiveWorkspace.lenses}
+          sourceActions={adaptiveWorkspace.sourceActions}
+          musicScale={{
+            ready: isMusicScaleReady && appSummaryReady,
+            observedAtMs: musicScaleSummary.updatedAtMs,
+            nextScale: musicScaleSummary.nextScale
+              ? {
+                  id: musicScaleSummary.nextScale.id,
+                  startsAtMs: musicScaleSummary.nextScale.startsAtMs,
+                  responseSummaryAvailable:
+                    musicScaleSummary.nextScale.responseSummaryAvailable,
+                  pendingResponses:
+                    musicScaleSummary.nextScale.responseCounts.pending || 0,
+                  declinedResponses:
+                    musicScaleSummary.nextScale.responseCounts.declined || 0,
+                  repertoireSummaryAvailable:
+                    musicScaleSummary.nextScale.repertoireContent !== null,
+                  repertoireGapCount:
+                    musicScaleSummary.nextScale.repertoireContent?.gapCount ?? 0
+                }
+              : null,
+            nextPersonalScale: musicScaleSummary.nextPersonalScale
+              ? {
+                  id: musicScaleSummary.nextPersonalScale.id,
+                  startsAtMs: musicScaleSummary.nextPersonalScale.startsAtMs,
+                  pendingResponses:
+                    musicScaleSummary.nextPersonalScale.pendingResponses,
+                  responseSummaryAvailable:
+                    musicScaleSummary.nextPersonalScale.responseSummaryAvailable
+                }
+              : null
+          }}
+          worshipDistribution={worshipDistribution}
+          onOpenDestination={handleAskDestination}
         />
 
         {adaptiveWorkspace.activeLens === 'worship' &&
