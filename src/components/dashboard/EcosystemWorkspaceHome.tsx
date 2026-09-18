@@ -5,6 +5,7 @@ import { EcosystemCommitments } from './EcosystemCommitments.js';
 import { EcosystemChanges } from './EcosystemChanges.js';
 import { HubLensSwitcher } from './HubLensSwitcher.js';
 import { HubAppLaunchpad } from './HubAppLaunchpad.js';
+import { MusicScaleDistributionSnapshot } from './MusicScaleDistributionSnapshot.js';
 import { buildCurrentAdaptiveWorkspace } from '../../lib/currentAdaptiveWorkspace.js';
 import type { HubLensId } from '../../lib/lensResolver.js';
 import type { CurrentMusicScaleLensAuthority } from '../../lib/hubLensAuthorization.js';
@@ -21,6 +22,13 @@ import {
   type ReadOnlyHubChange
 } from '../../lib/changeCenter.js';
 import type { ActionOsDismissCode, ActionOsInteractionInput } from '../../lib/actionOsAnalytics.js';
+import {
+  deriveEvidenceBackedMusicScaleDistribution
+} from '../../lib/musicScaleDistributionFactProjection.js';
+import {
+  hasMusicScaleDistributionData,
+  type MusicScaleAssignmentDistributionSnapshot
+} from '../../lib/musicScaleDistributionIntelligence.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -86,6 +94,7 @@ interface EcosystemWorkspaceHomeProps {
         count: number;
       }>;
     };
+    recentAssignmentDistribution: MusicScaleAssignmentDistributionSnapshot | null;
     nextPersonalScale: null | {
       id: string;
       date: string;
@@ -374,6 +383,18 @@ export function EcosystemWorkspaceHome({
         ? musicScaleChanges
         : []
     );
+
+    const worshipDistribution =
+      musicScaleSummary.recentAssignmentDistribution &&
+      hasMusicScaleDistributionData(
+        musicScaleSummary.recentAssignmentDistribution
+      )
+        ? deriveEvidenceBackedMusicScaleDistribution({
+            organizationId,
+            snapshot: musicScaleSummary.recentAssignmentDistribution,
+            observedAtMs: musicScaleSummary.updatedAtMs
+          })
+        : null;
 
     const attentionApp = operationalApps.find(experience => experience.needsAttention);
 
@@ -775,6 +796,20 @@ export function EcosystemWorkspaceHome({
           activeLens={adaptiveWorkspace.activeLens}
           onChange={setRequestedLens}
         />
+
+        {adaptiveWorkspace.activeLens === 'worship' &&
+          worshipDistribution &&
+          musicScaleExperience?.app && (
+            <MusicScaleDistributionSnapshot
+              snapshot={worshipDistribution}
+              onOpen={() =>
+                onLaunchApp(
+                  musicScaleExperience.app,
+                  '/scales'
+                )
+              }
+            />
+          )}
 
         <section
           aria-labelledby="hub-today-title"
