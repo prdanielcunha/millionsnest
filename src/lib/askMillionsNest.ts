@@ -189,6 +189,8 @@ function resolveIntent(
       'pendente da escala',
       'pending response',
       'pending responses',
+      'not responded',
+      'has not responded',
       'confirmation',
       'confirmations',
       'sin responder',
@@ -343,6 +345,11 @@ function projectionEvidence(input: {
   fieldPaths: readonly string[];
   observedAtMs?: number | null;
 }): FactEvidenceReference {
+  const observedAtMs =
+    typeof input.observedAtMs === 'number' && Number.isFinite(input.observedAtMs)
+      ? input.observedAtMs
+      : null;
+
   return {
     organizationId: input.organizationId,
     sourceApp: input.sourceApp,
@@ -351,10 +358,7 @@ function projectionEvidence(input: {
     entityType: input.entityType,
     entityId: input.entityId,
     fieldPaths: input.fieldPaths,
-    observedAtMs:
-      typeof input.observedAtMs === 'number' && Number.isFinite(input.observedAtMs)
-        ? input.observedAtMs
-        : undefined
+    ...(observedAtMs !== null ? { observedAtMs } : {})
   };
 }
 
@@ -477,9 +481,13 @@ export function answerAskMillionsNest(
       summaryKey: personalResponseReady
         ? 'ask.answers.personal_schedule.summary'
         : 'ask.answers.personal_schedule.summary_without_responses',
-      translationParams: personalResponseReady
-        ? { pending: nextPersonalScale.pendingResponses }
-        : undefined,
+      ...(personalResponseReady
+        ? {
+            translationParams: {
+              pending: nextPersonalScale.pendingResponses
+            }
+          }
+        : {}),
       facts: personalResponseReady
         ? [
             {
