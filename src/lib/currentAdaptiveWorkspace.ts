@@ -40,7 +40,15 @@ export interface CurrentAdaptiveWorkspaceInput {
 export function buildCurrentAdaptiveWorkspace(
   input: CurrentAdaptiveWorkspaceInput
 ): AdaptiveWorkspaceModel {
-  const entitledAppIds = resolveEntitledAppIds(input.appExperiences);
+  const resolvedEntitledAppIds = resolveEntitledAppIds(input.appExperiences);
+  const entitledAppIds = resolvedEntitledAppIds.filter(appId => {
+    if (appId !== 'musicscale') return true;
+
+    return (
+      input.musicScaleAccess?.accessible === true &&
+      input.musicScaleAccess?.decisionState === 'granted'
+    );
+  });
   const authorizedDomains = deriveCurrentHubLensAuthorization({
     canManageOrganization: input.canManageOrganization,
     musicScaleAccess: input.musicScaleAccess
