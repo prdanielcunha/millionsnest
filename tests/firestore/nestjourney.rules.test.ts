@@ -7,6 +7,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   Timestamp,
+  deleteDoc,
   doc,
   getDoc,
   serverTimestamp,
