@@ -1087,6 +1087,22 @@ export default {
         preparation_badge: "Preparación · próximos 7 días",
         note: "Los compromisos te ayudan a prepararte. Lo que realmente necesita acción permanece separado en Hoy."
       },
+      worship_distribution: {
+        eyebrow: "Adoración · últimos {{days}} días",
+        title: "Distribución reciente",
+        subtitle: "Asignaciones registradas en escalas concluidas durante los últimos {{days}} días.",
+        open: "Ver escalas en MusicScale",
+        completed_schedules_one: "{{count}} escala concluida incluida",
+        completed_schedules_other: "{{count}} escalas concluidas incluidas",
+        assignments_one: "{{count}} asignación registrada",
+        assignments_other: "{{count}} asignaciones registradas",
+        people_one: "{{count}} persona en las asignaciones",
+        people_other: "{{count}} personas en las asignaciones",
+        assignment_badge_one: "{{count}} asignación",
+        assignment_badge_other: "{{count}} asignaciones",
+        function_summary: "Personas: {{people}} · por persona: {{min}}–{{max}} · promedio {{average}}",
+        evidence_note: "Este resumen solo describe asignaciones registradas en escalas marcadas como concluidas. No mide presencia, desempeño, preferencia ni bienestar."
+      },
       spaces_title: "Acceso rápido",
       apps_title: "Tus aplicaciones",
       open_app: "Abrir {{appName}}",
