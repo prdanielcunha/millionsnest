@@ -16,6 +16,27 @@ assert.equal(rewrites[0]?.run?.pinTag, true, "Hosting releases must pin the Clou
 assert.equal(rewrites.at(-1)?.source, "**", "SPA fallback must be last");
 assert.equal(rewrites.at(-1)?.destination, "/index.html", "SPA fallback must resolve to index.html");
 
+const headers = hosting.headers ?? [];
+const spaFreshnessRule = headers.find((rule: any) => typeof rule.regex === "string" && rule.regex.includes("dashboard"));
+assert.ok(spaFreshnessRule, "Hosting must define a pre-rewrite no-cache rule for SPA navigation routes");
+assert.ok(spaFreshnessRule.regex.includes("login"), "SPA freshness rule must cover /login");
+assert.ok(spaFreshnessRule.regex.includes("dashboard"), "SPA freshness rule must cover Hub dashboard routes");
+assert.ok(
+  spaFreshnessRule.headers?.some((header: any) =>
+    header.key === "Cache-Control" &&
+    header.value.includes("no-store")
+  ),
+  "SPA route responses must not be served from a stale browser cache"
+);
+const immutableAssetsRule = headers.find((rule: any) => rule.source === "/assets/**");
+assert.ok(
+  immutableAssetsRule?.headers?.some((header: any) =>
+    header.key === "Cache-Control" &&
+    header.value.includes("immutable")
+  ),
+  "Content-hashed Vite assets must remain long-lived and immutable"
+);
+
 const rc = JSON.parse(fs.readFileSync(".firebaserc", "utf8"));
 const sites = rc?.targets?.millionsnest?.hosting?.hub;
 assert.deepEqual(sites, ["mn-hub-555464791734"], "Hub target must map to the canonical MillionsNest Hosting site");

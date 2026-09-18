@@ -9,6 +9,15 @@
     ],
     "headers": [
       {
+        "regex": "^/($|login$|dashboard(/.*)?$|join(/.*)?$|admin(/.*)?$|ecosystem(/.*)?$|upgrade$|checkout$|connect(/.*)?$|apps(/.*)?$|musicscale$|termos-de-uso$|politica-de-privacidade$|politicas-de-reembolso$|politicas-de-cancelamento$)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache,no-store,must-revalidate"
+          }
+        ]
+      },
+      {
         "source": "/assets/**",
         "headers": [
           {

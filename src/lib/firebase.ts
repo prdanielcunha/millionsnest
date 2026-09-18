@@ -4,11 +4,10 @@ import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  // Keep OAuth callbacks first-party on the Firebase Hosting domains. This
-  // prevents popup/third-party-storage loops on modern browsers.
-  authDomain: typeof window !== 'undefined' && /(^|\.)(millionsnest\.com|web\.app)$/.test(window.location.hostname)
-    ? window.location.hostname
-    : (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "millionsnest.firebaseapp.com"),
+  // Keep the canonical Firebase Auth helper domain for popup sign-in.
+  // Custom-domain redirect auth requires extra OAuth redirect URI configuration
+  // and is more fragile across browser privacy/storage policies.
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "millionsnest.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "millionsnest",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "millionsnest.appspot.com",
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
