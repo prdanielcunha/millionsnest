@@ -52,7 +52,6 @@ function appExperience(
 const worshipLeader = buildCurrentAdaptiveWorkspace({
   organizationId: 'org-current-adaptive',
   systemRole: 'user',
-  responsibilities: ['worship_leadership'],
   appExperiences: [appExperience('musicscale')],
   canManageOrganization: false,
   canManageMembers: false,
@@ -153,7 +152,11 @@ assert.deepEqual(
   globalAdministrator.lenses.map(lens => lens.id),
   ['my_today', 'administration']
 );
-assert.equal(globalAdministrator.activeLens, 'my_today');
+assert.equal(
+  globalAdministrator.activeLens,
+  'administration',
+  'a stale unavailable Lens falls back to the canonically preferred administration context'
+);
 assert.deepEqual(
   globalAdministrator.actions.map(action => action.signalType).sort(),
   ['organization_incomplete', 'pending_invites'].sort(),
