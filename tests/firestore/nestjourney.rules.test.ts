@@ -61,6 +61,7 @@ before(async () => {
       ['coord-a', 'coordinator', ['unit-a'], { canManagePeople: true }],
       ['pastor-a', 'pastor', ['unit-a', 'unit-b'], {}],
       ['leader-a', 'group_leader', ['unit-a'], {}],
+      ['leader-b', 'group_leader', ['unit-a'], {}],
       ['discipler-a', 'discipler', ['unit-a'], {}],
       ['admin-a', 'admin', ['unit-a'], {}],
       ['data-a', 'data_admin', ['unit-a'], {}],
@@ -223,6 +224,75 @@ test('group leader can manage a valid group only inside assigned scope', async (
     doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-b'),
     { organizationId: 'org-a', congregationId: 'unit-b', name: 'Outside', capacity: 12, participants: 0 },
   ));
+});
+
+
+test('explicit Casa roster stays private to its leader and scoped pastoral oversight', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-roster-a'), {
+      organizationId: 'org-a', congregationId: 'unit-a', name: 'Casa A',
+      leaderId: 'leader-a', capacity: 12, participants: 0, createdBy: 'leader-a',
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-roster-b'), {
+      organizationId: 'org-a', congregationId: 'unit-a', name: 'Casa B',
+      leaderId: 'leader-b', capacity: 12, participants: 0, createdBy: 'leader-b',
+    });
+  });
+
+  const leaderDb = env.authenticatedContext('leader-a').firestore();
+  const ownMembership = doc(leaderDb, 'organizations/org-a/products/raiz_e_mesa/groupMemberships/group-roster-a__person-a');
+  await assertSucceeds(setDoc(ownMembership, {
+    organizationId: 'org-a', congregationId: 'unit-a', groupId: 'group-roster-a',
+    personId: 'person-a', personName: 'Person A', status: 'active',
+    joinedAt: serverTimestamp(), joinedBy: 'leader-a', leftAt: null, leftBy: '',
+  }));
+  await assertSucceeds(getDoc(ownMembership));
+
+  await assertFails(setDoc(
+    doc(leaderDb, 'organizations/org-a/products/raiz_e_mesa/groupMemberships/group-roster-b__person-a'),
+    {
+      organizationId: 'org-a', congregationId: 'unit-a', groupId: 'group-roster-b',
+      personId: 'person-a', personName: 'Person A', status: 'active',
+      joinedAt: serverTimestamp(), joinedBy: 'leader-a', leftAt: null, leftBy: '',
+    },
+  ));
+  await assertFails(updateDoc(
+    doc(leaderDb, 'organizations/org-a/products/raiz_e_mesa/groups/group-roster-b'),
+    { participants: 1 },
+  ));
+
+  const pastorDb = env.authenticatedContext('pastor-a').firestore();
+  await assertSucceeds(getDoc(doc(
+    pastorDb,
+    'organizations/org-a/products/raiz_e_mesa/groupMemberships/group-roster-a__person-a',
+  )));
+
+  const otherLeaderDb = env.authenticatedContext('leader-b').firestore();
+  await assertFails(getDoc(doc(
+    otherLeaderDb,
+    'organizations/org-a/products/raiz_e_mesa/groupMemberships/group-roster-a__person-a',
+  )));
+});
+
+test('Casa membership lifecycle is status-based and cannot be hard-deleted', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'organizations/org-a/products/raiz_e_mesa/groups/group-lifecycle'), {
+      organizationId: 'org-a', congregationId: 'unit-a', name: 'Casa Lifecycle',
+      leaderId: 'leader-a', capacity: 12, participants: 1, createdBy: 'leader-a',
+    });
+  });
+  const db = env.authenticatedContext('leader-a').firestore();
+  const ref = doc(db, 'organizations/org-a/products/raiz_e_mesa/groupMemberships/group-lifecycle__person-a');
+  await assertSucceeds(setDoc(ref, {
+    organizationId: 'org-a', congregationId: 'unit-a', groupId: 'group-lifecycle',
+    personId: 'person-a', personName: 'Person A', status: 'active',
+    joinedAt: serverTimestamp(), joinedBy: 'leader-a', leftAt: null, leftBy: '',
+  }));
+  await assertSucceeds(updateDoc(ref, {
+    status: 'left', leftAt: serverTimestamp(), leftBy: 'leader-a',
+  }));
+  await assertFails(deleteDoc(ref));
 });
 
 test('discipler relation is append-progressive and cannot be reassigned', async () => {
