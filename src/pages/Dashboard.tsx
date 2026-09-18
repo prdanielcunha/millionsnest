@@ -2718,6 +2718,12 @@ export function Dashboard() {
                   accessible: musicScaleProjection?.accessible === true,
                   catalogState: musicScaleProjectionError ? 'error' : musicScaleProjectionLoading ? 'loading' : musicScaleProjection?.catalogState || 'available'
                 }}
+                musicScaleAuthority={musicScaleProjection ? {
+                  accessible: musicScaleProjection.accessible,
+                  decisionState: musicScaleProjection.decisionState,
+                  canReadManagedScaleResponses: musicScaleProjection.canReadManagedScaleResponses,
+                  isGlobalAccess: musicScaleProjection.isGlobalAccess
+                } : null}
                 musicScaleApp={musicScaleApp}
                 occupiedSlots={occupiedSlots}
                 maxUsersLimit={maxUsersLimit}
