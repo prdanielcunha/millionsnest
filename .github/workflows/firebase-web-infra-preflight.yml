@@ -67,6 +67,9 @@ jobs:
       - name: Action OS recent changes projection
         run: npx tsx scripts/test_change_center_projection.ts
 
+      - name: Tool Gateway safety and approvals
+        run: npx tsx scripts/test_tool_gateway.ts
+
       - name: Action OS privacy-safe pilot telemetry
         run: npx tsx scripts/test_action_os_pilot_telemetry.ts
 
