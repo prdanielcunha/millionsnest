@@ -54,7 +54,12 @@ assert.deepEqual(musicScaleActions[0]?.evidence[0], {
   sourceRef: 'musicscale.read_model.schedule_response_summary',
   entityType: 'scale',
   entityId: 'scale-evidence-1',
-  fieldPaths: ['responseSummaryAvailable', 'pendingResponses', 'startsAtMs'],
+  fieldPaths: [
+      'responseSummaryAvailable',
+      'pendingResponses',
+      'pendingByFunction',
+      'startsAtMs'
+    ],
   observedAtMs: 1_799_999_900_000
 });
 
