@@ -399,12 +399,52 @@ export default function Checkout() {
                     <h1 className="text-4xl lg:text-5xl font-semibold tracking-tight text-white leading-tight">
                         {checkoutApp === 'nestlocal' ? t('nestlocal.title') : t('title', 'Evolua com o plano ideal para você.')}
                     </h1>
-                    <p className="text-[#A0A7B5] text-lg font-light max-w-xl">
+                    <p className="text-[#A0A7B5] text-lg font-light max-w-2xl">
                         {checkoutApp === 'nestlocal'
                           ? t('nestlocal.subtitle')
-                          : t('subtitle', 'Acesso total às ferramentas MusicScale. Teste por 7 dias grátis, cancele quando quiser com 1 clique no painel.')}
+                          : t('purchase_journey.subtitle')}
                     </p>
                 </div>
+
+                <section
+                  aria-label={t('purchase_journey.kicker')}
+                  className="rounded-[1.75rem] border border-white/[0.08] bg-white/[0.025] p-4 sm:p-5"
+                >
+                  <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.18em] text-[#86BEFF]">
+                    {t('purchase_journey.kicker')}
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {[
+                      {
+                        title: t('purchase_journey.choose_title'),
+                        description: t('purchase_journey.choose_desc')
+                      },
+                      {
+                        title: t('purchase_journey.pay_title'),
+                        description: t('purchase_journey.pay_desc')
+                      },
+                      {
+                        title: t('purchase_journey.open_title'),
+                        description: t('purchase_journey.open_desc')
+                      }
+                    ].map((step, index) => (
+                      <div
+                        key={step.title}
+                        className="rounded-2xl border border-white/[0.07] bg-black/20 p-4"
+                      >
+                        <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-full border border-[#2B85EB]/20 bg-[#2B85EB]/10 text-xs font-bold text-[#9CC8FF]">
+                          {index + 1}
+                        </div>
+                        <p className="text-sm font-semibold text-white">
+                          {step.title}
+                        </p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-[#8F9AAA]">
+                          {step.description}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
 
                 {/* Billing Toggle */}
                 {checkoutApp === 'musicscale' && <div className="bg-white/5 p-1 rounded-full flex w-max border border-white/10 shadow-sm relative">
@@ -778,7 +818,7 @@ export default function Checkout() {
                        <div className="flex justify-between items-baseline border-t border-white/5 pt-4 mt-2">
                           <div>
                               <span className="font-semibold text-white block">{t('regular_sub', 'Assinatura Regular')}</span>
-                              <span className="text-[#A0A7B5] text-xs mt-1 block">{t('starts_after_trial', 'Inicia após o período de 7 dias grátis.')}</span>
+                              <span className="text-[#A0A7B5] text-xs mt-1 block">{t('purchase_journey.recurring_note')}</span>
                           </div>
                           <div className="text-right">
                               {savingsMonthly > 0 && (
@@ -827,7 +867,7 @@ export default function Checkout() {
                            </>
                        ) : (
                            <>
-                              {t('cta', 'Iniciar Teste de 7 Dias')} 
+                              {t('purchase_journey.cta')} 
                               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                            </>
                        )}
@@ -835,12 +875,12 @@ export default function Checkout() {
 
                     <div className="flex items-center justify-center gap-2 text-xs text-[#A0A7B5]">
                         <ShieldCheck className="w-4 h-4 text-emerald-500/80" />
-                        <span>{t('encrypted', 'Transação criptografada by Stripe')}</span>
+                        <span>{t('encrypted', 'Transação segura processada pela Stripe')}</span>
                     </div>
 
                     <div className="text-center">
                         <p className="text-[11px] text-[#A0A7B5]/60 font-light max-w-[200px] mx-auto leading-relaxed">
-                            {t('cancel_info', 'Cancele a qualquer momento antes do trial acabar e não seja cobrado.')}
+                            {t('purchase_journey.trial_note')}
                         </p>
                     </div>
 
