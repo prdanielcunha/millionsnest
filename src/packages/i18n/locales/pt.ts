@@ -1094,6 +1094,22 @@ export default {
         preparation_badge: "Preparação · próximos 7 dias",
         note: "Compromissos ajudam você a se preparar. O que realmente precisa de ação continua separado em Hoje."
       },
+      worship_distribution: {
+        eyebrow: "Louvor · últimos {{days}} dias",
+        title: "Distribuição recente",
+        subtitle: "Escalações registradas em escalas concluídas nos últimos {{days}} dias.",
+        open: "Ver escalas no MusicScale",
+        completed_schedules_one: "{{count}} escala concluída incluída",
+        completed_schedules_other: "{{count}} escalas concluídas incluídas",
+        assignments_one: "{{count}} escalação registrada",
+        assignments_other: "{{count}} escalações registradas",
+        people_one: "{{count}} pessoa nas escalações",
+        people_other: "{{count}} pessoas nas escalações",
+        assignment_badge_one: "{{count}} escalação",
+        assignment_badge_other: "{{count}} escalações",
+        function_summary: "Pessoas: {{people}} · por pessoa: {{min}}–{{max}} · média {{average}}",
+        evidence_note: "Este resumo descreve somente escalações registradas em escalas marcadas como concluídas. Não mede presença, desempenho, preferência ou bem-estar."
+      },
       spaces_title: "Acesso rápido",
       apps_title: "Seus aplicativos",
       open_app: "Abrir {{appName}}",

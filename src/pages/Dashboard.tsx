@@ -49,6 +49,10 @@ import {
   deriveDeclinedConfirmationGapsByFunction,
   derivePendingConfirmationGapsByFunction
 } from "../lib/musicScaleLeaderIntelligence.js";
+import {
+  deriveMusicScaleAssignmentDistribution,
+  type MusicScaleAssignmentDistributionSnapshot
+} from "../lib/musicScaleDistributionIntelligence.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -127,6 +131,7 @@ type MusicScaleHubSummary = {
       count: number;
     }>;
   };
+  recentAssignmentDistribution: MusicScaleAssignmentDistributionSnapshot | null;
   nextPersonalScale: null | {
     id: string;
     date: string;
@@ -148,6 +153,7 @@ const EMPTY_MUSICSCALE_SUMMARY: MusicScaleHubSummary = {
   scalesCount: 0,
   bandScalesCount: 0,
   nextScale: null,
+  recentAssignmentDistribution: null,
   nextPersonalScale: null,
   updatedAtMs: 0,
 };
@@ -2067,6 +2073,9 @@ export function Dashboard() {
     let personalResponseScaleId: string | null = null;
     const canReadResponseSummary =
       musicScaleProjection?.canReadManagedScaleResponses === true;
+    const canReadWorshipDistribution =
+      canReadResponseSummary &&
+      musicScaleProjection?.isGlobalAccess !== true;
 
     const publishSummary = () => {
       if (currentActiveOrgIdRef.current !== orgId) return;
@@ -2248,6 +2257,19 @@ export function Dashboard() {
           pendingByFunction: live.pendingByFunction.map(gap => ({ ...gap })),
           declinedByFunction: live.declinedByFunction.map(gap => ({ ...gap }))
         } : null,
+        recentAssignmentDistribution: canReadWorshipDistribution
+          ? deriveMusicScaleAssignmentDistribution(
+              live.scales.map(scale => ({
+                id: String(scale?.id || ''),
+                status: scale?.status || null,
+                startsAtMs: toEventEpoch(scale),
+                eventAssignments: Array.isArray(scale?.eventAssignments)
+                  ? scale.eventAssignments
+                  : []
+              })),
+              now
+            )
+          : null,
         nextPersonalScale: nextPersonalScale ? {
           id: nextPersonalScale.id,
           date: nextPersonalScale.date,
@@ -2329,7 +2351,8 @@ export function Dashboard() {
     user,
     activeContextOrgId,
     musicScaleProjection?.accessible,
-    musicScaleProjection?.canReadManagedScaleResponses
+    musicScaleProjection?.canReadManagedScaleResponses,
+    musicScaleProjection?.isGlobalAccess
   ]);
 
   useEffect(() => {
