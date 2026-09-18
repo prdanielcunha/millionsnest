@@ -23,6 +23,7 @@ import { Link } from 'react-router-dom';
 import { useSupportHub } from '../support/SupportHubContext.js';
 
 interface EcosystemWorkspaceHomeProps {
+  organizationId: string;
   selectedWorkspace: string;
   installedApps: EcosystemApp[];
   appExperiences: HubAppExperience[];
@@ -115,6 +116,7 @@ interface EcosystemWorkspaceHomeProps {
 }
 
 export function EcosystemWorkspaceHome({
+  organizationId,
   selectedWorkspace,
   installedApps,
   appExperiences,
@@ -154,7 +156,7 @@ export function EcosystemWorkspaceHome({
 
   React.useEffect(() => {
     setRequestedLens('my_today');
-  }, [organization?.id]);
+  }, [organizationId]);
 
   const dismissReasons: Array<{
     code: ActionOsDismissCode;
@@ -304,7 +306,7 @@ export function EcosystemWorkspaceHome({
     };
 
     const adaptiveWorkspace = buildCurrentAdaptiveWorkspace({
-      organizationId: String(organization?.id || ''),
+      organizationId,
       appExperiences,
       requestedLens,
       canManageOrganization,
