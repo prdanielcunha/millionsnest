@@ -62,6 +62,7 @@ before(async () => {
       ['pastor-a', 'pastor', ['unit-a', 'unit-b'], {}],
       ['leader-a', 'group_leader', ['unit-a'], {}],
       ['discipler-a', 'discipler', ['unit-a'], {}],
+      ['admin-a', 'admin', ['unit-a'], {}],
       ['data-a', 'data_admin', ['unit-a'], {}],
     ] as const;
 
@@ -434,4 +435,65 @@ test('ordinary operational members cannot create privacy-governance requests', a
       requestedBy: 'care-a',
     },
   ));
+});
+
+
+test('care handoff creates a restricted pastoral marker atomically without granting Care read access', async () => {
+  const careDb = env.authenticatedContext('care-a').firestore();
+  const careRef = doc(careDb, 'organizations/org-a/products/raiz_e_mesa/careRequests/pastoral-care');
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/careRequests/pastoral-care'), {
+      organizationId: 'org-a', congregationId: 'unit-a', personId: 'person-a',
+      careType: 'pastoral_contact', source: 'manual', summary: '', status: 'open',
+      requestedAt: new Date(), requestedBy: 'care-a', promiseHours: 24,
+      dueAt: new Date(Date.now() + 86400000), ownerRef: 'care-a',
+      assignedAt: new Date(), assignedBy: 'care-a', resolvedAt: null, resolvedBy: '',
+      resolutionCode: '', resolutionNote: '',
+    });
+  });
+  const handoffRef = doc(careDb, 'organizations/org-a/products/raiz_e_mesa/pastoralHandoffs/pastoral-care');
+  const batch = writeBatch(careDb);
+  batch.update(careRef, {
+    status: 'resolved', resolvedAt: serverTimestamp(), resolvedBy: 'care-a',
+    resolutionCode: 'pastoral_handoff', resolutionNote: '',
+  });
+  batch.set(handoffRef, {
+    organizationId: 'org-a', congregationId: 'unit-a', personId: 'person-a',
+    sourceCareRequestId: 'pastoral-care', status: 'open',
+    requestedAt: serverTimestamp(), requestedBy: 'care-a', resolvedAt: null, resolvedBy: '',
+  });
+  await assertSucceeds(batch.commit());
+  await assertFails(getDoc(handoffRef));
+});
+
+test('pastoral markers cannot be invented independently of a matching Care handoff', async () => {
+  const db = env.authenticatedContext('care-a').firestore();
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/pastoralHandoffs/fake'),
+    {
+      organizationId: 'org-a', congregationId: 'unit-a', personId: 'person-a',
+      sourceCareRequestId: 'fake', status: 'open',
+      requestedAt: serverTimestamp(), requestedBy: 'care-a', resolvedAt: null, resolvedBy: '',
+    },
+  ));
+});
+
+test('pastor can read and resolve a scoped pastoral marker while ordinary admin cannot', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'organizations/org-a/products/raiz_e_mesa/pastoralHandoffs/restricted-a'), {
+      organizationId: 'org-a', congregationId: 'unit-a', personId: 'person-a',
+      sourceCareRequestId: 'pastoral-care', status: 'open',
+      requestedAt: new Date(), requestedBy: 'care-a', resolvedAt: null, resolvedBy: '',
+    });
+  });
+  const pastorDb = env.authenticatedContext('pastor-a').firestore();
+  const adminDb = env.authenticatedContext('admin-a').firestore();
+  const pastorRef = doc(pastorDb, 'organizations/org-a/products/raiz_e_mesa/pastoralHandoffs/restricted-a');
+  await assertSucceeds(getDoc(pastorRef));
+  await assertFails(getDoc(doc(adminDb, 'organizations/org-a/products/raiz_e_mesa/pastoralHandoffs/restricted-a')));
+  await assertSucceeds(updateDoc(pastorRef, {
+    status: 'resolved', resolvedAt: serverTimestamp(), resolvedBy: 'pastor-a',
+  }));
+  await assertFails(updateDoc(pastorRef, { note: 'private narrative' }));
 });
