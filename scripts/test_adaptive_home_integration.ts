@@ -43,7 +43,7 @@ assert.match(
 );
 assert.match(
   currentBridge,
-  /resolveEntitledAppIds(input.appExperiences)/,
+  /resolveEntitledAppIds\s*\(input\.appExperiences\)/,
   'current Hub bridge must derive entitlements from canonical Hub app experience'
 );
 assert.match(
