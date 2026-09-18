@@ -99,6 +99,16 @@ assert.match(
   /activation\.access_note/,
   'activation screen must explain how to find the app again later'
 );
+assert.match(
+  success,
+  /manualRetryCount/,
+  'activation recovery must have an explicit retry trigger independent from provisioning polling'
+);
+assert.match(
+  success,
+  /setManualRetryCount\([\s\S]*current => current \+ 1/,
+  'manual retry must always force a new checkout confirmation attempt'
+);
 assert.equal(
   /setTimeout\([^)]*launchPurchasedApp|launchPurchasedApp\([^)]*\)[\s\S]{0,200}1200/.test(success),
   false,
