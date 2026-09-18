@@ -71,7 +71,11 @@ const canonical = selectNextBestMinistryAction({
   actions: [normalInProgress, highB, highA],
   resolutions: []
 });
-assert.equal(canonical?.action.dedupeKey, highA.dedupeKey);
+assert.equal(
+  canonical?.action.dedupeKey,
+  highB.dedupeKey,
+  'absolute ties use the stable canonical dedupe-key ordering'
+);
 assert.equal(canonical?.reason, 'high_priority');
 
 const samePriorityContinuity = selectNextBestMinistryAction({
