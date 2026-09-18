@@ -77,6 +77,10 @@ interface EcosystemWorkspaceHomeProps {
         maybe: number;
         declined: number;
       };
+      pendingByFunction: Array<{
+        functionName: string;
+        count: number;
+      }>;
     };
     nextPersonalScale: null | {
       id: string;
@@ -330,7 +334,8 @@ export function EcosystemWorkspaceHome({
               id: musicScaleSummary.nextScale.id,
               startsAtMs: musicScaleSummary.nextScale.startsAtMs,
               responseSummaryAvailable: musicScaleSummary.nextScale.responseSummaryAvailable,
-              pendingResponses: musicScaleSummary.nextScale.responseCounts.pending || 0
+              pendingResponses: musicScaleSummary.nextScale.responseCounts.pending || 0,
+              pendingByFunction: musicScaleSummary.nextScale.pendingByFunction
             }
           : null,
         nextPersonalScale: musicScaleSummary.nextPersonalScale

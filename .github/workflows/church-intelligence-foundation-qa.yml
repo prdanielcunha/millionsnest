@@ -8,10 +8,14 @@ on:
       - 'src/packages/events/**'
       - 'src/packages/i18n/engine.ts'
       - 'src/packages/i18n/intelligence/**'
+      - 'src/packages/i18n/locales/es.ts'
+      - 'src/packages/i18n/locales/en.ts'
+      - 'src/packages/i18n/locales/pt.ts'
       - 'src/lib/actionCenter.ts'
       - 'src/lib/actionSignals.ts'
       - 'src/lib/factSignalAdapter.ts'
       - 'src/lib/musicScaleFactProjection.ts'
+      - 'src/lib/musicScaleLeaderIntelligence.ts'
       - 'src/lib/musicScaleChangeFactProjection.ts'
       - 'src/lib/changeCenter.ts'
       - 'src/lib/commitmentCenter.ts'
@@ -28,6 +32,7 @@ on:
       - 'src/components/dashboard/EcosystemWorkspaceHome.tsx'
       - 'scripts/test_fact_contract.ts'
       - 'scripts/test_musicscale_fact_stream.ts'
+      - 'scripts/test_musicscale_leader_intelligence.ts'
       - 'scripts/test_evidence_backed_timeline.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
@@ -73,6 +78,9 @@ jobs:
 
       - name: MusicScale canonical Fact Stream
         run: npx tsx scripts/test_musicscale_fact_stream.ts
+
+      - name: MusicScale leader confirmation-gap intelligence
+        run: npx tsx scripts/test_musicscale_leader_intelligence.ts
 
       - name: Evidence-backed commitments and changes
         run: npx tsx scripts/test_evidence_backed_timeline.ts

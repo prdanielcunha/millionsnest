@@ -64,6 +64,10 @@ export interface ActionProjectionInput {
       startsAtMs?: number | null;
       responseSummaryAvailable: boolean;
       pendingResponses: number;
+      pendingByFunction?: readonly {
+        functionName: string;
+        count: number;
+      }[];
     };
     nextPersonalScale?: null | {
       id: string;
@@ -85,6 +89,21 @@ function numberPayload(
 ): number {
   const value = signal.payload[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function stringArrayPayload(
+  signal: EcosystemSignal,
+  key: string
+): string[] {
+  const value = signal.payload[key];
+  if (!Array.isArray(value)) return [];
+
+  return Array.from(new Set(
+    value
+      .filter((item): item is string => typeof item === 'string')
+      .map(item => item.trim())
+      .filter(Boolean)
+  ));
 }
 
 /**
@@ -156,6 +175,12 @@ export function projectSignalToAction(
     const pendingResponses = numberPayload(signal, 'pendingResponses');
     if (pendingResponses <= 0 || signal.sourceEntityType !== 'scale') return null;
 
+    const pendingFunctions = stringArrayPayload(
+      signal,
+      'pendingFunctionNames'
+    );
+    const hasFunctionContext = pendingFunctions.length > 0;
+
     return {
       id: signal.dedupeKey,
       dedupeKey: signal.dedupeKey,
@@ -164,8 +189,15 @@ export function projectSignalToAction(
       signalType: signal.signalType,
       priority: 'high',
       titleKey: 'workspace.actions.musicscale_pending_responses.title',
-      descriptionKey: 'workspace.actions.musicscale_pending_responses.description',
-      translationParams: { count: pendingResponses },
+      descriptionKey: hasFunctionContext
+        ? 'workspace.actions.musicscale_pending_responses.description_with_functions'
+        : 'workspace.actions.musicscale_pending_responses.description',
+      translationParams: {
+        count: pendingResponses,
+        ...(hasFunctionContext
+          ? { functions: pendingFunctions.join(' · ') }
+          : {})
+      },
       destination: {
         kind: 'app',
         appId: 'musicscale',

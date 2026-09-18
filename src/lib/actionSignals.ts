@@ -37,6 +37,10 @@ export interface ActionSignalCollectionInput {
       startsAtMs?: number | null;
       responseSummaryAvailable: boolean;
       pendingResponses: number;
+      pendingByFunction?: readonly {
+        functionName: string;
+        count: number;
+      }[];
     };
     nextPersonalScale?: null | {
       id: string;
