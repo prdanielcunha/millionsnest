@@ -1080,8 +1080,7 @@ service cloud.firestore {
             (
               (request.resource.data.get('eventType', '') == 'VISITOR_REGISTERED' && journeyCanManagePeople(orgId)) ||
               (request.resource.data.get('eventType', '') in ['PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED'] && journeyCanManagePresence(orgId)) ||
-              (request.resource.data.get('eventType', '') == 'CARE_REQUESTED' && (journeyCanManageCare(orgId) || journeyCanManagePeople(orgId))) ||
-              (request.resource.data.get('eventType', '') in ['CARE_ASSIGNED', 'CARE_RESOLVED'] && journeyCanManageCare(orgId))
+              request.resource.data.get('eventType', '') in ['CARE_REQUESTED', 'CARE_ASSIGNED', 'CARE_RESOLVED']
             ) &&
             journeyValidCanonicalFact(orgId, factId);
           allow update, delete: if false;
