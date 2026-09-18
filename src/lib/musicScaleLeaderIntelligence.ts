@@ -16,6 +16,11 @@ export interface MusicScalePendingFunctionGap {
   count: number;
 }
 
+export interface MusicScaleDeclinedFunctionGap {
+  functionName: string;
+  count: number;
+}
+
 const TERMINAL_RESPONSE_STATUSES = new Set([
   'accepted',
   'maybe',
@@ -36,6 +41,102 @@ function responseAssignmentId(
   response: MusicScaleResponseObservation
 ): string {
   return clean(response.eventAssignmentId) || clean(response.id);
+}
+
+function terminalStatusesByAssignment(
+  responses: readonly MusicScaleResponseObservation[]
+): Map<string, Set<string>> {
+  const statuses = new Map<string, Set<string>>();
+
+  for (const response of responses) {
+    if (response?.active === false) continue;
+
+    const id = responseAssignmentId(response);
+    if (!id) continue;
+
+    const status = clean(response.status || 'pending').toLowerCase();
+    if (!TERMINAL_RESPONSE_STATUSES.has(status)) continue;
+
+    const assignmentStatuses = statuses.get(id) || new Set<string>();
+    assignmentStatuses.add(status);
+    statuses.set(id, assignmentStatuses);
+  }
+
+  return statuses;
+}
+
+function declinedAssignmentIds(
+  assignments: readonly MusicScaleAssignmentObservation[],
+  responses: readonly MusicScaleResponseObservation[]
+): Set<string> {
+  const terminalStatuses = terminalStatusesByAssignment(responses);
+  const declined = new Set<string>();
+
+  for (const assignment of assignments) {
+    if (assignment?.active === false) continue;
+
+    const id = assignmentId(assignment);
+    if (!id) continue;
+
+    const statuses = terminalStatuses.get(id);
+    if (
+      statuses?.size === 1 &&
+      statuses.has('declined')
+    ) {
+      declined.add(id);
+    }
+  }
+
+  return declined;
+}
+
+export function countDeclinedConfirmations(
+  assignments: readonly MusicScaleAssignmentObservation[],
+  responses: readonly MusicScaleResponseObservation[]
+): number {
+  return declinedAssignmentIds(assignments, responses).size;
+}
+
+export function deriveDeclinedConfirmationGapsByFunction(
+  assignments: readonly MusicScaleAssignmentObservation[],
+  responses: readonly MusicScaleResponseObservation[]
+): MusicScaleDeclinedFunctionGap[] {
+  const declinedIds = declinedAssignmentIds(assignments, responses);
+  const counts = new Map<string, number>();
+
+  for (const assignment of assignments) {
+    if (assignment?.active === false) continue;
+
+    const id = assignmentId(assignment);
+    if (!id || !declinedIds.has(id)) continue;
+
+    const functionName = clean(assignment.functionName);
+    if (!functionName) continue;
+
+    counts.set(functionName, (counts.get(functionName) || 0) + 1);
+  }
+
+  return Array.from(counts.entries())
+    .map(([functionName, count]) => ({ functionName, count }))
+    .sort((a, b) =>
+      a.functionName < b.functionName
+        ? -1
+        : a.functionName > b.functionName
+          ? 1
+          : 0
+    );
+}
+
+export function summarizeDeclinedConfirmationFunctions(
+  gaps: readonly MusicScaleDeclinedFunctionGap[]
+): string[] {
+  return gaps
+    .filter(gap => gap.count > 0 && clean(gap.functionName))
+    .map(gap =>
+      gap.count > 1
+        ? `${gap.functionName} (${gap.count})`
+        : gap.functionName
+    );
 }
 
 /**
