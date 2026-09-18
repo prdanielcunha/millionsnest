@@ -4,10 +4,14 @@ import type {
 
 export type ActionResolutionStatus =
   | 'started'
-  | 'cleared_observed';
+  | 'cleared_observed'
+  | 'outcome_observed';
 
 export type ActionResolutionOutcome =
-  | 'signal_cleared';
+  | 'signal_cleared'
+  | 'resolved'
+  | 'superseded'
+  | 'no_longer_actionable';
 
 export interface ActionResolutionRecord {
   organizationId: string;
@@ -20,9 +24,11 @@ export interface ActionResolutionRecord {
     | 'musicscale_repertoire_content_gaps';
   status: ActionResolutionStatus;
   outcome?: ActionResolutionOutcome | null;
+  outcomeCode?: string | null;
   startedAtMs?: number | null;
   updatedAtMs?: number | null;
   clearedObservedAtMs?: number | null;
+  outcomeObservedAtMs?: number | null;
 }
 
 export interface MusicScaleResolutionProjectionReadiness {

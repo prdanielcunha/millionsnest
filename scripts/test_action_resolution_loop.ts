@@ -282,8 +282,13 @@ assert.match(
 );
 assert.match(
   server,
-  /status: 'cleared_observed'/,
-  'server must persist only an observed factual outcome'
+  /status: 'outcome_observed'/,
+  'server must persist classified factual outcomes through the Outcome Engine'
+);
+assert.match(
+  server,
+  /cleared_observed/,
+  'server must keep backward-compatible reads for legacy cleared_observed records'
 );
 assert.match(
   server,

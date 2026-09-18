@@ -1031,6 +1031,9 @@ export default {
         resolution_in_progress: "In progress",
         resolution_start_error: "We will open MusicScale, but we could not register resolution tracking.",
         resolution_cleared_feedback: "Resolved: the signal no longer appears in the source.",
+        outcome_resolved_feedback: "Resolved: the source condition was confirmed as completed.",
+        outcome_superseded_feedback: "The situation changed: the Hub kept the new pending state as a separate action.",
+        outcome_no_longer_actionable_feedback: "This action left the current operational window without being marked as resolved.",
         nbma: {
           recommended: "Recommended now",
           continue_resolution: "Continue the work already in progress at this same priority level.",

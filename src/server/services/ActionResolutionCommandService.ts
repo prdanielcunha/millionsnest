@@ -10,6 +10,11 @@ import {
   resolveEcosystemAppAccess,
   type ResolvedAppAccess
 } from './EcosystemAccessResolver.js';
+import {
+  isValidOutcomeForSignal,
+  type ActionOutcomeCode,
+  type ActionOutcomeResult
+} from '../../lib/outcomeEngine.js';
 
 type Dependencies = {
   verifyIdToken?: (
@@ -305,12 +310,15 @@ export async function getActionResolutions(
           signalType: data.signalType,
           status: data.status,
           outcome: data.outcome ?? null,
+          outcomeCode: data.outcomeCode ?? null,
           startedAtMs:
             timestampToMs(data.startedAt),
           updatedAtMs:
             timestampToMs(data.updatedAt),
           clearedObservedAtMs:
-            timestampToMs(data.clearedObservedAt)
+            timestampToMs(data.clearedObservedAt),
+          outcomeObservedAtMs:
+            timestampToMs(data.outcomeObservedAt)
         };
       })
       .filter(record =>
@@ -321,7 +329,8 @@ export async function getActionResolutions(
         RESOLVABLE_SIGNAL_TYPES.has(record.signalType) &&
         (
           record.status === 'started' ||
-          record.status === 'cleared_observed'
+          record.status === 'cleared_observed' ||
+          record.status === 'outcome_observed'
         )
       );
 
@@ -411,7 +420,12 @@ export async function startActionResolution(
 
     if (
       existing.exists &&
-      existing.data()?.status === 'cleared_observed'
+      (
+        existing.data()?.status ===
+          'cleared_observed' ||
+        existing.data()?.status ===
+          'outcome_observed'
+      )
     ) {
       const data = existing.data() ?? {};
       return res.status(200).json({
@@ -424,14 +438,24 @@ export async function startActionResolution(
           fingerprint: input.fingerprint,
           sourceApp: 'musicscale',
           signalType: input.signalType,
-          status: 'cleared_observed',
-          outcome: data.outcome ?? 'signal_cleared',
+          status: data.status,
+          outcome:
+            data.outcome ??
+            'signal_cleared',
+          outcomeCode:
+            data.outcomeCode ?? null,
           startedAtMs:
             timestampToMs(data.startedAt),
           updatedAtMs:
             timestampToMs(data.updatedAt),
           clearedObservedAtMs:
-            timestampToMs(data.clearedObservedAt)
+            timestampToMs(
+              data.clearedObservedAt
+            ),
+          outcomeObservedAtMs:
+            timestampToMs(
+              data.outcomeObservedAt
+            )
         }
       });
     }
@@ -445,6 +469,7 @@ export async function startActionResolution(
       signalType: input.signalType,
       status: 'started',
       outcome: null,
+      outcomeCode: null,
       updatedAt: FieldValue.serverTimestamp()
     };
 
@@ -481,7 +506,8 @@ export async function startActionResolution(
               )
             : nowMs,
         updatedAtMs: nowMs,
-        clearedObservedAtMs: null
+        clearedObservedAtMs: null,
+        outcomeObservedAtMs: null
       }
     });
   } catch (error) {
@@ -513,7 +539,8 @@ export async function observeActionResolutionOutcome(
     });
   }
 
-  const organizationId = req.params.organizationId;
+  const organizationId =
+    req.params.organizationId;
   if (!isSafeDocumentId(organizationId)) {
     return res.status(400).json({
       success: false,
@@ -521,10 +548,27 @@ export async function observeActionResolutionOutcome(
     });
   }
 
-  const input = parseResolutionInput(req.body);
+  const input = parseResolutionInput(
+    req.body
+  );
+  const outcomeResult =
+    req.body?.outcomeResult as
+      | ActionOutcomeResult
+      | undefined;
+  const outcomeCode =
+    req.body?.outcomeCode as
+      | ActionOutcomeCode
+      | undefined;
+
   if (
     !input ||
-    req.body?.outcome !== 'signal_cleared'
+    !outcomeResult ||
+    !outcomeCode ||
+    !isValidOutcomeForSignal({
+      signalType: input.signalType,
+      result: outcomeResult,
+      code: outcomeCode
+    })
   ) {
     return res.status(400).json({
       success: false,
@@ -534,7 +578,8 @@ export async function observeActionResolutionOutcome(
 
   try {
     const db =
-      (dependencies.getFirestore ?? getFirestore)();
+      (dependencies.getFirestore ??
+        getFirestore)();
 
     const authorization = await authorize(
       db,
@@ -544,10 +589,13 @@ export async function observeActionResolutionOutcome(
     );
 
     if (authorization.allowed === false) {
-      return res.status(authorization.status).json({
-        success: false,
-        reasonCode: authorization.reasonCode
-      });
+      return res
+        .status(authorization.status)
+        .json({
+          success: false,
+          reasonCode:
+            authorization.reasonCode
+        });
     }
 
     const id = resolutionId(
@@ -573,15 +621,21 @@ export async function observeActionResolutionOutcome(
           } as const;
         }
 
-        const data = existing.data() ?? {};
+        const data =
+          existing.data() ?? {};
 
         if (
-          data.organizationId !== organizationId ||
+          data.organizationId !==
+            organizationId ||
           data.actorUid !== actorUid ||
-          data.dedupeKey !== input.dedupeKey ||
-          data.fingerprint !== input.fingerprint ||
-          data.sourceApp !== input.sourceApp ||
-          data.signalType !== input.signalType
+          data.dedupeKey !==
+            input.dedupeKey ||
+          data.fingerprint !==
+            input.fingerprint ||
+          data.sourceApp !==
+            input.sourceApp ||
+          data.signalType !==
+            input.signalType
         ) {
           return {
             status: 409,
@@ -591,8 +645,24 @@ export async function observeActionResolutionOutcome(
         }
 
         if (
-          data.status === 'cleared_observed' &&
-          data.outcome === 'signal_cleared'
+          data.status ===
+            'outcome_observed' &&
+          data.outcome === outcomeResult &&
+          data.outcomeCode === outcomeCode
+        ) {
+          return {
+            status: 200,
+            alreadyObserved: true,
+            data
+          } as const;
+        }
+
+        if (
+          data.status ===
+            'cleared_observed' &&
+          data.outcome ===
+            'signal_cleared' &&
+          outcomeResult === 'resolved'
         ) {
           return {
             status: 200,
@@ -612,9 +682,12 @@ export async function observeActionResolutionOutcome(
         transaction.set(
           ref,
           {
-            status: 'cleared_observed',
-            outcome: 'signal_cleared',
-            clearedObservedAt:
+            status: 'outcome_observed',
+            outcome: outcomeResult,
+            outcomeCode,
+            outcomeBasis:
+              'authorized_canonical_projection',
+            outcomeObservedAt:
               FieldValue.serverTimestamp(),
             updatedAt:
               FieldValue.serverTimestamp()
@@ -631,10 +704,12 @@ export async function observeActionResolutionOutcome(
     );
 
     if ('reasonCode' in result) {
-      return res.status(result.status).json({
-        success: false,
-        reasonCode: result.reasonCode
-      });
+      return res
+        .status(result.status)
+        .json({
+          success: false,
+          reasonCode: result.reasonCode
+        });
     }
 
     res.setHeader(
@@ -649,18 +724,27 @@ export async function observeActionResolutionOutcome(
         id,
         organizationId,
         dedupeKey: input.dedupeKey,
-        fingerprint: input.fingerprint,
+        fingerprint:
+          input.fingerprint,
         sourceApp: input.sourceApp,
         signalType: input.signalType,
-        status: 'cleared_observed',
-        outcome: 'signal_cleared',
+        status: 'outcome_observed',
+        outcome: outcomeResult,
+        outcomeCode,
         startedAtMs:
-          timestampToMs(result.data.startedAt),
+          timestampToMs(
+            result.data.startedAt
+          ),
         updatedAtMs: nowMs,
         clearedObservedAtMs:
+          timestampToMs(
+            result.data.clearedObservedAt
+          ),
+        outcomeObservedAtMs:
           result.alreadyObserved
             ? timestampToMs(
-                result.data.clearedObservedAt
+                result.data
+                  .outcomeObservedAt
               )
             : nowMs
       }
