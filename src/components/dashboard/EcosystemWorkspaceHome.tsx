@@ -38,6 +38,9 @@ import {
   resolutionMatchesAction,
   type ActionResolutionRecord
 } from '../../lib/actionResolution.js';
+import type {
+  ActionOutcomeObservation
+} from '../../lib/outcomeEngine.js';
 import {
   selectNextBestMinistryAction
 } from '../../lib/nextBestMinistryAction.js';
@@ -154,7 +157,7 @@ interface EcosystemWorkspaceHomeProps {
     action: ReadOnlyHubAction
   ) => Promise<{ appId: 'musicscale'; path: string } | null>;
   onObserveActionResolutionOutcome: (
-    resolution: ActionResolutionRecord
+    observation: ActionOutcomeObservation
   ) => void | Promise<void>;
   onActionOsInteraction: (
     interaction: Omit<ActionOsInteractionInput, 'organizationId' | 'userId'>
@@ -720,7 +723,7 @@ export function EcosystemWorkspaceHome({
           resolutions={actionResolutions}
           sourceActions={adaptiveWorkspace.sourceActions}
           musicScaleReadiness={musicScaleResolutionReadiness}
-          onClearedObserved={onObserveActionResolutionOutcome}
+          onOutcomeObserved={onObserveActionResolutionOutcome}
         />
         <section aria-labelledby="hub-home-title" className="relative overflow-hidden rounded-[2rem] border border-white/[0.08] bg-[#07090D] p-5 shadow-[0_30px_90px_rgba(0,0,0,.28)] sm:p-7 md:p-8">
           <div className="pointer-events-none absolute inset-0">
