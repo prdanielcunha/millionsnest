@@ -688,6 +688,8 @@ export default {
     error_plan: "Please select a primary plan.",
     purchase_journey: {
       kicker: "From subscription to first use",
+      subtitle: "Choose your organization's plan, complete payment securely, and start through the guided path.",
+      recurring_note: "Recurring billing follows the selected plan and billing cycle.",
       choose_title: "1. Choose the plan",
       choose_desc: "Select the plan for your organization. The team uses the same purchased access.",
       pay_title: "2. Complete securely",
