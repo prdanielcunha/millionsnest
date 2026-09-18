@@ -150,6 +150,9 @@ interface EcosystemWorkspaceHomeProps {
   onStartActionResolution: (
     action: ReadOnlyHubAction
   ) => Promise<ActionResolutionRecord | null>;
+  onExecuteActionTool: (
+    action: ReadOnlyHubAction
+  ) => Promise<{ appId: 'musicscale'; path: string } | null>;
   onObserveActionResolutionOutcome: (
     resolution: ActionResolutionRecord
   ) => void | Promise<void>;
@@ -198,6 +201,7 @@ export function EcosystemWorkspaceHome({
   actionResolutions,
   actionResolutionBusyKey,
   onStartActionResolution,
+  onExecuteActionTool,
   onObserveActionResolutionOutcome,
   onActionOsInteraction,
   recentActivity
@@ -590,7 +594,9 @@ export function EcosystemWorkspaceHome({
         nextStep.tone === 'success' &&
         todayActions.length > 0);
 
-    const handleTodayAction = (action: ReadOnlyHubAction) => {
+    const handleTodayAction = async (
+      action: ReadOnlyHubAction
+    ) => {
       onActionOsInteraction({
         kind: 'action_opened',
         lane: 'action',
@@ -606,6 +612,32 @@ export function EcosystemWorkspaceHome({
         if (destination.section === 'members') onNavigateToOrganizationMembers();
         if (destination.section === 'billing') onNavigateToBilling();
         return;
+      }
+
+      const toolNavigation =
+        await onExecuteActionTool(action);
+
+      if (
+        toolNavigation?.appId ===
+          destination.appId
+      ) {
+        const toolExperience =
+          appExperiences.find(
+            item =>
+              item.app.id ===
+              toolNavigation.appId
+          );
+
+        if (
+          toolExperience?.app &&
+          toolExperience.canOpen
+        ) {
+          onLaunchApp(
+            toolExperience.app,
+            toolNavigation.path
+          );
+          return;
+        }
       }
 
       const experience = appExperiences.find(item => item.app.id === destination.appId);
@@ -983,7 +1015,7 @@ export function EcosystemWorkspaceHome({
                           if (resolutionEligible && !activeResolution) {
                             await onStartActionResolution(action);
                           }
-                          handleTodayAction(action);
+                          await handleTodayAction(action);
                         }}
                         className="min-h-[44px] w-full rounded-xl border border-white/[0.08] bg-white px-4 py-2.5 text-xs font-semibold text-[#07090D] transition-all hover:bg-[#F2F5F8] active:scale-[0.985] disabled:cursor-wait disabled:opacity-60 sm:min-w-[108px]"
                       >

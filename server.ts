@@ -21,6 +21,10 @@ import {
   startActionResolution,
   observeActionResolutionOutcome
 } from './src/server/services/ActionResolutionCommandService.js';
+import {
+  getToolGatewayCatalog,
+  executeToolAction
+} from './src/server/services/ToolGatewayService.js';
 import { createSupportTicket } from './src/server/services/SupportTicketService.js';
 import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
 import { createSupportWhatsAppLink } from './src/server/services/SupportWhatsAppService.js';
@@ -1461,6 +1465,8 @@ async function startServer() {
   app.get('/api/v1/organizations/:organizationId/action-resolutions', (req, res) => getActionResolutions(req, res));
   app.post('/api/v1/organizations/:organizationId/action-resolution/start', express.json({ limit: '8kb' }), (req, res) => startActionResolution(req, res));
   app.post('/api/v1/organizations/:organizationId/action-resolution/outcome', express.json({ limit: '8kb' }), (req, res) => observeActionResolutionOutcome(req, res));
+  app.get('/api/v1/organizations/:organizationId/tool-gateway/catalog', (req, res) => getToolGatewayCatalog(req, res));
+  app.post('/api/v1/organizations/:organizationId/tool-actions/execute', express.json({ limit: '8kb' }), (req, res) => executeToolAction(req, res));
   app.post('/api/v1/user/active-organization', express.json(), setActiveOrganization);
 
   app.post('/api/internal/repair-subscription', async (req: any, res) => {

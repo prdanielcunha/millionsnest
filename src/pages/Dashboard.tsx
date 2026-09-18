@@ -40,6 +40,11 @@ import { SupportHub } from "../components/support/SupportHub.js";
 import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js";
 import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
 import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "../lib/actionCenter.js";
+import {
+  buildActionToolRequest,
+  parseToolNavigationResult,
+  type ToolNavigationResult
+} from "../lib/actionToolGatewayBridge.js";
 import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
 import {
   fetchActionPreferences,
@@ -751,6 +756,58 @@ export function Dashboard() {
       return null;
     } finally {
       setActionResolutionBusyKey(null);
+    }
+  };
+
+  const handleExecuteActionTool = async (
+    action: ReadOnlyHubAction
+  ): Promise<ToolNavigationResult | null> => {
+    if (!user || !activeContextOrgId) return null;
+
+    const request = buildActionToolRequest(action);
+    if (!request) return null;
+
+    const orgId = activeContextOrgId;
+
+    try {
+      const token = await user.getIdToken();
+      const response = await withDashboardTimeout(
+        fetch(
+          `/api/v1/organizations/${encodeURIComponent(orgId)}/tool-actions/execute`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              'Cache-Control': 'no-store'
+            },
+            body: JSON.stringify(request)
+          }
+        ),
+        7000,
+        'Tool Gateway timeout'
+      );
+
+      if (activeContextOrgId !== orgId) return null;
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        console.warn('[ToolGateway] Action execution fell back to normal app launch.', {
+          status: response.status,
+          reasonCode: payload?.reasonCode || 'UNKNOWN'
+        });
+        return null;
+      }
+
+      return parseToolNavigationResult(payload);
+    } catch (error) {
+      console.warn(
+        '[ToolGateway] Action execution failed; using normal app launch.',
+        error
+      );
+      return null;
     }
   };
 
@@ -3031,6 +3088,7 @@ export function Dashboard() {
                 actionResolutions={actionResolutions}
                 actionResolutionBusyKey={actionResolutionBusyKey}
                 onStartActionResolution={handleStartActionResolution}
+                onExecuteActionTool={handleExecuteActionTool}
                 onObserveActionResolutionOutcome={handleObserveActionResolutionOutcome}
                 onActionOsInteraction={(interaction) => {
                   if (!user || !activeContextOrgId) return;
