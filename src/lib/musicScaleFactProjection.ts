@@ -41,7 +41,7 @@ export interface MusicScaleResponseSummaryFactMetadata extends Record<string, un
   responseSummaryAvailable: true;
   pendingResponses: number;
   startsAtMs: number | null;
-  pendingByFunction: Array<{
+  pendingByFunction?: Array<{
     functionName: string;
     count: number;
   }>;
