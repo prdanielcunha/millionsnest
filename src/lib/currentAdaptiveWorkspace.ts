@@ -9,12 +9,14 @@ import type {
 } from './actionCenter.js';
 import { deriveCurrentHubLensAuthorization } from './hubLensAuthorization.js';
 import type { HubLensId, HubResponsibility } from './lensResolver.js';
+import type { HubAppExperience } from './hubAppExperience.js';
+import { resolveEntitledAppIds } from './adaptiveEntitlements.js';
 
 export interface CurrentAdaptiveWorkspaceInput {
   organizationId: string;
   systemRole?: string | null;
   responsibilities?: readonly HubResponsibility[];
-  availableAppIds?: readonly string[];
+  appExperiences: readonly HubAppExperience[];
   requestedLens?: HubLensId | string | null;
   canManageOrganization: boolean;
   canManageMembers: boolean;
@@ -38,6 +40,7 @@ export interface CurrentAdaptiveWorkspaceInput {
 export function buildCurrentAdaptiveWorkspace(
   input: CurrentAdaptiveWorkspaceInput
 ): AdaptiveWorkspaceModel {
+  const entitledAppIds = resolveEntitledAppIds(input.appExperiences);
   const authorizedDomains = deriveCurrentHubLensAuthorization({
     canManageOrganization: input.canManageOrganization,
     musicScaleAccess: input.musicScaleAccess
@@ -48,7 +51,7 @@ export function buildCurrentAdaptiveWorkspace(
     systemRole: input.systemRole,
     responsibilities: input.responsibilities,
     authorizedDomains,
-    availableAppIds: input.availableAppIds,
+    entitledAppIds,
     requestedLens: input.requestedLens,
     organization: input.organization,
     permissions: {
