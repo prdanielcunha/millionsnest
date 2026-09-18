@@ -3,11 +3,15 @@ import {
   isCanonicalFactValid,
   type CanonicalFact
 } from '../packages/events/factContract.js';
+import type {
+  MusicScaleRepertoireContentSnapshot
+} from './musicScaleRepertoireIntelligence.js';
 
 export type MusicScaleCanonicalFactEventType =
   | 'musicscale.scale.response_summary_observed'
   | 'musicscale.scale.personal_confirmation_observed'
-  | 'musicscale.scale.personal_commitment_observed';
+  | 'musicscale.scale.personal_commitment_observed'
+  | 'musicscale.scale.repertoire_content_observed';
 
 export interface MusicScaleFactProjectionInput {
   organizationId: string;
@@ -28,6 +32,7 @@ export interface MusicScaleFactProjectionInput {
       functionName: string;
       count: number;
     }[];
+    repertoireContent?: MusicScaleRepertoireContentSnapshot | null;
   };
   nextPersonalScale?: null | {
     id: string;
@@ -62,6 +67,17 @@ export interface MusicScalePersonalConfirmationFactMetadata
   publishRevision: number;
 }
 
+export interface MusicScaleRepertoireContentFactMetadata
+  extends Record<string, unknown> {
+  startsAtMs: number | null;
+  totalSongRefs: number;
+  resolvedSongCount: number;
+  missingLibrarySongIds: string[];
+  emptyContentSongIds: string[];
+  emptyContentTitles: string[];
+  gapCount: number;
+}
+
 export interface MusicScalePersonalCommitmentFactMetadata
   extends Record<string, unknown> {
   date: string;
@@ -84,6 +100,10 @@ export type MusicScaleCanonicalFact =
   | CanonicalFact<
       'musicscale.scale.personal_commitment_observed',
       MusicScalePersonalCommitmentFactMetadata
+    >
+  | CanonicalFact<
+      'musicscale.scale.repertoire_content_observed',
+      MusicScaleRepertoireContentFactMetadata
     >;
 
 function finiteNonNegative(value: unknown): number | null {
@@ -244,6 +264,103 @@ function buildResponseSummaryFact(
   return isCanonicalFactValid(fact) ? fact : null;
 }
 
+function buildRepertoireContentFact(
+  input: MusicScaleFactProjectionInput,
+  scale: NonNullable<MusicScaleFactProjectionInput['nextScale']>
+): MusicScaleCanonicalFact | null {
+  const organizationId = cleanId(input.organizationId);
+  const scaleId = cleanId(scale.id);
+  const snapshot = scale.repertoireContent;
+
+  if (!organizationId || !scaleId || !snapshot) return null;
+
+  const totalSongRefs = finiteNonNegative(snapshot.totalSongRefs);
+  const resolvedSongCount = finiteNonNegative(snapshot.resolvedSongCount);
+  const gapCount = finiteNonNegative(snapshot.gapCount);
+
+  if (
+    totalSongRefs === null ||
+    resolvedSongCount === null ||
+    gapCount === null
+  ) {
+    return null;
+  }
+
+  const missingLibrarySongIds = Array.from(new Set(
+    (snapshot.missingLibrarySongIds || [])
+      .map(cleanId)
+      .filter((value): value is string => Boolean(value))
+  ));
+  const emptyContentSongIds = Array.from(new Set(
+    (snapshot.emptyContentSongIds || [])
+      .map(cleanId)
+      .filter((value): value is string => Boolean(value))
+  ));
+  const emptyContentTitles = normalizeFunctionNames(
+    snapshot.emptyContentTitles
+  );
+
+  const normalizedGapCount =
+    missingLibrarySongIds.length +
+    emptyContentSongIds.length;
+
+  if (normalizedGapCount !== Math.floor(gapCount)) {
+    return null;
+  }
+
+  const observedAtMs = finiteNonNegative(input.observedAtMs);
+  const timestamp = projectionTimestamp(input);
+  const startsAtMs = finiteNonNegative(scale.startsAtMs);
+  const gapFingerprint = [
+    ...missingLibrarySongIds.map(id => `missing:${id}`),
+    ...emptyContentSongIds.map(id => `empty:${id}`)
+  ].join('|') || 'no-gaps';
+  const idempotencyKey =
+    `musicscale:${organizationId}:scale:${scaleId}:repertoire-content:${gapFingerprint}`;
+
+  const fact: MusicScaleCanonicalFact = {
+    schemaVersion: CANONICAL_FACT_SCHEMA_VERSION,
+    factId: idempotencyKey,
+    organizationId,
+    eventType: 'musicscale.scale.repertoire_content_observed',
+    actor: { type: 'system' },
+    occurredAtMs: observedAtMs ?? timestamp,
+    recordedAtMs: timestamp,
+    source: {
+      organizationId,
+      sourceApp: 'musicscale',
+      sourceKind: 'runtime_projection',
+      sourceRef: 'musicscale.read_model.next_schedule_repertoire_content',
+      entityType: 'scale',
+      entityId: scaleId,
+      fieldPaths: [
+        'songIds',
+        'songs.id',
+        'songs.title',
+        'songs.lyrics',
+        'songs.chords'
+      ],
+      ...(observedAtMs !== null ? { observedAtMs } : {})
+    },
+    entity: {
+      type: 'scale',
+      id: scaleId
+    },
+    metadata: {
+      startsAtMs,
+      totalSongRefs: Math.floor(totalSongRefs),
+      resolvedSongCount: Math.floor(resolvedSongCount),
+      missingLibrarySongIds,
+      emptyContentSongIds,
+      emptyContentTitles,
+      gapCount: normalizedGapCount
+    },
+    idempotencyKey
+  };
+
+  return isCanonicalFactValid(fact) ? fact : null;
+}
+
 function buildPersonalConfirmationFact(
   input: MusicScaleFactProjectionInput,
   scale: NonNullable<MusicScaleFactProjectionInput['nextPersonalScale']>
@@ -388,8 +505,14 @@ export function projectCurrentMusicScaleFacts(
   const facts: MusicScaleCanonicalFact[] = [];
 
   if (input.nextScale) {
-    const fact = buildResponseSummaryFact(input, input.nextScale);
-    if (fact) facts.push(fact);
+    const responseFact = buildResponseSummaryFact(input, input.nextScale);
+    if (responseFact) facts.push(responseFact);
+
+    const repertoireFact = buildRepertoireContentFact(
+      input,
+      input.nextScale
+    );
+    if (repertoireFact) facts.push(repertoireFact);
   }
 
   if (input.nextPersonalScale) {
