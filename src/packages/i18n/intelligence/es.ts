@@ -96,11 +96,14 @@ const intelligence = {
       personal_schedule: {
         title: 'Tu próxima escala',
         summary: 'Encontré tu próxima participación en MusicScale. Hay {{pending}} respuesta(s) pendiente(s) asociada(s) al contexto disponible.',
+        summary_without_responses: 'Encontré tu próxima participación en MusicScale. El resumen de respuestas aún no está disponible para esta escala.',
         insufficient: 'No encontré una próxima escala personal en una fuente autorizada y lista para consulta en este momento.'
       },
       worship_service: {
         title: 'Próxima escala de alabanza',
         summary: 'La próxima escala autorizada tiene {{pending}} confirmación(es) pendiente(s), {{declined}} rechazo(s) y {{gaps}} brecha(s) de contenido en el repertorio.',
+        summary_responses_only: 'La próxima escala autorizada tiene {{pending}} confirmación(es) pendiente(s) y {{declined}} rechazo(s). La proyección del repertorio aún no está lista.',
+        summary_repertoire_only: 'La próxima escala autorizada posee {{gaps}} brecha(s) verificable(s) en el repertorio. El resumen de respuestas aún no está listo.',
         insufficient: 'El alcance autorizado actual no contiene información suficiente para afirmar cómo está el domingo solicitado.'
       },
       worship_confirmations: {
