@@ -33,6 +33,114 @@ const intelligence = {
     unavailable: 'Fonte indisponível',
     no_source_no_claim: 'Sem fonte, sem afirmação.'
   },
+  ask: {
+    eyebrow: 'Ask MillionsNest',
+    title: 'Pergunte ao seu ecossistema',
+    subtitle: 'Faça uma pergunta em linguagem natural. O Hub responde apenas com dados autorizados e fontes que consegue sustentar.',
+    evidence_promise: 'Sem fonte, sem afirmação',
+    input_label: 'Pergunta para o MillionsNest',
+    placeholder: 'Ex.: Como está domingo?',
+    ask_action: 'Perguntar',
+    answer_label: 'Resposta',
+    why_action: 'Por que estou vendo isso?',
+    open_source: 'Abrir no sistema de origem',
+    sources_title: 'Fontes que sustentam esta resposta',
+    status: {
+      evidence_backed: 'Com evidências',
+      insufficient: 'Dados insuficientes',
+      not_available: 'Fora do seu contexto',
+      unsupported: 'Pergunta não suportada'
+    },
+    suggestions: {
+      attention: 'O que precisa da minha atenção?',
+      sunday: 'Como está domingo?',
+      confirmations: 'Quem ainda não respondeu à escala?',
+      workload: 'Quem está acima da carga de serviço?',
+      personal_schedule: 'Qual é minha próxima escala?',
+      administration: 'Há algo pendente na equipe?'
+    },
+    why: {
+      answered: 'Esta resposta foi montada somente a partir de projeções autorizadas no seu contexto atual. As fontes abaixo sustentam os fatos exibidos; o MillionsNest não completou lacunas com suposições.',
+      insufficient: 'Existe contexto relacionado à pergunta, mas a fonte autorizada atual não contém detalhe suficiente para sustentar a conclusão pedida.',
+      aggregate_only: 'O MusicScale possui uma visão agregada da distribuição das escalas. Ela ajuda a enxergar desequilíbrios por função, mas não é evidência suficiente para rotular uma pessoa como sobrecarregada.',
+      not_available: 'Esse domínio não está disponível no seu contexto autorizado atual. O Hub não usa acesso administrativo genérico para revelar dados ministeriais, pastorais ou financeiros.',
+      unsupported: 'A pergunta ficou fora do conjunto de consultas que o Hub consegue responder com evidência suficiente neste momento.'
+    },
+    sources: {
+      hub: 'MillionsNest Hub',
+      scale: 'Escala',
+      worship_team: 'Equipe de louvor',
+      worship_schedule: 'Agenda de louvor',
+      organization: 'Organização',
+      workspace: 'Central adaptativa',
+      verified_record: 'Registro verificado',
+      observed_at: 'Observado em {{date}}',
+      authorized_projection: 'Projeção autorizada do contexto atual'
+    },
+    facts: {
+      personal_pending: '{{count}} resposta(s) pendente(s) na sua próxima escala.',
+      pending_confirmations: '{{count}} confirmação(ões) ainda pendente(s).',
+      declined_confirmations: '{{count}} recusa(s) registrada(s).',
+      repertoire_gaps: '{{count}} lacuna(s) de conteúdo no repertório.',
+      distribution_window: '{{schedules}} escala(s) concluída(s), {{assignments}} atribuição(ões) e {{people}} pessoa(s) no recorte de 30 dias.',
+      distribution_function: 'Em {{function}}, o maior registro individual foi {{max}} escala(s), com média de {{average}}.',
+      next_scale_is_not_sunday: 'A próxima escala disponível no recorte atual não é de domingo.',
+      action_item: 'Ação autorizada'
+    },
+    answers: {
+      attention: {
+        title: 'O que merece atenção agora',
+        summary: 'Há {{count}} ação(ões) sustentada(s) por dados no recorte autorizado desta visão.',
+        summary_clear: 'Não há ações abertas no recorte autorizado desta visão agora. Isso não significa ausência de atividade em domínios que ainda não estão conectados ou autorizados.'
+      },
+      personal_schedule: {
+        title: 'Sua próxima escala',
+        summary: 'Encontrei sua próxima participação no MusicScale. Há {{pending}} resposta(s) pendente(s) associada(s) ao contexto disponível.',
+        insufficient: 'Não encontrei uma próxima escala pessoal em uma fonte autorizada e pronta para consulta agora.'
+      },
+      worship_service: {
+        title: 'Próxima escala de louvor',
+        summary: 'A próxima escala autorizada tem {{pending}} confirmação(ões) pendente(s), {{declined}} recusa(s) e {{gaps}} lacuna(s) de conteúdo no repertório.',
+        insufficient: 'O recorte autorizado atual não contém informação suficiente para afirmar como está o domingo pedido.'
+      },
+      worship_confirmations: {
+        title: 'Confirmações da próxima escala',
+        summary: 'Na próxima escala há {{pending}} resposta(s) pendente(s) e {{declined}} recusa(s) registrada(s).',
+        insufficient: 'A próxima escala existe, mas o resumo de respostas ainda não está disponível com qualidade suficiente para responder.'
+      },
+      worship_repertoire: {
+        title: 'Preparação do repertório',
+        summary: 'A próxima escala possui {{gaps}} lacuna(s) verificável(is) de conteúdo no repertório.',
+        insufficient: 'Não há uma próxima escala com projeção de repertório suficiente para responder com segurança.'
+      },
+      worship_distribution: {
+        title: 'Distribuição de serviço',
+        insufficient: 'Consigo mostrar a distribuição agregada, mas os dados atuais não sustentam apontar quem está “acima da carga” como uma conclusão individual.'
+      },
+      journey_follow_up: {
+        insufficient: 'O Hub ainda não possui uma fonte Journey autorizada e estruturada neste contexto que sustente responder quem aguarda acompanhamento.'
+      },
+      finance: {
+        insufficient: 'O Hub ainda não possui uma fonte financeira autorizada e estruturada neste contexto que sustente responder essa pergunta.'
+      },
+      administration: {
+        title: 'Situação administrativa',
+        summary_attention: 'Há {{count}} ação(ões) administrativa(s) aberta(s) sustentada(s) pelo Hub.',
+        summary_clear: 'Não há ações administrativas abertas no recorte autorizado atual.'
+      },
+      not_available: {
+        title: 'Esse contexto não está disponível aqui',
+        summary: 'O MillionsNest não vai ampliar permissões nem inferir dados de outro domínio só para responder à pergunta.'
+      },
+      insufficient: {
+        title: 'Ainda não há evidência suficiente'
+      },
+      unsupported: {
+        title: 'Ainda não consigo responder isso com segurança',
+        summary: 'Tente perguntar sobre atenção atual, sua próxima escala, confirmações, repertório, distribuição do louvor ou situação administrativa.'
+      }
+    }
+  },
   sections: {
     needs_attention: 'Precisa da sua atenção',
     today: 'Hoje',
