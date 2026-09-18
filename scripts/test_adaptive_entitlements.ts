@@ -3,7 +3,11 @@ import {
   filterActionsByAppEntitlement,
   resolveEntitledAppIds
 } from '../src/lib/adaptiveEntitlements.js';
-import type { HubAppExperience } from '../src/lib/hubAppExperience.js';
+import {
+  resolveHubAppExperience,
+  type HubAppExperience
+} from '../src/lib/hubAppExperience.js';
+import { ECOSYSTEM_APPS } from '../src/lib/apps.js';
 import type { EvidenceBackedReadOnlyHubAction } from '../src/lib/actionCenter.js';
 
 function experience(
@@ -39,6 +43,9 @@ assert.deepEqual(
   'only installed, openable and operational products are adaptive entitlements'
 );
 
+// FUTURE ARCHITECTURE SCENARIO ONLY. NestFinance and NestJourney are not
+// currently built/operational. This verifies that the entitlement layer can
+// support independent products later without changing the core model.
 assert.deepEqual(
   resolveEntitledAppIds([
     experience('musicscale'),
@@ -46,7 +53,37 @@ assert.deepEqual(
     experience('nestjourney')
   ]),
   ['musicscale', 'nestfinance', 'nestjourney'],
-  'organizations may own any combination of products, including the full ecosystem'
+  'future operational products may compose independently once their catalog state becomes active'
+);
+
+const currentNestFinance = ECOSYSTEM_APPS.find(app => app.id === 'nestfinance');
+const currentNestJourney = ECOSYSTEM_APPS.find(app => app.id === 'nestjourney');
+assert.ok(currentNestFinance);
+assert.ok(currentNestJourney);
+
+const currentUnbuiltExperiences = [
+  resolveHubAppExperience({
+    app: currentNestFinance!,
+    organization: {
+      enabledApps: ['nestfinance'],
+      apps: { nestfinance: { enabled: true, status: 'active' } }
+    },
+    musicScaleAccess: null
+  }),
+  resolveHubAppExperience({
+    app: currentNestJourney!,
+    organization: {
+      enabledApps: ['nestjourney'],
+      apps: { nestjourney: { enabled: true, status: 'active' } }
+    },
+    musicScaleAccess: null
+  })
+];
+
+assert.deepEqual(
+  resolveEntitledAppIds(currentUnbuiltExperiences),
+  [],
+  'current coming-soon NestFinance/NestJourney catalog entries must never become adaptive entitlements even if organization flags are stale or manually enabled'
 );
 
 assert.deepEqual(
@@ -100,13 +137,13 @@ const musicAction = {
 assert.deepEqual(
   filterActionsByAppEntitlement([hubAction, musicAction], []),
   [hubAction],
-  'Hub-owned actions remain available without buying every ecosystem app'
+  'Hub-owned actions remain available independently of future app entitlements'
 );
 
 assert.deepEqual(
   filterActionsByAppEntitlement([hubAction, musicAction], ['nestfinance']),
   [hubAction],
-  'buying a different app must never unlock MusicScale actions in My Today'
+  'a different future app entitlement must never unlock MusicScale actions in My Today'
 );
 
 assert.deepEqual(
