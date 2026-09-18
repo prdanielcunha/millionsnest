@@ -73,6 +73,9 @@ jobs:
       - name: Private organization analytics rules contract
         run: npx tsx scripts/test_private_organization_analytics_rules.ts
 
+      - name: Customer purchase-to-first-use activation journey
+        run: npx tsx scripts/test_customer_activation_journey.ts
+
       - name: Build production artifacts with the canonical public Firebase app config
         run: npm run build
 
