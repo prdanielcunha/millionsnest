@@ -1023,6 +1023,13 @@ export default {
           description_other: "The next MusicScale schedule still has participations without confirmation.",
           description_with_functions: "Functions still awaiting confirmation: {{functions}}."
         },
+        musicscale_declined_responses: {
+          title_one: "{{count}} assignment was declined in the next schedule",
+          title_other: "{{count}} assignments were declined in the next schedule",
+          description_one: "The next schedule has one declined assignment that needs review.",
+          description_other: "The next schedule has declined assignments that need review.",
+          description_with_functions: "Functions with a declined assignment: {{functions}}."
+        },
         musicscale_personal_confirmation: {
           title_one: "Confirm your participation in the next schedule",
           title_other: "Confirm your participations in the next schedule",
