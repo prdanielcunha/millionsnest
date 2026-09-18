@@ -53,6 +53,10 @@ import {
   deriveMusicScaleAssignmentDistribution,
   type MusicScaleAssignmentDistributionSnapshot
 } from "../lib/musicScaleDistributionIntelligence.js";
+import {
+  deriveNextScaleRepertoireContentSnapshot,
+  type MusicScaleRepertoireContentSnapshot
+} from "../lib/musicScaleRepertoireIntelligence.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -130,6 +134,7 @@ type MusicScaleHubSummary = {
       functionName: string;
       count: number;
     }>;
+    repertoireContent: MusicScaleRepertoireContentSnapshot | null;
   };
   recentAssignmentDistribution: MusicScaleAssignmentDistributionSnapshot | null;
   nextPersonalScale: null | {
@@ -2255,7 +2260,13 @@ export function Dashboard() {
           responseSummaryAvailable: canReadResponseSummary && live.responseSummaryAvailable,
           responseCounts: { ...live.responseCounts },
           pendingByFunction: live.pendingByFunction.map(gap => ({ ...gap })),
-          declinedByFunction: live.declinedByFunction.map(gap => ({ ...gap }))
+          declinedByFunction: live.declinedByFunction.map(gap => ({ ...gap })),
+          repertoireContent: canReadWorshipDistribution
+            ? deriveNextScaleRepertoireContentSnapshot(
+                Array.isArray(nextScale.songIds) ? nextScale.songIds : [],
+                live.songs
+              )
+            : null
         } : null,
         recentAssignmentDistribution: canReadWorshipDistribution
           ? deriveMusicScaleAssignmentDistribution(

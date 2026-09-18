@@ -1046,6 +1046,12 @@ export default {
           description_other: "A próxima escala tem participações recusadas que precisam ser revistas.",
           description_with_functions: "Funções com participação recusada: {{functions}}."
         },
+        musicscale_repertoire_content_gaps: {
+          title_one: "{{count}} item do repertório precisa de conteúdo",
+          title_other: "{{count}} itens do repertório precisam de conteúdo",
+          description: "Na próxima escala: sem letra ou cifra, {{empty}} · referências ausentes da biblioteca, {{missing}}.",
+          description_with_titles: "Sem letra ou cifra: {{songs}}. Referências ausentes da biblioteca: {{missing}}."
+        },
         musicscale_personal_confirmation: {
           title_one: "Confirme sua participação na próxima escala",
           title_other: "Confirme suas participações na próxima escala",

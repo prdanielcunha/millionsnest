@@ -1030,6 +1030,12 @@ export default {
           description_other: "The next schedule has declined assignments that need review.",
           description_with_functions: "Functions with a declined assignment: {{functions}}."
         },
+        musicscale_repertoire_content_gaps: {
+          title_one: "{{count}} repertoire item needs content",
+          title_other: "{{count}} repertoire items need content",
+          description: "In the next schedule: without lyrics or chords, {{empty}} · library references not found, {{missing}}.",
+          description_with_titles: "Without lyrics or chords: {{songs}}. Library references not found: {{missing}}."
+        },
         musicscale_personal_confirmation: {
           title_one: "Confirm your participation in the next schedule",
           title_other: "Confirm your participations in the next schedule",

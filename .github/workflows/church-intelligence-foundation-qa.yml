@@ -16,6 +16,7 @@ on:
       - 'src/lib/factSignalAdapter.ts'
       - 'src/lib/musicScaleFactProjection.ts'
       - 'src/lib/musicScaleLeaderIntelligence.ts'
+      - 'src/lib/musicScaleRepertoireIntelligence.ts'
       - 'src/lib/musicScaleDistributionFactProjection.ts'
       - 'src/lib/musicScaleDistributionIntelligence.ts'
       - 'src/lib/musicScaleChangeFactProjection.ts'
@@ -38,6 +39,7 @@ on:
       - 'scripts/test_musicscale_leader_intelligence.ts'
       - 'scripts/test_musicscale_declined_gaps.ts'
       - 'scripts/test_musicscale_distribution_intelligence.ts'
+      - 'scripts/test_musicscale_repertoire_intelligence.ts'
       - 'scripts/test_evidence_backed_timeline.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
@@ -92,6 +94,9 @@ jobs:
 
       - name: MusicScale Worship distribution intelligence
         run: npx tsx scripts/test_musicscale_distribution_intelligence.ts
+
+      - name: MusicScale repertoire content intelligence
+        run: npx tsx scripts/test_musicscale_repertoire_intelligence.ts
 
       - name: Evidence-backed commitments and changes
         run: npx tsx scripts/test_evidence_backed_timeline.ts

@@ -7,6 +7,7 @@ export type ActionSignalType =
   | 'pending_invites'
   | 'musicscale_pending_responses'
   | 'musicscale_declined_responses'
+  | 'musicscale_repertoire_content_gaps'
   | 'musicscale_personal_confirmation';
 
 export interface EcosystemSignal {
@@ -47,6 +48,14 @@ export interface ActionSignalCollectionInput {
         functionName: string;
         count: number;
       }[];
+      repertoireContent?: {
+        totalSongRefs: number;
+        resolvedSongCount: number;
+        missingLibrarySongIds: string[];
+        emptyContentSongIds: string[];
+        emptyContentTitles: string[];
+        gapCount: number;
+      } | null;
     };
     nextPersonalScale?: null | {
       id: string;

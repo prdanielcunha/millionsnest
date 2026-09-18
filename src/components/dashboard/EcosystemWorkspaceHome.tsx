@@ -29,6 +29,9 @@ import {
   hasMusicScaleDistributionData,
   type MusicScaleAssignmentDistributionSnapshot
 } from '../../lib/musicScaleDistributionIntelligence.js';
+import type {
+  MusicScaleRepertoireContentSnapshot
+} from '../../lib/musicScaleRepertoireIntelligence.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -93,6 +96,7 @@ interface EcosystemWorkspaceHomeProps {
         functionName: string;
         count: number;
       }>;
+      repertoireContent: MusicScaleRepertoireContentSnapshot | null;
     };
     recentAssignmentDistribution: MusicScaleAssignmentDistributionSnapshot | null;
     nextPersonalScale: null | {
@@ -350,7 +354,8 @@ export function EcosystemWorkspaceHome({
               pendingResponses: musicScaleSummary.nextScale.responseCounts.pending || 0,
               pendingByFunction: musicScaleSummary.nextScale.pendingByFunction,
               declinedResponses: musicScaleSummary.nextScale.responseCounts.declined || 0,
-              declinedByFunction: musicScaleSummary.nextScale.declinedByFunction
+              declinedByFunction: musicScaleSummary.nextScale.declinedByFunction,
+              repertoireContent: musicScaleSummary.nextScale.repertoireContent
             }
           : null,
         nextPersonalScale: musicScaleSummary.nextPersonalScale
