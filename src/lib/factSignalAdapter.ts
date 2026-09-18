@@ -7,6 +7,7 @@ import {
 import type {
   MusicScaleCanonicalFact,
   MusicScalePersonalConfirmationFactMetadata,
+  MusicScaleRepertoireContentFactMetadata,
   MusicScaleResponseSummaryFactMetadata
 } from './musicScaleFactProjection.js';
 
@@ -115,6 +116,76 @@ function declinedResponseSignal(
   };
 }
 
+function repertoireContentSignal(
+  fact: Extract<
+    MusicScaleCanonicalFact,
+    { eventType: 'musicscale.scale.repertoire_content_observed' }
+  >
+): EvidenceBackedEcosystemSignal | null {
+  const metadata = fact.metadata as MusicScaleRepertoireContentFactMetadata;
+  const gapCount = nonNegativeNumber(metadata.gapCount);
+
+  if (
+    fact.source.sourceRef !==
+      'musicscale.read_model.next_schedule_repertoire_content' ||
+    gapCount === null ||
+    gapCount <= 0
+  ) {
+    return null;
+  }
+
+  const missingLibrarySongIds = Array.isArray(metadata.missingLibrarySongIds)
+    ? metadata.missingLibrarySongIds.filter(
+        (value): value is string =>
+          typeof value === 'string' && value.trim().length > 0
+      )
+    : [];
+  const emptyContentSongIds = Array.isArray(metadata.emptyContentSongIds)
+    ? metadata.emptyContentSongIds.filter(
+        (value): value is string =>
+          typeof value === 'string' && value.trim().length > 0
+      )
+    : [];
+  const emptyContentTitles = Array.isArray(metadata.emptyContentTitles)
+    ? metadata.emptyContentTitles.filter(
+        (value): value is string =>
+          typeof value === 'string' && value.trim().length > 0
+      )
+    : [];
+
+  if (
+    missingLibrarySongIds.length +
+      emptyContentSongIds.length !==
+    gapCount
+  ) {
+    return null;
+  }
+
+  const gapFingerprint = [
+    ...missingLibrarySongIds.map(id => `missing:${id}`),
+    ...emptyContentSongIds.map(id => `empty:${id}`)
+  ].join('|');
+
+  return {
+    organizationId: fact.organizationId,
+    sourceApp: 'musicscale',
+    signalType: 'musicscale_repertoire_content_gaps',
+    sourceEntityType: 'scale',
+    sourceEntityId: fact.entity.id,
+    dedupeKey: `musicscale:repertoire_content:${fact.entity.id}`,
+    fingerprint:
+      `musicscale:repertoire_content:${fact.entity.id}:${gapFingerprint}`,
+    occurredAtMs: startsAtMsFrom(metadata),
+    payload: {
+      gapCount,
+      missingLibrarySongCount: missingLibrarySongIds.length,
+      emptyContentSongCount: emptyContentSongIds.length,
+      emptyContentTitles
+    },
+    evidence: [fact.source]
+  };
+}
+
 function personalConfirmationSignal(
   fact: Extract<
     MusicScaleCanonicalFact,
@@ -172,6 +243,12 @@ export function collectMusicScaleSignalsFromFacts(
 
       const declinedSignal = declinedResponseSignal(fact);
       if (declinedSignal) signals.push(declinedSignal);
+      continue;
+    }
+
+    if (fact.eventType === 'musicscale.scale.repertoire_content_observed') {
+      const signal = repertoireContentSignal(fact);
+      if (signal) signals.push(signal);
       continue;
     }
 
