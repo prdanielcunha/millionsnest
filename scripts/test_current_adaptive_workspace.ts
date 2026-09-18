@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { buildCurrentAdaptiveWorkspace } from '../src/lib/currentAdaptiveWorkspace.js';
 import type { MusicScaleAccessProjection } from '../src/lib/ecosystemAccessProjection.js';
+import type { HubAppExperience } from '../src/lib/hubAppExperience.js';
 
 function musicScaleAccess(
   overrides: Partial<MusicScaleAccessProjection> = {}
@@ -25,11 +26,34 @@ function musicScaleAccess(
   };
 }
 
+function appExperience(
+  appId: string,
+  options: { entitled?: boolean; state?: HubAppExperience['state'] } = {}
+): HubAppExperience {
+  const entitled = options.entitled !== false;
+  return {
+    app: {
+      id: appId,
+      name: appId,
+      description: appId,
+      icon: 'Grid',
+      status: 'active',
+      category: 'core'
+    },
+    installed: entitled,
+    canOpen: entitled,
+    state: options.state ?? (entitled ? 'active' : 'available'),
+    plan: entitled ? 'starter' : null,
+    needsAttention: false,
+    isOperational: true
+  };
+}
+
 const worshipLeader = buildCurrentAdaptiveWorkspace({
   organizationId: 'org-current-adaptive',
   systemRole: 'user',
   responsibilities: ['worship_leadership'],
-  availableAppIds: ['musicscale'],
+  appExperiences: [appExperience('musicscale')],
   canManageOrganization: false,
   canManageMembers: false,
   musicScaleAccess: musicScaleAccess(),
@@ -63,7 +87,7 @@ assert.deepEqual(
 const ordinaryMusician = buildCurrentAdaptiveWorkspace({
   organizationId: 'org-current-adaptive',
   systemRole: 'user',
-  availableAppIds: ['musicscale'],
+  appExperiences: [appExperience('musicscale')],
   canManageOrganization: false,
   canManageMembers: false,
   musicScaleAccess: musicScaleAccess({
@@ -100,7 +124,11 @@ assert.deepEqual(
 const globalAdministrator = buildCurrentAdaptiveWorkspace({
   organizationId: 'org-current-adaptive',
   systemRole: 'ceo',
-  availableAppIds: ['musicscale', 'nestjourney', 'nestfinance'],
+  appExperiences: [
+    appExperience('musicscale', { state: 'administrative' }),
+    appExperience('nestjourney'),
+    appExperience('nestfinance')
+  ],
   requestedLens: 'worship',
   canManageOrganization: true,
   canManageMembers: true,
@@ -136,7 +164,7 @@ const deniedAccess = buildCurrentAdaptiveWorkspace({
   organizationId: 'org-current-adaptive',
   systemRole: 'user',
   responsibilities: ['worship_leadership'],
-  availableAppIds: ['musicscale'],
+  appExperiences: [appExperience('musicscale', { entitled: false })],
   canManageOrganization: false,
   canManageMembers: false,
   musicScaleAccess: musicScaleAccess({
@@ -159,5 +187,68 @@ const deniedAccess = buildCurrentAdaptiveWorkspace({
 
 assert.deepEqual(deniedAccess.lenses.map(lens => lens.id), ['my_today']);
 assert.deepEqual(deniedAccess.actions, []);
+
+const financeOnlyOrganization = buildCurrentAdaptiveWorkspace({
+  organizationId: 'org-current-adaptive',
+  systemRole: 'user',
+  appExperiences: [appExperience('nestfinance')],
+  canManageOrganization: false,
+  canManageMembers: false,
+  musicScaleAccess: musicScaleAccess(),
+  organization: { isConfigured: true },
+  pendingInvitesCount: 0,
+  musicScale: {
+    ready: true,
+    nextPersonalScale: {
+      id: 'stale-music-action',
+      responseSummaryAvailable: true,
+      pendingResponses: 1
+    },
+    nextScale: null
+  }
+});
+
+assert.deepEqual(
+  financeOnlyOrganization.lenses.map(lens => lens.id),
+  ['my_today'],
+  'buying NestFinance without MusicScale must not expose the Worship Lens'
+);
+assert.deepEqual(
+  financeOnlyOrganization.actions,
+  [],
+  'stale MusicScale read models must not leak into My Today for a NestFinance-only organization'
+);
+
+const conflictingMusicScaleState = buildCurrentAdaptiveWorkspace({
+  organizationId: 'org-current-adaptive',
+  systemRole: 'user',
+  appExperiences: [appExperience('musicscale')],
+  canManageOrganization: false,
+  canManageMembers: false,
+  musicScaleAccess: musicScaleAccess({
+    accessible: false,
+    decisionState: 'denied',
+    catalogState: 'unavailable',
+    canReadManagedScaleResponses: false
+  }),
+  organization: { isConfigured: true },
+  pendingInvitesCount: 0,
+  musicScale: {
+    ready: true,
+    nextPersonalScale: {
+      id: 'stale-denied-personal-scale',
+      responseSummaryAvailable: true,
+      pendingResponses: 1
+    },
+    nextScale: null
+  }
+});
+
+assert.deepEqual(conflictingMusicScaleState.lenses.map(lens => lens.id), ['my_today']);
+assert.deepEqual(
+  conflictingMusicScaleState.actions,
+  [],
+  'server denial must win over a stale installed-app catalog entry'
+);
 
 console.log('Current Hub adaptive workspace bridge checks passed.');
