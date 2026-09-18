@@ -5,6 +5,7 @@ import { EcosystemCommitments } from './EcosystemCommitments.js';
 import { EcosystemChanges } from './EcosystemChanges.js';
 import { HubLensSwitcher } from './HubLensSwitcher.js';
 import { HubAppLaunchpad } from './HubAppLaunchpad.js';
+import { ActionResolutionObserver } from './ActionResolutionObserver.js';
 import { MusicScaleDistributionSnapshot } from './MusicScaleDistributionSnapshot.js';
 import { buildCurrentAdaptiveWorkspace } from '../../lib/currentAdaptiveWorkspace.js';
 import type { HubLensId } from '../../lib/lensResolver.js';
@@ -32,6 +33,11 @@ import {
 import type {
   MusicScaleRepertoireContentSnapshot
 } from '../../lib/musicScaleRepertoireIntelligence.js';
+import {
+  isActionResolutionEligible,
+  resolutionMatchesAction,
+  type ActionResolutionRecord
+} from '../../lib/actionResolution.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -99,6 +105,10 @@ interface EcosystemWorkspaceHomeProps {
       repertoireContent: MusicScaleRepertoireContentSnapshot | null;
     };
     recentAssignmentDistribution: MusicScaleAssignmentDistributionSnapshot | null;
+    readiness: {
+      scalesReady: boolean;
+      songsReady: boolean;
+    };
     nextPersonalScale: null | {
       id: string;
       date: string;
@@ -131,6 +141,14 @@ interface EcosystemWorkspaceHomeProps {
     action: ReadOnlyHubAction,
     mode: ActionPreferenceMode,
     dismissCode?: ActionOsDismissCode
+  ) => void | Promise<void>;
+  actionResolutions: ActionResolutionRecord[];
+  actionResolutionBusyKey?: string | null;
+  onStartActionResolution: (
+    action: ReadOnlyHubAction
+  ) => Promise<ActionResolutionRecord | null>;
+  onObserveActionResolutionOutcome: (
+    resolution: ActionResolutionRecord
   ) => void | Promise<void>;
   onActionOsInteraction: (
     interaction: Omit<ActionOsInteractionInput, 'organizationId' | 'userId'>
@@ -174,6 +192,10 @@ export function EcosystemWorkspaceHome({
   actionPreferences,
   actionPreferenceBusyKey,
   onSetActionPreference,
+  actionResolutions,
+  actionResolutionBusyKey,
+  onStartActionResolution,
+  onObserveActionResolutionOutcome,
   onActionOsInteraction,
   recentActivity
 }: EcosystemWorkspaceHomeProps) {
@@ -372,6 +394,13 @@ export function EcosystemWorkspaceHome({
     });
     const todayActions = adaptiveWorkspace.actionsForActiveLens;
     const hasSuppressedTodayActions = adaptiveWorkspace.hasSuppressedActionsForActiveLens;
+    const musicScaleResolutionReadiness = {
+      scalesReady: musicScaleSummary.readiness.scalesReady,
+      songsReady: musicScaleSummary.readiness.songsReady,
+      nextScaleId: musicScaleSummary.nextScale?.id ?? null,
+      responseSummaryAvailable:
+        musicScaleSummary.nextScale?.responseSummaryAvailable === true
+    };
 
     const commitments = deriveEvidenceBackedHubCommitments({
       organizationId,
@@ -648,6 +677,12 @@ export function EcosystemWorkspaceHome({
 
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-3 duration-300 space-y-8 md:space-y-10">
+        <ActionResolutionObserver
+          resolutions={actionResolutions}
+          sourceActions={adaptiveWorkspace.sourceActions}
+          musicScaleReadiness={musicScaleResolutionReadiness}
+          onClearedObserved={onObserveActionResolutionOutcome}
+        />
         <section aria-labelledby="hub-home-title" className="relative overflow-hidden rounded-[2rem] border border-white/[0.08] bg-[#07090D] p-5 shadow-[0_30px_90px_rgba(0,0,0,.28)] sm:p-7 md:p-8">
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute right-[-10%] top-[-45%] h-96 w-96 rounded-full bg-[#2B85EB]/16 blur-[110px]" />
@@ -861,6 +896,14 @@ export function EcosystemWorkspaceHome({
               {todayActions.map((action, index) => {
                 const isMusicScaleAction = action.sourceApp === 'musicscale';
                 const highPriority = action.priority === 'high' || action.priority === 'urgent';
+                const resolutionEligible = isActionResolutionEligible(action);
+                const activeResolution = resolutionEligible
+                  ? actionResolutions.find(resolution =>
+                      resolutionMatchesAction(resolution, action)
+                    ) ?? null
+                  : null;
+                const resolutionBusy =
+                  actionResolutionBusyKey === action.dedupeKey;
 
                 return (
                   <article
@@ -898,6 +941,11 @@ export function EcosystemWorkspaceHome({
                             : t('workspace.actions.priority_normal')}
                         </span>
                         <span className="text-[9px] font-medium text-[#4F5968]">#{index + 1}</span>
+                        {activeResolution && (
+                          <span className="rounded-full border border-[#2B85EB]/20 bg-[#2B85EB]/[0.08] px-2 py-0.5 text-[9px] font-semibold text-[#9CC8FF]">
+                            {t('workspace.actions.resolution_in_progress')}
+                          </span>
+                        )}
                       </div>
                       <h4 className="text-[15px] font-semibold leading-snug text-white sm:text-base">
                         {t(action.titleKey, action.translationParams ?? {})}
@@ -910,11 +958,21 @@ export function EcosystemWorkspaceHome({
                     <div className="flex w-full flex-col gap-2 sm:w-auto">
                       <button
                         type="button"
-                        onClick={() => handleTodayAction(action)}
-                        className="min-h-[44px] w-full rounded-xl border border-white/[0.08] bg-white px-4 py-2.5 text-xs font-semibold text-[#07090D] transition-all hover:bg-[#F2F5F8] active:scale-[0.985] sm:min-w-[108px]"
+                        disabled={resolutionBusy}
+                        onClick={async () => {
+                          if (resolutionEligible && !activeResolution) {
+                            await onStartActionResolution(action);
+                          }
+                          handleTodayAction(action);
+                        }}
+                        className="min-h-[44px] w-full rounded-xl border border-white/[0.08] bg-white px-4 py-2.5 text-xs font-semibold text-[#07090D] transition-all hover:bg-[#F2F5F8] active:scale-[0.985] disabled:cursor-wait disabled:opacity-60 sm:min-w-[108px]"
                       >
                         <span className="inline-flex items-center justify-center gap-1.5">
-                          {t('workspace.actions.open_action')}
+                          {resolutionEligible
+                            ? activeResolution
+                              ? t('workspace.actions.continue_resolution_action')
+                              : t('workspace.actions.resolve_action')
+                            : t('workspace.actions.open_action')}
                           <ChevronRight className="h-3.5 w-3.5" />
                         </span>
                       </button>
