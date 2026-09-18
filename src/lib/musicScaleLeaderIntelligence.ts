@@ -48,10 +48,10 @@ function responseAssignmentId(
  * A terminal response (accepted/maybe/declined) wins over a stale duplicate
  * pending response for the same assignment, avoiding false pending gaps.
  */
-export function derivePendingConfirmationGapsByFunction(
+function pendingAssignmentIds(
   assignments: readonly MusicScaleAssignmentObservation[],
   responses: readonly MusicScaleResponseObservation[]
-): MusicScalePendingFunctionGap[] {
+): Set<string> {
   const activeAssignments = assignments.filter(
     assignment => assignment?.active !== false
   );
@@ -60,44 +60,74 @@ export function derivePendingConfirmationGapsByFunction(
   );
 
   const terminalAssignmentIds = new Set<string>();
-  const pendingAssignmentIds = new Set<string>();
+  const responseAssignmentIds = new Set<string>();
+  const pendingResponseAssignmentIds = new Set<string>();
 
   for (const response of activeResponses) {
     const id = responseAssignmentId(response);
     if (!id) continue;
 
+    responseAssignmentIds.add(id);
     const status = clean(response.status || 'pending').toLowerCase();
+
     if (TERMINAL_RESPONSE_STATUSES.has(status)) {
       terminalAssignmentIds.add(id);
-      pendingAssignmentIds.delete(id);
+      pendingResponseAssignmentIds.delete(id);
     } else if (!terminalAssignmentIds.has(id)) {
-      pendingAssignmentIds.add(id);
+      pendingResponseAssignmentIds.add(id);
     }
   }
 
-  const counts = new Map<string, number>();
+  const pending = new Set<string>();
 
-  for (const assignment of activeAssignments) {
-    const functionName = clean(assignment.functionName);
-    if (!functionName) continue;
-
+  activeAssignments.forEach((assignment, index) => {
     const id = assignmentId(assignment);
-    const isPending =
+    const stableId = id || `__missing_assignment_id__:${index}`;
+
+    if (
       !id ||
       (
         !terminalAssignmentIds.has(id) &&
         (
-          pendingAssignmentIds.has(id) ||
-          !activeResponses.some(
-            response => responseAssignmentId(response) === id
-          )
+          pendingResponseAssignmentIds.has(id) ||
+          !responseAssignmentIds.has(id)
         )
-      );
+      )
+    ) {
+      pending.add(stableId);
+    }
+  });
 
-    if (!isPending) continue;
+  return pending;
+}
+
+export function countPendingConfirmations(
+  assignments: readonly MusicScaleAssignmentObservation[],
+  responses: readonly MusicScaleResponseObservation[]
+): number {
+  return pendingAssignmentIds(assignments, responses).size;
+}
+
+export function derivePendingConfirmationGapsByFunction(
+  assignments: readonly MusicScaleAssignmentObservation[],
+  responses: readonly MusicScaleResponseObservation[]
+): MusicScalePendingFunctionGap[] {
+  const activeAssignments = assignments.filter(
+    assignment => assignment?.active !== false
+  );
+  const pendingIds = pendingAssignmentIds(assignments, responses);
+  const counts = new Map<string, number>();
+
+  activeAssignments.forEach((assignment, index) => {
+    const functionName = clean(assignment.functionName);
+    if (!functionName) return;
+
+    const id = assignmentId(assignment);
+    const stableId = id || `__missing_assignment_id__:${index}`;
+    if (!pendingIds.has(stableId)) return;
 
     counts.set(functionName, (counts.get(functionName) || 0) + 1);
-  }
+  });
 
   return Array.from(counts.entries())
     .map(([functionName, count]) => ({ functionName, count }))
