@@ -9,6 +9,12 @@ const resources = {
   es: () => import('./locales/es.js'),
 };
 
+const intelligenceResources = {
+  en: () => import('./intelligence/en.js'),
+  pt: () => import('./intelligence/pt.js'),
+  es: () => import('./intelligence/es.js'),
+};
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -16,6 +22,14 @@ i18n
     type: 'backend',
     read: async (language: string, namespace: string, callback: any) => {
       try {
+        if (namespace === 'intelligence') {
+          const langModule = await intelligenceResources[
+            language as keyof typeof intelligenceResources
+          ]();
+          callback(null, langModule.default);
+          return;
+        }
+
         const langModule = await resources[language as keyof typeof resources]();
         const data = (langModule.default as any)[namespace];
         if (data) {
@@ -31,7 +45,7 @@ i18n
   .init({
     fallbackLng: 'pt',
     supportedLngs: ['pt', 'en', 'es'],
-    ns: ['common', 'auth', 'commandPalette', 'resume', 'landing', 'musicscale', 'dashboard'],
+    ns: ['common', 'auth', 'commandPalette', 'resume', 'landing', 'musicscale', 'dashboard', 'intelligence'],
     defaultNS: 'common',
     interpolation: {
       escapeValue: false, // React already safeguards from xss
