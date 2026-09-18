@@ -73,6 +73,14 @@ export interface ActionProjectionInput {
         functionName: string;
         count: number;
       }[];
+      repertoireContent?: {
+        totalSongRefs: number;
+        resolvedSongCount: number;
+        missingLibrarySongIds: string[];
+        emptyContentSongIds: string[];
+        emptyContentTitles: string[];
+        gapCount: number;
+      } | null;
     };
     nextPersonalScale?: null | {
       id: string;
@@ -248,6 +256,59 @@ export function projectSignalToAction(
     };
   }
 
+  if (signal.signalType === 'musicscale_repertoire_content_gaps') {
+    const gapCount = numberPayload(signal, 'gapCount');
+    const missingLibrarySongCount = numberPayload(
+      signal,
+      'missingLibrarySongCount'
+    );
+    const emptyContentSongCount = numberPayload(
+      signal,
+      'emptyContentSongCount'
+    );
+
+    if (
+      gapCount <= 0 ||
+      signal.sourceEntityType !== 'scale' ||
+      missingLibrarySongCount + emptyContentSongCount !== gapCount
+    ) {
+      return null;
+    }
+
+    const emptyContentTitles = stringArrayPayload(
+      signal,
+      'emptyContentTitles'
+    );
+    const hasTitles = emptyContentTitles.length > 0;
+
+    return {
+      id: signal.dedupeKey,
+      dedupeKey: signal.dedupeKey,
+      fingerprint: signal.fingerprint,
+      sourceApp: signal.sourceApp,
+      signalType: signal.signalType,
+      priority: 'normal',
+      titleKey: 'workspace.actions.musicscale_repertoire_content_gaps.title',
+      descriptionKey: hasTitles
+        ? 'workspace.actions.musicscale_repertoire_content_gaps.description_with_titles'
+        : 'workspace.actions.musicscale_repertoire_content_gaps.description',
+      translationParams: {
+        count: gapCount,
+        missing: missingLibrarySongCount,
+        empty: emptyContentSongCount,
+        ...(hasTitles
+          ? { songs: emptyContentTitles.join(' · ') }
+          : {})
+      },
+      destination: {
+        kind: 'app',
+        appId: 'musicscale',
+        path: `/scales/${signal.sourceEntityId}`
+      },
+      dueAtMs: signal.occurredAtMs ?? null
+    };
+  }
+
   return null;
 }
 
@@ -281,7 +342,8 @@ export function projectEvidenceBackedSignalToAction(
   if (
     (
       signal.signalType === 'musicscale_pending_responses' ||
-      signal.signalType === 'musicscale_declined_responses'
+      signal.signalType === 'musicscale_declined_responses' ||
+      signal.signalType === 'musicscale_repertoire_content_gaps'
     ) &&
     permissions.canReadManagedMusicScaleResponses !== true
   ) {
