@@ -180,8 +180,8 @@ const workspaceSource = readFileSync(
 
 assert.match(
   workspaceSource,
-  /deriveReadOnlyHubChanges/,
-  'Hub workspace must use the dedicated Changes domain'
+  /deriveEvidenceBackedHubChanges/,
+  'Hub workspace must use the evidence-backed dedicated Changes domain'
 );
 
 assert.match(

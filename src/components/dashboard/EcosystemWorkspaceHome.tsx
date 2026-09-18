@@ -11,8 +11,15 @@ import type { CurrentMusicScaleLensAuthority } from '../../lib/hubLensAuthorizat
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
 import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from '../../lib/actionCenter.js';
-import { deriveReadOnlyHubCommitments, type ReadOnlyHubCommitment } from '../../lib/commitmentCenter.js';
-import { deriveReadOnlyHubChanges, type MusicScaleChangeNotificationInput, type ReadOnlyHubChange } from '../../lib/changeCenter.js';
+import {
+  deriveEvidenceBackedHubCommitments,
+  type ReadOnlyHubCommitment
+} from '../../lib/commitmentCenter.js';
+import {
+  deriveEvidenceBackedHubChanges,
+  type MusicScaleChangeNotificationInput,
+  type ReadOnlyHubChange
+} from '../../lib/changeCenter.js';
 import type { ActionOsDismissCode, ActionOsInteractionInput } from '../../lib/actionOsAnalytics.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
@@ -341,14 +348,17 @@ export function EcosystemWorkspaceHome({
     const todayActions = adaptiveWorkspace.actionsForActiveLens;
     const hasSuppressedTodayActions = adaptiveWorkspace.hasSuppressedActionsForActiveLens;
 
-    const commitments = deriveReadOnlyHubCommitments({
+    const commitments = deriveEvidenceBackedHubCommitments({
+      organizationId,
       musicScale: {
         ready: isMusicScaleReady && appSummaryReady,
+        observedAtMs: musicScaleSummary.updatedAtMs,
         nextPersonalScale: musicScaleSummary.nextPersonalScale
       }
     });
 
-    const changes = deriveReadOnlyHubChanges(
+    const changes = deriveEvidenceBackedHubChanges(
+      organizationId,
       isMusicScaleReady && appSummaryReady
         ? musicScaleChanges
         : []

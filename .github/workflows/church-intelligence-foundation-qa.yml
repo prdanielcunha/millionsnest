@@ -12,6 +12,9 @@ on:
       - 'src/lib/actionSignals.ts'
       - 'src/lib/factSignalAdapter.ts'
       - 'src/lib/musicScaleFactProjection.ts'
+      - 'src/lib/musicScaleChangeFactProjection.ts'
+      - 'src/lib/changeCenter.ts'
+      - 'src/lib/commitmentCenter.ts'
       - 'src/lib/lensResolver.ts'
       - 'src/lib/hubLensAuthorization.ts'
       - 'src/lib/lensActionProjection.ts'
@@ -25,6 +28,7 @@ on:
       - 'src/components/dashboard/EcosystemWorkspaceHome.tsx'
       - 'scripts/test_fact_contract.ts'
       - 'scripts/test_musicscale_fact_stream.ts'
+      - 'scripts/test_evidence_backed_timeline.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
       - 'scripts/test_hub_lens_authorization.ts'
@@ -69,6 +73,9 @@ jobs:
 
       - name: MusicScale canonical Fact Stream
         run: npx tsx scripts/test_musicscale_fact_stream.ts
+
+      - name: Evidence-backed commitments and changes
+        run: npx tsx scripts/test_evidence_backed_timeline.ts
 
       - name: Evidence-first Action Center projection
         run: npx tsx scripts/test_action_center_evidence_projection.ts
