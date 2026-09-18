@@ -167,6 +167,256 @@ service cloud.firestore {
       return checkOrgAccess(orgId) || isEcosystemSupport();
     }
 
+    // NestJourney / Raiz e Mesa compatibility gate.
+    // Product identity is nestjourney; storage remains products/raiz_e_mesa
+    // during the incremental migration.
+    function journeyOwner(orgId) {
+      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
+      return isAuthenticated() && orgDoc != null && (
+        orgDoc.data.get('ownerUid', '') == request.auth.uid ||
+        orgDoc.data.get('ownerId', '') == request.auth.uid ||
+        orgDoc.data.get('owner_user_id', '') == request.auth.uid ||
+        orgDoc.data.get('ownerUserId', '') == request.auth.uid
+      );
+    }
+
+    function journeyMemberActive(orgId) {
+      let memberData = getMemberPermissions(orgId);
+      return isAuthenticated() &&
+        memberData != null &&
+        memberData.get('status', 'active') in ['active', 'ativo'];
+    }
+
+    function journeyRole(orgId) {
+      let memberData = getMemberPermissions(orgId);
+      return journeyMemberActive(orgId)
+        ? memberData.get('organizationRole', memberData.get('role', ''))
+        : (journeyOwner(orgId) ? 'owner' : '');
+    }
+
+    function journeyProductEnabled(orgId) {
+      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
+      let apps = orgDoc != null ? orgDoc.data.get('apps', {}) : {};
+      let nestJourney = apps is map ? apps.get('nestjourney', {}) : {};
+      let legacyJourney = apps is map ? apps.get('raiz_e_mesa', {}) : {};
+      return isSystemAdmin() || (
+        orgDoc != null &&
+        (
+          (nestJourney is map && nestJourney.get('status', '') in ['active', 'trialing']) ||
+          (legacyJourney is map && legacyJourney.get('status', '') in ['active', 'trialing'])
+        )
+      );
+    }
+
+    function journeyHasMembership(orgId) {
+      return journeyProductEnabled(orgId) &&
+        (isSystemAdmin() || journeyOwner(orgId) || journeyMemberActive(orgId));
+    }
+
+    function journeyIsOrgAdmin(orgId) {
+      return journeyHasMembership(orgId) &&
+        (isSystemAdmin() || journeyRole(orgId) in ['owner', 'admin', 'pastor', 'data_admin']);
+    }
+
+    function journeyHasPermission(orgId, permission) {
+      let memberData = getMemberPermissions(orgId);
+      let permissions = memberData != null ? memberData.get('permissions', {}) : {};
+      return journeyHasMembership(orgId) && (
+        journeyIsOrgAdmin(orgId) ||
+        (permissions is map && permissions.get(permission, false) == true)
+      );
+    }
+
+    function journeyCanManagePresence(orgId) {
+      return journeyHasMembership(orgId) && (
+        journeyIsOrgAdmin(orgId) ||
+        journeyRole(orgId) == 'coordinator' ||
+        journeyHasPermission(orgId, 'canManagePresence')
+      );
+    }
+
+    function journeyCanManagePeople(orgId) {
+      return journeyHasMembership(orgId) &&
+        (journeyIsOrgAdmin(orgId) || journeyHasPermission(orgId, 'canManagePeople'));
+    }
+
+    function journeyCanManageCare(orgId) {
+      return journeyHasMembership(orgId) && (
+        journeyIsOrgAdmin(orgId) ||
+        journeyRole(orgId) == 'care' ||
+        journeyHasPermission(orgId, 'canManageCare')
+      );
+    }
+
+    function journeyAssignedToCongregation(orgId, congregationId) {
+      let memberData = getMemberPermissions(orgId);
+      let ids = memberData != null ? memberData.get('congregationIds', []) : [];
+      return journeyMemberActive(orgId) &&
+        congregationId is string &&
+        ids is list &&
+        congregationId in ids;
+    }
+
+    function journeyCanAccessCongregation(orgId, congregationId) {
+      return journeyHasMembership(orgId) &&
+        (journeyIsOrgAdmin(orgId) || journeyAssignedToCongregation(orgId, congregationId));
+    }
+
+    function journeyTenantCreate(orgId) {
+      return request.resource.data.get('organizationId', '') == orgId;
+    }
+
+    function journeyTenantUnchanged(orgId) {
+      return resource.data.get('organizationId', '') == orgId &&
+        request.resource.data.get('organizationId', '') == orgId;
+    }
+
+    function journeyCongregationUnchanged() {
+      return request.resource.data.get('congregationId', '') ==
+        resource.data.get('congregationId', '');
+    }
+
+    function journeyValidPresenceSessionCreate(orgId) {
+      return journeyTenantCreate(orgId) &&
+        request.resource.data.get('congregationId', '') is string &&
+        request.resource.data.get('createdBy', '') == request.auth.uid &&
+        request.resource.data.get('openedAt', null) == request.time &&
+        request.resource.data.get('status', '') == 'open' &&
+        request.resource.data.get('expectedPeopleCount', -1) is number &&
+        request.resource.data.get('expectedPeopleCount', -1) >= 0 &&
+        request.resource.data.get('minimumCoveragePercent', -1) is number &&
+        request.resource.data.get('minimumCoveragePercent', -1) >= 0 &&
+        request.resource.data.get('minimumCoveragePercent', -1) <= 100;
+    }
+
+    function journeyValidPresenceCheckCreate(orgId) {
+      let sessionId = request.resource.data.get('sessionId', '');
+      let congregationId = request.resource.data.get('congregationId', '');
+      let personId = request.resource.data.get('personId', '');
+      let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
+      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+      return journeyTenantCreate(orgId) &&
+        sessionId is string &&
+        congregationId is string &&
+        personId is string &&
+        request.resource.data.get('actorId', '') == request.auth.uid &&
+        request.resource.data.get('recordedAt', null) == request.time &&
+        request.resource.data.get('state', '') in ['present_confirmed', 'absent_confirmed', 'unverified'] &&
+        request.resource.data.get('source', '') == 'human_check' &&
+        request.resource.data.get('correctedFromCheckId', '') == '' &&
+        exists(sessionPath) &&
+        get(sessionPath).data.get('congregationId', '') == congregationId &&
+        get(sessionPath).data.get('status', '') == 'open' &&
+        exists(personPath) &&
+        get(personPath).data.get('congregationId', '') == congregationId;
+    }
+
+    function journeyValidCareRequestCreate(orgId) {
+      let source = request.resource.data.get('source', '');
+      let ownerRef = request.resource.data.get('ownerRef', '');
+      let summary = request.resource.data.get('summary', '');
+      return journeyTenantCreate(orgId) &&
+        request.resource.data.get('congregationId', '') is string &&
+        request.resource.data.get('personId', '') is string &&
+        request.resource.data.get('careType', '') in ['first_contact', 'prayer', 'pastoral_contact', 'group_interest', 'absence_check', 'operational_followup'] &&
+        source in ['manual', 'visitor_registration'] &&
+        request.resource.data.get('status', '') == 'open' &&
+        request.resource.data.get('requestedAt', null) == request.time &&
+        request.resource.data.get('requestedBy', '') == request.auth.uid &&
+        request.resource.data.get('promiseHours', 0) is number &&
+        request.resource.data.get('promiseHours', 0) >= 1 &&
+        request.resource.data.get('promiseHours', 0) <= 168 &&
+        request.resource.data.get('dueAt', null) is timestamp &&
+        request.resource.data.get('dueAt', null) > request.time &&
+        request.resource.data.get('dueAt', null) <= request.time + duration.value(168, 'h') &&
+        ownerRef is string &&
+        summary is string &&
+        summary.size() <= 160 &&
+        (
+          (source == 'manual' &&
+            ownerRef == request.auth.uid &&
+            request.resource.data.get('assignedAt', null) == request.time &&
+            request.resource.data.get('assignedBy', '') == request.auth.uid)
+          ||
+          (source == 'visitor_registration' &&
+            ownerRef == '' &&
+            request.resource.data.get('assignedAt', null) == null &&
+            request.resource.data.get('assignedBy', '') == '')
+        );
+    }
+
+    function journeyValidCareClaim(orgId) {
+      return resource.data.get('status', '') == 'open' &&
+        resource.data.get('ownerRef', '') == '' &&
+        journeyTenantUnchanged(orgId) &&
+        journeyCongregationUnchanged() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerRef', 'assignedAt', 'assignedBy']) &&
+        request.resource.data.get('ownerRef', '') == request.auth.uid &&
+        request.resource.data.get('assignedAt', null) == request.time &&
+        request.resource.data.get('assignedBy', '') == request.auth.uid;
+    }
+
+    function journeyValidCareResolve(orgId) {
+      let note = request.resource.data.get('resolutionNote', '');
+      return resource.data.get('status', '') == 'open' &&
+        (resource.data.get('ownerRef', '') == request.auth.uid || journeyIsOrgAdmin(orgId)) &&
+        journeyTenantUnchanged(orgId) &&
+        journeyCongregationUnchanged() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedAt', 'resolvedBy', 'resolutionCode', 'resolutionNote']) &&
+        request.resource.data.get('status', '') == 'resolved' &&
+        request.resource.data.get('resolvedAt', null) == request.time &&
+        request.resource.data.get('resolvedBy', '') == request.auth.uid &&
+        request.resource.data.get('resolutionCode', '') in ['contact_completed', 'pastoral_handoff', 'declined_contact', 'closed_no_response', 'other_resolved'] &&
+        note is string &&
+        note.size() <= 160;
+    }
+
+    function journeyValidCanonicalFact(orgId) {
+      let eventType = request.resource.data.get('eventType', '');
+      let payload = request.resource.data.get('payload', {});
+      let personId = payload.get('personId', '');
+      let sessionId = payload.get('sessionId', '');
+      let checkId = payload.get('checkId', '');
+      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+      let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
+      let checkPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceChecks/$(checkId);
+      return journeyTenantCreate(orgId) &&
+        request.resource.data.get('actorId', '') == request.auth.uid &&
+        request.resource.data.get('sourceApp', '') == 'nestjourney' &&
+        request.resource.data.get('version', 0) == 1 &&
+        request.resource.data.get('recordedAt', null) == request.time &&
+        request.resource.data.get('occurredAt', null) == request.time &&
+        request.resource.data.get('subjectRef', '') is string &&
+        request.resource.data.get('scope', '') is string &&
+        request.resource.data.get('evidenceRef', '') is string &&
+        request.resource.data.get('evidenceRef', '').size() > 0 &&
+        request.resource.data.get('sensitivity', '') in ['public', 'internal', 'confidential', 'restricted'] &&
+        eventType in ['VISITOR_REGISTERED', 'PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED'] &&
+        (
+          (eventType == 'VISITOR_REGISTERED' &&
+            personId is string &&
+            request.resource.data.get('subjectRef', '') == 'person:' + personId &&
+            request.resource.data.get('evidenceRef', '') == 'person:' + personId &&
+            existsAfter(personPath) &&
+            request.resource.data.get('scope', '') == 'congregation:' + getAfter(personPath).data.get('congregationId', ''))
+          ||
+          (eventType == 'PRESENCE_SESSION_OPENED' &&
+            sessionId is string &&
+            request.resource.data.get('subjectRef', '') == 'presenceSession:' + sessionId &&
+            request.resource.data.get('evidenceRef', '') == 'presenceSession:' + sessionId &&
+            existsAfter(sessionPath) &&
+            request.resource.data.get('scope', '') == 'congregation:' + getAfter(sessionPath).data.get('congregationId', ''))
+          ||
+          (eventType == 'PRESENCE_CONFIRMED' &&
+            checkId is string &&
+            request.resource.data.get('evidenceRef', '') == 'presenceCheck:' + checkId &&
+            existsAfter(checkPath) &&
+            getAfter(checkPath).data.get('state', '') != 'unverified' &&
+            request.resource.data.get('subjectRef', '') == 'person:' + getAfter(checkPath).data.get('personId', '') &&
+            request.resource.data.get('scope', '') == 'congregation:' + getAfter(checkPath).data.get('congregationId', ''))
+        );
+    }
+
     // ==========================================
     // 1. DADOS DOS USUÁRIOS
     // ==========================================
@@ -313,12 +563,155 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // NestJourney is intentionally carved out of the generic product wildcard.
+      // Firestore ORs overlapping allows, so products must be excluded below.
+      match /products/raiz_e_mesa {
+        allow read: if journeyHasMembership(orgId);
+        allow write: if false;
+
+        match /congregations/{congregationId} {
+          allow read: if journeyCanAccessCongregation(orgId, congregationId);
+          allow create: if journeyIsOrgAdmin(orgId) && journeyTenantCreate(orgId);
+          allow update: if journeyIsOrgAdmin(orgId) && journeyTenantUnchanged(orgId);
+          allow delete: if false;
+        }
+
+        match /people/{personId} {
+          allow read: if journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if journeyTenantCreate(orgId) &&
+            request.resource.data.get('deletedAt', null) == null &&
+            journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
+            journeyCanManagePeople(orgId);
+          allow update: if journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
+            journeyCanManagePeople(orgId);
+          allow delete: if false;
+        }
+
+        match /presenceSessions/{sessionId} {
+          allow read: if journeyCanManagePresence(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if journeyCanManagePresence(orgId) &&
+            journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
+            journeyValidPresenceSessionCreate(orgId);
+          allow update: if journeyCanManagePresence(orgId) &&
+            resource.data.get('status', '') == 'open' &&
+            journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'closedAt', 'closedBy']) &&
+            request.resource.data.get('status', '') == 'closed' &&
+            request.resource.data.get('closedAt', null) == request.time &&
+            request.resource.data.get('closedBy', '') == request.auth.uid;
+          allow delete: if false;
+        }
+
+        match /presenceChecks/{checkId} {
+          allow read: if journeyCanManagePresence(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if journeyCanManagePresence(orgId) &&
+            journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
+            journeyValidPresenceCheckCreate(orgId);
+          allow update, delete: if false;
+        }
+
+        match /careRequests/{careRequestId} {
+          allow read: if journeyCanManageCare(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
+            (
+              (request.resource.data.get('source', '') == 'manual' && journeyCanManageCare(orgId)) ||
+              (request.resource.data.get('source', '') == 'visitor_registration' && journeyCanManagePeople(orgId))
+            ) &&
+            journeyValidCareRequestCreate(orgId);
+          allow update: if journeyCanManageCare(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
+            (journeyValidCareClaim(orgId) || journeyValidCareResolve(orgId));
+          allow delete: if false;
+        }
+
+        match /facts/{factId} {
+          allow read: if journeyIsOrgAdmin(orgId);
+          allow create: if journeyHasMembership(orgId) &&
+            (
+              (request.resource.data.get('eventType', '') == 'VISITOR_REGISTERED' && journeyCanManagePeople(orgId)) ||
+              (request.resource.data.get('eventType', '') in ['PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED'] && journeyCanManagePresence(orgId))
+            ) &&
+            journeyValidCanonicalFact(orgId);
+          allow update, delete: if false;
+        }
+
+        match /groups/{groupId} {
+          allow read: if journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if journeyTenantCreate(orgId) &&
+            journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
+            (journeyIsOrgAdmin(orgId) || journeyHasPermission(orgId, 'canManageGroups'));
+          allow update: if journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
+            (journeyIsOrgAdmin(orgId) || journeyHasPermission(orgId, 'canManageGroups'));
+          allow delete: if false;
+        }
+
+        match /discipleships/{discipleshipId} {
+          allow read: if journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
+            (journeyIsOrgAdmin(orgId) || resource.data.get('disciplerId', '') == request.auth.uid);
+          allow create: if journeyTenantCreate(orgId) &&
+            journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
+            (journeyIsOrgAdmin(orgId) || request.resource.data.get('disciplerId', '') == request.auth.uid);
+          allow update: if journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
+            (journeyIsOrgAdmin(orgId) || resource.data.get('disciplerId', '') == request.auth.uid) &&
+            request.resource.data.get('disciplerId', '') == resource.data.get('disciplerId', '');
+          allow delete: if false;
+        }
+
+        match /pastoral/{pastoralId} {
+          allow read: if journeyHasMembership(orgId) && journeyRole(orgId) in ['owner', 'pastor'];
+          allow create: if journeyTenantCreate(orgId) && journeyHasMembership(orgId) && journeyRole(orgId) in ['owner', 'pastor'];
+          allow update: if journeyTenantUnchanged(orgId) && journeyHasMembership(orgId) && journeyRole(orgId) in ['owner', 'pastor'];
+          allow delete: if false;
+        }
+
+        match /audit/{auditId} {
+          allow read: if journeyIsOrgAdmin(orgId);
+          allow create: if journeyHasMembership(orgId) &&
+            journeyTenantCreate(orgId) &&
+            request.resource.data.get('actorId', '') == request.auth.uid &&
+            request.resource.data.get('action', '') is string &&
+            request.resource.data.get('createdAt', null) == request.time;
+          allow update, delete: if false;
+        }
+
+        match /retentionRequests/{requestId} {
+          allow read: if journeyHasMembership(orgId) && journeyRole(orgId) in ['owner', 'admin', 'data_admin'];
+          allow create: if journeyHasMembership(orgId) &&
+            journeyTenantCreate(orgId) &&
+            request.resource.data.get('requestedBy', '') == request.auth.uid;
+          allow update, delete: if false;
+        }
+
+        match /{document=**} {
+          allow read, write: if false;
+        }
+      }
+
+      // Preserve the previous generic behavior for other product namespaces.
+      match /products/{productId}/{document=**} {
+        allow read: if productId != 'raiz_e_mesa' &&
+          isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
+        allow create, update, delete: if productId != 'raiz_e_mesa' &&
+          isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+      }
+
       match /{app}/{document=**} {
         // Firestore ORs overlapping allow rules. Sensitive subcollections with
         // narrower policies must never inherit this generic tenant-wide access.
-        allow read: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
-        allow create: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow read: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
+        allow create: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 
