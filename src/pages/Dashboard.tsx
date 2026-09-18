@@ -20,7 +20,7 @@ import { feedback } from '../packages/ui/feedback.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { resolveMusicScaleEntitlements, calculateOccupiedSlots } from "../lib/musicScalePlans.js";
 import { canPurchasePlanAgain, isSubscriptionValid, normalizeDateToMs } from "../lib/subscriptionHelpers.js";
-import { isGlobalPrivilegedUser, canAccessNestFinanceDevelopment, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy } from "../lib/permissionService.js";
+import { isGlobalPrivilegedUser, canAccessEcosystemDevelopment, canAccessNestFinanceDevelopment, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy } from "../lib/permissionService.js";
 import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
 import { getInviteableOrganizationRolesForActor, getOrganizationRoleLabel, normalizeExistingOrganizationRole } from "../lib/organizationRoles.js";
@@ -355,7 +355,10 @@ export function Dashboard() {
         feedback.error('Acesso indisponível ao MusicScale.');
         return;
       }
-    } else if (!organization?.enabledApps?.includes(app.id)) {
+    } else if (
+      !organization?.enabledApps?.includes(app.id) &&
+      !canAccessDevelopmentPreviews
+    ) {
        feedback.error(`Módulo Indisponível: O aplicativo ${app.name} não está habilitado para a sua organização.`);
        return;
     }
@@ -550,6 +553,7 @@ export function Dashboard() {
     }).canEdit;
   };
 
+  const canAccessDevelopmentPreviews = canAccessEcosystemDevelopment(profile?.systemRole);
   const hasNestFinanceDevelopmentAccess = canAccessNestFinanceDevelopment(profile?.systemRole);
   const activeContextOrgId = canCrossTenantAccess && adminSelectedOrgId 
     ? adminSelectedOrgId 
@@ -2414,7 +2418,8 @@ export function Dashboard() {
           ? 'loading'
           : musicScaleProjection?.catalogState || 'unavailable'
     },
-    isGlobalAdmin
+    isGlobalAdmin,
+    canAccessDevelopmentPreviews
   });
   const installedAppExperiences = hubAppCatalog.filter(experience => experience.installed);
   const installedApps = installedAppExperiences.map(experience => experience.app);
