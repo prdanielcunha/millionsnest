@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  countPendingConfirmations,
   derivePendingConfirmationGapsByFunction,
   summarizePendingConfirmationFunctions
 } from '../src/lib/musicScaleLeaderIntelligence.js';
@@ -65,6 +66,12 @@ const responses = [
 const gaps = derivePendingConfirmationGapsByFunction(
   assignments,
   responses
+);
+
+assert.equal(
+  countPendingConfirmations(assignments, responses),
+  3,
+  'pending total must count active assignments, not duplicate response documents'
 );
 
 assert.deepEqual(gaps, [
