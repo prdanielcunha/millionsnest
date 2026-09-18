@@ -1,9 +1,14 @@
 import type { MusicScaleAccessProjection } from './ecosystemAccessProjection.js';
+
+export type CurrentMusicScaleLensAuthority = Pick<
+  MusicScaleAccessProjection,
+  'accessible' | 'decisionState' | 'canReadManagedScaleResponses' | 'isGlobalAccess'
+>;
 import type { HubLensAuthorizationProjection } from './lensResolver.js';
 
 export interface CurrentHubLensAuthorityInput {
   canManageOrganization: boolean;
-  musicScaleAccess?: MusicScaleAccessProjection | null;
+  musicScaleAccess?: CurrentMusicScaleLensAuthority | null;
 }
 
 /**
