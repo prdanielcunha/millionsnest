@@ -62,6 +62,60 @@ jobs:
           done
           echo "HUB_PRODUCTION_HTTPS_OK"
 
+      - name: Diagnose Firebase Auth reserved endpoints
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check_host () {
+            BASE="$1"
+            SAFE="$(echo "$BASE" | tr -cd '[:alnum:]')"
+            echo "===== FIREBASE AUTH DIAGNOSTICS: $BASE ====="
+
+            INIT_META="$(curl --silent --show-error --max-time 20 \
+              -o "/tmp/${SAFE}-init.json" \
+              -w '%{http_code}|%{content_type}|%{remote_ip}|%{time_total}' \
+              "$BASE/__/firebase/init.json" || true)"
+            echo "INIT=$INIT_META"
+            head -c 500 "/tmp/${SAFE}-init.json" 2>/dev/null || true
+            echo
+
+            HANDLER_META="$(curl --silent --show-error --max-time 20 \
+              -o "/tmp/${SAFE}-handler.html" \
+              -w '%{http_code}|%{content_type}|%{remote_ip}|%{time_total}|%{redirect_url}' \
+              "$BASE/__/auth/handler" || true)"
+            echo "HANDLER=$HANDLER_META"
+            head -c 300 "/tmp/${SAFE}-handler.html" 2>/dev/null || true
+            echo
+          }
+
+          check_host "https://millionsnest.com"
+          check_host "https://www.millionsnest.com"
+          check_host "https://mn-hub-555464791734.web.app"
+
+          node <<'NODE'
+          const fs = require('fs');
+          for (const name of [
+            'httpsmillionsnestcom-init.json',
+            'httpswwwmillionsnestcom-init.json',
+            'httpsmnhub555464791734webapp-init.json'
+          ]) {
+            const p = '/tmp/' + name;
+            if (!fs.existsSync(p)) continue;
+            try {
+              const x = JSON.parse(fs.readFileSync(p, 'utf8'));
+              console.log('FIREBASE_INIT', name, {
+                projectId: x.projectId,
+                authDomain: x.authDomain,
+                appId: x.appId
+              });
+            } catch (error) {
+              console.log('FIREBASE_INIT_PARSE_FAILED', name, String(error));
+            }
+          }
+          NODE
+
       - name: Smoke Hub API and Stripe read path
         continue-on-error: true
         shell: bash
