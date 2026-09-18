@@ -136,6 +136,9 @@ jobs:
       - name: CEO people governance contract
         run: npx tsx scripts/test_ceo_people_governance_contract.ts
 
+      - name: CEO development preview contract
+        run: npx tsx scripts/test_ceo_development_preview.ts
+
       - name: MusicScale access resolver contract
         run: npx tsx scripts/test_mn_access_01_musicscale_resolver.ts
 
