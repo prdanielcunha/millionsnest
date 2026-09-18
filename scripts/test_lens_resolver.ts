@@ -7,7 +7,7 @@ import {
 
 const memberLenses = resolveAvailableHubLenses({
   systemRole: 'user',
-  availableAppIds: ['musicscale', 'nestjourney', 'nestfinance']
+  entitledAppIds: ['musicscale', 'nestjourney', 'nestfinance']
 });
 assert.deepEqual(
   memberLenses.map(lens => lens.id),
@@ -22,7 +22,7 @@ assert.equal(
 
 const ceoLenses = resolveAvailableHubLenses({
   systemRole: 'ceo',
-  availableAppIds: ['musicscale', 'nestjourney', 'nestfinance']
+  entitledAppIds: ['musicscale', 'nestjourney', 'nestfinance']
 });
 assert.deepEqual(
   ceoLenses.map(lens => lens.id),
@@ -40,7 +40,7 @@ assert.equal(
 const responsibilityWithoutAuthorization = resolveAvailableHubLenses({
   systemRole: 'user',
   responsibilities: ['pastoral_care', 'worship_leadership'],
-  availableAppIds: ['musicscale']
+  entitledAppIds: ['musicscale']
 });
 assert.deepEqual(
   responsibilityWithoutAuthorization.map(lens => lens.id),
@@ -54,7 +54,7 @@ const worshipLeaderLenses = resolveAvailableHubLenses({
   authorizedDomains: {
     worship: true
   },
-  availableAppIds: ['musicscale']
+  entitledAppIds: ['musicscale']
 });
 assert.deepEqual(
   worshipLeaderLenses.map(lens => lens.id),
@@ -72,12 +72,12 @@ const missingAppLenses = resolveAvailableHubLenses({
     worship: true,
     journey: true
   },
-  availableAppIds: []
+  entitledAppIds: []
 });
 assert.deepEqual(
   missingAppLenses.map(lens => lens.id),
   ['my_today'],
-  'an app-backed lens must not appear when its product is unavailable in the current organization'
+  'an app-backed lens must not appear when its product is not entitled for the current organization'
 );
 
 const multiResponsibilityLenses = resolveAvailableHubLenses({
@@ -94,7 +94,7 @@ const multiResponsibilityLenses = resolveAvailableHubLenses({
     worship: true,
     finance: true
   },
-  availableAppIds: ['nestjourney', 'musicscale', 'nestfinance']
+  entitledAppIds: ['nestjourney', 'musicscale', 'nestfinance']
 });
 assert.deepEqual(
   multiResponsibilityLenses.map(lens => lens.id),
