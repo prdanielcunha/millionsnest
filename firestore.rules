@@ -263,6 +263,18 @@ service cloud.firestore {
         journeyHasPermission(orgId, 'canManageImplementation');
     }
 
+    function journeyCanViewGovernance(orgId) {
+      return isSystemAdmin() ||
+        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'data_admin']) ||
+        journeyHasPermission(orgId, 'canViewGovernance');
+    }
+
+    function journeyCanManagePrivacy(orgId) {
+      return isSystemAdmin() ||
+        journeyRoleAllowed(orgId, ['owner', 'admin', 'data_admin']) ||
+        journeyHasPermission(orgId, 'canManagePrivacy');
+    }
+
     function journeyAssignedToCongregation(orgId, congregationId) {
       let memberData = getMemberPermissions(orgId);
       let ids = memberData != null ? memberData.get('congregationIds', []) : [];
@@ -423,6 +435,38 @@ service cloud.firestore {
         request.resource.data.get('resolutionCode', '') in ['contact_completed', 'pastoral_handoff', 'declined_contact', 'closed_no_response', 'other_resolved'] &&
         note is string &&
         note.size() <= 160;
+    }
+
+    function journeyValidPrivacyRequestCreate(orgId) {
+      let congregationId = request.resource.data.get('congregationId', '');
+      let personId = request.resource.data.get('personId', '');
+      let requestType = request.resource.data.get('requestType', '');
+      let targetField = request.resource.data.get('targetField', '');
+      let proposedValue = request.resource.data.get('proposedValue', '');
+      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+      return journeyTenantCreate(orgId) &&
+        congregationId is string &&
+        personId is string &&
+        requestType in ['correction', 'consent_revocation', 'deletion_review', 'retention_review'] &&
+        request.resource.data.get('status', '') == 'open' &&
+        request.resource.data.get('requestedAt', null) == request.time &&
+        request.resource.data.get('requestedBy', '') == request.auth.uid &&
+        exists(personPath) &&
+        get(personPath).data.get('congregationId', '') == congregationId &&
+        (
+          (
+            requestType == 'correction' &&
+            targetField in ['name', 'phone', 'firstVisit'] &&
+            proposedValue is string &&
+            proposedValue.size() > 0 &&
+            proposedValue.size() <= 120
+          ) ||
+          (
+            requestType != 'correction' &&
+            targetField == '' &&
+            proposedValue == ''
+          )
+        );
     }
 
     function journeyValidImplementationKey(key) {
@@ -817,20 +861,37 @@ service cloud.firestore {
         }
 
         match /audit/{auditId} {
-          allow read: if journeyIsOrgAdmin(orgId);
+          allow read: if journeyCanViewGovernance(orgId) &&
+            (
+              (
+                resource.data.get('congregationId', '') is string &&
+                resource.data.get('congregationId', '').size() > 0 &&
+                journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''))
+              ) ||
+              (resource.data.get('congregationId', '') == '' && journeyIsOrgAdmin(orgId))
+            );
           allow create: if journeyHasMembership(orgId) &&
             journeyTenantCreate(orgId) &&
             request.resource.data.get('actorId', '') == request.auth.uid &&
             request.resource.data.get('action', '') is string &&
-            request.resource.data.get('createdAt', null) == request.time;
+            request.resource.data.get('createdAt', null) == request.time &&
+            (
+              (
+                request.resource.data.get('congregationId', '') is string &&
+                request.resource.data.get('congregationId', '').size() > 0 &&
+                journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', ''))
+              ) ||
+              (request.resource.data.get('congregationId', '') == '' && journeyIsOrgAdmin(orgId))
+            );
           allow update, delete: if false;
         }
 
         match /retentionRequests/{requestId} {
-          allow read: if journeyHasMembership(orgId) && journeyRole(orgId) in ['owner', 'admin', 'data_admin'];
-          allow create: if journeyHasMembership(orgId) &&
-            journeyTenantCreate(orgId) &&
-            request.resource.data.get('requestedBy', '') == request.auth.uid;
+          allow read: if journeyCanManagePrivacy(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if journeyCanManagePrivacy(orgId) &&
+            journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
+            journeyValidPrivacyRequestCreate(orgId);
           allow update, delete: if false;
         }
 
