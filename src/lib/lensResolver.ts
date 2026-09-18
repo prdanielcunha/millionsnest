@@ -29,7 +29,7 @@ export interface HubLensResolverInput {
   systemRole?: string | null;
   responsibilities?: readonly HubResponsibility[];
   authorizedDomains?: HubLensAuthorizationProjection;
-  availableAppIds?: readonly string[];
+  entitledAppIds?: readonly string[];
 }
 
 export interface ResolvedHubLens {
@@ -61,12 +61,12 @@ const REQUIRED_APP_BY_LENS: Partial<Record<HubLensId, string>> = {
   finance: 'nestfinance'
 };
 
-function hasAvailableApp(
+function hasEntitledApp(
   lensId: HubLensId,
-  availableAppIds: ReadonlySet<string>
+  entitledAppIds: ReadonlySet<string>
 ): boolean {
   const requiredApp = REQUIRED_APP_BY_LENS[lensId];
-  return !requiredApp || availableAppIds.has(requiredApp);
+  return !requiredApp || entitledAppIds.has(requiredApp);
 }
 
 function isPreferred(
@@ -92,7 +92,7 @@ export function resolveAvailableHubLenses(
   input: HubLensResolverInput
 ): ResolvedHubLens[] {
   const responsibilities = new Set(input.responsibilities ?? []);
-  const availableAppIds = new Set(input.availableAppIds ?? []);
+  const entitledAppIds = new Set(input.entitledAppIds ?? []);
   const authorizedDomains = input.authorizedDomains ?? {};
   const privilegePolicy = resolveEcosystemPrivilegePolicy(input.systemRole);
 
@@ -113,7 +113,7 @@ export function resolveAvailableHubLenses(
   ];
 
   for (const lensId of domainLensIds) {
-    if (!hasAvailableApp(lensId, availableAppIds)) continue;
+    if (!hasEntitledApp(lensId, entitledAppIds)) continue;
 
     const authorizedByDomain = authorizedDomains[lensId] === true;
     const authorizedByGlobalGovernance =
