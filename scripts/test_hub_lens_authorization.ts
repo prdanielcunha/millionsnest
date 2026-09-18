@@ -49,9 +49,7 @@ assert.deepEqual(
     canManageOrganization: false,
     musicScaleAccess: {
       ...baseProjection,
-      isGlobalAccess: true,
-      accessSource: 'global_system_role',
-      catalogState: 'administrative'
+      isGlobalAccess: true
     }
   }),
   {
@@ -82,8 +80,7 @@ assert.equal(
     musicScaleAccess: {
       ...baseProjection,
       accessible: false,
-      decisionState: 'denied',
-      catalogState: 'unavailable'
+      decisionState: 'denied'
     }
   }).worship,
   false,
