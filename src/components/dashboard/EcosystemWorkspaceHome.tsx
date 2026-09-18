@@ -38,6 +38,9 @@ import {
   resolutionMatchesAction,
   type ActionResolutionRecord
 } from '../../lib/actionResolution.js';
+import {
+  selectNextBestMinistryAction
+} from '../../lib/nextBestMinistryAction.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -394,6 +397,10 @@ export function EcosystemWorkspaceHome({
     });
     const todayActions = adaptiveWorkspace.actionsForActiveLens;
     const hasSuppressedTodayActions = adaptiveWorkspace.hasSuppressedActionsForActiveLens;
+    const nextBestAction = selectNextBestMinistryAction({
+      actions: todayActions,
+      resolutions: actionResolutions
+    });
     const musicScaleResolutionReadiness = {
       scalesReady: musicScaleSummary.readiness.scalesReady,
       songsReady: musicScaleSummary.readiness.songsReady,
@@ -904,6 +911,9 @@ export function EcosystemWorkspaceHome({
                   : null;
                 const resolutionBusy =
                   actionResolutionBusyKey === action.dedupeKey;
+                const isNextBest =
+                  nextBestAction?.action.dedupeKey === action.dedupeKey &&
+                  nextBestAction?.action.fingerprint === action.fingerprint;
 
                 return (
                   <article
@@ -946,6 +956,11 @@ export function EcosystemWorkspaceHome({
                             {t('workspace.actions.resolution_in_progress')}
                           </span>
                         )}
+                        {isNextBest && (
+                          <span className="rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-2 py-0.5 text-[9px] font-semibold text-emerald-300">
+                            {t('workspace.actions.nbma.recommended')}
+                          </span>
+                        )}
                       </div>
                       <h4 className="text-[15px] font-semibold leading-snug text-white sm:text-base">
                         {t(action.titleKey, action.translationParams ?? {})}
@@ -953,6 +968,11 @@ export function EcosystemWorkspaceHome({
                       <p className="mt-1 text-xs leading-relaxed text-[#8A95A4] sm:text-[13px]">
                         {t(action.descriptionKey, action.translationParams ?? {})}
                       </p>
+                      {isNextBest && nextBestAction && (
+                        <p className="mt-2 text-[10px] font-medium leading-relaxed text-emerald-300/80">
+                          {t(`workspace.actions.nbma.${nextBestAction.reason}`)}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex w-full flex-col gap-2 sm:w-auto">
