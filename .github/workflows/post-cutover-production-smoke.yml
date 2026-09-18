@@ -116,6 +116,47 @@ jobs:
           }
           NODE
 
+      - name: Diagnose public Firebase Auth project configuration
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          inspect_key () {
+            LABEL="$1"
+            KEY="$2"
+            echo "===== IDENTITY TOOLKIT PUBLIC CONFIG: $LABEL ====="
+            META="$(curl --silent --show-error --max-time 20 \
+              -o "/tmp/idtk-${LABEL}.json" \
+              -w '%{http_code}|%{content_type}|%{time_total}' \
+              "https://identitytoolkit.googleapis.com/v1/projects?key=${KEY}" || true)"
+            echo "META=$META"
+            node - "/tmp/idtk-${LABEL}.json" <<'NODE'
+          const fs = require('fs');
+          const p = process.argv[2];
+          try {
+            const x = JSON.parse(fs.readFileSync(p, 'utf8'));
+            console.log(JSON.stringify({
+              projectId: x.projectId,
+              authorizedDomains: x.authorizedDomains || [],
+              error: x.error ? {
+                code: x.error.code,
+                status: x.error.status,
+                message: x.error.message
+              } : null
+            }, null, 2));
+          } catch (error) {
+            console.log('IDENTITY_TOOLKIT_PARSE_FAILED', String(error));
+          }
+          NODE
+          }
+
+          BUILD_KEY="AIzaSyAhXY8TV8qoXz8Pd2u5jFHUTVssZmi3kMs"
+          HOSTED_KEY="$(node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('/tmp/httpswwwmillionsnestcom-init.json','utf8')); process.stdout.write(String(x.apiKey||''));")"
+
+          inspect_key "build" "$BUILD_KEY"
+          inspect_key "hosted" "$HOSTED_KEY"
+
       - name: Smoke Hub API and Stripe read path
         continue-on-error: true
         shell: bash
