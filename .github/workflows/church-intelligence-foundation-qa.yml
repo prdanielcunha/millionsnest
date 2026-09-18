@@ -16,6 +16,8 @@ on:
       - 'src/lib/factSignalAdapter.ts'
       - 'src/lib/musicScaleFactProjection.ts'
       - 'src/lib/musicScaleLeaderIntelligence.ts'
+      - 'src/lib/musicScaleDistributionFactProjection.ts'
+      - 'src/lib/musicScaleDistributionIntelligence.ts'
       - 'src/lib/musicScaleChangeFactProjection.ts'
       - 'src/lib/changeCenter.ts'
       - 'src/lib/commitmentCenter.ts'
@@ -28,12 +30,14 @@ on:
       - 'src/lib/currentContextGraph.ts'
       - 'src/components/dashboard/HubLensSwitcher.tsx'
       - 'src/components/dashboard/HubAppLaunchpad.tsx'
+      - 'src/components/dashboard/MusicScaleDistributionSnapshot.tsx'
       - 'src/pages/Dashboard.tsx'
       - 'src/components/dashboard/EcosystemWorkspaceHome.tsx'
       - 'scripts/test_fact_contract.ts'
       - 'scripts/test_musicscale_fact_stream.ts'
       - 'scripts/test_musicscale_leader_intelligence.ts'
       - 'scripts/test_musicscale_declined_gaps.ts'
+      - 'scripts/test_musicscale_distribution_intelligence.ts'
       - 'scripts/test_evidence_backed_timeline.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
@@ -85,6 +89,9 @@ jobs:
 
       - name: MusicScale declined leader-gap intelligence
         run: npx tsx scripts/test_musicscale_declined_gaps.ts
+
+      - name: MusicScale Worship distribution intelligence
+        run: npx tsx scripts/test_musicscale_distribution_intelligence.ts
 
       - name: Evidence-backed commitments and changes
         run: npx tsx scripts/test_evidence_backed_timeline.ts
