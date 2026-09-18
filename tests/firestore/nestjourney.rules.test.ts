@@ -62,6 +62,7 @@ before(async () => {
       ['pastor-a', 'pastor', ['unit-a', 'unit-b'], {}],
       ['leader-a', 'group_leader', ['unit-a'], {}],
       ['discipler-a', 'discipler', ['unit-a'], {}],
+      ['data-a', 'data_admin', ['unit-a'], {}],
     ] as const;
 
     for (const [uid, role, congregationIds, permissions] of members) {
@@ -316,6 +317,121 @@ test('implementation gate rejects invalid keys, cross-scope cycles and ordinary 
       startedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
       createdBy: 'member-a',
+    },
+  ));
+});
+
+
+test('governance data admin can register a structured privacy request and append an audit event', async () => {
+  const db = env.authenticatedContext('data-a').firestore();
+  const requestRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/privacy-a');
+  const auditRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/audit/privacy-a');
+  const batch = writeBatch(db);
+  batch.set(requestRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    personId: 'person-a',
+    personName: 'Person A',
+    requestType: 'correction',
+    targetField: 'phone',
+    proposedValue: '43988888888',
+    status: 'open',
+    requestedAt: serverTimestamp(),
+    requestedBy: 'data-a',
+  });
+  batch.set(auditRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    actorId: 'data-a',
+    action: 'privacy.requested',
+    targetRef: 'privacyRequest:privacy-a',
+    subjectRef: 'person:person-a',
+    requestType: 'correction',
+    createdAt: serverTimestamp(),
+  });
+  await assertSucceeds(batch.commit());
+  await assertSucceeds(getDoc(requestRef));
+  await assertSucceeds(getDoc(auditRef));
+  await assertFails(updateDoc(requestRef, { status: 'resolved' }));
+  await assertFails(updateDoc(auditRef, { action: 'tampered' }));
+});
+
+test('governance gate rejects invalid correction fields and cross-scope privacy requests', async () => {
+  const db = env.authenticatedContext('data-a').firestore();
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/privacy-invalid'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      personId: 'person-a',
+      personName: 'Person A',
+      requestType: 'correction',
+      targetField: 'private_notes',
+      proposedValue: 'sensitive narrative',
+      status: 'open',
+      requestedAt: serverTimestamp(),
+      requestedBy: 'data-a',
+    },
+  ));
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/privacy-outside'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-b',
+      personId: 'person-a',
+      personName: 'Person A',
+      requestType: 'retention_review',
+      targetField: '',
+      proposedValue: '',
+      status: 'open',
+      requestedAt: serverTimestamp(),
+      requestedBy: 'data-a',
+    },
+  ));
+});
+
+test('pastor can view scoped governance audit but cannot read the privacy queue', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/audit/governance-pastor'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      actorId: 'data-a',
+      action: 'privacy.requested',
+      createdAt: new Date(),
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/governance-pastor'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      personId: 'person-a',
+      requestType: 'retention_review',
+      targetField: '',
+      proposedValue: '',
+      status: 'open',
+      requestedAt: new Date(),
+      requestedBy: 'data-a',
+    });
+  });
+  const db = env.authenticatedContext('pastor-a').firestore();
+  await assertSucceeds(getDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/audit/governance-pastor')));
+  await assertFails(getDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/governance-pastor')));
+});
+
+test('ordinary operational members cannot create privacy-governance requests', async () => {
+  const db = env.authenticatedContext('care-a').firestore();
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/privacy-care'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      personId: 'person-a',
+      personName: 'Person A',
+      requestType: 'consent_revocation',
+      targetField: '',
+      proposedValue: '',
+      status: 'open',
+      requestedAt: serverTimestamp(),
+      requestedBy: 'care-a',
     },
   ));
 });
