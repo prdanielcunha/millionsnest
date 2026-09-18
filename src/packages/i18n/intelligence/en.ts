@@ -96,11 +96,14 @@ const intelligence = {
       personal_schedule: {
         title: 'Your next schedule',
         summary: 'I found your next MusicScale assignment. There are {{pending}} pending response(s) associated with the available context.',
+        summary_without_responses: 'I found your next MusicScale assignment. The response summary is not available for this schedule yet.',
         insufficient: 'I could not find a next personal schedule in an authorized source that is ready for querying right now.'
       },
       worship_service: {
         title: 'Next worship schedule',
         summary: 'The next authorized schedule has {{pending}} pending confirmation(s), {{declined}} decline(s), and {{gaps}} repertoire content gap(s).',
+        summary_responses_only: 'The next authorized schedule has {{pending}} pending confirmation(s) and {{declined}} decline(s). The repertoire projection is not ready yet.',
+        summary_repertoire_only: 'The next authorized schedule has {{gaps}} verifiable repertoire content gap(s). The response summary is not ready yet.',
         insufficient: 'The current authorized scope does not contain enough information to state how the requested Sunday is looking.'
       },
       worship_confirmations: {
