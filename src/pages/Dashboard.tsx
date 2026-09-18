@@ -2710,6 +2710,7 @@ export function Dashboard() {
               transition={{ duration: 0.2 }}
             >
               <EcosystemWorkspaceHome 
+                organizationId={String(activeContextOrgId || '')}
                 selectedWorkspace={selectedWorkspace}
                 installedApps={installedApps}
                 appExperiences={hubAppCatalog}
