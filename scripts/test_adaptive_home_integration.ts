@@ -37,6 +37,21 @@ assert.match(
   'Dashboard must pass the backend-authoritative MusicScale capability projection to Home'
 );
 assert.match(
+  dashboard,
+  /organizationId=\{String\(activeContextOrgId \|\| ''\)\}/,
+  'Dashboard must pass the canonical active organization id to adaptive Home'
+);
+assert.match(
+  home,
+  /organizationId,\s*\n\s*appExperiences,/,
+  'adaptive Home must use the explicit canonical organization id instead of relying on an embedded organization.id'
+);
+assert.equal(
+  home.includes("organizationId: String(organization?.id || '')"),
+  false,
+  'adaptive Home must not reconstruct tenant identity from an optional organization object'
+);
+assert.match(
   adaptive,
   /filterActionsByAppEntitlement/,
   'Adaptive workspace must filter app-owned claims by product entitlement before My Today'

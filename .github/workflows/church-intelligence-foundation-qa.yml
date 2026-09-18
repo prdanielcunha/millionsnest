@@ -10,6 +10,8 @@ on:
       - 'src/packages/i18n/intelligence/**'
       - 'src/lib/actionCenter.ts'
       - 'src/lib/actionSignals.ts'
+      - 'src/lib/factSignalAdapter.ts'
+      - 'src/lib/musicScaleFactProjection.ts'
       - 'src/lib/lensResolver.ts'
       - 'src/lib/hubLensAuthorization.ts'
       - 'src/lib/lensActionProjection.ts'
@@ -21,6 +23,7 @@ on:
       - 'src/pages/Dashboard.tsx'
       - 'src/components/dashboard/EcosystemWorkspaceHome.tsx'
       - 'scripts/test_fact_contract.ts'
+      - 'scripts/test_musicscale_fact_stream.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
       - 'scripts/test_hub_lens_authorization.ts'
@@ -61,6 +64,9 @@ jobs:
 
       - name: Canonical fact and evidence contract
         run: npx tsx scripts/test_fact_contract.ts
+
+      - name: MusicScale canonical Fact Stream
+        run: npx tsx scripts/test_musicscale_fact_stream.ts
 
       - name: Evidence-first Action Center projection
         run: npx tsx scripts/test_action_center_evidence_projection.ts
