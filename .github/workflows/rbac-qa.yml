@@ -9,8 +9,10 @@ on:
       - 'src/lib/permissionService.ts'
       - 'src/lib/roleResolver.ts'
       - 'src/lib/ecosystemLauncher.ts'
+      - 'src/lib/hubAppExperience.ts'
       - 'src/contexts/**'
       - 'src/pages/Dashboard.tsx'
+      - 'src/components/dashboard/EcosystemWorkspaceHome.tsx'
       - 'src/components/OrganizationManager.tsx'
       - 'src/server/services/EcosystemAccessResolver.ts'
       - 'src/server/services/MusicScaleHandoffService.ts'
@@ -26,6 +28,7 @@ on:
       - 'scripts/test_global_role_canonicalization.ts'
       - 'scripts/test_global_tenant_governance.ts'
       - 'scripts/test_ceo_people_governance_contract.ts'
+      - 'scripts/test_ceo_development_preview.ts'
       - 'scripts/test_mn_access_01_musicscale_resolver.ts'
       - 'scripts/test_mn_access_02_musicscale_handoff.ts'
       - '.github/workflows/rbac-qa.yml'
@@ -72,6 +75,9 @@ jobs:
 
       - name: CEO people governance contract
         run: npx tsx scripts/test_ceo_people_governance_contract.ts
+
+      - name: CEO development preview contract
+        run: npx tsx scripts/test_ceo_development_preview.ts
 
       - name: MusicScale access resolver contract
         run: npx tsx scripts/test_mn_access_01_musicscale_resolver.ts

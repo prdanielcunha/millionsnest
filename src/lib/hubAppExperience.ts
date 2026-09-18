@@ -61,8 +61,16 @@ export function resolveHubAppExperience(params: {
     catalogState?: string | null;
   } | null;
   isGlobalAdmin?: boolean;
+  canAccessDevelopmentPreviews?: boolean;
 }): HubAppExperience {
-  const { app, organization, subscription, musicScaleAccess, isGlobalAdmin } = params;
+  const {
+    app,
+    organization,
+    subscription,
+    musicScaleAccess,
+    isGlobalAdmin,
+    canAccessDevelopmentPreviews
+  } = params;
   const appRecord = organization?.apps?.[app.id] || null;
   const enabledApps = Array.isArray(organization?.enabledApps) ? organization.enabledApps : [];
   const explicitlyEnabled = enabledApps.includes(app.id) || appRecord?.enabled === true;
@@ -114,6 +122,26 @@ export function resolveHubAppExperience(params: {
 
   if (!catalogOperational) {
     const state: HubAppState = app.status === 'coming_soon' ? 'coming_soon' : 'development';
+    const hasLaunchTarget = typeof app.url === 'string' && app.url.trim().length > 0;
+    const isInternalDevelopmentPreview =
+      canAccessDevelopmentPreviews === true &&
+      app.status !== 'disabled' &&
+      hasLaunchTarget;
+
+    if (isInternalDevelopmentPreview) {
+      return {
+        app,
+        installed: true,
+        canOpen: true,
+        state: 'development',
+        plan: null,
+        needsAttention: false,
+        // Critical distinction: CEO preview access is not a commercial/product
+        // entitlement and must never feed adaptive intelligence or customer UX.
+        isOperational: false
+      };
+    }
+
     return {
       app,
       installed: false,

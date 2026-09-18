@@ -283,7 +283,7 @@ export function EcosystemWorkspaceHome({
       if (experience.state === 'trialing' || experience.state === 'cancel_scheduled') {
         return 'bg-amber-500/10 text-amber-300 border-amber-500/20';
       }
-      if (experience.state === 'administrative') {
+      if (experience.state === 'administrative' || experience.state === 'development') {
         return 'bg-purple-500/10 text-purple-300 border-purple-500/20';
       }
       if (experience.installed) {
@@ -1613,15 +1613,18 @@ export function EcosystemWorkspaceHome({
           .filter((metric: any) => metric && typeof metric.label === 'string' && ['string', 'number'].includes(typeof metric.value))
           .slice(0, 4)
       : [];
-    const planLabel = experience.plan
-      ? String(experience.plan).replace(/[_-]/g, ' ').replace(/\b\w/g, character => character.toUpperCase())
-      : t('workspace.plan_included', 'Incluído');
+    const planLabel = experience.state === 'development'
+      ? t('workspace.plan_internal_preview', 'Preview interno')
+      : experience.plan
+        ? String(experience.plan).replace(/[_-]/g, ' ').replace(/\b\w/g, character => character.toUpperCase())
+        : t('workspace.plan_included', 'Incluído');
     const statusLabel: Record<string, string> = {
       active: t('workspace.app_state.active', 'Ativo'),
       trialing: t('workspace.app_state.trialing', 'Em teste'),
       cancel_scheduled: t('workspace.app_state.cancel_scheduled', 'Cancelamento agendado'),
       payment_issue: t('workspace.app_state.payment_issue', 'Pagamento pendente'),
       administrative: t('workspace.app_state.administrative', 'Acesso administrativo'),
+      development: t('workspace.app_state.development', 'Em desenvolvimento · acesso interno'),
       error: t('workspace.app_state.error', 'Precisa de atenção')
     };
 
@@ -1640,7 +1643,7 @@ export function EcosystemWorkspaceHome({
                   <span className={`px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wider ${
                     experience.needsAttention
                       ? 'bg-red-500/10 text-red-300 border-red-500/20'
-                      : experience.state === 'administrative'
+                      : experience.state === 'administrative' || experience.state === 'development'
                         ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
                         : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
                   }`}>
