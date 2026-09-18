@@ -360,7 +360,7 @@ export function projectEvidenceBackedSignalToAction(
   };
 }
 
-function sortActions<TAction extends ReadOnlyHubAction>(actions: TAction[]): TAction[] {
+export function sortActionsForActionCenter<TAction extends ReadOnlyHubAction>(actions: TAction[]): TAction[] {
   const rank: Record<ActionPriority, number> = {
     urgent: 4,
     high: 3,
@@ -395,7 +395,7 @@ export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnly
     .map(signal => projectSignalToAction(signal, input.permissions))
     .filter((action): action is ReadOnlyHubAction => action !== null);
 
-  return sortActions(actions);
+  return sortActionsForActionCenter(actions);
 }
 
 /**
@@ -417,7 +417,7 @@ export function deriveEvidenceBackedHubActions(
     .map(signal => projectEvidenceBackedSignalToAction(signal, input.permissions))
     .filter((action): action is EvidenceBackedReadOnlyHubAction => action !== null);
 
-  return sortActions(actions);
+  return sortActionsForActionCenter(actions);
 }
 
 /**
