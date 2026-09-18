@@ -2062,6 +2062,7 @@ export function Dashboard() {
     const orgId = activeContextOrgId;
     const live = {
       songs: [] as any[],
+      songsReady: false,
       scales: [] as any[],
       bandScales: [] as any[],
       configuredMembersCount: 0,
@@ -2261,12 +2262,13 @@ export function Dashboard() {
           responseCounts: { ...live.responseCounts },
           pendingByFunction: live.pendingByFunction.map(gap => ({ ...gap })),
           declinedByFunction: live.declinedByFunction.map(gap => ({ ...gap })),
-          repertoireContent: canReadWorshipDistribution
-            ? deriveNextScaleRepertoireContentSnapshot(
-                Array.isArray(nextScale.songIds) ? nextScale.songIds : [],
-                live.songs
-              )
-            : null
+          repertoireContent:
+            canReadWorshipDistribution && live.songsReady
+              ? deriveNextScaleRepertoireContentSnapshot(
+                  Array.isArray(nextScale.songIds) ? nextScale.songIds : [],
+                  live.songs
+                )
+              : null
         } : null,
         recentAssignmentDistribution: canReadWorshipDistribution
           ? deriveMusicScaleAssignmentDistribution(
@@ -2312,9 +2314,13 @@ export function Dashboard() {
       query(collection(db, 'songs'), where('organizationId', '==', orgId)),
       snapshot => {
         live.songs = snapshot.docs.map(songDoc => ({ id: songDoc.id, ...songDoc.data() }));
+        live.songsReady = true;
         publishSummary();
       },
-      error => console.warn('[Dashboard] MusicScale songs summary listener failed:', error)
+      error => {
+        live.songsReady = false;
+        console.warn('[Dashboard] MusicScale songs summary listener failed:', error);
+      }
     ));
 
     unsubscribers.push(onSnapshot(
