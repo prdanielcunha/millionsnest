@@ -236,3 +236,86 @@ test('discipler relation is append-progressive and cannot be reassigned', async 
   await assertFails(updateDoc(ref, { personId: 'person-b' }));
   await assertFails(updateDoc(ref, { meeting: 7, status: 'completed' }));
 });
+
+
+test('implementation coordinator can start a cycle and append only canonical steps', async () => {
+  const db = env.authenticatedContext('coord-a').firestore();
+  const cycle = doc(db, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-a');
+  await assertSucceeds(setDoc(cycle, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    playbookId: 'raiz_e_mesa_2026',
+    status: 'active',
+    startedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+    createdBy: 'coord-a',
+  }));
+
+  const step = doc(db, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-a/steps/prep.1');
+  await assertSucceeds(setDoc(step, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    cycleId: 'cycle-a',
+    playbookId: 'raiz_e_mesa_2026',
+    key: 'prep.1',
+    completedAt: serverTimestamp(),
+    completedBy: 'coord-a',
+  }));
+
+  await assertFails(updateDoc(step, { key: 'prep.2' }));
+  await assertFails(updateDoc(cycle, { status: 'completed' }));
+});
+
+test('implementation gate rejects invalid keys, cross-scope cycles and ordinary members', async () => {
+  const coordDb = env.authenticatedContext('coord-a').firestore();
+  const cycle = doc(coordDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-b');
+  await assertSucceeds(setDoc(cycle, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    playbookId: 'raiz_e_mesa_2026',
+    status: 'active',
+    startedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+    createdBy: 'coord-a',
+  }));
+
+  await assertFails(setDoc(
+    doc(coordDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-b/steps/invented.step'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      cycleId: 'cycle-b',
+      playbookId: 'raiz_e_mesa_2026',
+      key: 'invented.step',
+      completedAt: serverTimestamp(),
+      completedBy: 'coord-a',
+    },
+  ));
+
+  await assertFails(setDoc(
+    doc(coordDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-outside'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-b',
+      playbookId: 'raiz_e_mesa_2026',
+      status: 'active',
+      startedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      createdBy: 'coord-a',
+    },
+  ));
+
+  const memberDb = env.authenticatedContext('member-a').firestore();
+  await assertFails(setDoc(
+    doc(memberDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/member-cycle'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      playbookId: 'raiz_e_mesa_2026',
+      status: 'active',
+      startedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      createdBy: 'member-a',
+    },
+  ));
+});
