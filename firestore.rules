@@ -270,6 +270,46 @@ service cloud.firestore {
         journeyHasPermission(orgId, 'canManageGroups');
     }
 
+    function journeyCanManageGroupRoster(orgId, groupId) {
+      let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
+      let memberData = getMemberPermissions(orgId);
+      let active = isAuthenticated() &&
+        memberData != null &&
+        memberData.get('status', 'active') in ['active', 'ativo'];
+      let roleName = active
+        ? memberData.get('organizationRole', memberData.get('role', ''))
+        : '';
+      let permissions = active ? memberData.get('permissions', {}) : {};
+      let privileged = isSystemAdmin() || journeyOwner(orgId);
+      let groupData = exists(groupPath) ? get(groupPath).data : {};
+      let broad = roleName in ['owner', 'admin', 'pastor'];
+      let ownsGroup = groupData.get('leaderId', '') == request.auth.uid ||
+        groupData.get('createdBy', '') == request.auth.uid;
+      let ids = active ? memberData.get('congregationIds', []) : [];
+      let inScope = privileged || broad || (
+        active &&
+        ids is list &&
+        groupData.get('congregationId', '') in ids
+      );
+      let allowed = privileged || (
+        active &&
+        (
+          broad ||
+          (
+            (
+              roleName == 'group_leader' ||
+              (permissions is map && permissions.get('canManageGroups', false) == true)
+            ) &&
+            ownsGroup
+          )
+        )
+      );
+      return exists(groupPath) &&
+        journeyProductEnabled(orgId) &&
+        inScope &&
+        allowed;
+    }
+
     function journeyCanManageImplementation(orgId) {
       return isSystemAdmin() ||
         journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator']) ||
@@ -542,6 +582,72 @@ service cloud.firestore {
         capacity <= 100 &&
         participants >= 0 &&
         participants <= capacity;
+    }
+
+    function journeyValidGroupMembershipCreate(orgId, membershipId) {
+      let groupId = request.resource.data.get('groupId', '');
+      let personId = request.resource.data.get('personId', '');
+      let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
+      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+      return request.resource.data.keys().hasOnly([
+          'organizationId', 'congregationId', 'groupId', 'personId', 'personName',
+          'status', 'joinedAt', 'joinedBy', 'leftAt', 'leftBy'
+        ]) &&
+        request.resource.data.get('organizationId', '') == orgId &&
+        groupId is string &&
+        groupId.size() > 0 &&
+        personId is string &&
+        personId.size() > 0 &&
+        membershipId == groupId + '__' + personId &&
+        request.resource.data.get('status', '') == 'active' &&
+        request.resource.data.get('joinedAt', null) == request.time &&
+        request.resource.data.get('joinedBy', '') == request.auth.uid &&
+        request.resource.data.get('leftAt', null) == null &&
+        request.resource.data.get('leftBy', '') == '' &&
+        journeyCanManageGroupRoster(orgId, groupId) &&
+        exists(groupPath) &&
+        exists(personPath) &&
+        get(groupPath).data.get('congregationId', '') ==
+          request.resource.data.get('congregationId', '') &&
+        get(personPath).data.get('congregationId', '') ==
+          request.resource.data.get('congregationId', '');
+    }
+
+    function journeyValidGroupMembershipUpdate(orgId) {
+      let groupId = resource.data.get('groupId', '');
+      let nextStatus = request.resource.data.get('status', '');
+      let previousStatus = resource.data.get('status', '');
+      return request.resource.data.get('organizationId', '') == orgId &&
+        request.resource.data.get('organizationId', '') ==
+          resource.data.get('organizationId', '') &&
+        request.resource.data.get('congregationId', '') ==
+          resource.data.get('congregationId', '') &&
+        request.resource.data.get('groupId', '') == groupId &&
+        request.resource.data.get('personId', '') ==
+          resource.data.get('personId', '') &&
+        request.resource.data.get('personName', '') ==
+          resource.data.get('personName', '') &&
+        journeyCanManageGroupRoster(orgId, groupId) &&
+        (
+          (
+            previousStatus == 'active' &&
+            nextStatus == 'left' &&
+            request.resource.data.get('joinedAt', null) ==
+              resource.data.get('joinedAt', null) &&
+            request.resource.data.get('joinedBy', '') ==
+              resource.data.get('joinedBy', '') &&
+            request.resource.data.get('leftAt', null) == request.time &&
+            request.resource.data.get('leftBy', '') == request.auth.uid
+          ) ||
+          (
+            previousStatus == 'left' &&
+            nextStatus == 'active' &&
+            request.resource.data.get('joinedAt', null) == request.time &&
+            request.resource.data.get('joinedBy', '') == request.auth.uid &&
+            request.resource.data.get('leftAt', null) == null &&
+            request.resource.data.get('leftBy', '') == ''
+          )
+        );
     }
 
     function journeyValidDiscipleshipCreate() {
@@ -881,8 +987,18 @@ service cloud.firestore {
           allow update: if journeyTenantUnchanged(orgId) &&
             journeyCongregationUnchanged() &&
             journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
-            journeyCanManageGroups(orgId) &&
+            journeyCanManageGroupRoster(orgId, groupId) &&
             journeyValidGroupState();
+          allow delete: if false;
+        }
+
+        match /groupMemberships/{membershipId} {
+          allow read: if journeyCanManageGroupRoster(
+            orgId,
+            resource.data.get('groupId', '')
+          );
+          allow create: if journeyValidGroupMembershipCreate(orgId, membershipId);
+          allow update: if journeyValidGroupMembershipUpdate(orgId);
           allow delete: if false;
         }
 
