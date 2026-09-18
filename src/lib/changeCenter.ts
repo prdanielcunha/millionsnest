@@ -1,3 +1,9 @@
+import type { FactEvidenceReference } from '../packages/events/factContract.js';
+import {
+  projectMusicScaleChangeFacts,
+  type MusicScaleChangeFactMetadata
+} from './musicScaleChangeFactProjection.js';
+
 export const CHANGE_HORIZON_DAYS = 14;
 export const CHANGE_LIMIT = 3;
 
@@ -55,6 +61,11 @@ export interface ReadOnlyHubChange {
     appId: 'musicscale';
     path: string;
   };
+}
+
+export interface EvidenceBackedReadOnlyHubChange extends ReadOnlyHubChange {
+  organizationId: string;
+  evidence: readonly FactEvidenceReference[];
 }
 
 type MetadataRecord = Record<string, unknown>;
@@ -168,6 +179,72 @@ export function deriveReadOnlyHubChanges(
       bySourceRevision.set(key, change);
     }
   });
+
+  return Array.from(bySourceRevision.values())
+    .sort((a, b) => b.occurredAtMs - a.occurredAtMs)
+    .slice(0, Math.max(0, limit));
+}
+
+
+/**
+ * Evidence-first Change Center projection.
+ *
+ * The source notification becomes a Canonical Fact first; only then is it
+ * projected into the user-visible Changes lane.
+ */
+export function deriveEvidenceBackedHubChanges(
+  organizationIdInput: string,
+  notifications: MusicScaleChangeNotificationInput[],
+  nowMs: number = Date.now(),
+  horizonDays: number = CHANGE_HORIZON_DAYS,
+  limit: number = CHANGE_LIMIT
+): EvidenceBackedReadOnlyHubChange[] {
+  const organizationId = organizationIdInput.trim();
+  if (!organizationId) return [];
+
+  const horizonStart = nowMs - Math.max(1, horizonDays) * 86_400_000;
+  const futureTolerance = nowMs + 5 * 60_000;
+  const bySourceRevision = new Map<string, EvidenceBackedReadOnlyHubChange>();
+
+  const facts = projectMusicScaleChangeFacts({
+    organizationId,
+    notifications
+  });
+
+  for (const fact of facts) {
+    if (
+      fact.occurredAtMs < horizonStart ||
+      fact.occurredAtMs > futureTolerance
+    ) {
+      continue;
+    }
+
+    const metadata = fact.metadata as MusicScaleChangeFactMetadata;
+    const change: EvidenceBackedReadOnlyHubChange = {
+      id: `musicscale:change:${metadata.sourceNotificationId}`,
+      sourceApp: 'musicscale',
+      sourceEntityType: 'scale',
+      sourceEntityId: fact.entity.id,
+      sourceNotificationId: metadata.sourceNotificationId,
+      publishRevision: metadata.publishRevision,
+      occurredAtMs: fact.occurredAtMs,
+      isRead: metadata.isRead,
+      codes: [...metadata.codes] as HubChangeCode[],
+      destination: {
+        kind: 'app',
+        appId: 'musicscale',
+        path: `/scales/${fact.entity.id}`
+      },
+      organizationId,
+      evidence: [fact.source]
+    };
+
+    const key = `${fact.entity.id}:rev${metadata.publishRevision}`;
+    const existing = bySourceRevision.get(key);
+    if (!existing || change.occurredAtMs > existing.occurredAtMs) {
+      bySourceRevision.set(key, change);
+    }
+  }
 
   return Array.from(bySourceRevision.values())
     .sort((a, b) => b.occurredAtMs - a.occurredAtMs)

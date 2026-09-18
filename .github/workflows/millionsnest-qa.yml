@@ -58,6 +58,9 @@ jobs:
       - name: Action OS recent changes projection
         run: npx tsx scripts/test_change_center_projection.ts
 
+      - name: Tool Gateway safety and approvals
+        run: npx tsx scripts/test_tool_gateway.ts
+
       - name: Action OS privacy-safe pilot telemetry
         run: npx tsx scripts/test_action_os_pilot_telemetry.ts
 
@@ -136,6 +139,9 @@ jobs:
       - name: CEO people governance contract
         run: npx tsx scripts/test_ceo_people_governance_contract.ts
 
+      - name: CEO development preview contract
+        run: npx tsx scripts/test_ceo_development_preview.ts
+
       - name: MusicScale access resolver contract
         run: npx tsx scripts/test_mn_access_01_musicscale_resolver.ts
 
@@ -148,8 +154,14 @@ jobs:
       - name: MusicScale explicit checkout plan contract
         run: npx tsx scripts/test_music_scale_checkout_explicit_plan.ts
 
+      - name: Customer purchase-to-first-use activation journey
+        run: npx tsx scripts/test_customer_activation_journey.ts
+
       - name: MusicScale one-trial-per-organization contract
         run: npx tsx scripts/test_music_scale_trial_history.ts
+
+      - name: NestLocal SaaS billing and entitlement contract
+        run: npx tsx scripts/test_nestlocal_saas_billing_contract.ts
 
       - name: Checkout confirmation tenant-binding contract
         run: npx tsx scripts/test_checkout_confirm_tenant_binding.ts

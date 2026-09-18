@@ -48,6 +48,9 @@ export default function Checkout() {
   // Checkout Error State
   const [checkoutError, setCheckoutError] = useState('');
   const [checkoutAction, setCheckoutAction] = useState<{ code: string, label: string, url?: string } | null>(null);
+  const checkoutApp: 'musicscale' | 'nestlocal' = new URLSearchParams(window.location.search).get('app') === 'nestlocal'
+    ? 'nestlocal'
+    : 'musicscale';
 
   const activeOrganizationId = canonicalContext?.activeOrganizationId 
     || profile?.activeOrganizationId 
@@ -57,15 +60,22 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate('/login');
+      const params = new URLSearchParams(window.location.search);
+      const requestedPlan = params.get('plan');
+      if (requestedPlan) sessionStorage.setItem('purchase_intent', requestedPlan);
+      sessionStorage.setItem('purchase_app', checkoutApp);
+      const next = `${window.location.pathname}${window.location.search}`;
+      navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true });
       return;
     }
     
     fetch('/api/v1/billing/products')
       .then(res => res.json())
       .then(data => {
-         if (data.plans) setPlans(data.plans);
-         if (data.addons) setAddons(data.addons);
+         const appPlans = Array.isArray(data.plans) ? data.plans.filter((plan: NormalizedProduct) => plan.app === checkoutApp) : [];
+         const appAddons = Array.isArray(data.addons) ? data.addons.filter((addon: NormalizedProduct) => addon.app === checkoutApp) : [];
+         setPlans(appPlans);
+         setAddons(appAddons);
          
          // A trial/checkout must always follow an explicit customer plan choice.
          // Never silently default a generic or direct checkout visit to Pro.
@@ -73,10 +83,10 @@ export default function Checkout() {
          const planParam = params.get('plan');
 
          const requestedPlan = planParam
-           ? data.plans?.find((p: any) => p.lookupKey === planParam)
+           ? appPlans.find((p: any) => p.lookupKey === planParam)
            : null;
          const requestedAddon = planParam
-           ? data.addons?.find((a: any) => a.lookupKey === planParam)
+           ? appAddons.find((a: any) => a.lookupKey === planParam)
            : null;
 
          if (requestedPlan?.lookupKey) {
@@ -95,7 +105,7 @@ export default function Checkout() {
          console.error('Error fetching catalog:', err);
          setLoading(false);
       });
-  }, [user, navigate]);
+  }, [user, navigate, checkoutApp]);
 
   const availablePlans = useMemo(() => {
      return plans.filter(p => billingCycle === 'yearly' ? p.interval === 'year' : p.interval === 'month');
@@ -230,7 +240,7 @@ export default function Checkout() {
     }
     
     analytics.track('checkout_started', {
-      app: 'musicscale',
+      app: checkoutApp,
       userId: user.uid,
       organizationId: activeOrganizationId,
       metadata: {
@@ -250,6 +260,7 @@ export default function Checkout() {
         },
         body: JSON.stringify({
           organizationId: activeOrganizationId,
+          app: checkoutApp,
           planLookupKey: selectedPlanLookup,
           addonLookupKeys: selectedAddonsLookup,
           promoCodeId: appliedCoupon ? appliedCoupon.id : undefined
@@ -352,7 +363,7 @@ export default function Checkout() {
 
   // Tiers sorting: Starter, Advanced, then Pro
   const sortedPlans = [...availablePlans].sort((a, b) => {
-    const order: Record<string, number> = { starter: 1, advanced: 2, pro: 3 };
+    const order: Record<string, number> = { starter: 1, essential: 1, advanced: 2, growth: 2, pro: 3 };
     const oA = order[a.tier || ''] || 99;
     const oB = order[b.tier || ''] || 99;
     return oA - oB;
@@ -386,15 +397,57 @@ export default function Checkout() {
                 {/* Header */}
                 <div className="space-y-4">
                     <h1 className="text-4xl lg:text-5xl font-semibold tracking-tight text-white leading-tight">
-                        {t('title', 'Evolua com o plano ideal para você.')}
+                        {checkoutApp === 'nestlocal' ? t('nestlocal.title') : t('title', 'Evolua com o plano ideal para você.')}
                     </h1>
-                    <p className="text-[#A0A7B5] text-lg font-light max-w-xl">
-                        {t('subtitle', 'Acesso total às ferramentas MusicScale. Teste por 7 dias grátis, cancele quando quiser com 1 clique no painel.')}
+                    <p className="text-[#A0A7B5] text-lg font-light max-w-2xl">
+                        {checkoutApp === 'nestlocal'
+                          ? t('nestlocal.subtitle')
+                          : t('purchase_journey.subtitle')}
                     </p>
                 </div>
 
+                <section
+                  aria-label={t('purchase_journey.kicker')}
+                  className="rounded-[1.75rem] border border-white/[0.08] bg-white/[0.025] p-4 sm:p-5"
+                >
+                  <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.18em] text-[#86BEFF]">
+                    {t('purchase_journey.kicker')}
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {[
+                      {
+                        title: t('purchase_journey.choose_title'),
+                        description: t('purchase_journey.choose_desc')
+                      },
+                      {
+                        title: t('purchase_journey.pay_title'),
+                        description: t('purchase_journey.pay_desc')
+                      },
+                      {
+                        title: t('purchase_journey.open_title'),
+                        description: t('purchase_journey.open_desc')
+                      }
+                    ].map((step, index) => (
+                      <div
+                        key={step.title}
+                        className="rounded-2xl border border-white/[0.07] bg-black/20 p-4"
+                      >
+                        <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-full border border-[#2B85EB]/20 bg-[#2B85EB]/10 text-xs font-bold text-[#9CC8FF]">
+                          {index + 1}
+                        </div>
+                        <p className="text-sm font-semibold text-white">
+                          {step.title}
+                        </p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-[#8F9AAA]">
+                          {step.description}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
                 {/* Billing Toggle */}
-                <div className="bg-white/5 p-1 rounded-full flex w-max border border-white/10 shadow-sm relative">
+                {checkoutApp === 'musicscale' && <div className="bg-white/5 p-1 rounded-full flex w-max border border-white/10 shadow-sm relative">
                    <button 
                        onClick={() => setBillingCycle('monthly')}
                        className={`px-8 py-2.5 rounded-full text-sm font-medium transition-all relative z-10 ${billingCycle === 'monthly' ? 'text-white' : 'text-[#A0A7B5] hover:text-white'}`}
@@ -412,15 +465,15 @@ export default function Checkout() {
                        animate={{ x: billingCycle === 'monthly' ? 4 : '100%' }}
                        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                    />
-                </div>
+                </div>}
 
                 {/* Unified Plan Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6 pb-4">
                    {sortedPlans.map(plan => {
                        const isSelected = selectedPlanLookup === plan.lookupKey;
                        const isPro = plan.tier === 'pro';
-                       const isAdvanced = plan.tier === 'advanced';
-                       const isStarter = plan.tier === 'starter';
+                       const isAdvanced = plan.tier === 'advanced' || plan.tier === 'growth';
+                       const isStarter = plan.tier === 'starter' || plan.tier === 'essential';
                        
                        return (
                            <div 
@@ -449,7 +502,7 @@ export default function Checkout() {
                                
                                <div className="flex justify-between items-start mb-6 relative z-10">
                                    <div>
-                                       <h3 className="text-xl md:text-2xl font-medium text-white mb-1 uppercase tracking-widest">{isPro ? 'Pro' : plan.name}</h3>
+                                       <h3 className="text-xl md:text-2xl font-medium text-white mb-1 uppercase tracking-widest">{isPro ? 'Pro' : checkoutApp === 'nestlocal' ? (plan.tier === 'growth' ? t('nestlocal.growth') : t('nestlocal.essential')) : plan.name}</h3>
                                        <p className="text-[#A0A7B5] text-xs font-light min-h-[36px]">{plan.description || (isPro ? "Para ministérios que desejam a experiência premium completa." : isAdvanced ? "Para ministérios em crescimento." : "Ideal para começar com simplicidade.")}</p>
                                    </div>
                                    <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors flex-shrink-0 ${isSelected ? 'bg-[#2B85EB] border-[#2B85EB]' : 'border-white/20 group-hover:border-white/40'}`}>
@@ -466,7 +519,7 @@ export default function Checkout() {
                                            / {billingCycle === 'yearly' ? t('yearly_period', 'ano') : t('monthly_period', 'mês')}
                                        </span>
                                    </div>
-                                   {isPro && (
+                                   {(isPro || checkoutApp === 'nestlocal') && (
                                        <div className="mt-2">
                                            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB] text-white rounded-md shadow-[0_0_15px_rgba(43,133,235,0.4)]">
                                              {t('pricing_free_trial', '7 dias grátis')}
@@ -478,7 +531,7 @@ export default function Checkout() {
                                             <span className="text-[#A0A7B5]/50 line-through">R$ {(34.90 * 12).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                             <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px]">20% OFF</span>
                                        </div>
-                                   ) : isPro && billingCycle === 'monthly' ? (
+                                   ) : checkoutApp === 'musicscale' && isPro && billingCycle === 'monthly' ? (
                                        <div className="flex items-center gap-2 mt-4 mb-2 text-xs font-medium relative z-10">
                                             <span className="text-[#A0A7B5]/50 line-through">R$ {getProductByLookupKey(plan.lookupKey || '')?.compareAtPriceInCents ? (getProductByLookupKey(plan.lookupKey || '')!.compareAtPriceInCents! / 100).toFixed(2).replace('.',',') : "44,90"}</span>
                                             <span className="text-[#2B85EB] font-semibold bg-[#2B85EB]/10 border border-[#2B85EB]/20 px-2 py-0.5 rounded-md text-[10px] uppercase tracking-widest">{getProductByLookupKey(plan.lookupKey || '')?.promotionLabel || 'Lançamento'}</span>
@@ -487,7 +540,23 @@ export default function Checkout() {
                                </div>
 
                                <ul className="space-y-4 pt-6 border-t border-white/5 relative z-10 w-full text-left mt-0 flex-1">
-                                   {isPro ? (
+                                   {checkoutApp === 'nestlocal' ? (
+                                       <>
+                                         {(Array.isArray((isStarter
+                                           ? t('nestlocal.features.essential', { returnObjects: true })
+                                           : isAdvanced
+                                             ? t('nestlocal.features.growth', { returnObjects: true })
+                                             : t('nestlocal.features.pro', { returnObjects: true })))
+                                           ? (isStarter
+                                             ? t('nestlocal.features.essential', { returnObjects: true })
+                                             : isAdvanced
+                                               ? t('nestlocal.features.growth', { returnObjects: true })
+                                               : t('nestlocal.features.pro', { returnObjects: true })) as string[]
+                                           : []).map((item, i) => (
+                                           <React.Fragment key={i}><FeatureItem text={item} /></React.Fragment>
+                                         ))}
+                                       </>
+                                   ) : isPro ? (
                                        <>
                                          {[
                                             'Tudo do Advanced',
@@ -539,10 +608,10 @@ export default function Checkout() {
                    })}
                 </div>
 
-                <hr className="border-white/5" />
+                {checkoutApp === 'musicscale' && <hr className="border-white/5" />}
 
                 {/* Addons Section */}
-                <div className="space-y-6">
+                {checkoutApp === 'musicscale' && <div className="space-y-6">
                     <div className="flex items-center gap-2 mb-2">
                         <Layers className="w-5 h-5 text-[#A0A7B5]" />
                         <h2 className="text-xl font-medium text-white tracking-tight">{t('addons_title', 'Melhorias adicionais')}</h2>
@@ -625,7 +694,7 @@ export default function Checkout() {
                             <p className="text-[#A0A7B5] text-sm">{t('no_addons', 'Nenhuma melhoria disponível no momento.')}</p>
                         )}
                     </div>
-                </div>
+                </div>}
                 <div className="h-20 lg:hidden" /> {/* Mobile padding */}
             </div>
 
@@ -638,10 +707,12 @@ export default function Checkout() {
                         
                         <div className="mb-6 p-3.5 rounded-xl bg-white/[0.03] border border-white/10">
                            <div className="text-[#2B85EB] text-[11px] font-bold uppercase tracking-wider mb-1">
-                              {t('subscription_scope_summary_title', 'Assinatura por organização')}
+                              {checkoutApp === 'nestlocal' ? t('nestlocal.scope_title') : t('subscription_scope_summary_title', 'Assinatura por organização')}
                            </div>
                            <p className="text-xs text-[#A0A7B5] font-normal leading-relaxed">
-                              {t('subscription_scope_summary_desc', 'Plano contratado para toda a sua organização/igreja. Os integrantes convidados não pagam assinaturas individuais.')}
+                              {checkoutApp === 'nestlocal'
+                                ? t('nestlocal.scope_description')
+                                : t('subscription_scope_summary_desc', 'Plano contratado para toda a sua organização/igreja. Os integrantes convidados não pagam assinaturas individuais.')}
                            </p>
                         </div>
 
@@ -747,7 +818,7 @@ export default function Checkout() {
                        <div className="flex justify-between items-baseline border-t border-white/5 pt-4 mt-2">
                           <div>
                               <span className="font-semibold text-white block">{t('regular_sub', 'Assinatura Regular')}</span>
-                              <span className="text-[#A0A7B5] text-xs mt-1 block">{t('starts_after_trial', 'Inicia após o período de 7 dias grátis.')}</span>
+                              <span className="text-[#A0A7B5] text-xs mt-1 block">{t('purchase_journey.recurring_note')}</span>
                           </div>
                           <div className="text-right">
                               {savingsMonthly > 0 && (
@@ -796,7 +867,7 @@ export default function Checkout() {
                            </>
                        ) : (
                            <>
-                              {t('cta', 'Iniciar Teste de 7 Dias')} 
+                              {t('purchase_journey.cta')} 
                               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                            </>
                        )}
@@ -804,12 +875,12 @@ export default function Checkout() {
 
                     <div className="flex items-center justify-center gap-2 text-xs text-[#A0A7B5]">
                         <ShieldCheck className="w-4 h-4 text-emerald-500/80" />
-                        <span>{t('encrypted', 'Transação criptografada by Stripe')}</span>
+                        <span>{t('encrypted', 'Transação segura processada pela Stripe')}</span>
                     </div>
 
                     <div className="text-center">
                         <p className="text-[11px] text-[#A0A7B5]/60 font-light max-w-[200px] mx-auto leading-relaxed">
-                            {t('cancel_info', 'Cancele a qualquer momento antes do trial acabar e não seja cobrado.')}
+                            {t('purchase_journey.trial_note')}
                         </p>
                     </div>
 

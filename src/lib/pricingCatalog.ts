@@ -2,10 +2,11 @@
 // Esta é a única fonte da verdade para a interface e para o checkout.
 
 export interface CatalogProduct {
+  app: 'musicscale' | 'nestlocal';
   lookupKey: string;
   name: string;
   description: string;
-  tier: 'starter' | 'advanced' | 'pro' | 'addon';
+  tier: 'starter' | 'advanced' | 'essential' | 'growth' | 'pro' | 'addon';
   type: 'plan' | 'addon';
   interval: 'month' | 'year' | 'one_time';
   priceInCents: number;
@@ -20,6 +21,7 @@ export interface CatalogProduct {
 export const PRODUCT_CATALOG: CatalogProduct[] = [
   // PLANOS STARTER
   {
+    app: 'musicscale',
     lookupKey: 'musicscale_starter_monthly',
     name: 'Starter (Mensal)',
     description: 'Ideal para começar com simplicidade.',
@@ -30,6 +32,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     envKey: 'STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY'
   },
   {
+    app: 'musicscale',
     lookupKey: 'musicscale_starter_yearly',
     name: 'Starter (Anual)',
     description: 'Ideal para começar com simplicidade.',
@@ -42,6 +45,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
 
   // PLANOS ADVANCED
   {
+    app: 'musicscale',
     lookupKey: 'musicscale_advanced_monthly',
     name: 'Advanced (Mensal)',
     description: 'Para ministérios em crescimento.',
@@ -52,6 +56,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     envKey: 'STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY'
   },
   {
+    app: 'musicscale',
     lookupKey: 'musicscale_advanced_yearly',
     name: 'Advanced (Anual)',
     description: 'Para ministérios em crescimento.',
@@ -64,6 +69,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
 
   // PLANOS PRO
   {
+    app: 'musicscale',
     lookupKey: 'musicscale_pro_monthly',
     name: 'Pro (Mensal)',
     description: 'Para ministérios que desejam a experiência premium completa.',
@@ -78,6 +84,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     envKey: 'STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY'
   },
   {
+    app: 'musicscale',
     lookupKey: 'musicscale_pro_yearly',
     name: 'Pro (Anual)',
     description: 'Para ministérios que desejam a experiência premium completa.',
@@ -91,6 +98,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
 
   // ADD-ONS
   {
+    app: 'musicscale',
     lookupKey: 'musicscale_setup_premium',
     name: 'Setup Premium',
     description: 'Configuração inicial assistida para estruturar rapidamente sua equipe no MusicScale.',
@@ -101,6 +109,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     envKey: 'STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM'
   },
   {
+    app: 'musicscale',
     lookupKey: 'musicscale_training_express',
     name: 'Treinamento Express',
     description: 'Treinamento online prático para aprender rapidamente o fluxo do MusicScale.',
@@ -111,6 +120,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     envKey: 'STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS'
   },
   {
+    app: 'musicscale',
     lookupKey: 'musicscale_worship_100',
     name: 'Acervo Inicial Worship',
     description: 'Acervo pronto de 100 músicas já organizadas, incluindo cifra e letra integradas.',
@@ -121,6 +131,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     envKey: 'STRIPE_PRICE_MUSICSCALE_WORSHIP_100'
   },
   {
+    app: 'musicscale',
     lookupKey: 'musicscale_music_pack_10',
     name: 'Music Pack +10',
     description: 'Pacote avulso para adicionar até 10 novas músicas ao acervo da sua organização.',
@@ -129,6 +140,43 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     interval: 'one_time',
     priceInCents: 1490,
     envKey: 'STRIPE_PRICE_MUSICSCALE_PACK_10'
+  },
+
+  // NestLocal — planos mensais por negócio. O trial é aplicado pelo checkout
+  // central uma única vez por organização e por aplicativo.
+  {
+    app: 'nestlocal',
+    lookupKey: 'nestlocal_essential_monthly',
+    name: 'NestLocal Essencial',
+    description: 'Página pública, orçamento guiado e até 100 solicitações por mês.',
+    tier: 'essential',
+    type: 'plan',
+    interval: 'month',
+    priceInCents: 7900,
+    envKey: 'STRIPE_PRICE_NESTLOCAL_ESSENTIAL_MONTHLY'
+  },
+  {
+    app: 'nestlocal',
+    lookupKey: 'nestlocal_growth_monthly',
+    name: 'NestLocal Crescimento',
+    description: 'Até 3 usuários, 500 solicitações por mês e automações operacionais.',
+    tier: 'growth',
+    type: 'plan',
+    interval: 'month',
+    priceInCents: 12900,
+    recommended: true,
+    envKey: 'STRIPE_PRICE_NESTLOCAL_GROWTH_MONTHLY'
+  },
+  {
+    app: 'nestlocal',
+    lookupKey: 'nestlocal_pro_monthly',
+    name: 'NestLocal Pro',
+    description: 'Até 10 usuários, solicitações em uso justo e recursos avançados.',
+    tier: 'pro',
+    type: 'plan',
+    interval: 'month',
+    priceInCents: 19900,
+    envKey: 'STRIPE_PRICE_NESTLOCAL_PRO_MONTHLY'
   }
 ];
 

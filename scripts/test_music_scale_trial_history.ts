@@ -5,7 +5,7 @@ const source = fs.readFileSync(path.join(process.cwd(), 'server.ts'), 'utf8');
 
 const required = [
   "Commercial rule: one 7-day evaluation per organization lifetime.",
-  "Boolean(subData.stripeSubscriptionId)",
+  "Boolean(appSubscription.stripeSubscriptionId)",
   "materializedStatuses.has(priorStatus)",
   "eligibility.reason === 'previous_subscription_expired'",
   "hasTrialHistory = true; // A prior MusicScale subscription exists, so no second trial.",

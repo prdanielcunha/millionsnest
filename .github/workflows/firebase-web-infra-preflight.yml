@@ -49,6 +49,9 @@ jobs:
       - name: Hub app experience regression guard
         run: npx tsx scripts/test_hub_app_experience_framework.ts
 
+      - name: CEO development preview contract
+        run: npx tsx scripts/test_ceo_development_preview.ts
+
       - name: MusicScale Action OS access projection
         run: npx tsx scripts/test_mn_access_03_dashboard_projection.ts
 
@@ -64,11 +67,17 @@ jobs:
       - name: Action OS recent changes projection
         run: npx tsx scripts/test_change_center_projection.ts
 
+      - name: Tool Gateway safety and approvals
+        run: npx tsx scripts/test_tool_gateway.ts
+
       - name: Action OS privacy-safe pilot telemetry
         run: npx tsx scripts/test_action_os_pilot_telemetry.ts
 
       - name: Private organization analytics rules contract
         run: npx tsx scripts/test_private_organization_analytics_rules.ts
+
+      - name: Customer purchase-to-first-use activation journey
+        run: npx tsx scripts/test_customer_activation_journey.ts
 
       - name: Build production artifacts with the canonical public Firebase app config
         run: npm run build

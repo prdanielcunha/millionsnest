@@ -1,3 +1,9 @@
+import type { FactEvidenceReference } from '../packages/events/factContract.js';
+import {
+  projectCurrentMusicScaleFacts,
+  type MusicScalePersonalCommitmentFactMetadata
+} from './musicScaleFactProjection.js';
+
 export const PREPARATION_WINDOW_DAYS = 7;
 export const PREPARATION_WINDOW_MS = PREPARATION_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
@@ -15,6 +21,12 @@ export interface ReadOnlyHubCommitment {
   songCount: number;
   functionNames: string[];
   destination: CommitmentDestination;
+}
+
+export interface EvidenceBackedReadOnlyHubCommitment
+  extends ReadOnlyHubCommitment {
+  organizationId: string;
+  evidence: readonly FactEvidenceReference[];
 }
 
 export interface CommitmentProjectionInput {
@@ -77,5 +89,89 @@ export function deriveReadOnlyHubCommitments(
       appId: 'musicscale',
       path: `/scales/${scale.id}`
     }
+  }];
+}
+
+
+export interface EvidenceBackedCommitmentProjectionInput {
+  organizationId: string;
+  musicScale: CommitmentProjectionInput['musicScale'] & {
+    observedAtMs?: number | null;
+    nextPersonalScale: null | (
+      NonNullable<CommitmentProjectionInput['musicScale']['nextPersonalScale']> & {
+        publishRevision?: number | null;
+        responseSummaryAvailable?: boolean;
+        pendingResponses?: number;
+      }
+    );
+  };
+}
+
+/**
+ * Evidence-first Commitment Center projection.
+ *
+ * Commitments remain separate from actions, but a visible commitment now has a
+ * canonical source fact and tenant-bound evidence.
+ */
+export function deriveEvidenceBackedHubCommitments(
+  input: EvidenceBackedCommitmentProjectionInput,
+  nowMs: number = Date.now()
+): EvidenceBackedReadOnlyHubCommitment[] {
+  const organizationId = input.organizationId.trim();
+  if (!organizationId || !input.musicScale.ready) return [];
+
+  const scale = input.musicScale.nextPersonalScale;
+  if (!scale) return [];
+
+  const facts = projectCurrentMusicScaleFacts({
+    organizationId,
+    ready: true,
+    observedAtMs: input.musicScale.observedAtMs,
+    projectionNowMs: nowMs,
+    nextScale: null,
+    nextPersonalScale: {
+      id: scale.id,
+      date: scale.date,
+      time: scale.time ?? null,
+      startsAtMs: scale.startsAtMs,
+      songCount: scale.songCount,
+      functionNames: scale.functionNames,
+      publishRevision: scale.publishRevision ?? 0,
+      responseSummaryAvailable: scale.responseSummaryAvailable === true,
+      pendingResponses:
+        typeof scale.pendingResponses === 'number' &&
+        Number.isFinite(scale.pendingResponses)
+          ? Math.max(0, scale.pendingResponses)
+          : 0
+    }
+  });
+
+  const fact = facts.find(
+    candidate =>
+      candidate.eventType === 'musicscale.scale.personal_commitment_observed'
+  );
+  if (!fact) return [];
+
+  const metadata = fact.metadata as MusicScalePersonalCommitmentFactMetadata;
+  if (metadata.startsAtMs < nowMs - 6 * 60 * 60 * 1000) return [];
+  if (metadata.startsAtMs > nowMs + PREPARATION_WINDOW_MS) return [];
+
+  return [{
+    id: `musicscale:commitment:${fact.entity.id}`,
+    sourceApp: 'musicscale',
+    sourceEntityType: 'scale',
+    sourceEntityId: fact.entity.id,
+    startsAtMs: metadata.startsAtMs,
+    date: metadata.date,
+    time: metadata.time,
+    songCount: metadata.songCount,
+    functionNames: [...metadata.functionNames],
+    destination: {
+      kind: 'app',
+      appId: 'musicscale',
+      path: `/scales/${fact.entity.id}`
+    },
+    organizationId,
+    evidence: [fact.source]
   }];
 }

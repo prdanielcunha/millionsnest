@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { useLocation, useNavigate } from "react-router-dom";
+import { signInWithRedirect, getRedirectResult, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import { motion } from "framer-motion";
@@ -8,10 +8,12 @@ import { Loader2 } from "lucide-react";
 import { parseInvitationRedirectPath } from "../lib/InvitationRedirectPolicy.js";
 import { useTranslation } from "react-i18next";
 import { MillionsNestLogo } from "../components/MillionsNestLogo.js";
+import { resolveSafePostLoginPath } from "../lib/connectLaunchPolicy.js";
 
 export function Login() {
   const { user, profile, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation(['auth']);
   
   const [isLogin, setIsLogin] = useState(true);
@@ -19,6 +21,14 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!auth) return;
+    getRedirectResult(auth).catch((err: any) => {
+      setError(err?.message || t("google_error"));
+      setLoading(false);
+    });
+  }, [t]);
 
   useEffect(() => {
     // invite_org_id injection removed to prevent blindly trusting invalid organization ids bypassing Join.tsx validations
@@ -39,17 +49,25 @@ export function Login() {
       }
       
       if (profile) {
+          const safeNext = resolveSafePostLoginPath(location.search);
+          if (safeNext) {
+            navigate(safeNext, { replace: true });
+            return;
+          }
+
           // UX Optimized: Check if user was trying to buy something before login
           const purchaseIntent = sessionStorage.getItem('purchase_intent');
           if (purchaseIntent) {
             sessionStorage.removeItem('purchase_intent');
-            navigate(`/checkout?plan=${purchaseIntent}`);
+            const purchaseApp = sessionStorage.getItem('purchase_app') || 'musicscale';
+            sessionStorage.removeItem('purchase_app');
+            navigate(`/checkout?app=${encodeURIComponent(purchaseApp)}&plan=${encodeURIComponent(purchaseIntent)}`);
           } else {
             navigate('/dashboard/overview');
           }
       }
     }
-  }, [user, profile, authLoading, navigate]);
+  }, [user, profile, authLoading, navigate, location.search]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,7 +102,8 @@ export function Login() {
 
     setLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      sessionStorage.setItem('mn_auth_started_at', String(Date.now()));
+      await signInWithRedirect(auth, googleProvider);
     } catch (err: any) {
       setError(err.message || t("google_error"));
       setLoading(false);

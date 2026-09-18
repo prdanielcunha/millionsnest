@@ -102,7 +102,7 @@ export class BillingService {
       const normalizedInfo: NormalizedProduct = {
         id: stripeId,
         lookupKey: item.lookupKey,
-        app: 'musicscale',
+        app: item.app,
         type: item.type,
         tier: item.tier,
         name: item.name,
@@ -110,10 +110,10 @@ export class BillingService {
         price: item.priceInCents / 100,
         currency: 'brl',
         interval: item.interval,
-        feature: item.lookupKey.replace('musicscale_', ''),
+        feature: item.lookupKey.replace(`${item.app}_`, ''),
         featured: item.featured || false,
         recommended: item.recommended || false,
-        metadata: { app: 'musicscale', type: item.type, tier: item.tier }
+        metadata: { app: item.app, type: item.type, tier: item.tier }
       };
 
       if (item.type === 'plan') {
@@ -442,6 +442,61 @@ export class BillingService {
     const products = await this.getProducts();
     const item = [...products.plans, ...products.addons].find(p => p.lookupKey === lookupKey);
     return item ? item.id : null;
+  }
+
+  async getOrCreatePriceByLookupKey(lookupKey: string): Promise<string | null> {
+    const products = await this.getProducts();
+    const item = [...products.plans, ...products.addons].find(product => product.lookupKey === lookupKey);
+    if (!item) return null;
+    if (!item.id.startsWith('mock_')) return item.id;
+    if (this.isMock) return null;
+
+    const existing = await this.stripe.prices.list({
+      active: true,
+      lookup_keys: [lookupKey],
+      limit: 1,
+    });
+    if (existing.data[0]?.id) return existing.data[0].id;
+
+    const { PRODUCT_CATALOG } = await import('../../lib/pricingCatalog.js');
+    const catalogItem = PRODUCT_CATALOG.find(product => product.lookupKey === lookupKey);
+    if (!catalogItem || catalogItem.type !== 'plan') return null;
+
+    const product = await this.stripe.products.create({
+      name: catalogItem.name,
+      description: catalogItem.description,
+      metadata: {
+        app: catalogItem.app,
+        type: catalogItem.type,
+        tier: catalogItem.tier,
+        catalog_key: catalogItem.lookupKey,
+      },
+    }, { idempotencyKey: `catalog-product-${catalogItem.lookupKey}` });
+
+    try {
+      const price = await this.stripe.prices.create({
+        product: product.id,
+        currency: 'brl',
+        unit_amount: catalogItem.priceInCents,
+        recurring: { interval: catalogItem.interval as Stripe.Price.Recurring.Interval },
+        lookup_key: catalogItem.lookupKey,
+        metadata: {
+          app: catalogItem.app,
+          type: catalogItem.type,
+          tier: catalogItem.tier,
+          catalog_key: catalogItem.lookupKey,
+        },
+      }, { idempotencyKey: `catalog-price-${catalogItem.lookupKey}` });
+      return price.id;
+    } catch (error: any) {
+      const recovered = await this.stripe.prices.list({
+        active: true,
+        lookup_keys: [lookupKey],
+        limit: 1,
+      });
+      if (recovered.data[0]?.id) return recovered.data[0].id;
+      throw error;
+    }
   }
 
   private createMockProduct(id: string, lookupKey: string, name: string, price: number, interval: any, type: string, feature: string, app: string): NormalizedProduct {

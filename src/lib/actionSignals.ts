@@ -1,7 +1,13 @@
+import type { FactEvidenceReference } from '../packages/events/factContract.js';
+import { projectCurrentMusicScaleFacts } from './musicScaleFactProjection.js';
+import { collectMusicScaleSignalsFromFacts } from './factSignalAdapter.js';
+
 export type ActionSignalType =
   | 'organization_incomplete'
   | 'pending_invites'
   | 'musicscale_pending_responses'
+  | 'musicscale_declined_responses'
+  | 'musicscale_repertoire_content_gaps'
   | 'musicscale_personal_confirmation';
 
 export interface EcosystemSignal {
@@ -15,6 +21,11 @@ export interface EcosystemSignal {
   payload: Record<string, unknown>;
 }
 
+export interface EvidenceBackedEcosystemSignal extends EcosystemSignal {
+  organizationId: string;
+  evidence: readonly FactEvidenceReference[];
+}
+
 export interface ActionSignalCollectionInput {
   organization?: {
     isConfigured: boolean;
@@ -22,11 +33,29 @@ export interface ActionSignalCollectionInput {
   pendingInvitesCount: number;
   musicScale: {
     ready: boolean;
+    observedAtMs?: number | null;
     nextScale: null | {
       id: string;
       startsAtMs?: number | null;
       responseSummaryAvailable: boolean;
       pendingResponses: number;
+      pendingByFunction?: readonly {
+        functionName: string;
+        count: number;
+      }[];
+      declinedResponses?: number;
+      declinedByFunction?: readonly {
+        functionName: string;
+        count: number;
+      }[];
+      repertoireContent?: {
+        totalSongRefs: number;
+        resolvedSongCount: number;
+        missingLibrarySongIds: string[];
+        emptyContentSongIds: string[];
+        emptyContentTitles: string[];
+        gapCount: number;
+      } | null;
     };
     nextPersonalScale?: null | {
       id: string;
@@ -36,6 +65,10 @@ export interface ActionSignalCollectionInput {
       pendingResponses: number;
     };
   };
+}
+
+export interface EvidenceBackedActionSignalCollectionInput extends ActionSignalCollectionInput {
+  organizationId: string;
 }
 
 /**
@@ -93,7 +126,6 @@ export function collectActionSignals(
     });
   }
 
-
   const nextPersonalScale = input.musicScale.nextPersonalScale;
   if (
     input.musicScale.ready &&
@@ -123,4 +155,90 @@ export function collectActionSignals(
   }
 
   return signals;
+}
+
+function buildHubSignalEvidence(
+  signal: EcosystemSignal,
+  input: EvidenceBackedActionSignalCollectionInput
+): FactEvidenceReference | null {
+  const organizationId = input.organizationId.trim();
+  if (!organizationId || signal.sourceApp !== 'hub') return null;
+
+  if (signal.signalType === 'organization_incomplete') {
+    return {
+      organizationId,
+      sourceApp: 'hub',
+      sourceKind: 'runtime_projection',
+      sourceRef: 'hub.read_model.organization_configuration',
+      entityType: 'organization',
+      entityId: organizationId,
+      fieldPaths: ['name', 'slug']
+    };
+  }
+
+  if (signal.signalType === 'pending_invites') {
+    return {
+      organizationId,
+      sourceApp: 'hub',
+      sourceKind: 'runtime_projection',
+      sourceRef: 'hub.read_model.pending_invitations',
+      entityType: 'invitation_set',
+      entityId: 'pending',
+      fieldPaths: ['pendingInvitesCount']
+    };
+  }
+
+  // MusicScale evidence must come from Canonical Facts. Any other source fails
+  // closed here instead of silently recreating a legacy direct adapter.
+  return null;
+}
+
+/**
+ * Transitional adapter for Church Intelligence OS.
+ *
+ * It reuses the already-loaded read models and attaches traceable evidence to
+ * each deterministic signal. It performs no additional Firestore/API reads.
+ */
+export function collectEvidenceBackedActionSignals(
+  input: EvidenceBackedActionSignalCollectionInput
+): EvidenceBackedEcosystemSignal[] {
+  const organizationId = input.organizationId.trim();
+  if (!organizationId) return [];
+
+  // Hub-owned facts remain on the transitional adapter for now. MusicScale is
+  // the first real product migrated through Canonical Facts -> Signals.
+  const hubSignals = collectActionSignals({
+    organization: input.organization,
+    pendingInvitesCount: input.pendingInvitesCount,
+    musicScale: {
+      ready: false,
+      nextScale: null,
+      nextPersonalScale: null
+    }
+  }).flatMap(signal => {
+    const normalizedSignal: EcosystemSignal =
+      signal.signalType === 'organization_incomplete'
+        ? { ...signal, sourceEntityId: organizationId }
+        : signal;
+    const evidence = buildHubSignalEvidence(normalizedSignal, input);
+    if (!evidence) return [];
+
+    return [{
+      ...normalizedSignal,
+      organizationId,
+      evidence: [evidence]
+    } satisfies EvidenceBackedEcosystemSignal];
+  });
+
+  const musicScaleFacts = projectCurrentMusicScaleFacts({
+    organizationId,
+    ready: input.musicScale.ready,
+    observedAtMs: input.musicScale.observedAtMs,
+    nextScale: input.musicScale.nextScale,
+    nextPersonalScale: input.musicScale.nextPersonalScale
+  });
+
+  const musicScaleSignals = collectMusicScaleSignalsFromFacts(musicScaleFacts);
+
+  return [...hubSignals, ...musicScaleSignals];
 }

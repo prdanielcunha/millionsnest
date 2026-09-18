@@ -244,14 +244,26 @@ test('implementation coordinator can start a cycle and append only canonical ste
   const db = env.authenticatedContext('coord-a').firestore();
   const cycle = doc(db, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-a');
   await assertSucceeds(setDoc(cycle, {
-    organizationId: 'org-a', congregationId: 'unit-a', playbookId: 'raiz_e_mesa_2026',
-    status: 'active', startedAt: serverTimestamp(), createdAt: serverTimestamp(), createdBy: 'coord-a',
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    playbookId: 'raiz_e_mesa_2026',
+    status: 'active',
+    startedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+    createdBy: 'coord-a',
   }));
+
   const step = doc(db, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-a/steps/prep.1');
   await assertSucceeds(setDoc(step, {
-    organizationId: 'org-a', congregationId: 'unit-a', cycleId: 'cycle-a', playbookId: 'raiz_e_mesa_2026',
-    key: 'prep.1', completedAt: serverTimestamp(), completedBy: 'coord-a',
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    cycleId: 'cycle-a',
+    playbookId: 'raiz_e_mesa_2026',
+    key: 'prep.1',
+    completedAt: serverTimestamp(),
+    completedBy: 'coord-a',
   }));
+
   await assertFails(updateDoc(step, { key: 'prep.2' }));
   await assertFails(updateDoc(cycle, { status: 'completed' }));
 });
@@ -260,22 +272,54 @@ test('implementation gate rejects invalid keys, cross-scope cycles and ordinary 
   const coordDb = env.authenticatedContext('coord-a').firestore();
   const cycle = doc(coordDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-b');
   await assertSucceeds(setDoc(cycle, {
-    organizationId: 'org-a', congregationId: 'unit-a', playbookId: 'raiz_e_mesa_2026',
-    status: 'active', startedAt: serverTimestamp(), createdAt: serverTimestamp(), createdBy: 'coord-a',
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    playbookId: 'raiz_e_mesa_2026',
+    status: 'active',
+    startedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+    createdBy: 'coord-a',
   }));
-  await assertFails(setDoc(doc(coordDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-b/steps/invented.step'), {
-    organizationId: 'org-a', congregationId: 'unit-a', cycleId: 'cycle-b', playbookId: 'raiz_e_mesa_2026',
-    key: 'invented.step', completedAt: serverTimestamp(), completedBy: 'coord-a',
-  }));
-  await assertFails(setDoc(doc(coordDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-outside'), {
-    organizationId: 'org-a', congregationId: 'unit-b', playbookId: 'raiz_e_mesa_2026',
-    status: 'active', startedAt: serverTimestamp(), createdAt: serverTimestamp(), createdBy: 'coord-a',
-  }));
+
+  await assertFails(setDoc(
+    doc(coordDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-b/steps/invented.step'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      cycleId: 'cycle-b',
+      playbookId: 'raiz_e_mesa_2026',
+      key: 'invented.step',
+      completedAt: serverTimestamp(),
+      completedBy: 'coord-a',
+    },
+  ));
+
+  await assertFails(setDoc(
+    doc(coordDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/cycle-outside'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-b',
+      playbookId: 'raiz_e_mesa_2026',
+      status: 'active',
+      startedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      createdBy: 'coord-a',
+    },
+  ));
+
   const memberDb = env.authenticatedContext('member-a').firestore();
-  await assertFails(setDoc(doc(memberDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/member-cycle'), {
-    organizationId: 'org-a', congregationId: 'unit-a', playbookId: 'raiz_e_mesa_2026',
-    status: 'active', startedAt: serverTimestamp(), createdAt: serverTimestamp(), createdBy: 'member-a',
-  }));
+  await assertFails(setDoc(
+    doc(memberDb, 'organizations/org-a/products/raiz_e_mesa/implementationCycles/member-cycle'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      playbookId: 'raiz_e_mesa_2026',
+      status: 'active',
+      startedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      createdBy: 'member-a',
+    },
+  ));
 });
 
 
@@ -315,30 +359,36 @@ test('governance data admin can register a structured privacy request and append
 
 test('governance gate rejects invalid correction fields and cross-scope privacy requests', async () => {
   const db = env.authenticatedContext('data-a').firestore();
-  await assertFails(setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/privacy-invalid'), {
-    organizationId: 'org-a',
-    congregationId: 'unit-a',
-    personId: 'person-a',
-    personName: 'Person A',
-    requestType: 'correction',
-    targetField: 'private_notes',
-    proposedValue: 'sensitive narrative',
-    status: 'open',
-    requestedAt: serverTimestamp(),
-    requestedBy: 'data-a',
-  }));
-  await assertFails(setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/privacy-outside'), {
-    organizationId: 'org-a',
-    congregationId: 'unit-b',
-    personId: 'person-a',
-    personName: 'Person A',
-    requestType: 'retention_review',
-    targetField: '',
-    proposedValue: '',
-    status: 'open',
-    requestedAt: serverTimestamp(),
-    requestedBy: 'data-a',
-  }));
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/privacy-invalid'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      personId: 'person-a',
+      personName: 'Person A',
+      requestType: 'correction',
+      targetField: 'private_notes',
+      proposedValue: 'sensitive narrative',
+      status: 'open',
+      requestedAt: serverTimestamp(),
+      requestedBy: 'data-a',
+    },
+  ));
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/privacy-outside'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-b',
+      personId: 'person-a',
+      personName: 'Person A',
+      requestType: 'retention_review',
+      targetField: '',
+      proposedValue: '',
+      status: 'open',
+      requestedAt: serverTimestamp(),
+      requestedBy: 'data-a',
+    },
+  ));
 });
 
 test('pastor can view scoped governance audit but cannot read the privacy queue', async () => {
@@ -370,18 +420,21 @@ test('pastor can view scoped governance audit but cannot read the privacy queue'
 
 test('ordinary operational members cannot create privacy-governance requests', async () => {
   const db = env.authenticatedContext('care-a').firestore();
-  await assertFails(setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/privacy-care'), {
-    organizationId: 'org-a',
-    congregationId: 'unit-a',
-    personId: 'person-a',
-    personName: 'Person A',
-    requestType: 'consent_revocation',
-    targetField: '',
-    proposedValue: '',
-    status: 'open',
-    requestedAt: serverTimestamp(),
-    requestedBy: 'care-a',
-  }));
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/retentionRequests/privacy-care'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      personId: 'person-a',
+      personName: 'Person A',
+      requestType: 'consent_revocation',
+      targetField: '',
+      proposedValue: '',
+      status: 'open',
+      requestedAt: serverTimestamp(),
+      requestedBy: 'care-a',
+    },
+  ));
 });
 
 

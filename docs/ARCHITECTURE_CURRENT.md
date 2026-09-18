@@ -102,7 +102,7 @@
 
 ## 18. Billing, Assinaturas e Entitlements
 - Gerenciado via **Stripe**.
-- Webhooks atualizam o estado da assinatura da organização (ex: `/organizations/{orgId}` -> `subscriptionStatus`, `subscriptionPlan`).
+- Webhooks atualizam o estado por aplicativo em `/subscriptions/{orgId}.apps.{appId}` e projetam o entitlement em `/organizations/{orgId}.apps.{appId}`. Os campos de topo do MusicScale permanecem apenas por compatibilidade durante a migração.
 - O faturamento não deve ser alterado (Regra Absoluta listada em `AGENTS.md`).
 
 ## 19. Variáveis de Ambiente Utilizadas

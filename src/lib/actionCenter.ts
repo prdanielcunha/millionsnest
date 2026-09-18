@@ -1,8 +1,14 @@
 import {
   collectActionSignals,
+  collectEvidenceBackedActionSignals,
   type ActionSignalType,
-  type EcosystemSignal
+  type EcosystemSignal,
+  type EvidenceBackedEcosystemSignal
 } from './actionSignals.js';
+import {
+  hasValidFactEvidence,
+  type FactEvidenceReference
+} from '../packages/events/factContract.js';
 
 export type ActionPriority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -27,6 +33,11 @@ export interface ReadOnlyHubAction {
   createdAtMs?: number | null;
 }
 
+export interface EvidenceBackedReadOnlyHubAction extends ReadOnlyHubAction {
+  organizationId: string;
+  evidence: readonly FactEvidenceReference[];
+}
+
 export interface ActionPreference {
   dedupeKey: string;
   fingerprint: string;
@@ -42,15 +53,34 @@ export interface ActionProjectionInput {
   permissions: {
     canManageOrganization: boolean;
     canManageMembers: boolean;
+    canReadManagedMusicScaleResponses?: boolean;
   };
   pendingInvitesCount: number;
   musicScale: {
     ready: boolean;
+    observedAtMs?: number | null;
     nextScale: null | {
       id: string;
       startsAtMs?: number | null;
       responseSummaryAvailable: boolean;
       pendingResponses: number;
+      pendingByFunction?: readonly {
+        functionName: string;
+        count: number;
+      }[];
+      declinedResponses?: number;
+      declinedByFunction?: readonly {
+        functionName: string;
+        count: number;
+      }[];
+      repertoireContent?: {
+        totalSongRefs: number;
+        resolvedSongCount: number;
+        missingLibrarySongIds: string[];
+        emptyContentSongIds: string[];
+        emptyContentTitles: string[];
+        gapCount: number;
+      } | null;
     };
     nextPersonalScale?: null | {
       id: string;
@@ -62,12 +92,31 @@ export interface ActionProjectionInput {
   };
 }
 
+export interface EvidenceBackedActionProjectionInput extends ActionProjectionInput {
+  organizationId: string;
+}
+
 function numberPayload(
   signal: EcosystemSignal,
   key: string
 ): number {
   const value = signal.payload[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function stringArrayPayload(
+  signal: EcosystemSignal,
+  key: string
+): string[] {
+  const value = signal.payload[key];
+  if (!Array.isArray(value)) return [];
+
+  return Array.from(new Set(
+    value
+      .filter((item): item is string => typeof item === 'string')
+      .map(item => item.trim())
+      .filter(Boolean)
+  ));
 }
 
 /**
@@ -139,6 +188,12 @@ export function projectSignalToAction(
     const pendingResponses = numberPayload(signal, 'pendingResponses');
     if (pendingResponses <= 0 || signal.sourceEntityType !== 'scale') return null;
 
+    const pendingFunctions = stringArrayPayload(
+      signal,
+      'pendingFunctionNames'
+    );
+    const hasFunctionContext = pendingFunctions.length > 0;
+
     return {
       id: signal.dedupeKey,
       dedupeKey: signal.dedupeKey,
@@ -147,8 +202,104 @@ export function projectSignalToAction(
       signalType: signal.signalType,
       priority: 'high',
       titleKey: 'workspace.actions.musicscale_pending_responses.title',
-      descriptionKey: 'workspace.actions.musicscale_pending_responses.description',
-      translationParams: { count: pendingResponses },
+      descriptionKey: hasFunctionContext
+        ? 'workspace.actions.musicscale_pending_responses.description_with_functions'
+        : 'workspace.actions.musicscale_pending_responses.description',
+      translationParams: {
+        count: pendingResponses,
+        ...(hasFunctionContext
+          ? { functions: pendingFunctions.join(' · ') }
+          : {})
+      },
+      destination: {
+        kind: 'app',
+        appId: 'musicscale',
+        path: `/scales/${signal.sourceEntityId}`
+      },
+      dueAtMs: signal.occurredAtMs ?? null
+    };
+  }
+
+  if (signal.signalType === 'musicscale_declined_responses') {
+    const declinedResponses = numberPayload(signal, 'declinedResponses');
+    if (declinedResponses <= 0 || signal.sourceEntityType !== 'scale') return null;
+
+    const declinedFunctions = stringArrayPayload(
+      signal,
+      'declinedFunctionNames'
+    );
+    const hasFunctionContext = declinedFunctions.length > 0;
+
+    return {
+      id: signal.dedupeKey,
+      dedupeKey: signal.dedupeKey,
+      fingerprint: signal.fingerprint,
+      sourceApp: signal.sourceApp,
+      signalType: signal.signalType,
+      priority: 'high',
+      titleKey: 'workspace.actions.musicscale_declined_responses.title',
+      descriptionKey: hasFunctionContext
+        ? 'workspace.actions.musicscale_declined_responses.description_with_functions'
+        : 'workspace.actions.musicscale_declined_responses.description',
+      translationParams: {
+        count: declinedResponses,
+        ...(hasFunctionContext
+          ? { functions: declinedFunctions.join(' · ') }
+          : {})
+      },
+      destination: {
+        kind: 'app',
+        appId: 'musicscale',
+        path: `/scales/${signal.sourceEntityId}`
+      },
+      dueAtMs: signal.occurredAtMs ?? null
+    };
+  }
+
+  if (signal.signalType === 'musicscale_repertoire_content_gaps') {
+    const gapCount = numberPayload(signal, 'gapCount');
+    const missingLibrarySongCount = numberPayload(
+      signal,
+      'missingLibrarySongCount'
+    );
+    const emptyContentSongCount = numberPayload(
+      signal,
+      'emptyContentSongCount'
+    );
+
+    if (
+      gapCount <= 0 ||
+      signal.sourceEntityType !== 'scale' ||
+      missingLibrarySongCount + emptyContentSongCount !== gapCount
+    ) {
+      return null;
+    }
+
+    const emptyContentTitles = stringArrayPayload(
+      signal,
+      'emptyContentTitles'
+    );
+    const hasTitles = emptyContentTitles.length > 0;
+
+    return {
+      id: signal.dedupeKey,
+      dedupeKey: signal.dedupeKey,
+      fingerprint: signal.fingerprint,
+      sourceApp: signal.sourceApp,
+      signalType: signal.signalType,
+      priority: 'normal',
+      titleKey: 'workspace.actions.musicscale_repertoire_content_gaps.title',
+      descriptionKey: hasTitles
+        ? 'workspace.actions.musicscale_repertoire_content_gaps.description_with_titles'
+        : 'workspace.actions.musicscale_repertoire_content_gaps.description',
+      translationParams: {
+        count: gapCount,
+        missing: missingLibrarySongCount,
+        empty: emptyContentSongCount,
+        ...(hasTitles
+          ? { songs: emptyContentTitles.join(' · ') }
+          : {})
+      },
       destination: {
         kind: 'app',
         appId: 'musicscale',
@@ -161,22 +312,55 @@ export function projectSignalToAction(
   return null;
 }
 
-/**
- * Public Action OS projection for the Hub.
- *
- * Source facts are collected first; policy and permission logic are applied
- * separately. This boundary lets NestJourney, Connect and future apps add
- * adapters without teaching the Hub UI about each product.
- */
-export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnlyHubAction[] {
-  const actions = collectActionSignals({
-    organization: input.organization,
-    pendingInvitesCount: input.pendingInvitesCount,
-    musicScale: input.musicScale
-  })
-    .map(signal => projectSignalToAction(signal, input.permissions))
-    .filter((action): action is ReadOnlyHubAction => action !== null);
+function hasCoherentSignalEvidence(
+  signal: EvidenceBackedEcosystemSignal
+): boolean {
+  if (!signal.organizationId.trim()) return false;
+  if (!hasValidFactEvidence(signal.evidence, signal.organizationId)) return false;
 
+  return signal.evidence.every(reference =>
+    reference.sourceApp === signal.sourceApp &&
+    reference.entityType === signal.sourceEntityType &&
+    reference.entityId === signal.sourceEntityId
+  );
+}
+
+/**
+ * Strict evidence-first projection used by Church Intelligence OS adapters.
+ * Invalid, missing or cross-tenant evidence fails closed before an action can
+ * become a user-visible claim.
+ */
+export function projectEvidenceBackedSignalToAction(
+  signal: EvidenceBackedEcosystemSignal,
+  permissions: ActionProjectionInput['permissions']
+): EvidenceBackedReadOnlyHubAction | null {
+  if (!hasCoherentSignalEvidence(signal)) return null;
+
+  // Managed MusicScale response summaries are ministry-level operational data.
+  // The strict projector requires the explicit backend-projected capability;
+  // ecosystem administration alone is not a substitute for domain authority.
+  if (
+    (
+      signal.signalType === 'musicscale_pending_responses' ||
+      signal.signalType === 'musicscale_declined_responses' ||
+      signal.signalType === 'musicscale_repertoire_content_gaps'
+    ) &&
+    permissions.canReadManagedMusicScaleResponses !== true
+  ) {
+    return null;
+  }
+
+  const action = projectSignalToAction(signal, permissions);
+  if (!action) return null;
+
+  return {
+    ...action,
+    organizationId: signal.organizationId,
+    evidence: signal.evidence
+  };
+}
+
+export function sortActionsForActionCenter<TAction extends ReadOnlyHubAction>(actions: TAction[]): TAction[] {
   const rank: Record<ActionPriority, number> = {
     urgent: 4,
     high: 3,
@@ -197,16 +381,56 @@ export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnly
 }
 
 /**
+ * Public Action OS projection for the Hub.
+ *
+ * This compatibility boundary preserves the currently shipped Hub while
+ * evidence-backed adapters are migrated incrementally.
+ */
+export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnlyHubAction[] {
+  const actions = collectActionSignals({
+    organization: input.organization,
+    pendingInvitesCount: input.pendingInvitesCount,
+    musicScale: input.musicScale
+  })
+    .map(signal => projectSignalToAction(signal, input.permissions))
+    .filter((action): action is ReadOnlyHubAction => action !== null);
+
+  return sortActionsForActionCenter(actions);
+}
+
+/**
+ * Evidence-first Action OS projection.
+ *
+ * It reads the same already-loaded inputs as the legacy projection. The only
+ * additional requirement is an explicit organizationId so tenant integrity can
+ * be verified before a factual signal is shown to the user.
+ */
+export function deriveEvidenceBackedHubActions(
+  input: EvidenceBackedActionProjectionInput
+): EvidenceBackedReadOnlyHubAction[] {
+  const actions = collectEvidenceBackedActionSignals({
+    organizationId: input.organizationId,
+    organization: input.organization,
+    pendingInvitesCount: input.pendingInvitesCount,
+    musicScale: input.musicScale
+  })
+    .map(signal => projectEvidenceBackedSignalToAction(signal, input.permissions))
+    .filter((action): action is EvidenceBackedReadOnlyHubAction => action !== null);
+
+  return sortActionsForActionCenter(actions);
+}
+
+/**
  * Applies user-scoped interaction preferences without changing the source truth.
  *
  * A dismissed/snoozed action reappears when its fingerprint changes, so a
  * materially changed signal cannot remain hidden forever.
  */
-export function applyActionPreferences(
-  actions: ReadOnlyHubAction[],
+export function applyActionPreferences<TAction extends ReadOnlyHubAction>(
+  actions: TAction[],
   preferences: ActionPreference[],
   nowMs = Date.now()
-): ReadOnlyHubAction[] {
+): TAction[] {
   const byKey = new Map(preferences.map(preference => [preference.dedupeKey, preference]));
 
   return actions.filter(action => {
