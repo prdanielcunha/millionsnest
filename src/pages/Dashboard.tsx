@@ -43,7 +43,10 @@ import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "
 import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
 import { fetchActionPreferences, saveActionPreference } from "../services/actionCenterClient.js";
 import { trackActionOsInteraction, type ActionOsDismissCode } from "../lib/actionOsAnalytics.js";
-import { derivePendingConfirmationGapsByFunction } from "../lib/musicScaleLeaderIntelligence.js";
+import {
+  countPendingConfirmations,
+  derivePendingConfirmationGapsByFunction
+} from "../lib/musicScaleLeaderIntelligence.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -2164,7 +2167,6 @@ export function Dashboard() {
             collection(db, `scales/${nextScale.id}/responses`),
             (responseSnapshot) => {
               const counts = { pending: 0, accepted: 0, maybe: 0, declined: 0 };
-              const respondedAssignmentIds = new Set<string>();
               const responseObservations = responseSnapshot.docs.map(responseDoc => {
                 const data = responseDoc.data() as any;
                 return {
@@ -2177,17 +2179,16 @@ export function Dashboard() {
 
               responseObservations.forEach(response => {
                 if (response.active === false) return;
-                respondedAssignmentIds.add(response.eventAssignmentId || response.id || '');
                 const status = String(response.status || 'pending').toLowerCase();
                 if (status === 'accepted') counts.accepted += 1;
                 else if (status === 'maybe') counts.maybe += 1;
                 else if (status === 'declined') counts.declined += 1;
-                else counts.pending += 1;
               });
 
-              counts.pending += activeAssignments.filter((assignment: any) =>
-                !respondedAssignmentIds.has(assignment.eventAssignmentId)
-              ).length;
+              counts.pending = countPendingConfirmations(
+                activeAssignments,
+                responseObservations
+              );
 
               live.responseSummaryAvailable = true;
               live.responseCounts = counts;
