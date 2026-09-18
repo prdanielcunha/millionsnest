@@ -44,7 +44,9 @@ import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
 import { fetchActionPreferences, saveActionPreference } from "../services/actionCenterClient.js";
 import { trackActionOsInteraction, type ActionOsDismissCode } from "../lib/actionOsAnalytics.js";
 import {
+  countDeclinedConfirmations,
   countPendingConfirmations,
+  deriveDeclinedConfirmationGapsByFunction,
   derivePendingConfirmationGapsByFunction
 } from "../lib/musicScaleLeaderIntelligence.js";
 
@@ -117,6 +119,10 @@ type MusicScaleHubSummary = {
       declined: number;
     };
     pendingByFunction: Array<{
+      functionName: string;
+      count: number;
+    }>;
+    declinedByFunction: Array<{
       functionName: string;
       count: number;
     }>;
@@ -2051,6 +2057,7 @@ export function Dashboard() {
       responseSummaryAvailable: false,
       responseCounts: { pending: 0, accepted: 0, maybe: 0, declined: 0 },
       pendingByFunction: [] as Array<{ functionName: string; count: number }>,
+      declinedByFunction: [] as Array<{ functionName: string; count: number }>,
       personalResponseSummaryAvailable: false,
       personalPendingResponses: 0
     };
@@ -2161,6 +2168,7 @@ export function Dashboard() {
           declined: 0
         };
         live.pendingByFunction = [];
+        live.declinedByFunction = [];
 
         if (nextScale?.id && canReadResponseSummary) {
           responsesUnsubscribe = onSnapshot(
@@ -2189,10 +2197,18 @@ export function Dashboard() {
                 activeAssignments,
                 responseObservations
               );
+              counts.declined = countDeclinedConfirmations(
+                activeAssignments,
+                responseObservations
+              );
 
               live.responseSummaryAvailable = true;
               live.responseCounts = counts;
               live.pendingByFunction = derivePendingConfirmationGapsByFunction(
+                activeAssignments,
+                responseObservations
+              );
+              live.declinedByFunction = deriveDeclinedConfirmationGapsByFunction(
                 activeAssignments,
                 responseObservations
               );
@@ -2202,6 +2218,7 @@ export function Dashboard() {
               live.responseSummaryAvailable = false;
               live.responseCounts = { pending: 0, accepted: 0, maybe: 0, declined: 0 };
               live.pendingByFunction = [];
+              live.declinedByFunction = [];
               publishSummary();
               console.warn('[Dashboard] MusicScale response summary listener failed:', error);
             }
@@ -2228,7 +2245,8 @@ export function Dashboard() {
           bandScaleId: nextScale.bandScaleId || null,
           responseSummaryAvailable: canReadResponseSummary && live.responseSummaryAvailable,
           responseCounts: { ...live.responseCounts },
-          pendingByFunction: live.pendingByFunction.map(gap => ({ ...gap }))
+          pendingByFunction: live.pendingByFunction.map(gap => ({ ...gap })),
+          declinedByFunction: live.declinedByFunction.map(gap => ({ ...gap }))
         } : null,
         nextPersonalScale: nextPersonalScale ? {
           id: nextPersonalScale.id,

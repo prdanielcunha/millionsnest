@@ -1032,6 +1032,13 @@ export default {
           description_other: "La próxima escala de MusicScale todavía tiene participaciones sin confirmar.",
           description_with_functions: "Funciones que aún esperan confirmación: {{functions}}."
         },
+        musicscale_declined_responses: {
+          title_one: "{{count}} participación fue rechazada en la próxima escala",
+          title_other: "{{count}} participaciones fueron rechazadas en la próxima escala",
+          description_one: "La próxima escala tiene una participación rechazada que necesita revisión.",
+          description_other: "La próxima escala tiene participaciones rechazadas que necesitan revisión.",
+          description_with_functions: "Funciones con una participación rechazada: {{functions}}."
+        },
         musicscale_personal_confirmation: {
           title_one: "Confirma tu participación en la próxima escala",
           title_other: "Confirma tus participaciones en la próxima escala",

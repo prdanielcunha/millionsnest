@@ -1,6 +1,9 @@
 import { isCanonicalFactValid } from '../packages/events/factContract.js';
 import type { EvidenceBackedEcosystemSignal } from './actionSignals.js';
-import { summarizePendingConfirmationFunctions } from './musicScaleLeaderIntelligence.js';
+import {
+  summarizeDeclinedConfirmationFunctions,
+  summarizePendingConfirmationFunctions
+} from './musicScaleLeaderIntelligence.js';
 import type {
   MusicScaleCanonicalFact,
   MusicScalePersonalConfirmationFactMetadata,
@@ -70,6 +73,48 @@ function responseSummarySignal(
   };
 }
 
+function declinedResponseSignal(
+  fact: Extract<
+    MusicScaleCanonicalFact,
+    { eventType: 'musicscale.scale.response_summary_observed' }
+  >
+): EvidenceBackedEcosystemSignal | null {
+  const metadata = fact.metadata as MusicScaleResponseSummaryFactMetadata;
+  const declinedResponses = nonNegativeNumber(metadata.declinedResponses);
+
+  if (
+    fact.source.sourceRef !== 'musicscale.read_model.schedule_response_summary' ||
+    metadata.responseSummaryAvailable !== true ||
+    declinedResponses === null ||
+    declinedResponses <= 0
+  ) {
+    return null;
+  }
+
+  const declinedFunctionNames = summarizeDeclinedConfirmationFunctions(
+    metadata.declinedByFunction || []
+  );
+  const functionFingerprint = declinedFunctionNames.join('|');
+
+  return {
+    organizationId: fact.organizationId,
+    sourceApp: 'musicscale',
+    signalType: 'musicscale_declined_responses',
+    sourceEntityType: 'scale',
+    sourceEntityId: fact.entity.id,
+    dedupeKey: `musicscale:declined_responses:${fact.entity.id}`,
+    fingerprint:
+      `musicscale:declined_responses:${fact.entity.id}:${declinedResponses}` +
+      (functionFingerprint ? `:functions:${functionFingerprint}` : ''),
+    occurredAtMs: startsAtMsFrom(metadata),
+    payload: {
+      declinedResponses,
+      declinedFunctionNames
+    },
+    evidence: [fact.source]
+  };
+}
+
 function personalConfirmationSignal(
   fact: Extract<
     MusicScaleCanonicalFact,
@@ -122,8 +167,11 @@ export function collectMusicScaleSignalsFromFacts(
     if (!baseFactIsCoherent(fact)) continue;
 
     if (fact.eventType === 'musicscale.scale.response_summary_observed') {
-      const signal = responseSummarySignal(fact);
-      if (signal) signals.push(signal);
+      const pendingSignal = responseSummarySignal(fact);
+      if (pendingSignal) signals.push(pendingSignal);
+
+      const declinedSignal = declinedResponseSignal(fact);
+      if (declinedSignal) signals.push(declinedSignal);
       continue;
     }
 

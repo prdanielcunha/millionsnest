@@ -23,6 +23,11 @@ export interface MusicScaleFactProjectionInput {
       functionName: string;
       count: number;
     }[];
+    declinedResponses?: number;
+    declinedByFunction?: readonly {
+      functionName: string;
+      count: number;
+    }[];
   };
   nextPersonalScale?: null | {
     id: string;
@@ -42,6 +47,11 @@ export interface MusicScaleResponseSummaryFactMetadata extends Record<string, un
   pendingResponses: number;
   startsAtMs: number | null;
   pendingByFunction?: Array<{
+    functionName: string;
+    count: number;
+  }>;
+  declinedResponses?: number;
+  declinedByFunction?: Array<{
     functionName: string;
     count: number;
   }>;
@@ -94,7 +104,7 @@ function cleanText(value: unknown): string | null {
   return clean ? clean : null;
 }
 
-function normalizePendingByFunction(
+function normalizeFunctionGaps(
   value: unknown
 ): Array<{ functionName: string; count: number }> {
   if (!Array.isArray(value)) return [];
@@ -155,15 +165,36 @@ function buildResponseSummaryFact(
   const observedAtMs = finiteNonNegative(input.observedAtMs);
   const timestamp = projectionTimestamp(input);
   const startsAtMs = finiteNonNegative(scale.startsAtMs);
-  const pendingByFunction = normalizePendingByFunction(
+  const pendingByFunction = normalizeFunctionGaps(
     scale.pendingByFunction
   );
-  const functionFingerprint = pendingByFunction
+  const declinedByFunction = normalizeFunctionGaps(
+    scale.declinedByFunction
+  );
+  const hasDeclinedContext =
+    scale.declinedResponses !== undefined ||
+    Array.isArray(scale.declinedByFunction);
+  const declinedResponses =
+    finiteNonNegative(scale.declinedResponses) ?? 0;
+
+  const pendingFunctionFingerprint = pendingByFunction
     .map(gap => `${gap.functionName}=${gap.count}`)
     .join('|');
+  const declinedFunctionFingerprint = declinedByFunction
+    .map(gap => `${gap.functionName}=${gap.count}`)
+    .join('|');
+
   const idempotencyKey =
     `musicscale:${organizationId}:scale:${scaleId}:response-summary:pending-${pendingResponses}` +
-    (functionFingerprint ? `:functions-${functionFingerprint}` : '');
+    (pendingFunctionFingerprint
+      ? `:functions-${pendingFunctionFingerprint}`
+      : '') +
+    (hasDeclinedContext
+      ? `:declined-${declinedResponses}` +
+        (declinedFunctionFingerprint
+          ? `:declined-functions-${declinedFunctionFingerprint}`
+          : '')
+      : '');
 
   const fact: MusicScaleCanonicalFact = {
     schemaVersion: CANONICAL_FACT_SCHEMA_VERSION,
@@ -184,6 +215,9 @@ function buildResponseSummaryFact(
         'responseSummaryAvailable',
         'pendingResponses',
         'pendingByFunction',
+        ...(hasDeclinedContext
+          ? ['declinedResponses', 'declinedByFunction']
+          : []),
         'startsAtMs'
       ],
       ...(observedAtMs !== null ? { observedAtMs } : {})
@@ -196,7 +230,13 @@ function buildResponseSummaryFact(
       responseSummaryAvailable: true,
       pendingResponses,
       startsAtMs,
-      pendingByFunction
+      pendingByFunction,
+      ...(hasDeclinedContext
+        ? {
+            declinedResponses,
+            declinedByFunction
+          }
+        : {})
     },
     idempotencyKey
   };

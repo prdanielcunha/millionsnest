@@ -68,6 +68,11 @@ export interface ActionProjectionInput {
         functionName: string;
         count: number;
       }[];
+      declinedResponses?: number;
+      declinedByFunction?: readonly {
+        functionName: string;
+        count: number;
+      }[];
     };
     nextPersonalScale?: null | {
       id: string;
@@ -207,6 +212,42 @@ export function projectSignalToAction(
     };
   }
 
+  if (signal.signalType === 'musicscale_declined_responses') {
+    const declinedResponses = numberPayload(signal, 'declinedResponses');
+    if (declinedResponses <= 0 || signal.sourceEntityType !== 'scale') return null;
+
+    const declinedFunctions = stringArrayPayload(
+      signal,
+      'declinedFunctionNames'
+    );
+    const hasFunctionContext = declinedFunctions.length > 0;
+
+    return {
+      id: signal.dedupeKey,
+      dedupeKey: signal.dedupeKey,
+      fingerprint: signal.fingerprint,
+      sourceApp: signal.sourceApp,
+      signalType: signal.signalType,
+      priority: 'high',
+      titleKey: 'workspace.actions.musicscale_declined_responses.title',
+      descriptionKey: hasFunctionContext
+        ? 'workspace.actions.musicscale_declined_responses.description_with_functions'
+        : 'workspace.actions.musicscale_declined_responses.description',
+      translationParams: {
+        count: declinedResponses,
+        ...(hasFunctionContext
+          ? { functions: declinedFunctions.join(' · ') }
+          : {})
+      },
+      destination: {
+        kind: 'app',
+        appId: 'musicscale',
+        path: `/scales/${signal.sourceEntityId}`
+      },
+      dueAtMs: signal.occurredAtMs ?? null
+    };
+  }
+
   return null;
 }
 
@@ -238,7 +279,10 @@ export function projectEvidenceBackedSignalToAction(
   // The strict projector requires the explicit backend-projected capability;
   // ecosystem administration alone is not a substitute for domain authority.
   if (
-    signal.signalType === 'musicscale_pending_responses' &&
+    (
+      signal.signalType === 'musicscale_pending_responses' ||
+      signal.signalType === 'musicscale_declined_responses'
+    ) &&
     permissions.canReadManagedMusicScaleResponses !== true
   ) {
     return null;

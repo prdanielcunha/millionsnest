@@ -6,6 +6,7 @@ export type ActionSignalType =
   | 'organization_incomplete'
   | 'pending_invites'
   | 'musicscale_pending_responses'
+  | 'musicscale_declined_responses'
   | 'musicscale_personal_confirmation';
 
 export interface EcosystemSignal {
@@ -38,6 +39,11 @@ export interface ActionSignalCollectionInput {
       responseSummaryAvailable: boolean;
       pendingResponses: number;
       pendingByFunction?: readonly {
+        functionName: string;
+        count: number;
+      }[];
+      declinedResponses?: number;
+      declinedByFunction?: readonly {
         functionName: string;
         count: number;
       }[];
