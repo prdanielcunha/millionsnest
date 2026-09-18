@@ -763,16 +763,19 @@ service cloud.firestore {
         (status != 'completed' || meeting == 7);
     }
 
-    function journeyValidCanonicalFact(orgId) {
+    function journeyValidCanonicalFact(orgId, factId) {
       let eventType = request.resource.data.get('eventType', '');
       let payload = request.resource.data.get('payload', {});
       let personId = payload.get('personId', '');
       let sessionId = payload.get('sessionId', '');
       let checkId = payload.get('checkId', '');
+      let careRequestId = payload.get('careRequestId', '');
       let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
       let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
       let checkPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceChecks/$(checkId);
+      let carePath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(careRequestId);
       return journeyTenantCreate(orgId) &&
+        request.resource.data.get('eventId', '') == factId &&
         request.resource.data.get('actorId', '') == request.auth.uid &&
         request.resource.data.get('sourceApp', '') == 'nestjourney' &&
         request.resource.data.get('version', 0) == 1 &&
@@ -783,7 +786,10 @@ service cloud.firestore {
         request.resource.data.get('evidenceRef', '') is string &&
         request.resource.data.get('evidenceRef', '').size() > 0 &&
         request.resource.data.get('sensitivity', '') in ['public', 'internal', 'confidential', 'restricted'] &&
-        eventType in ['VISITOR_REGISTERED', 'PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED'] &&
+        eventType in [
+          'VISITOR_REGISTERED', 'PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED',
+          'CARE_REQUESTED', 'CARE_ASSIGNED', 'CARE_RESOLVED'
+        ] &&
         (
           (eventType == 'VISITOR_REGISTERED' &&
             personId is string &&
@@ -806,10 +812,55 @@ service cloud.firestore {
             getAfter(checkPath).data.get('state', '') != 'unverified' &&
             request.resource.data.get('subjectRef', '') == 'person:' + getAfter(checkPath).data.get('personId', '') &&
             request.resource.data.get('scope', '') == 'congregation:' + getAfter(checkPath).data.get('congregationId', ''))
+          ||
+          (eventType == 'CARE_REQUESTED' &&
+            careRequestId is string &&
+            careRequestId.size() > 0 &&
+            factId == 'care-requested-' + careRequestId &&
+            existsAfter(carePath) &&
+            getAfter(carePath).data.get('requestedAt', null) == request.time &&
+            getAfter(carePath).data.get('requestedBy', '') == request.auth.uid &&
+            getAfter(carePath).data.get('personId', '') == personId &&
+            getAfter(carePath).data.get('careType', '') == payload.get('careType', '') &&
+            getAfter(carePath).data.get('source', '') == payload.get('source', '') &&
+            request.resource.data.get('subjectRef', '') == 'person:' + personId &&
+            request.resource.data.get('evidenceRef', '') == 'careRequest:' + careRequestId &&
+            request.resource.data.get('scope', '') == 'congregation:' + getAfter(carePath).data.get('congregationId', ''))
+          ||
+          (eventType == 'CARE_ASSIGNED' &&
+            careRequestId is string &&
+            careRequestId.size() > 0 &&
+            factId == 'care-assigned-' + careRequestId &&
+            existsAfter(carePath) &&
+            getAfter(carePath).data.get('ownerRef', '') == request.auth.uid &&
+            getAfter(carePath).data.get('assignedAt', null) == request.time &&
+            getAfter(carePath).data.get('assignedBy', '') == request.auth.uid &&
+            getAfter(carePath).data.get('personId', '') == personId &&
+            getAfter(carePath).data.get('careType', '') == payload.get('careType', '') &&
+            payload.get('ownerRef', '') == request.auth.uid &&
+            request.resource.data.get('subjectRef', '') == 'person:' + personId &&
+            request.resource.data.get('evidenceRef', '') == 'careRequest:' + careRequestId &&
+            request.resource.data.get('scope', '') == 'congregation:' + getAfter(carePath).data.get('congregationId', ''))
+          ||
+          (eventType == 'CARE_RESOLVED' &&
+            careRequestId is string &&
+            careRequestId.size() > 0 &&
+            factId == 'care-resolved-' + careRequestId &&
+            existsAfter(carePath) &&
+            getAfter(carePath).data.get('status', '') == 'resolved' &&
+            getAfter(carePath).data.get('resolvedAt', null) == request.time &&
+            getAfter(carePath).data.get('resolvedBy', '') == request.auth.uid &&
+            getAfter(carePath).data.get('personId', '') == personId &&
+            getAfter(carePath).data.get('careType', '') == payload.get('careType', '') &&
+            getAfter(carePath).data.get('resolutionCode', '') == payload.get('resolutionCode', '') &&
+            request.resource.data.get('subjectRef', '') == 'person:' + personId &&
+            request.resource.data.get('evidenceRef', '') == 'careRequest:' + careRequestId &&
+            request.resource.data.get('scope', '') == 'congregation:' + getAfter(carePath).data.get('congregationId', ''))
         );
     }
 
     // ==========================================
+    // 1. DADOS DOS USUÁRIOS    // ==========================================
     // 1. DADOS DOS USUÁRIOS
     // ==========================================
 
@@ -1028,9 +1079,10 @@ service cloud.firestore {
           allow create: if journeyHasMembership(orgId) &&
             (
               (request.resource.data.get('eventType', '') == 'VISITOR_REGISTERED' && journeyCanManagePeople(orgId)) ||
-              (request.resource.data.get('eventType', '') in ['PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED'] && journeyCanManagePresence(orgId))
+              (request.resource.data.get('eventType', '') in ['PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED'] && journeyCanManagePresence(orgId)) ||
+              request.resource.data.get('eventType', '') in ['CARE_REQUESTED', 'CARE_ASSIGNED', 'CARE_RESOLVED']
             ) &&
-            journeyValidCanonicalFact(orgId);
+            journeyValidCanonicalFact(orgId, factId);
           allow update, delete: if false;
         }
 

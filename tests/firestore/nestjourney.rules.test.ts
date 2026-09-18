@@ -126,6 +126,29 @@ function careRequest(uid: string, source: 'manual' | 'visitor_registration' = 'm
   };
 }
 
+function careFact(
+  factId: string,
+  eventType: 'CARE_REQUESTED' | 'CARE_ASSIGNED' | 'CARE_RESOLVED',
+  uid: string,
+  payload: Record<string, string>,
+) {
+  return {
+    eventId: factId,
+    eventType,
+    occurredAt: serverTimestamp(),
+    recordedAt: serverTimestamp(),
+    organizationId: 'org-a',
+    actorId: uid,
+    subjectRef: `person:${payload.personId}`,
+    sourceApp: 'nestjourney',
+    scope: 'congregation:unit-a',
+    evidenceRef: `careRequest:${payload.careRequestId}`,
+    sensitivity: 'confidential',
+    version: 1,
+    payload,
+  };
+}
+
 test('ordinary scoped member can read People but cannot mutate NestJourney People', async () => {
   const db = env.authenticatedContext('member-a').firestore();
   const ref = doc(db, 'organizations/org-a/products/raiz_e_mesa/people/person-a');
@@ -168,6 +191,98 @@ test('People manager may create visitor-origin Care without gaining Care claim c
     assignedAt: serverTimestamp(),
     assignedBy: 'coord-a',
   }));
+});
+
+
+test('manual Care may append requested and assigned canonical facts atomically', async () => {
+  const db = env.authenticatedContext('care-a').firestore();
+  const requestId = 'care-fact-manual';
+  const requestRef = doc(db, `organizations/org-a/products/raiz_e_mesa/careRequests/${requestId}`);
+  const batch = writeBatch(db);
+  batch.set(requestRef, careRequest('care-a'));
+  batch.set(
+    doc(db, `organizations/org-a/products/raiz_e_mesa/facts/care-requested-${requestId}`),
+    careFact(`care-requested-${requestId}`, 'CARE_REQUESTED', 'care-a', {
+      careRequestId: requestId,
+      personId: 'person-a',
+      careType: 'first_contact',
+      source: 'manual',
+    }),
+  );
+  batch.set(
+    doc(db, `organizations/org-a/products/raiz_e_mesa/facts/care-assigned-${requestId}`),
+    careFact(`care-assigned-${requestId}`, 'CARE_ASSIGNED', 'care-a', {
+      careRequestId: requestId,
+      personId: 'person-a',
+      careType: 'first_contact',
+      ownerRef: 'care-a',
+    }),
+  );
+  await assertSucceeds(batch.commit());
+});
+
+test('visitor-origin Care may append only its requested fact from People capability', async () => {
+  const db = env.authenticatedContext('coord-a').firestore();
+  const requestId = 'care-fact-visitor';
+  const requestRef = doc(db, `organizations/org-a/products/raiz_e_mesa/careRequests/${requestId}`);
+  const batch = writeBatch(db);
+  batch.set(requestRef, careRequest('coord-a', 'visitor_registration'));
+  batch.set(
+    doc(db, `organizations/org-a/products/raiz_e_mesa/facts/care-requested-${requestId}`),
+    careFact(`care-requested-${requestId}`, 'CARE_REQUESTED', 'coord-a', {
+      careRequestId: requestId,
+      personId: 'person-a',
+      careType: 'first_contact',
+      source: 'visitor_registration',
+    }),
+  );
+  await assertSucceeds(batch.commit());
+
+  await assertFails(setDoc(
+    doc(db, `organizations/org-a/products/raiz_e_mesa/facts/care-assigned-${requestId}`),
+    careFact(`care-assigned-${requestId}`, 'CARE_ASSIGNED', 'coord-a', {
+      careRequestId: requestId,
+      personId: 'person-a',
+      careType: 'first_contact',
+      ownerRef: 'coord-a',
+    }),
+  ));
+});
+
+test('Care resolution fact is accepted only when backed by the same factual resolution', async () => {
+  const db = env.authenticatedContext('care-a').firestore();
+  const requestId = 'care-fact-resolve';
+  const requestRef = doc(db, `organizations/org-a/products/raiz_e_mesa/careRequests/${requestId}`);
+  await assertSucceeds(setDoc(requestRef, careRequest('care-a')));
+
+  await assertFails(setDoc(
+    doc(db, `organizations/org-a/products/raiz_e_mesa/facts/care-resolved-${requestId}`),
+    careFact(`care-resolved-${requestId}`, 'CARE_RESOLVED', 'care-a', {
+      careRequestId: requestId,
+      personId: 'person-a',
+      careType: 'first_contact',
+      resolutionCode: 'contact_completed',
+    }),
+  ));
+
+  const batch = writeBatch(db);
+  batch.update(requestRef, {
+    status: 'resolved',
+    resolvedAt: serverTimestamp(),
+    resolvedBy: 'care-a',
+    resolutionCode: 'contact_completed',
+    resolutionNote: 'Completed',
+  });
+  batch.set(
+    doc(db, `organizations/org-a/products/raiz_e_mesa/facts/care-resolved-${requestId}`),
+    careFact(`care-resolved-${requestId}`, 'CARE_RESOLVED', 'care-a', {
+      careRequestId: requestId,
+      personId: 'person-a',
+      careType: 'first_contact',
+      resolutionCode: 'contact_completed',
+    }),
+  );
+  await assertSucceeds(batch.commit());
 });
 
 test('NestJourney entitlement is required even for a scoped operational member', async () => {
