@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrganizationSwitchError(null);
     
     try {
-      const idToken = await user.getIdToken();
+      const idToken = await withTimeout(user.getIdToken(), 8000, "Firebase ID token timeout while switching organization");
       const res = await fetch('/api/v1/user/active-organization', {
          method: 'POST',
          headers: {
@@ -172,6 +172,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const authRestoreWatchdog = window.setTimeout(() => {
+      if (active) {
+        console.warn("Firebase Auth restore exceeded 12s; releasing the blocking loading state.");
+        setLoading(false);
+      }
+    }, 12000);
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!active) return;
       
@@ -201,7 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             let mergeData: any = { lastLoginAt: serverTimestamp() };
             
             try {
-              const idToken = await currentUser.getIdToken();
+              const idToken = await withTimeout(currentUser.getIdToken(), 8000, "Firebase ID token timeout loading canonical context");
               if (!isCurrentAuthEvent()) return;
               canonicalContextController?.abort();
               const controller = new AbortController();
@@ -301,16 +308,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     sessionStorage.removeItem('mn_invite_redirect');
                 }
                 try {
-                   const idToken = await currentUser.getIdToken(true);
+                   const idToken = await withTimeout(currentUser.getIdToken(true), 8000, "Firebase ID token refresh timeout during onboarding");
                    if (!isCurrentAuthEvent()) return;
-                   const bootRes = await fetch('/api/v1/onboarding/bootstrap', {
+                   const bootRes = await withTimeout(fetch('/api/v1/onboarding/bootstrap', {
                       method: 'POST',
                       headers: { 'Authorization': `Bearer ${idToken}` }
-                   });
+                   }), 8000, "Onboarding bootstrap timeout");
                    if (!isCurrentAuthEvent()) return;
                    if (bootRes.ok) {
                       // Re-fetch user profile
-                      const newUserSnap = await getDoc(userRef);
+                      const newUserSnap = await withTimeout(getDoc(userRef), 8000, "Firestore timeout reloading bootstrapped user");
                       if (!isCurrentAuthEvent()) return;
                       if (newUserSnap.exists()) {
                          const newProfileData = newUserSnap.data() as UserProfile;
@@ -350,6 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       if (isCurrentAuthEvent()) {
+        window.clearTimeout(authRestoreWatchdog);
         setLoading(false);
         window.performance?.mark?.('auth_restored');
       }
@@ -358,6 +366,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
       authEventSequence += 1;
+      window.clearTimeout(authRestoreWatchdog);
       canonicalContextController?.abort();
       canonicalContextController = null;
       unsubscribe();
