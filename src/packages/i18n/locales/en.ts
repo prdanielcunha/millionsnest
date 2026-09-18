@@ -1078,6 +1078,22 @@ export default {
         preparation_badge: "Preparation · next 7 days",
         note: "Commitments help you prepare. Items that truly need action stay separate in Today."
       },
+      worship_distribution: {
+        eyebrow: "Worship · last {{days}} days",
+        title: "Recent distribution",
+        subtitle: "Recorded assignments on completed schedules in the last {{days}} days.",
+        open: "View schedules in MusicScale",
+        completed_schedules_one: "{{count}} completed schedule included",
+        completed_schedules_other: "{{count}} completed schedules included",
+        assignments_one: "{{count}} recorded assignment",
+        assignments_other: "{{count}} recorded assignments",
+        people_one: "{{count}} person in the assignments",
+        people_other: "{{count}} people in the assignments",
+        assignment_badge_one: "{{count}} assignment",
+        assignment_badge_other: "{{count}} assignments",
+        function_summary: "People: {{people}} · per person: {{min}}–{{max}} · average {{average}}",
+        evidence_note: "This summary only describes recorded assignments on schedules marked completed. It does not measure attendance, performance, preference, or wellbeing."
+      },
       spaces_title: "Quick access",
       apps_title: "Your apps",
       open_app: "Open {{appName}}",
