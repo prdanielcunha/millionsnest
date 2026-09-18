@@ -105,10 +105,7 @@ export async function startActionResolution(
   input: Pick<
     ActionResolutionRecord,
     'dedupeKey' | 'fingerprint' | 'sourceApp' | 'signalType'
-  > & {
-    outcomeResult: ActionOutcomeResult;
-    outcomeCode: ActionOutcomeCode;
-  }
+  >
 ): Promise<ActionResolutionRecord> {
   const response = await fetch(
     `/api/v1/organizations/${encodeURIComponent(organizationId)}/action-resolution/start`,
@@ -137,7 +134,10 @@ export async function observeActionResolutionOutcome(
   input: Pick<
     ActionResolutionRecord,
     'dedupeKey' | 'fingerprint' | 'sourceApp' | 'signalType'
-  >
+  > & {
+    outcomeResult: ActionOutcomeResult;
+    outcomeCode: ActionOutcomeCode;
+  }
 ): Promise<ActionResolutionRecord> {
   const response = await fetch(
     `/api/v1/organizations/${encodeURIComponent(organizationId)}/action-resolution/outcome`,
