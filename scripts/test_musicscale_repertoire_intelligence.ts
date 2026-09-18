@@ -271,8 +271,18 @@ assert.match(
 );
 assert.match(
   dashboard,
-  /repertoireContent:\s*canReadWorshipDistribution/,
-  'repertoire intelligence must stay behind worship authority'
+  /canReadWorshipDistribution && live\.songsReady/,
+  'repertoire intelligence must wait for both worship authority and a loaded song library'
+);
+assert.match(
+  dashboard,
+  /live\.songsReady = true/,
+  'successful song snapshot must mark the library as ready'
+);
+assert.match(
+  dashboard,
+  /live\.songsReady = false/,
+  'song listener errors must fail closed instead of claiming missing library songs'
 );
 
 const home = readFileSync(
