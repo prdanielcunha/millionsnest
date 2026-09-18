@@ -64,6 +64,7 @@ export interface AskMillionsNestInput {
       responseSummaryAvailable: boolean;
       pendingResponses: number;
       declinedResponses: number;
+      repertoireSummaryAvailable: boolean;
       repertoireGapCount: number;
     };
     nextPersonalScale: null | {
@@ -467,19 +468,26 @@ export function answerAskMillionsNest(
       })
     ]);
 
+    const personalResponseReady =
+      nextPersonalScale.responseSummaryAvailable === true;
+
     return answered({
       intent,
       titleKey: 'ask.answers.personal_schedule.title',
-      summaryKey: 'ask.answers.personal_schedule.summary',
-      translationParams: {
-        pending: nextPersonalScale.pendingResponses
-      },
-      facts: [
-        {
-          key: 'ask.facts.personal_pending',
-          params: { count: nextPersonalScale.pendingResponses }
-        }
-      ],
+      summaryKey: personalResponseReady
+        ? 'ask.answers.personal_schedule.summary'
+        : 'ask.answers.personal_schedule.summary_without_responses',
+      translationParams: personalResponseReady
+        ? { pending: nextPersonalScale.pendingResponses }
+        : undefined,
+      facts: personalResponseReady
+        ? [
+            {
+              key: 'ask.facts.personal_pending',
+              params: { count: nextPersonalScale.pendingResponses }
+            }
+          ]
+        : [],
       evidence,
       destination: {
         kind: 'app',
@@ -591,6 +599,7 @@ export function answerAskMillionsNest(
           'nextScale.responseSummaryAvailable',
           'nextScale.pendingResponses',
           'nextScale.declinedResponses',
+          'nextScale.repertoireSummaryAvailable',
           'nextScale.repertoireGapCount'
         ],
         observedAtMs: input.musicScale.observedAtMs
@@ -613,16 +622,17 @@ export function answerAskMillionsNest(
         );
       }
 
-      return answered({
-        intent,
-        titleKey: 'ask.answers.worship_service.title',
-        summaryKey: 'ask.answers.worship_service.summary',
-        translationParams: {
-          pending: nextScale.pendingResponses,
-          declined: nextScale.declinedResponses,
-          gaps: nextScale.repertoireGapCount
-        },
-        facts: [
+      const responseReady = nextScale.responseSummaryAvailable === true;
+      const repertoireReady = nextScale.repertoireSummaryAvailable === true;
+
+      if (!responseReady && !repertoireReady) {
+        return insufficient(intent, nextScaleEvidence, [], destination);
+      }
+
+      const serviceFacts: AskMillionsNestFactLine[] = [];
+
+      if (responseReady) {
+        serviceFacts.push(
           {
             key: 'ask.facts.pending_confirmations',
             params: { count: nextScale.pendingResponses }
@@ -630,12 +640,32 @@ export function answerAskMillionsNest(
           {
             key: 'ask.facts.declined_confirmations',
             params: { count: nextScale.declinedResponses }
-          },
-          {
-            key: 'ask.facts.repertoire_gaps',
-            params: { count: nextScale.repertoireGapCount }
           }
-        ],
+        );
+      }
+
+      if (repertoireReady) {
+        serviceFacts.push({
+          key: 'ask.facts.repertoire_gaps',
+          params: { count: nextScale.repertoireGapCount }
+        });
+      }
+
+      return answered({
+        intent,
+        titleKey: 'ask.answers.worship_service.title',
+        summaryKey:
+          responseReady && repertoireReady
+            ? 'ask.answers.worship_service.summary'
+            : responseReady
+              ? 'ask.answers.worship_service.summary_responses_only'
+              : 'ask.answers.worship_service.summary_repertoire_only',
+        translationParams: {
+          pending: nextScale.pendingResponses,
+          declined: nextScale.declinedResponses,
+          gaps: nextScale.repertoireGapCount
+        },
+        facts: serviceFacts,
         evidence: nextScaleEvidence,
         destination,
         eventStartsAtMs: nextScale.startsAtMs
@@ -669,6 +699,10 @@ export function answerAskMillionsNest(
         destination,
         eventStartsAtMs: nextScale.startsAtMs
       });
+    }
+
+    if (!nextScale.repertoireSummaryAvailable) {
+      return insufficient(intent, nextScaleEvidence, [], destination);
     }
 
     return answered({
