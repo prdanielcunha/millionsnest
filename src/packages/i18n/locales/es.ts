@@ -697,6 +697,8 @@ export default {
     error_plan: "Por favor, seleccione un plan principal.",
     purchase_journey: {
       kicker: "De la suscripción al primer uso",
+      subtitle: "Elige el plan de tu organización, completa el pago con seguridad y comienza por el camino guiado.",
+      recurring_note: "La facturación recurrente sigue el plan y el ciclo seleccionados.",
       choose_title: "1. Elige el plan",
       choose_desc: "Selecciona el plan de tu organización. El equipo utiliza el mismo acceso contratado.",
       pay_title: "2. Completa de forma segura",
