@@ -80,30 +80,33 @@ assert.deepEqual(
   'an app-backed lens must not appear when its product is not entitled for the current organization'
 );
 
-const financeOnlyLenses = resolveAvailableHubLenses({
+// FUTURE ARCHITECTURE SCENARIO: NestFinance is not built/operational yet.
+const futureFinanceOnlyLenses = resolveAvailableHubLenses({
   systemRole: 'user',
   responsibilities: ['finance_operations'],
   authorizedDomains: { finance: true },
   entitledAppIds: ['nestfinance']
 });
 assert.deepEqual(
-  financeOnlyLenses.map(lens => lens.id),
+  futureFinanceOnlyLenses.map(lens => lens.id),
   ['my_today', 'finance'],
-  'a NestFinance-only organization may expose Finance without requiring MusicScale or Journey'
+  'future architecture must support NestFinance independently once that product is built and entitled'
 );
 
-const journeyOnlyLenses = resolveAvailableHubLenses({
+// FUTURE ARCHITECTURE SCENARIO: NestJourney is not built/operational yet.
+const futureJourneyOnlyLenses = resolveAvailableHubLenses({
   systemRole: 'user',
   responsibilities: ['journey_leadership'],
   authorizedDomains: { journey: true },
   entitledAppIds: ['nestjourney']
 });
 assert.deepEqual(
-  journeyOnlyLenses.map(lens => lens.id),
+  futureJourneyOnlyLenses.map(lens => lens.id),
   ['my_today', 'journey'],
-  'a NestJourney-only organization may expose Journey without requiring the other ecosystem products'
+  'future architecture must support NestJourney independently once that product is built and entitled'
 );
 
+// FUTURE ARCHITECTURE SCENARIO: exercises eventual multi-product composition only.
 const multiResponsibilityLenses = resolveAvailableHubLenses({
   systemRole: 'user',
   responsibilities: [
