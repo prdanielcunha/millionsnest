@@ -101,7 +101,9 @@ export function deriveMusicScaleAssignmentDistribution(
       continue;
     }
 
-    eligibleScaleById.set(scaleId, scale);
+    if (!eligibleScaleById.has(scaleId)) {
+      eligibleScaleById.set(scaleId, scale);
+    }
   }
 
   const eligibleScales = Array.from(eligibleScaleById.values());
