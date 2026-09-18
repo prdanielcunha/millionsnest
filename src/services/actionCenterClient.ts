@@ -1,9 +1,14 @@
 import type { ActionPreference, ActionPreferenceMode } from '../lib/actionCenter.js';
+import type {
+  ActionResolutionRecord
+} from '../lib/actionResolution.js';
 
 type PreferenceResponse = {
   success: boolean;
   preferences?: ActionPreference[];
   preference?: ActionPreference;
+  resolutions?: ActionResolutionRecord[];
+  resolution?: ActionResolutionRecord;
   reasonCode?: string;
 };
 
@@ -63,4 +68,90 @@ export async function saveActionPreference(
 
   const payload = await parseResponse(response);
   return payload.preference ?? null;
+}
+
+
+export async function fetchActionResolutions(
+  idToken: string,
+  organizationId: string,
+  signal?: AbortSignal
+): Promise<ActionResolutionRecord[]> {
+  const response = await fetch(
+    `/api/v1/organizations/${encodeURIComponent(organizationId)}/action-resolutions`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        Accept: 'application/json',
+        'Cache-Control': 'no-store'
+      },
+      signal
+    }
+  );
+
+  const payload = await parseResponse(response);
+  return Array.isArray(payload.resolutions)
+    ? payload.resolutions
+    : [];
+}
+
+export async function startActionResolution(
+  idToken: string,
+  organizationId: string,
+  input: Pick<
+    ActionResolutionRecord,
+    'dedupeKey' | 'fingerprint' | 'sourceApp' | 'signalType'
+  >
+): Promise<ActionResolutionRecord> {
+  const response = await fetch(
+    `/api/v1/organizations/${encodeURIComponent(organizationId)}/action-resolution/start`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'Cache-Control': 'no-store'
+      },
+      body: JSON.stringify(input)
+    }
+  );
+
+  const payload = await parseResponse(response);
+  if (!payload.resolution) {
+    throw new Error('ACTION_RESOLUTION_MISSING');
+  }
+  return payload.resolution;
+}
+
+export async function observeActionResolutionOutcome(
+  idToken: string,
+  organizationId: string,
+  input: Pick<
+    ActionResolutionRecord,
+    'dedupeKey' | 'fingerprint' | 'sourceApp' | 'signalType'
+  >
+): Promise<ActionResolutionRecord> {
+  const response = await fetch(
+    `/api/v1/organizations/${encodeURIComponent(organizationId)}/action-resolution/outcome`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'Cache-Control': 'no-store'
+      },
+      body: JSON.stringify({
+        ...input,
+        outcome: 'signal_cleared'
+      })
+    }
+  );
+
+  const payload = await parseResponse(response);
+  if (!payload.resolution) {
+    throw new Error('ACTION_RESOLUTION_OUTCOME_MISSING');
+  }
+  return payload.resolution;
 }

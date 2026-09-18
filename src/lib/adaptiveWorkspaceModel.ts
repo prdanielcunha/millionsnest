@@ -32,6 +32,7 @@ export interface AdaptiveWorkspaceModel {
   lenses: readonly ResolvedHubLens[];
   defaultLens: HubLensId;
   activeLens: HubLensId;
+  sourceActions: readonly EvidenceBackedReadOnlyHubAction[];
   actions: readonly EvidenceBackedReadOnlyHubAction[];
   actionsForActiveLens: readonly EvidenceBackedReadOnlyHubAction[];
   hasSuppressedActionsForActiveLens: boolean;
@@ -115,6 +116,7 @@ export function buildAdaptiveWorkspaceModel(
     lenses,
     defaultLens,
     activeLens,
+    sourceActions: projectedActions,
     actions,
     actionsForActiveLens: actionsByLens[activeLens],
     hasSuppressedActionsForActiveLens:

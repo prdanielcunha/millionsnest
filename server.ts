@@ -16,6 +16,11 @@ import {
   getActionPreferences,
   updateActionPreference
 } from './src/server/services/ActionPreferenceCommandService.js';
+import {
+  getActionResolutions,
+  startActionResolution,
+  observeActionResolutionOutcome
+} from './src/server/services/ActionResolutionCommandService.js';
 import { createSupportTicket } from './src/server/services/SupportTicketService.js';
 import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
 import { createSupportWhatsAppLink } from './src/server/services/SupportWhatsAppService.js';
@@ -1453,6 +1458,9 @@ async function startServer() {
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/musicscale-capability', express.json({ limit: '8kb' }), (req, res) => updateMusicScaleMemberCapability(req, res));
   app.get('/api/v1/organizations/:organizationId/action-preferences', (req, res) => getActionPreferences(req, res));
   app.put('/api/v1/organizations/:organizationId/action-preference', express.json({ limit: '8kb' }), (req, res) => updateActionPreference(req, res));
+  app.get('/api/v1/organizations/:organizationId/action-resolutions', (req, res) => getActionResolutions(req, res));
+  app.post('/api/v1/organizations/:organizationId/action-resolution/start', express.json({ limit: '8kb' }), (req, res) => startActionResolution(req, res));
+  app.post('/api/v1/organizations/:organizationId/action-resolution/outcome', express.json({ limit: '8kb' }), (req, res) => observeActionResolutionOutcome(req, res));
   app.post('/api/v1/user/active-organization', express.json(), setActiveOrganization);
 
   app.post('/api/internal/repair-subscription', async (req: any, res) => {
