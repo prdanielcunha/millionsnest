@@ -34,6 +34,7 @@ export interface AdaptiveWorkspaceModel {
   activeLens: HubLensId;
   actions: readonly EvidenceBackedReadOnlyHubAction[];
   actionsForActiveLens: readonly EvidenceBackedReadOnlyHubAction[];
+  hasSuppressedActionsForActiveLens: boolean;
   actionsByLens: Readonly<Record<HubLensId, readonly EvidenceBackedReadOnlyHubAction[]>>;
 }
 
@@ -88,13 +89,20 @@ export function buildAdaptiveWorkspaceModel(
       )
     : [];
 
+  const availableLensIds = new Set(lenses.map(lens => lens.id));
+  const projectedActionsByLens = emptyActionsByLens();
+
+  for (const lensId of ALL_LENSES) {
+    if (!availableLensIds.has(lensId)) continue;
+    projectedActionsByLens[lensId] = projectActionsForLens(projectedActions, lensId);
+  }
+
   const actions = applyActionPreferences(
     projectedActions,
     [...(input.actionPreferences ?? [])],
     input.nowMs
   );
 
-  const availableLensIds = new Set(lenses.map(lens => lens.id));
   const actionsByLens = emptyActionsByLens();
 
   for (const lensId of ALL_LENSES) {
@@ -109,6 +117,8 @@ export function buildAdaptiveWorkspaceModel(
     activeLens,
     actions,
     actionsForActiveLens: actionsByLens[activeLens],
+    hasSuppressedActionsForActiveLens:
+      projectedActionsByLens[activeLens].length > actionsByLens[activeLens].length,
     actionsByLens
   };
 }
