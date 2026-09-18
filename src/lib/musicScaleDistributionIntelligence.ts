@@ -83,16 +83,28 @@ export function deriveMusicScaleAssignmentDistribution(
     safeNow - WORSHIP_DISTRIBUTION_WINDOW_MS
   );
 
-  const eligibleScales = scales.filter(scale => {
-    const startsAtMs = finiteTimestamp(scale?.startsAtMs);
-    if (startsAtMs === null) return false;
+  const eligibleScaleById = new Map<
+    string,
+    MusicScaleDistributionScaleInput
+  >();
 
-    return (
-      clean(scale.status).toLowerCase() === 'completed' &&
-      startsAtMs >= windowStartMs &&
-      startsAtMs <= safeNow
-    );
-  });
+  for (const scale of scales) {
+    const scaleId = clean(scale?.id);
+    const startsAtMs = finiteTimestamp(scale?.startsAtMs);
+    if (!scaleId || startsAtMs === null) continue;
+
+    if (
+      clean(scale.status).toLowerCase() !== 'completed' ||
+      startsAtMs < windowStartMs ||
+      startsAtMs > safeNow
+    ) {
+      continue;
+    }
+
+    eligibleScaleById.set(scaleId, scale);
+  }
+
+  const eligibleScales = Array.from(eligibleScaleById.values());
 
   const seenAssignments = new Set<string>();
   const allPeople = new Set<string>();
