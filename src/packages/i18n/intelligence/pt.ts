@@ -24,7 +24,8 @@ const intelligence = {
     multiple_title: 'Seus aplicativos estão prontos',
     multiple_description: 'Escolha o aplicativo que você precisa usar agora. O Hub organiza os acessos e mostra o próximo passo sem você precisar decorar caminhos.',
     open_app: 'Abrir {{app}}',
-    view_start: 'Ver como começar'
+    view_start: 'Ver como começar',
+    access_note: 'Sempre que precisar voltar, abra o Hub e use Meus aplicativos. Seu acesso fica disponível por aqui.'
   },
   evidence: {
     source_label: 'Fonte',
