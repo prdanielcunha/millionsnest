@@ -12,7 +12,10 @@ on:
       - 'src/packages/i18n/locales/en.ts'
       - 'src/packages/i18n/locales/pt.ts'
       - 'src/lib/actionCenter.ts'
+      - 'src/lib/actionResolution.ts'
       - 'src/lib/actionSignals.ts'
+      - 'src/services/actionCenterClient.ts'
+      - 'src/server/services/ActionResolutionCommandService.ts'
       - 'src/lib/factSignalAdapter.ts'
       - 'src/lib/musicScaleFactProjection.ts'
       - 'src/lib/musicScaleLeaderIntelligence.ts'
@@ -31,8 +34,10 @@ on:
       - 'src/lib/currentContextGraph.ts'
       - 'src/components/dashboard/HubLensSwitcher.tsx'
       - 'src/components/dashboard/HubAppLaunchpad.tsx'
+      - 'src/components/dashboard/ActionResolutionObserver.tsx'
       - 'src/components/dashboard/MusicScaleDistributionSnapshot.tsx'
       - 'src/pages/Dashboard.tsx'
+      - 'server.ts'
       - 'src/components/dashboard/EcosystemWorkspaceHome.tsx'
       - 'scripts/test_fact_contract.ts'
       - 'scripts/test_musicscale_fact_stream.ts'
@@ -40,6 +45,7 @@ on:
       - 'scripts/test_musicscale_declined_gaps.ts'
       - 'scripts/test_musicscale_distribution_intelligence.ts'
       - 'scripts/test_musicscale_repertoire_intelligence.ts'
+      - 'scripts/test_action_resolution_loop.ts'
       - 'scripts/test_evidence_backed_timeline.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
@@ -97,6 +103,9 @@ jobs:
 
       - name: MusicScale repertoire content intelligence
         run: npx tsx scripts/test_musicscale_repertoire_intelligence.ts
+
+      - name: Action Loop Resolver and factual outcomes
+        run: npx tsx scripts/test_action_resolution_loop.ts
 
       - name: Evidence-backed commitments and changes
         run: npx tsx scripts/test_evidence_backed_timeline.ts
