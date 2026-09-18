@@ -1,5 +1,6 @@
 import { isCanonicalFactValid } from '../packages/events/factContract.js';
 import type { EvidenceBackedEcosystemSignal } from './actionSignals.js';
+import { summarizePendingConfirmationFunctions } from './musicScaleLeaderIntelligence.js';
 import type {
   MusicScaleCanonicalFact,
   MusicScalePersonalConfirmationFactMetadata,
@@ -45,6 +46,11 @@ function responseSummarySignal(
     return null;
   }
 
+  const pendingFunctionNames = summarizePendingConfirmationFunctions(
+    metadata.pendingByFunction || []
+  );
+  const functionFingerprint = pendingFunctionNames.join('|');
+
   return {
     organizationId: fact.organizationId,
     sourceApp: 'musicscale',
@@ -53,10 +59,12 @@ function responseSummarySignal(
     sourceEntityId: fact.entity.id,
     dedupeKey: `musicscale:pending_responses:${fact.entity.id}`,
     fingerprint:
-      `musicscale:pending_responses:${fact.entity.id}:${pendingResponses}`,
+      `musicscale:pending_responses:${fact.entity.id}:${pendingResponses}` +
+      (functionFingerprint ? `:functions:${functionFingerprint}` : ''),
     occurredAtMs: startsAtMsFrom(metadata),
     payload: {
-      pendingResponses
+      pendingResponses,
+      pendingFunctionNames
     },
     evidence: [fact.source]
   };
