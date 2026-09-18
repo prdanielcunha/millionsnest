@@ -251,6 +251,19 @@ service cloud.firestore {
         journeyHasPermission(orgId, 'canManageCare');
     }
 
+    function journeyCanManagePastoral(orgId) {
+      let memberData = getMemberPermissions(orgId);
+      let permissions = memberData != null ? memberData.get('permissions', {}) : {};
+      return isSystemAdmin() ||
+        journeyOwner(orgId) ||
+        journeyRoleAllowed(orgId, ['owner', 'pastor']) ||
+        (
+          journeyMemberActive(orgId) &&
+          permissions is map &&
+          permissions.get('canManagePastoral', false) == true
+        );
+    }
+
     function journeyCanManageGroups(orgId) {
       return isSystemAdmin() ||
         journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'group_leader']) ||
@@ -467,6 +480,42 @@ service cloud.firestore {
             proposedValue == ''
           )
         );
+    }
+
+    function journeyValidPastoralHandoffCreate(orgId, handoffId) {
+      let sourceCareRequestId = request.resource.data.get('sourceCareRequestId', '');
+      let source = getAfter(/databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(sourceCareRequestId)).data;
+      return request.resource.data.keys().hasOnly([
+          'organizationId', 'congregationId', 'personId', 'sourceCareRequestId',
+          'status', 'requestedAt', 'requestedBy', 'resolvedAt', 'resolvedBy'
+        ]) &&
+        request.resource.data.get('organizationId', '') == orgId &&
+        sourceCareRequestId == handoffId &&
+        request.resource.data.get('status', '') == 'open' &&
+        request.resource.data.get('requestedAt', null) == request.time &&
+        request.resource.data.get('requestedBy', '') == request.auth.uid &&
+        request.resource.data.get('resolvedAt', null) == null &&
+        request.resource.data.get('resolvedBy', '') == '' &&
+        source.get('organizationId', '') == orgId &&
+        source.get('congregationId', '') == request.resource.data.get('congregationId', '') &&
+        source.get('personId', '') == request.resource.data.get('personId', '') &&
+        source.get('status', '') == 'resolved' &&
+        source.get('resolutionCode', '') == 'pastoral_handoff' &&
+        source.get('resolvedBy', '') == request.auth.uid;
+    }
+
+    function journeyValidPastoralHandoffResolve(orgId) {
+      return journeyTenantUnchanged(orgId) &&
+        journeyCongregationUnchanged() &&
+        resource.data.get('status', '') == 'open' &&
+        request.resource.data.get('personId', '') == resource.data.get('personId', '') &&
+        request.resource.data.get('sourceCareRequestId', '') == resource.data.get('sourceCareRequestId', '') &&
+        request.resource.data.get('requestedAt', null) == resource.data.get('requestedAt', null) &&
+        request.resource.data.get('requestedBy', '') == resource.data.get('requestedBy', '') &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedAt', 'resolvedBy']) &&
+        request.resource.data.get('status', '') == 'resolved' &&
+        request.resource.data.get('resolvedAt', null) == request.time &&
+        request.resource.data.get('resolvedBy', '') == request.auth.uid;
     }
 
     function journeyValidImplementationKey(key) {
@@ -850,6 +899,17 @@ service cloud.firestore {
             (journeyIsOrgAdmin(orgId) || resource.data.get('disciplerId', '') == request.auth.uid) &&
             request.resource.data.get('disciplerId', '') == resource.data.get('disciplerId', '') &&
             journeyValidDiscipleshipUpdate();
+          allow delete: if false;
+        }
+
+        match /pastoralHandoffs/{handoffId} {
+          allow read: if journeyCanManagePastoral(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if journeyCanManageCare(orgId) &&
+            journeyValidPastoralHandoffCreate(orgId, handoffId);
+          allow update: if journeyCanManagePastoral(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
+            journeyValidPastoralHandoffResolve(orgId);
           allow delete: if false;
         }
 
