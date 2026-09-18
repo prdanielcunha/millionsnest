@@ -1008,6 +1008,14 @@ export default {
         resolution_in_progress: "Em resolução",
         resolution_start_error: "Abriremos o MusicScale, mas não foi possível registrar o acompanhamento desta resolução.",
         resolution_cleared_feedback: "Resolvido: o sinal não aparece mais na fonte.",
+        nbma: {
+          recommended: "Recomendado agora",
+          continue_resolution: "Continue o que já está em resolução neste mesmo nível de prioridade.",
+          urgent_priority: "É a ação urgente mais importante disponível agora.",
+          high_priority: "É a ação de alta prioridade que vem primeiro na fila.",
+          due_soon: "Esta ação tem prazo próximo e deve ser tratada primeiro.",
+          next_in_queue: "É o próximo passo pela ordem canônica de prioridades."
+        },
         snooze_action: "Adiar 24h",
         dismiss_action: "Ocultar",
         dismiss_prompt: "Por que isso não ajuda agora? (opcional)",
