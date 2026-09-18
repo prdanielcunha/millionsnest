@@ -4,6 +4,7 @@ import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemCommitments } from './EcosystemCommitments.js';
 import { EcosystemChanges } from './EcosystemChanges.js';
 import { HubLensSwitcher } from './HubLensSwitcher.js';
+import { HubAppLaunchpad } from './HubAppLaunchpad.js';
 import { buildCurrentAdaptiveWorkspace } from '../../lib/currentAdaptiveWorkspace.js';
 import type { HubLensId } from '../../lib/lensResolver.js';
 import type { CurrentMusicScaleLensAuthority } from '../../lib/hubLensAuthorization.js';
@@ -238,6 +239,9 @@ export function EcosystemWorkspaceHome({
       (musicScaleAccess?.catalogState as MusicScaleDisplayStatus) ?? 'unavailable';
     const musicScaleExperience = appExperiences.find(experience => experience.app.id === 'musicscale');
     const operationalApps = appExperiences.filter(experience => experience.installed);
+    const primaryOperationalExperience = operationalApps.find(
+      experience => experience.canOpen && experience.isOperational
+    ) ?? null;
     const discoveryApps = appExperiences.filter(experience =>
       !experience.installed &&
       (experience.state === 'coming_soon' || experience.state === 'development')
@@ -644,19 +648,51 @@ export function EcosystemWorkspaceHome({
           </div>
 
           <div className="relative mt-7 grid gap-2 border-t border-white/[0.06] pt-5 sm:grid-cols-2 xl:grid-cols-4">
-            <button
-              type="button"
-              onClick={() => onSelectWorkspace('musicscale')}
-              className="group flex min-h-[78px] items-center gap-3 rounded-2xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.055] px-4 text-left transition hover:border-[#2B85EB]/30 hover:bg-[#2B85EB]/[0.08]"
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2B85EB]/15 bg-black/20">
-                <img src="/LogoIconMusicScale-1.png" alt="" className="h-6 w-6 object-contain" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-semibold text-white">MusicScale</p>
-                <p className="mt-1 truncate text-[10px] text-[#7D8999]">{t('workspace.apps_hint', 'Entre para ver dados, acessos e configurações de cada produto.')}</p>
-              </div>
-            </button>
+            {primaryOperationalExperience ? (
+              <button
+                type="button"
+                onClick={() => onLaunchApp(primaryOperationalExperience.app)}
+                className="group flex min-h-[78px] items-center gap-3 rounded-2xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.055] px-4 text-left transition hover:border-[#2B85EB]/30 hover:bg-[#2B85EB]/[0.08]"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2B85EB]/15 bg-black/20">
+                  {primaryOperationalExperience.app.id === 'musicscale' ? (
+                    <img src="/LogoIconMusicScale-1.png" alt="" className="h-6 w-6 object-contain" />
+                  ) : (
+                    <EcosystemAppIcon
+                      app={primaryOperationalExperience.app}
+                      iconClassName="h-5 w-5"
+                      assetClassName="h-8 w-8"
+                    />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-white">
+                    {t('workspace.open_app', 'Abrir {{appName}}', { appName: primaryOperationalExperience.app.name })}
+                  </p>
+                  <p className="mt-1 truncate text-[10px] text-[#7D8999]">
+                    {primaryOperationalExperience.app.shortDescription || primaryOperationalExperience.app.description}
+                  </p>
+                </div>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onNavigateToBilling}
+                className="group flex min-h-[78px] items-center gap-3 rounded-2xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.055] px-4 text-left transition hover:border-[#2B85EB]/30 hover:bg-[#2B85EB]/[0.08]"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2B85EB]/15 bg-black/20">
+                  <LayoutGrid className="h-4 w-4 text-[#9CC8FF]" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-white">
+                    {t('workspace.next_step.view_products_action', 'Ver produtos')}
+                  </p>
+                  <p className="mt-1 truncate text-[10px] text-[#7D8999]">
+                    {t('workspace.no_apps_found', 'Os aplicativos liberados para sua organização aparecerão aqui.')}
+                  </p>
+                </div>
+              </button>
+            )}
 
             <button
               type="button"
@@ -704,6 +740,12 @@ export function EcosystemWorkspaceHome({
             </button>
           </div>
         </section>
+
+        <HubAppLaunchpad
+          appExperiences={appExperiences}
+          onOpenApp={(experience) => onLaunchApp(experience.app)}
+          onViewApp={(experience) => onSelectWorkspace(experience.app.id)}
+        />
 
         <HubLensSwitcher
           lenses={adaptiveWorkspace.lenses}
