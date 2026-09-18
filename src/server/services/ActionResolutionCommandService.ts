@@ -276,7 +276,7 @@ export async function getActionResolutions(
       dependencies
     );
 
-    if (!authorization.allowed) {
+    if (authorization.allowed === false) {
       return res.status(authorization.status).json({
         success: false,
         reasonCode: authorization.reasonCode
@@ -391,7 +391,7 @@ export async function startActionResolution(
       dependencies
     );
 
-    if (!authorization.allowed) {
+    if (authorization.allowed === false) {
       return res.status(authorization.status).json({
         success: false,
         reasonCode: authorization.reasonCode
@@ -543,7 +543,7 @@ export async function observeActionResolutionOutcome(
       dependencies
     );
 
-    if (!authorization.allowed) {
+    if (authorization.allowed === false) {
       return res.status(authorization.status).json({
         success: false,
         reasonCode: authorization.reasonCode
