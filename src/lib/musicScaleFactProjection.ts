@@ -19,6 +19,10 @@ export interface MusicScaleFactProjectionInput {
     startsAtMs?: number | null;
     responseSummaryAvailable: boolean;
     pendingResponses: number;
+    pendingByFunction?: readonly {
+      functionName: string;
+      count: number;
+    }[];
   };
   nextPersonalScale?: null | {
     id: string;
@@ -37,6 +41,10 @@ export interface MusicScaleResponseSummaryFactMetadata extends Record<string, un
   responseSummaryAvailable: true;
   pendingResponses: number;
   startsAtMs: number | null;
+  pendingByFunction: Array<{
+    functionName: string;
+    count: number;
+  }>;
 }
 
 export interface MusicScalePersonalConfirmationFactMetadata
@@ -86,6 +94,31 @@ function cleanText(value: unknown): string | null {
   return clean ? clean : null;
 }
 
+function normalizePendingByFunction(
+  value: unknown
+): Array<{ functionName: string; count: number }> {
+  if (!Array.isArray(value)) return [];
+
+  const counts = new Map<string, number>();
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const functionName = cleanText((item as any).functionName);
+    const count = finiteNonNegative((item as any).count);
+    if (!functionName || count === null || count <= 0) continue;
+    counts.set(functionName, (counts.get(functionName) || 0) + Math.floor(count));
+  }
+
+  return Array.from(counts.entries())
+    .map(([functionName, count]) => ({ functionName, count }))
+    .sort((a, b) =>
+      a.functionName < b.functionName
+        ? -1
+        : a.functionName > b.functionName
+          ? 1
+          : 0
+    );
+}
+
 function normalizeFunctionNames(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return Array.from(new Set(
@@ -122,8 +155,15 @@ function buildResponseSummaryFact(
   const observedAtMs = finiteNonNegative(input.observedAtMs);
   const timestamp = projectionTimestamp(input);
   const startsAtMs = finiteNonNegative(scale.startsAtMs);
+  const pendingByFunction = normalizePendingByFunction(
+    scale.pendingByFunction
+  );
+  const functionFingerprint = pendingByFunction
+    .map(gap => `${gap.functionName}=${gap.count}`)
+    .join('|');
   const idempotencyKey =
-    `musicscale:${organizationId}:scale:${scaleId}:response-summary:pending-${pendingResponses}`;
+    `musicscale:${organizationId}:scale:${scaleId}:response-summary:pending-${pendingResponses}` +
+    (functionFingerprint ? `:functions-${functionFingerprint}` : '');
 
   const fact: MusicScaleCanonicalFact = {
     schemaVersion: CANONICAL_FACT_SCHEMA_VERSION,
@@ -143,6 +183,7 @@ function buildResponseSummaryFact(
       fieldPaths: [
         'responseSummaryAvailable',
         'pendingResponses',
+        'pendingByFunction',
         'startsAtMs'
       ],
       ...(observedAtMs !== null ? { observedAtMs } : {})
@@ -154,7 +195,8 @@ function buildResponseSummaryFact(
     metadata: {
       responseSummaryAvailable: true,
       pendingResponses,
-      startsAtMs
+      startsAtMs,
+      pendingByFunction
     },
     idempotencyKey
   };
