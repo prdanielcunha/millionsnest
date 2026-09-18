@@ -38,6 +38,7 @@ interface AskMillionsNestProps {
       responseSummaryAvailable: boolean;
       pendingResponses: number;
       declinedResponses: number;
+      repertoireSummaryAvailable: boolean;
       repertoireGapCount: number;
     };
     nextPersonalScale: null | {
