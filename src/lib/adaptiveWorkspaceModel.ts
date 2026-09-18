@@ -15,12 +15,13 @@ import {
   type ResolvedHubLens
 } from './lensResolver.js';
 import { projectActionsForLens } from './lensActionProjection.js';
+import { filterActionsByAppEntitlement } from './adaptiveEntitlements.js';
 
 export interface AdaptiveWorkspaceModelInput extends EvidenceBackedActionProjectionInput {
   systemRole?: string | null;
   responsibilities?: readonly HubResponsibility[];
   authorizedDomains?: HubLensAuthorizationProjection;
-  availableAppIds?: readonly string[];
+  entitledAppIds?: readonly string[];
   requestedLens?: HubLensId | string | null;
   actionPreferences?: readonly ActionPreference[];
   nowMs?: number;
@@ -69,19 +70,22 @@ export function buildAdaptiveWorkspaceModel(
     systemRole: input.systemRole,
     responsibilities: input.responsibilities,
     authorizedDomains: input.authorizedDomains,
-    availableAppIds: input.availableAppIds
+    entitledAppIds: input.entitledAppIds
   });
   const defaultLens = resolveDefaultHubLens(lenses);
   const activeLens = resolveActiveHubLens(input.requestedLens, lenses);
 
   const projectedActions = organizationId
-    ? deriveEvidenceBackedHubActions({
-        organizationId,
-        organization: input.organization,
-        permissions: input.permissions,
-        pendingInvitesCount: input.pendingInvitesCount,
-        musicScale: input.musicScale
-      })
+    ? filterActionsByAppEntitlement(
+        deriveEvidenceBackedHubActions({
+          organizationId,
+          organization: input.organization,
+          permissions: input.permissions,
+          pendingInvitesCount: input.pendingInvitesCount,
+          musicScale: input.musicScale
+        }),
+        input.entitledAppIds ?? []
+      )
     : [];
 
   const actions = applyActionPreferences(
