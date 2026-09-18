@@ -107,8 +107,8 @@ const repertoireFact = facts.find(
 assert.ok(responseFact);
 assert.ok(repertoireFact);
 assert.equal(
-  responseFact!.idempotencyKey.includes('repertoire'),
-  false,
+  responseFact!.idempotencyKey,
+  `musicscale:${organizationId}:scale:scale-repertoire:response-summary:pending-0:declined-0`,
   'repertoire intelligence must not mutate the response-summary fact identity'
 );
 assert.equal(repertoireFact!.metadata.gapCount, 3);
