@@ -17,6 +17,15 @@ const intelligence = {
       administration: 'Organizaciones, personas, accesos y operación del ecosistema.'
     }
   },
+  onboarding: {
+    kicker: 'Empieza aquí',
+    single_title: 'Tu {{app}} está listo para usar',
+    single_description: 'No necesitas averiguar dónde entrar. Abre la aplicación desde aquí y MillionsNest seguirá mostrando el siguiente paso para tu equipo.',
+    multiple_title: 'Tus aplicaciones están listas',
+    multiple_description: 'Elige la aplicación que necesitas usar ahora. El Hub organiza los accesos y muestra el siguiente paso sin que tengas que memorizar rutas.',
+    open_app: 'Abrir {{app}}',
+    view_start: 'Ver cómo empezar'
+  },
   evidence: {
     source_label: 'Fuente',
     verified_fact: 'Hecho verificado',
