@@ -679,7 +679,7 @@ export default {
     starts_after_trial: "Starts after your 7-day free trial.",
     savings: "You save",
     cta: "Start 7-Day Free Trial",
-    encrypted: "Encrypted transaction by Stripe",
+    encrypted: "Secure transaction processed by Stripe",
     cancel_info: "Cancel anytime before trial ends and you will not be charged.",
     loading: "Loading premium catalog...",
     monthly_period: "month",
@@ -727,7 +727,7 @@ export default {
     },
     nestlocal: {
       title: "Turn requests into an organized operation.",
-      subtitle: "Your service page, guided quotes, and request inbox. Try it free for 7 days and cancel anytime.",
+      subtitle: "Your service page, guided quotes, and request inbox in one plan for your business.",
       essential: "Essential",
       growth: "Growth",
       scope_title: "Subscription per business",
