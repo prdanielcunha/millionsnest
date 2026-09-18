@@ -3,9 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemCommitments } from './EcosystemCommitments.js';
 import { EcosystemChanges } from './EcosystemChanges.js';
+import { HubLensSwitcher } from './HubLensSwitcher.js';
+import { buildCurrentAdaptiveWorkspace } from '../../lib/currentAdaptiveWorkspace.js';
+import type { HubLensId } from '../../lib/lensResolver.js';
+import type { CurrentMusicScaleLensAuthority } from '../../lib/hubLensAuthorization.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
-import { applyActionPreferences, deriveReadOnlyHubActions, type ActionPreference, type ActionPreferenceMode, type ReadOnlyHubAction } from '../../lib/actionCenter.js';
+import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from '../../lib/actionCenter.js';
 import { deriveReadOnlyHubCommitments, type ReadOnlyHubCommitment } from '../../lib/commitmentCenter.js';
 import { deriveReadOnlyHubChanges, type MusicScaleChangeNotificationInput, type ReadOnlyHubChange } from '../../lib/changeCenter.js';
 import type { ActionOsDismissCode, ActionOsInteractionInput } from '../../lib/actionOsAnalytics.js';
@@ -41,6 +45,7 @@ interface EcosystemWorkspaceHomeProps {
       | 'error';
   } | null;
   musicScaleApp?: EcosystemApp;
+  musicScaleAuthority: CurrentMusicScaleLensAuthority | null;
   musicScaleSummary: {
     songsCount: number;
     songsWithContentCount: number;
@@ -120,6 +125,7 @@ export function EcosystemWorkspaceHome({
   isGlobalAdmin,
   musicScaleAccess,
   musicScaleApp,
+  musicScaleAuthority,
   musicScaleSummary,
   musicScaleChanges,
   onAcknowledgeMusicScaleChange,
@@ -143,6 +149,11 @@ export function EcosystemWorkspaceHome({
   const { t } = useTranslation(['dashboard']);
   const { openHub } = useSupportHub();
   const [dismissReasonActionKey, setDismissReasonActionKey] = React.useState<string | null>(null);
+  const [requestedLens, setRequestedLens] = React.useState<HubLensId>('my_today');
+
+  React.useEffect(() => {
+    setRequestedLens('my_today');
+  }, [organization?.id]);
 
   const dismissReasons: Array<{
     code: ActionOsDismissCode;
@@ -288,13 +299,15 @@ export function EcosystemWorkspaceHome({
         .replace(/\b\w/g, character => character.toUpperCase());
     };
 
-    const projectedTodayActions = deriveReadOnlyHubActions({
+    const adaptiveWorkspace = buildCurrentAdaptiveWorkspace({
+      organizationId: String(organization?.id || ''),
+      appExperiences,
+      requestedLens,
+      canManageOrganization,
+      canManageMembers,
+      musicScaleAccess: musicScaleAuthority,
       organization: {
         isConfigured: Boolean(organization?.name && organization?.slug)
-      },
-      permissions: {
-        canManageOrganization,
-        canManageMembers
       },
       pendingInvitesCount: pendingInvites.length,
       musicScale: {
@@ -316,10 +329,11 @@ export function EcosystemWorkspaceHome({
               pendingResponses: musicScaleSummary.nextPersonalScale.pendingResponses
             }
           : null
-      }
+      },
+      actionPreferences
     });
-    const todayActions = applyActionPreferences(projectedTodayActions, actionPreferences);
-    const hasSuppressedTodayActions = projectedTodayActions.length > todayActions.length;
+    const todayActions = adaptiveWorkspace.actionsForActiveLens;
+    const hasSuppressedTodayActions = adaptiveWorkspace.hasSuppressedActionsForActiveLens;
 
     const commitments = deriveReadOnlyHubCommitments({
       musicScale: {
@@ -690,6 +704,12 @@ export function EcosystemWorkspaceHome({
             </button>
           </div>
         </section>
+
+        <HubLensSwitcher
+          lenses={adaptiveWorkspace.lenses}
+          activeLens={adaptiveWorkspace.activeLens}
+          onChange={setRequestedLens}
+        />
 
         <section
           aria-labelledby="hub-today-title"
