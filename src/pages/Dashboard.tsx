@@ -41,7 +41,17 @@ import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js"
 import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
 import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "../lib/actionCenter.js";
 import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
-import { fetchActionPreferences, saveActionPreference } from "../services/actionCenterClient.js";
+import {
+  fetchActionPreferences,
+  saveActionPreference,
+  fetchActionResolutions,
+  startActionResolution,
+  observeActionResolutionOutcome
+} from "../services/actionCenterClient.js";
+import {
+  isActionResolutionEligible,
+  type ActionResolutionRecord
+} from "../lib/actionResolution.js";
 import { trackActionOsInteraction, type ActionOsDismissCode } from "../lib/actionOsAnalytics.js";
 import {
   countDeclinedConfirmations,
@@ -137,6 +147,10 @@ type MusicScaleHubSummary = {
     repertoireContent: MusicScaleRepertoireContentSnapshot | null;
   };
   recentAssignmentDistribution: MusicScaleAssignmentDistributionSnapshot | null;
+  readiness: {
+    scalesReady: boolean;
+    songsReady: boolean;
+  };
   nextPersonalScale: null | {
     id: string;
     date: string;
@@ -159,6 +173,10 @@ const EMPTY_MUSICSCALE_SUMMARY: MusicScaleHubSummary = {
   bandScalesCount: 0,
   nextScale: null,
   recentAssignmentDistribution: null,
+  readiness: {
+    scalesReady: false,
+    songsReady: false
+  },
   nextPersonalScale: null,
   updatedAtMs: 0,
 };
@@ -242,6 +260,8 @@ export function Dashboard() {
   const [organization, setOrganization] = useState<any>(null);
   const [actionPreferences, setActionPreferences] = useState<ActionPreference[]>([]);
   const [actionPreferenceBusyKey, setActionPreferenceBusyKey] = useState<string | null>(null);
+  const [actionResolutions, setActionResolutions] = useState<ActionResolutionRecord[]>([]);
+  const [actionResolutionBusyKey, setActionResolutionBusyKey] = useState<string | null>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
@@ -624,6 +644,173 @@ export function Dashboard() {
       controller.abort();
     };
   }, [user, activeContextOrgId, isEcosystemSupport]);
+
+  useEffect(() => {
+    const canLoadResolutions =
+      Boolean(user) &&
+      Boolean(activeContextOrgId) &&
+      musicScaleProjection?.accessible === true &&
+      musicScaleProjection?.canReadManagedScaleResponses === true &&
+      musicScaleProjection?.isGlobalAccess !== true;
+
+    if (!canLoadResolutions || !user || !activeContextOrgId) {
+      setActionResolutions([]);
+      return;
+    }
+
+    const orgId = activeContextOrgId;
+    const controller = new AbortController();
+    let active = true;
+
+    void (async () => {
+      try {
+        const token = await user.getIdToken();
+        const resolutions = await fetchActionResolutions(
+          token,
+          orgId,
+          controller.signal
+        );
+        if (active && activeContextOrgId === orgId) {
+          setActionResolutions(resolutions);
+        }
+      } catch (error: any) {
+        if (error?.name !== 'AbortError') {
+          console.warn(
+            '[ActionLoop] Failed to load resolutions:',
+            error
+          );
+        }
+        if (active) setActionResolutions([]);
+      }
+    })();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [
+    user,
+    activeContextOrgId,
+    musicScaleProjection?.accessible,
+    musicScaleProjection?.canReadManagedScaleResponses,
+    musicScaleProjection?.isGlobalAccess
+  ]);
+
+  const handleStartActionResolution = async (
+    action: ReadOnlyHubAction
+  ): Promise<ActionResolutionRecord | null> => {
+    if (
+      !user ||
+      !activeContextOrgId ||
+      actionResolutionBusyKey ||
+      !isActionResolutionEligible(action)
+    ) {
+      return null;
+    }
+
+    const orgId = activeContextOrgId;
+    setActionResolutionBusyKey(action.dedupeKey);
+
+    try {
+      const token = await user.getIdToken();
+      const resolution = await startActionResolution(
+        token,
+        orgId,
+        {
+          dedupeKey: action.dedupeKey,
+          fingerprint: action.fingerprint,
+          sourceApp: action.sourceApp,
+          signalType: action.signalType
+        }
+      );
+
+      if (activeContextOrgId !== orgId) return null;
+
+      setActionResolutions(current => [
+        ...current.filter(item =>
+          !(
+            item.dedupeKey === resolution.dedupeKey &&
+            item.fingerprint === resolution.fingerprint
+          )
+        ),
+        resolution
+      ]);
+
+      return resolution;
+    } catch (error) {
+      console.error(
+        '[ActionLoop] Failed to start resolution:',
+        error
+      );
+      feedback.error(
+        t(
+          'workspace.actions.resolution_start_error',
+          'Abriremos o MusicScale, mas não foi possível registrar o acompanhamento desta resolução.'
+        )
+      );
+      return null;
+    } finally {
+      setActionResolutionBusyKey(null);
+    }
+  };
+
+  const handleObserveActionResolutionOutcome = async (
+    resolution: ActionResolutionRecord
+  ): Promise<void> => {
+    if (
+      !user ||
+      !activeContextOrgId ||
+      resolution.status !== 'started' ||
+      actionResolutionBusyKey
+    ) {
+      return;
+    }
+
+    const orgId = activeContextOrgId;
+    const busyKey =
+      `${resolution.dedupeKey}\u0000${resolution.fingerprint}`;
+    setActionResolutionBusyKey(busyKey);
+
+    try {
+      const token = await user.getIdToken();
+      const updated = await observeActionResolutionOutcome(
+        token,
+        orgId,
+        {
+          dedupeKey: resolution.dedupeKey,
+          fingerprint: resolution.fingerprint,
+          sourceApp: resolution.sourceApp,
+          signalType: resolution.signalType
+        }
+      );
+
+      if (activeContextOrgId !== orgId) return;
+
+      setActionResolutions(current => [
+        ...current.filter(item =>
+          !(
+            item.dedupeKey === updated.dedupeKey &&
+            item.fingerprint === updated.fingerprint
+          )
+        ),
+        updated
+      ]);
+
+      feedback.success(
+        t(
+          'workspace.actions.resolution_cleared_feedback',
+          'Resolvido: o sinal não aparece mais na fonte.'
+        )
+      );
+    } catch (error) {
+      console.warn(
+        '[ActionLoop] Could not observe resolution outcome:',
+        error
+      );
+    } finally {
+      setActionResolutionBusyKey(null);
+    }
+  };
 
   const handleSetActionPreference = async (
     action: ReadOnlyHubAction,
@@ -2064,6 +2251,7 @@ export function Dashboard() {
       songs: [] as any[],
       songsReady: false,
       scales: [] as any[],
+      scalesReady: false,
       bandScales: [] as any[],
       configuredMembersCount: 0,
       responseSummaryAvailable: false,
@@ -2270,6 +2458,10 @@ export function Dashboard() {
                 )
               : null
         } : null,
+        readiness: {
+          scalesReady: live.scalesReady,
+          songsReady: live.songsReady
+        },
         recentAssignmentDistribution: canReadWorshipDistribution
           ? deriveMusicScaleAssignmentDistribution(
               live.scales.map(scale => ({
@@ -2327,9 +2519,13 @@ export function Dashboard() {
       query(collection(db, 'scales'), where('organizationId', '==', orgId)),
       snapshot => {
         live.scales = snapshot.docs.map(scaleDoc => ({ id: scaleDoc.id, ...scaleDoc.data() }));
+        live.scalesReady = true;
         publishSummary();
       },
-      error => console.warn('[Dashboard] MusicScale scales summary listener failed:', error)
+      error => {
+        live.scalesReady = false;
+        console.warn('[Dashboard] MusicScale scales summary listener failed:', error);
+      }
     ));
 
     unsubscribers.push(onSnapshot(
@@ -2832,6 +3028,10 @@ export function Dashboard() {
                 actionPreferences={actionPreferences}
                 actionPreferenceBusyKey={actionPreferenceBusyKey}
                 onSetActionPreference={handleSetActionPreference}
+                actionResolutions={actionResolutions}
+                actionResolutionBusyKey={actionResolutionBusyKey}
+                onStartActionResolution={handleStartActionResolution}
+                onObserveActionResolutionOutcome={handleObserveActionResolutionOutcome}
                 onActionOsInteraction={(interaction) => {
                   if (!user || !activeContextOrgId) return;
                   trackActionOsInteraction({
