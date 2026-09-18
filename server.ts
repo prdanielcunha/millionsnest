@@ -16,6 +16,15 @@ import {
   getActionPreferences,
   updateActionPreference
 } from './src/server/services/ActionPreferenceCommandService.js';
+import {
+  getActionResolutions,
+  startActionResolution,
+  observeActionResolutionOutcome
+} from './src/server/services/ActionResolutionCommandService.js';
+import {
+  getToolGatewayCatalog,
+  executeToolAction
+} from './src/server/services/ToolGatewayService.js';
 import { createSupportTicket } from './src/server/services/SupportTicketService.js';
 import { getSupportCapabilities } from './src/server/services/SupportCapabilitiesService.js';
 import { createSupportWhatsAppLink } from './src/server/services/SupportWhatsAppService.js';
@@ -49,6 +58,7 @@ import {
   resolveMusicScaleEntitlements,
   calculateOccupiedSlots
 } from './src/lib/musicScalePlans.js';
+import { NESTLOCAL_PLANS, normalizeNestLocalPlan } from './src/lib/nestLocalPlans.js';
 
 dotenv.config();
 
@@ -316,11 +326,11 @@ function getStripe(): Stripe {
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) {
       console.warn('[STRIPE_ENV] WARNING: STRIPE_SECRET_KEY is missing. Using mock key.');
-      stripeInstance = new Stripe('sk_test_mock', { apiVersion: '2024-06-20' } as any);
+      stripeInstance = new Stripe('sk_test_mock', { apiVersion: '2026-07-29.dahlia' } as any);
     } else {
       const isLive = key.startsWith('sk_live');
       console.log(`[STRIPE_ENV] Initialized in ${isLive ? 'LIVE' : 'TEST'} mode.`);
-      stripeInstance = new Stripe(key, { apiVersion: '2024-06-20' } as any);
+      stripeInstance = new Stripe(key, { apiVersion: '2026-07-29.dahlia' } as any);
     }
   }
   return stripeInstance;
@@ -348,6 +358,8 @@ export async function upsertEcosystemSubscription(params: {
   userEmail?: string | null;
 }) {
   const { userId, orgId, subscription, eventCreatedTs, event_type } = params;
+  const metadataApp = String((subscription as any).metadata?.app || '').toLowerCase();
+  const appId: 'musicscale' | 'nestlocal' = metadataApp === 'nestlocal' ? 'nestlocal' : 'musicscale';
   const db = getDb();
   if (!db) {
     throw new Error('Database not initialized in upsertEcosystemSubscription');
@@ -372,11 +384,14 @@ export async function upsertEcosystemSubscription(params: {
 
   // Idempotency: if all documents exist, check the incoming timestamp
   if (!anyMissing) {
-    const existingTs = subDoc.data()?.lastStripeEventTs || orgDoc.data()?.lastStripeEventTs || 0;
+    const existingTs = subDoc.data()?.apps?.[appId]?.lastStripeEventTs
+      || (appId === 'musicscale' ? (subDoc.data()?.lastStripeEventTs || orgDoc.data()?.lastStripeEventTs) : 0)
+      || 0;
     
     // Protect against an old canceled subscription overwriting a newer active/trialing one
-    const existingStatus = subDoc.data()?.status;
-    const existingSubId = subDoc.data()?.stripeSubscriptionId;
+    const existingAppSubscription = subDoc.data()?.apps?.[appId] || {};
+    const existingStatus = existingAppSubscription.status || (appId === 'musicscale' ? subDoc.data()?.status : null);
+    const existingSubId = existingAppSubscription.stripeSubscriptionId || (appId === 'musicscale' ? subDoc.data()?.stripeSubscriptionId : null);
     const incomingStatus = subscription.status;
     const incomingSubId = subscription.id;
 
@@ -398,8 +413,8 @@ export async function upsertEcosystemSubscription(params: {
               skipped: true,
               createdDocuments: [],
               updatedDocuments: [],
-              resolvedPlan: subDoc.data()?.plan || 'starter',
-              trialEndsAt: subDoc.data()?.trialEndsAt ? (subDoc.data()?.trialEndsAt instanceof admin.firestore.Timestamp ? subDoc.data()?.trialEndsAt.toDate() : new Date(subDoc.data()?.trialEndsAt)) : null
+              resolvedPlan: existingAppSubscription.plan || (appId === 'musicscale' ? subDoc.data()?.plan : 'essential') || 'starter',
+              trialEndsAt: existingAppSubscription.trialEndsAt ? (existingAppSubscription.trialEndsAt instanceof admin.firestore.Timestamp ? existingAppSubscription.trialEndsAt.toDate() : new Date(existingAppSubscription.trialEndsAt)) : null
             };
         }
     }
@@ -411,8 +426,8 @@ export async function upsertEcosystemSubscription(params: {
         skipped: true,
         createdDocuments: [],
         updatedDocuments: [],
-        resolvedPlan: subDoc.data()?.plan || 'starter',
-        trialEndsAt: subDoc.data()?.trialEndsAt ? (subDoc.data()?.trialEndsAt instanceof admin.firestore.Timestamp ? subDoc.data()?.trialEndsAt.toDate() : new Date(subDoc.data()?.trialEndsAt)) : null
+        resolvedPlan: existingAppSubscription.plan || (appId === 'musicscale' ? subDoc.data()?.plan : 'essential') || 'starter',
+        trialEndsAt: existingAppSubscription.trialEndsAt ? (existingAppSubscription.trialEndsAt instanceof admin.firestore.Timestamp ? existingAppSubscription.trialEndsAt.toDate() : new Date(existingAppSubscription.trialEndsAt)) : null
       };
     }
   }
@@ -455,65 +470,96 @@ export async function upsertEcosystemSubscription(params: {
   const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(subscription.status);
 
   const priceId = (subscription as any).items?.data?.[0]?.price?.id || null;
-  const metadataPlan = (subscription as any).metadata?.plan || 'starter';
-  const resolvedPlan = priceIdToMusicScalePlan(priceId) || normalizeMusicScalePlan(metadataPlan);
-  const planDetails = MUSIC_SCALE_PLANS[resolvedPlan] || MUSIC_SCALE_PLANS['starter'];
+  const metadataPlan = (subscription as any).metadata?.plan || (appId === 'nestlocal' ? 'essential' : 'starter');
+  const resolvedPlan = appId === 'nestlocal'
+    ? normalizeNestLocalPlan(metadataPlan)
+    : (priceIdToMusicScalePlan(priceId) || normalizeMusicScalePlan(metadataPlan));
+  const planDetails = appId === 'nestlocal'
+    ? NESTLOCAL_PLANS[resolvedPlan as keyof typeof NESTLOCAL_PLANS]
+    : (MUSIC_SCALE_PLANS[resolvedPlan as keyof typeof MUSIC_SCALE_PLANS] || MUSIC_SCALE_PLANS.starter);
   const cancelAtPeriodEnd = (subscription as any).cancel_at_period_end || false;
 
   const batch = db.batch();
 
   // 1. subscriptions/{orgId}
-  batch.set(subRef, {
-    schemaVersion: 2,
-    organizationId: orgId,
-    app: 'musicscale',
+  const appSubscriptionPayload = {
+    app: appId,
     status: subscription.status,
     plan: resolvedPlan,
-    priceId: priceId,
+    priceId,
     stripeCustomerId: subscription.customer,
     stripeSubscriptionId: subscription.id,
     trialEndsAt: trialEnd,
-    currentPeriodEnd: currentPeriodEnd,
-    cancelAtPeriodEnd: cancelAtPeriodEnd,
+    currentPeriodEnd,
+    cancelAtPeriodEnd,
     limits: planDetails.limits,
-    features: {
-      globalLibrary: hasAccess,
-      musicScale: hasAccess,
-      ...planDetails.features
-    },
-    supportTier: planDetails.features?.supportTier || 'basic',
+    features: planDetails.features,
+    trialUsed: true,
     lastStripeEventTs: eventCreatedTs,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  const subscriptionPayload: any = {
+    schemaVersion: 2,
+    organizationId: orgId,
+    stripeCustomerId: subscription.customer,
+    [`apps.${appId}`]: appSubscriptionPayload,
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
-  }, { merge: true });
+  };
+  if (appId === 'musicscale') {
+    Object.assign(subscriptionPayload, {
+      app: 'musicscale',
+      status: subscription.status,
+      plan: resolvedPlan,
+      priceId,
+      stripeSubscriptionId: subscription.id,
+      trialEndsAt: trialEnd,
+      currentPeriodEnd,
+      cancelAtPeriodEnd,
+      limits: planDetails.limits,
+      features: {
+        globalLibrary: hasAccess,
+        musicScale: hasAccess,
+        ...planDetails.features,
+      },
+      supportTier: (planDetails.features as any)?.supportTier || 'basic',
+      lastStripeEventTs: eventCreatedTs,
+    });
+  }
+  batch.set(subRef, subscriptionPayload, { merge: true });
 
   // 2. organizations/{orgId}
   const orgName = orgDoc.exists ? (orgDoc.data()?.name || `Organização de ${userEmail || userId}`) : `Organização de ${userEmail || userId}`;
   const orgPayload: any = {
     name: orgName,
-    plan: resolvedPlan,
-    subscriptionPlan: resolvedPlan,
-    subscriptionStatus: subscription.status,
-    status: subscription.status,
-    enabledApps: admin.firestore.FieldValue.arrayUnion('musicscale'),
+    enabledApps: admin.firestore.FieldValue.arrayUnion(appId),
     
     // Nested app cache object
-    'apps.musicscale.access': hasAccess,
-    'apps.musicscale.status': subscription.status,
-    'apps.musicscale.plan': resolvedPlan,
-    'apps.musicscale.features': planDetails.features,
-    'apps.musicscale.limits': planDetails.limits,
-    'apps.musicscale.supportTier': planDetails.features?.supportTier || 'basic',
-    'apps.musicscale.currentPeriodEnd': currentPeriodEnd,
-    'apps.musicscale.trialEndsAt': trialEnd,
-    'apps.musicscale.updatedAt': admin.firestore.FieldValue.serverTimestamp(),
-    'apps.musicscale.planUpdatedAt': admin.firestore.FieldValue.serverTimestamp(),
+    [`apps.${appId}.access`]: hasAccess,
+    [`apps.${appId}.status`]: subscription.status,
+    [`apps.${appId}.plan`]: resolvedPlan,
+    [`apps.${appId}.features`]: planDetails.features,
+    [`apps.${appId}.limits`]: planDetails.limits,
+    [`apps.${appId}.currentPeriodEnd`]: currentPeriodEnd,
+    [`apps.${appId}.trialEndsAt`]: trialEnd,
+    [`apps.${appId}.cancelAtPeriodEnd`]: cancelAtPeriodEnd,
+    [`apps.${appId}.updatedAt`]: admin.firestore.FieldValue.serverTimestamp(),
+    [`apps.${appId}.planUpdatedAt`]: admin.firestore.FieldValue.serverTimestamp(),
     
     planUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     entitlementsVersion: 2,
     
-    lastStripeEventTs: eventCreatedTs,
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
+  if (appId === 'musicscale') {
+    Object.assign(orgPayload, {
+      plan: resolvedPlan,
+      subscriptionPlan: resolvedPlan,
+      subscriptionStatus: subscription.status,
+      status: subscription.status,
+      'apps.musicscale.supportTier': (planDetails.features as any)?.supportTier || 'basic',
+      lastStripeEventTs: eventCreatedTs,
+    });
+  }
   
   if (!orgDoc.exists) {
      // Ownership is established only when checkout creates a brand-new
@@ -557,13 +603,17 @@ export async function upsertEcosystemSubscription(params: {
      primaryOrganizationId: orgId,
      defaultOrganizationId: orgId,
      stripeCustomerId: subscription.customer,
-     stripeSubscriptionId: subscription.id,
-     subscriptionStatus: subscription.status,
-     trialEndsAt: trialEnd,
-     currentPeriodEnd: currentPeriodEnd,
-     cancelAtPeriodEnd: cancelAtPeriodEnd,
      updatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
+  if (appId === 'musicscale') {
+    Object.assign(userPayload, {
+      stripeSubscriptionId: subscription.id,
+      subscriptionStatus: subscription.status,
+      trialEndsAt: trialEnd,
+      currentPeriodEnd,
+      cancelAtPeriodEnd,
+    });
+  }
   
   if (userEmail && (!userDoc.exists || !userDoc.data()?.email)) {
      userPayload.email = userEmail;
@@ -577,16 +627,6 @@ export async function upsertEcosystemSubscription(params: {
   if (!userDoc.exists || !userDoc.data()?.createdAt) {
      userPayload.createdAt = admin.firestore.FieldValue.serverTimestamp();
   }
-  if (!userDoc.exists || !userDoc.data()?.products) {
-     userPayload.products = ['musicscale'];
-  }
-  if (!userDoc.exists || !userDoc.data()?.permissions) {
-     userPayload.permissions = { musicscale: true };
-  }
-  if (!userDoc.exists || !userDoc.data()?.appsAccess) {
-     userPayload['appsAccess'] = { musicscale: true };
-  }
-
   batch.set(userRef, userPayload, { merge: true });
 
   await batch.commit();
@@ -597,6 +637,7 @@ export async function upsertEcosystemSubscription(params: {
     subscriptionId: subscription.id,
     customerId: subscription.customer,
     status: subscription.status,
+    app: appId,
     plan: resolvedPlan,
     trialEndsAt: trialEnd ? trialEnd.toDate().toISOString() : null,
     createdDocuments,
@@ -1421,6 +1462,11 @@ async function startServer() {
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/musicscale-capability', express.json({ limit: '8kb' }), (req, res) => updateMusicScaleMemberCapability(req, res));
   app.get('/api/v1/organizations/:organizationId/action-preferences', (req, res) => getActionPreferences(req, res));
   app.put('/api/v1/organizations/:organizationId/action-preference', express.json({ limit: '8kb' }), (req, res) => updateActionPreference(req, res));
+  app.get('/api/v1/organizations/:organizationId/action-resolutions', (req, res) => getActionResolutions(req, res));
+  app.post('/api/v1/organizations/:organizationId/action-resolution/start', express.json({ limit: '8kb' }), (req, res) => startActionResolution(req, res));
+  app.post('/api/v1/organizations/:organizationId/action-resolution/outcome', express.json({ limit: '8kb' }), (req, res) => observeActionResolutionOutcome(req, res));
+  app.get('/api/v1/organizations/:organizationId/tool-gateway/catalog', (req, res) => getToolGatewayCatalog(req, res));
+  app.post('/api/v1/organizations/:organizationId/tool-actions/execute', express.json({ limit: '8kb' }), (req, res) => executeToolAction(req, res));
   app.post('/api/v1/user/active-organization', express.json(), setActiveOrganization);
 
   app.post('/api/internal/repair-subscription', async (req: any, res) => {
@@ -6971,12 +7017,22 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
 
       const stripe = getStripe();
-      
+      const productsReq = await service.getProducts();
+      const allProds = [...productsReq.plans, ...productsReq.addons];
+      const selectedPlan = planLookupKey
+        ? productsReq.plans.find(product => product.lookupKey === planLookupKey)
+        : null;
+      const requestedApp = String(req.body?.app || selectedPlan?.app || '').toLowerCase();
+      const appId: 'musicscale' | 'nestlocal' = requestedApp === 'nestlocal' ? 'nestlocal' : 'musicscale';
+      if (!selectedPlan || selectedPlan.app !== appId) {
+        return res.status(400).json({ error: 'O plano selecionado não pertence ao aplicativo informado.' });
+      }
+
       const line_items: any[] = [];
 
       // Find plan price
       if (planLookupKey) {
-        const planPriceId = await service.getPriceByLookupKey(planLookupKey);
+        const planPriceId = await service.getOrCreatePriceByLookupKey(planLookupKey);
         if (planPriceId) {
           line_items.push({ price: planPriceId, quantity: 1 });
         } else {
@@ -6988,6 +7044,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       // Find addon prices
       if (addonLookupKeys && Array.isArray(addonLookupKeys)) {
         for (const addonKey of addonLookupKeys) {
+          const addon = productsReq.addons.find(product => product.lookupKey === addonKey);
+          if (!addon || addon.app !== appId) {
+            return res.status(400).json({ error: `Addon ${addonKey} não pertence ao aplicativo selecionado.` });
+          }
           const addonPriceId = await service.getPriceByLookupKey(addonKey);
           if (addonPriceId) {
             line_items.push({ price: addonPriceId, quantity: 1 });
@@ -7014,7 +7074,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          if (userDoc.exists) {
             customerId = userDoc.data()?.stripeCustomerId;
          }
-         orgId = orgContext.primaryOrganizationId || orgContext.activeOrganizationId || (userDoc.exists ? userDoc.data()?.organizationId : null) || userId;
+         const requestedOrganizationId = typeof req.body?.organizationId === 'string' ? req.body.organizationId.trim() : '';
+         const requestedOrganization = requestedOrganizationId
+           ? orgContext.organizations.find((organization: any) => organization.id === requestedOrganizationId)
+           : null;
+         if (requestedOrganizationId && !requestedOrganization) {
+           return res.status(403).json({ error: 'A organização informada não pertence ao contexto autenticado.' });
+         }
+         orgId = requestedOrganizationId || orgContext.primaryOrganizationId || orgContext.activeOrganizationId || (userDoc.exists ? userDoc.data()?.organizationId : null) || userId;
          
          const isOwner = orgContext.ownedOrganizations.some((org: any) => org.id === orgId);
          const membership = orgContext.memberships.find((m: any) => m.organizationId === orgId);
@@ -7035,13 +7102,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          const subDoc = await db.collection('subscriptions').doc(orgId).get();
          if (subDoc.exists) {
             const subData = subDoc.data() || {};
-            if (!customerId) customerId = subData.stripeCustomerId;
+            const appSubscription = subData.apps?.[appId] || (appId === 'musicscale' ? subData : {});
+            if (!customerId) customerId = appSubscription.stripeCustomerId || subData.stripeCustomerId;
 
             // Commercial rule: one 7-day evaluation per organization lifetime.
             // Older records did not always persist `trialUsed`, so any canonical
             // Stripe subscription identity or materialized subscription lifecycle
             // is sufficient proof that this organization has already subscribed.
-            const priorStatus = String(subData.status || '').toLowerCase().trim();
+            const priorStatus = String(appSubscription.status || '').toLowerCase().trim();
             const materializedStatuses = new Set([
               'active',
               'trialing',
@@ -7057,8 +7125,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             ]);
 
             if (
-              subData.trialUsed === true ||
-              Boolean(subData.stripeSubscriptionId) ||
+              appSubscription.trialUsed === true ||
+              Boolean(appSubscription.stripeSubscriptionId) ||
               materializedStatuses.has(priorStatus)
             ) {
               hasTrialHistory = true;
@@ -7073,7 +7141,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }
       }
 
-      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId);
+      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId);
 
       if (planLookupKey) {
         if (eligibility.decision === 'block_duplicate') {
@@ -7121,15 +7189,12 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       // We only pass subscription data if there's at least one recurring item. Check prices.
       let hasRecurring = false;
-      const productsReq = await service.getProducts();
-      const allProds = [...productsReq.plans, ...productsReq.addons];
-      
       const sessionArgs: any = {
-        payment_method_types: ['card'],
         line_items,
         client_reference_id: userId,
-        success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing`,
+        integration_identifier: 'millionsnest_kxqvjzpt',
+        success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}&app=${appId}`,
+        cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/checkout?app=${appId}&plan=${encodeURIComponent(planLookupKey)}`,
       };
 
       if (promoCodeId) {
@@ -7159,7 +7224,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             userId: userId,
             organizationId: orgId,
             plan: planLookupKey || 'unknown',
-            app: 'musicscale',
+            app: appId,
             productId: planLookupKey || 'unknown',
             source: 'millionsnest_site'
           }
@@ -7188,7 +7253,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         organizationId: orgId,
         unified_checkout: 'true',
         plan: planLookupKey || 'none',
-        app: 'musicscale',
+        app: appId,
+        appId,
         source: 'millionsnest_site',
         addons: addonLookupKeys ? addonLookupKeys.join(',') : ''
       };
@@ -7201,7 +7267,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const accessUntilStr = eligibility.decision === 'allow_new_subscription' ? (eligibility.accessUntil || 'no_access') : 'no_access';
       const idempotencyKey = crypto.createHash('sha256').update(
-        `unified-checkout_${orgId}_${planLookupKey || 'none'}_${addonLookupKeys ? addonLookupKeys.join(',') : ''}_${accessUntilStr}`
+        `unified-checkout_${orgId}_${appId}_${planLookupKey || 'none'}_${addonLookupKeys ? addonLookupKeys.join(',') : ''}_${accessUntilStr}`
       ).digest('hex');
 
       const session = await stripe.checkout.sessions.create(sessionArgs, { idempotencyKey });
@@ -7246,7 +7312,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          return;
       }
 
-      const priceId = await service.getPriceByLookupKey(lookupKey);
+      const priceId = await service.getOrCreatePriceByLookupKey(lookupKey);
       
       if (!priceId) {
          console.error(`[Checkout] Preço com lookup_key ${lookupKey} não encontrado no Stripe.`);
@@ -7259,6 +7325,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       // Buscamos qual app ou plano é pelo cache pra mandar no metadata
       const products = await service.getProducts();
       const planItem = products.plans.find(p => p.lookupKey === lookupKey);
+      if (!planItem) return res.status(400).json({ error: 'Plano não encontrado no sistema.' });
+      const appId: 'musicscale' | 'nestlocal' = planItem.app === 'nestlocal' ? 'nestlocal' : 'musicscale';
 
       let customerId: string | undefined;
       let orgId = userId;
@@ -7291,13 +7359,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          const subDoc = await db.collection('subscriptions').doc(orgId).get();
          if (subDoc.exists) {
             const subData = subDoc.data() || {};
-            if (!customerId) customerId = subData.stripeCustomerId;
+            const appSubscription = subData.apps?.[appId] || (appId === 'musicscale' ? subData : {});
+            if (!customerId) customerId = appSubscription.stripeCustomerId || subData.stripeCustomerId;
 
             // Commercial rule: one 7-day evaluation per organization lifetime.
             // Older records did not always persist `trialUsed`, so any canonical
             // Stripe subscription identity or materialized subscription lifecycle
             // is sufficient proof that this organization has already subscribed.
-            const priorStatus = String(subData.status || '').toLowerCase().trim();
+            const priorStatus = String(appSubscription.status || '').toLowerCase().trim();
             const materializedStatuses = new Set([
               'active',
               'trialing',
@@ -7313,8 +7382,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             ]);
 
             if (
-              subData.trialUsed === true ||
-              Boolean(subData.stripeSubscriptionId) ||
+              appSubscription.trialUsed === true ||
+              Boolean(appSubscription.stripeSubscriptionId) ||
               materializedStatuses.has(priorStatus)
             ) {
               hasTrialHistory = true;
@@ -7329,7 +7398,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }
       }
 
-      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId);
+      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId);
 
       if (eligibility.decision === 'block_duplicate') {
         return res.status(409).json({ 
@@ -7373,8 +7442,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         hasTrialHistory = true; // A prior MusicScale subscription exists, so no second trial.
       }
 
-      const sessionArgs: Stripe.Checkout.SessionCreateParams = {
-        payment_method_types: ['card'],
+      const sessionArgs: Stripe.Checkout.SessionCreateParams & { integration_identifier?: string } = {
+        integration_identifier: 'millionsnest_kxqvjzpt',
         line_items: [
           {
             price: priceId,
@@ -7389,7 +7458,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             userId: userId,
             organizationId: orgId,
             plan: planItem ? planItem.lookupKey : 'unknown',
-            app: 'musicscale',
+            app: appId,
             productId: planItem ? planItem.lookupKey : 'unknown',
             source: 'millionsnest_site'
           }
@@ -7400,12 +7469,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
           userId: userId,
           organizationId: orgId,
           plan: planItem ? planItem.lookupKey : 'none',
-          app: 'musicscale',
+          app: appId,
+          appId,
           productId: planItem ? planItem.lookupKey : 'none',
           source: 'millionsnest_site'
         },
-        success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing`,
+        success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}&app=${appId}`,
+        cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/checkout?app=${appId}&plan=${encodeURIComponent(lookupKey)}`,
       };
 
       if (!hasTrialHistory) {
@@ -7430,7 +7500,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const accessUntilStr = eligibility.decision === 'allow_new_subscription' ? (eligibility.accessUntil || 'no_access') : 'no_access';
       const idempotencyKey = crypto.createHash('sha256').update(
-        `checkout_${orgId}_${lookupKey}_${accessUntilStr}`
+        `checkout_${orgId}_${appId}_${lookupKey}_${accessUntilStr}`
       ).digest('hex');
 
       const session = await stripe.checkout.sessions.create(sessionArgs, { idempotencyKey });
@@ -7578,7 +7648,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             subscriptionStatus: sub.status,
             hasAccess: true,
             organizationId: orgId,
-            app: session.metadata?.appId || 'musicscale'
+            app: session.metadata?.app || session.metadata?.appId || 'musicscale'
           });
         } else {
           return res.json({
@@ -7815,7 +7885,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
            message: 'Reconciliation complete',
            session: sessionId,
            status: sub.status,
-           organizationId: orgId
+           organizationId: orgId,
+           app: session.metadata?.app || session.metadata?.appId || 'musicscale'
          });
       }
 
@@ -7935,8 +8006,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const feature = addonItem.feature;
 
-      const sessionArgs: Stripe.Checkout.SessionCreateParams = {
-        payment_method_types: ['card'],
+      const sessionArgs: Stripe.Checkout.SessionCreateParams & { integration_identifier?: string } = {
+        integration_identifier: 'millionsnest_kxqvjzpt',
         line_items: [
           {
             price: priceId,

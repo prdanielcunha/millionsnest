@@ -51,7 +51,10 @@ function runTests() {
     const upsertCode = upsertMatch[0];
     assert(upsertCode.includes("status: subscription.status"), "upsertEcosystemSubscription writes subscriptions.status");
     assert(upsertCode.includes("plan: resolvedPlan"), "upsertEcosystemSubscription writes subscriptions.plan");
-    assert(upsertCode.includes("currentPeriodEnd: currentPeriodEnd"), "upsertEcosystemSubscription writes subscriptions.currentPeriodEnd");
+    assert(
+      upsertCode.includes("currentPeriodEnd: currentPeriodEnd") || upsertCode.includes("currentPeriodEnd,"),
+      "upsertEcosystemSubscription writes subscriptions.currentPeriodEnd"
+    );
   } else {
     assert(false, "upsertEcosystemSubscription not found or modified unexpectedly");
   }

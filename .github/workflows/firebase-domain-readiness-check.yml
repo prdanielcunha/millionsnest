@@ -1,5 +1,5 @@
 name: Firebase Domain Readiness Check
-# Manual verification trigger 2
+# Certified ecosystem-domain verification: DNS + Firebase state + Auth allowlist + public HTTPS
 
 on:
   push:
@@ -47,23 +47,141 @@ jobs:
 
           echo "ALL_REQUIRED_TXT_VISIBLE"
 
-      - name: Read Firebase custom-domain states
+      - name: Require Firebase custom-domain readiness
         shell: bash
         run: |
           set -euo pipefail
           TOKEN="$(gcloud auth print-access-token)"
 
-          show () {
+          require_ready () {
             SITE="$1"
             DOMAIN="$2"
             URL="https://firebasehosting.googleapis.com/v1beta1/projects/millionsnest/sites/$SITE/customDomains/$DOMAIN"
             echo "===== DOMAIN:$DOMAIN ====="
-            curl --fail --silent --show-error               -H "Authorization: Bearer $TOKEN" "$URL"               | python3 -c 'import json,sys; x=json.load(sys.stdin); print("ownershipState="+str(x.get("ownershipState"))); print("hostState="+str(x.get("hostState"))); print("certState="+str((x.get("cert") or {}).get("state"))); print("reconciling="+str(x.get("reconciling"))); print("issues="+json.dumps(x.get("issues",[]),separators=(",",":")))'
+            curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$URL" > /tmp/domain.json
+            python3 - "$DOMAIN" <<'PY'
+          import json, sys
+          domain = sys.argv[1]
+          with open('/tmp/domain.json', encoding='utf-8') as f:
+              x = json.load(f)
+          ownership = x.get('ownershipState')
+          host = x.get('hostState')
+          cert = (x.get('cert') or {}).get('state')
+          reconciling = bool(x.get('reconciling', False))
+          issues = x.get('issues', [])
+          print(f'ownershipState={ownership}')
+          print(f'hostState={host}')
+          print(f'certState={cert}')
+          print(f'reconciling={reconciling}')
+          print('issues='+json.dumps(issues, separators=(',', ':')))
+          if ownership != 'OWNERSHIP_ACTIVE' or host != 'HOST_ACTIVE' or cert != 'CERT_ACTIVE':
+              raise SystemExit(f'{domain} is not fully ready')
+          PY
           }
 
-          show "mn-hub-555464791734" "millionsnest.com"
-          show "mn-hub-555464791734" "www.millionsnest.com"
-          show "mn-musicscale-555464791734" "musicscale.millionsnest.com"
-          show "mn-nestfinance-555464791734" "nestfinance.millionsnest.com"
-          show "mn-connect-555464791734" "connect.millionsnest.com"
-          show "mn-nestjourney-555464791734" "nestjourney.millionsnest.com"
+          require_ready "mn-hub-555464791734" "millionsnest.com"
+          require_ready "mn-hub-555464791734" "www.millionsnest.com"
+          require_ready "mn-musicscale-555464791734" "musicscale.millionsnest.com"
+          require_ready "mn-nestfinance-555464791734" "nestfinance.millionsnest.com"
+          require_ready "mn-connect-555464791734" "connect.millionsnest.com"
+          require_ready "mn-nestjourney-555464791734" "nestjourney.millionsnest.com"
+
+          echo "ALL_FIREBASE_CUSTOM_DOMAINS_READY"
+
+      - name: Require Firebase Authentication authorized domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+
+          # Prefer the private admin config when the deploy identity has firebaseauth.configs.get.
+          # If that least-privilege permission is intentionally absent, derive the public Web API
+          # key from Firebase Management and query the public Identity Toolkit project config.
+          if curl --fail --silent --show-error \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://identitytoolkit.googleapis.com/admin/v2/projects/millionsnest/config" \
+            > /tmp/firebase-auth-config.json; then
+            echo "Firebase Auth config verified through admin API."
+          else
+            echo "Admin config read is not granted to deploy identity; using public Firebase Auth config fallback."
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $TOKEN" \
+              "https://firebase.googleapis.com/v1beta1/projects/millionsnest/webApps?pageSize=100" \
+              > /tmp/firebase-webapps.json
+
+            APP_NAME="$(python3 - <<'PY'
+          import json
+          with open('/tmp/firebase-webapps.json', encoding='utf-8') as f:
+              data = json.load(f)
+          apps = data.get('apps') or []
+          if not apps:
+              raise SystemExit('No Firebase Web App found for public Auth config verification')
+          print(apps[0]['name'])
+          PY
+            )"
+
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $TOKEN" \
+              "https://firebase.googleapis.com/v1beta1/${APP_NAME}/config" \
+              > /tmp/firebase-webapp-config.json
+
+            API_KEY="$(python3 - <<'PY'
+          import json
+          with open('/tmp/firebase-webapp-config.json', encoding='utf-8') as f:
+              config = json.load(f)
+          key = config.get('apiKey')
+          if not key:
+              raise SystemExit('Firebase Web App config did not expose an API key')
+          print(key)
+          PY
+            )"
+
+            curl --fail --silent --show-error \
+              --get --data-urlencode "key=${API_KEY}" \
+              "https://identitytoolkit.googleapis.com/v1/projects" \
+              > /tmp/firebase-auth-config.json
+          fi
+
+          python3 <<'PY'
+          import json
+          required = {
+              'millionsnest.com',
+              'www.millionsnest.com',
+              'musicscale.millionsnest.com',
+              'nestfinance.millionsnest.com',
+              'connect.millionsnest.com',
+              'nestjourney.millionsnest.com',
+          }
+          with open('/tmp/firebase-auth-config.json', encoding='utf-8') as f:
+              config = json.load(f)
+          actual = set(config.get('authorizedDomains') or config.get('authorized_domains') or [])
+          print('authorizedDomains=' + ','.join(sorted(actual)))
+          missing = sorted(required - actual)
+          if missing:
+              raise SystemExit('Missing Firebase Auth authorized domains: ' + ', '.join(missing))
+          print('ALL_OFFICIAL_DOMAINS_AUTHORIZED_IN_FIREBASE_AUTH')
+          PY
+
+      - name: Public HTTPS smoke for every official domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke () {
+            DOMAIN="$1"
+            echo "===== HTTPS:$DOMAIN ====="
+            echo "A=$(dig +short A "$DOMAIN" | tr '\n' ',' | sed 's/,$//')"
+            echo "AAAA=$(dig +short AAAA "$DOMAIN" | tr '\n' ',' | sed 's/,$//')"
+            STATUS="$(curl --silent --show-error --location --http1.1 --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 60 --output /tmp/domain-home.html --write-out '%{http_code}' "https://$DOMAIN/")"
+            echo "status=$STATUS"
+            test "$STATUS" = "200"
+            grep -Eiq '<!doctype html|<html' /tmp/domain-home.html
+          }
+
+          smoke "millionsnest.com"
+          smoke "www.millionsnest.com"
+          smoke "musicscale.millionsnest.com"
+          smoke "nestfinance.millionsnest.com"
+          smoke "connect.millionsnest.com"
+          smoke "nestjourney.millionsnest.com"
+
+          echo "ALL_OFFICIAL_DOMAINS_HTTPS_OK"

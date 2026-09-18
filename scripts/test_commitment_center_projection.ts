@@ -146,8 +146,8 @@ const workspaceSource = readFileSync(
 
 assert.match(
   workspaceSource,
-  /deriveReadOnlyHubCommitments/,
-  'Hub workspace must project commitments through the dedicated domain layer'
+  /deriveEvidenceBackedHubCommitments/,
+  'Hub workspace must project visible commitments through the evidence-backed dedicated domain layer'
 );
 
 assert.match(

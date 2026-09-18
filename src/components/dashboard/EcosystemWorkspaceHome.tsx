@@ -3,12 +3,44 @@ import { useTranslation } from 'react-i18next';
 import { MusicScaleGuideCenter } from './MusicScaleGuideCenter.js';
 import { EcosystemCommitments } from './EcosystemCommitments.js';
 import { EcosystemChanges } from './EcosystemChanges.js';
+import { HubLensSwitcher } from './HubLensSwitcher.js';
+import { HubAppLaunchpad } from './HubAppLaunchpad.js';
+import { ActionResolutionObserver } from './ActionResolutionObserver.js';
+import { MusicScaleDistributionSnapshot } from './MusicScaleDistributionSnapshot.js';
+import { buildCurrentAdaptiveWorkspace } from '../../lib/currentAdaptiveWorkspace.js';
+import type { HubLensId } from '../../lib/lensResolver.js';
+import type { CurrentMusicScaleLensAuthority } from '../../lib/hubLensAuthorization.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
-import { applyActionPreferences, deriveReadOnlyHubActions, type ActionPreference, type ActionPreferenceMode, type ReadOnlyHubAction } from '../../lib/actionCenter.js';
-import { deriveReadOnlyHubCommitments, type ReadOnlyHubCommitment } from '../../lib/commitmentCenter.js';
-import { deriveReadOnlyHubChanges, type MusicScaleChangeNotificationInput, type ReadOnlyHubChange } from '../../lib/changeCenter.js';
+import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from '../../lib/actionCenter.js';
+import {
+  deriveEvidenceBackedHubCommitments,
+  type ReadOnlyHubCommitment
+} from '../../lib/commitmentCenter.js';
+import {
+  deriveEvidenceBackedHubChanges,
+  type MusicScaleChangeNotificationInput,
+  type ReadOnlyHubChange
+} from '../../lib/changeCenter.js';
 import type { ActionOsDismissCode, ActionOsInteractionInput } from '../../lib/actionOsAnalytics.js';
+import {
+  deriveEvidenceBackedMusicScaleDistribution
+} from '../../lib/musicScaleDistributionFactProjection.js';
+import {
+  hasMusicScaleDistributionData,
+  type MusicScaleAssignmentDistributionSnapshot
+} from '../../lib/musicScaleDistributionIntelligence.js';
+import type {
+  MusicScaleRepertoireContentSnapshot
+} from '../../lib/musicScaleRepertoireIntelligence.js';
+import {
+  isActionResolutionEligible,
+  resolutionMatchesAction,
+  type ActionResolutionRecord
+} from '../../lib/actionResolution.js';
+import {
+  selectNextBestMinistryAction
+} from '../../lib/nextBestMinistryAction.js';
 import { EcosystemAppIcon } from '../apps/EcosystemAppIcon.js';
 import { 
   Music, Check, Users, ShieldCheck, User, Settings, ArrowRight, Play, ExternalLink, Mail, Clock, LayoutGrid, Info,
@@ -18,6 +50,7 @@ import { Link } from 'react-router-dom';
 import { useSupportHub } from '../support/SupportHubContext.js';
 
 interface EcosystemWorkspaceHomeProps {
+  organizationId: string;
   selectedWorkspace: string;
   installedApps: EcosystemApp[];
   appExperiences: HubAppExperience[];
@@ -41,6 +74,7 @@ interface EcosystemWorkspaceHomeProps {
       | 'error';
   } | null;
   musicScaleApp?: EcosystemApp;
+  musicScaleAuthority: CurrentMusicScaleLensAuthority | null;
   musicScaleSummary: {
     songsCount: number;
     songsWithContentCount: number;
@@ -63,6 +97,20 @@ interface EcosystemWorkspaceHomeProps {
         maybe: number;
         declined: number;
       };
+      pendingByFunction: Array<{
+        functionName: string;
+        count: number;
+      }>;
+      declinedByFunction: Array<{
+        functionName: string;
+        count: number;
+      }>;
+      repertoireContent: MusicScaleRepertoireContentSnapshot | null;
+    };
+    recentAssignmentDistribution: MusicScaleAssignmentDistributionSnapshot | null;
+    readiness: {
+      scalesReady: boolean;
+      songsReady: boolean;
     };
     nextPersonalScale: null | {
       id: string;
@@ -97,6 +145,17 @@ interface EcosystemWorkspaceHomeProps {
     mode: ActionPreferenceMode,
     dismissCode?: ActionOsDismissCode
   ) => void | Promise<void>;
+  actionResolutions: ActionResolutionRecord[];
+  actionResolutionBusyKey?: string | null;
+  onStartActionResolution: (
+    action: ReadOnlyHubAction
+  ) => Promise<ActionResolutionRecord | null>;
+  onExecuteActionTool: (
+    action: ReadOnlyHubAction
+  ) => Promise<{ appId: 'musicscale'; path: string } | null>;
+  onObserveActionResolutionOutcome: (
+    resolution: ActionResolutionRecord
+  ) => void | Promise<void>;
   onActionOsInteraction: (
     interaction: Omit<ActionOsInteractionInput, 'organizationId' | 'userId'>
   ) => void;
@@ -109,6 +168,7 @@ interface EcosystemWorkspaceHomeProps {
 }
 
 export function EcosystemWorkspaceHome({
+  organizationId,
   selectedWorkspace,
   installedApps,
   appExperiences,
@@ -120,6 +180,7 @@ export function EcosystemWorkspaceHome({
   isGlobalAdmin,
   musicScaleAccess,
   musicScaleApp,
+  musicScaleAuthority,
   musicScaleSummary,
   musicScaleChanges,
   onAcknowledgeMusicScaleChange,
@@ -137,12 +198,22 @@ export function EcosystemWorkspaceHome({
   actionPreferences,
   actionPreferenceBusyKey,
   onSetActionPreference,
+  actionResolutions,
+  actionResolutionBusyKey,
+  onStartActionResolution,
+  onExecuteActionTool,
+  onObserveActionResolutionOutcome,
   onActionOsInteraction,
   recentActivity
 }: EcosystemWorkspaceHomeProps) {
   const { t } = useTranslation(['dashboard']);
   const { openHub } = useSupportHub();
   const [dismissReasonActionKey, setDismissReasonActionKey] = React.useState<string | null>(null);
+  const [requestedLens, setRequestedLens] = React.useState<HubLensId>('my_today');
+
+  React.useEffect(() => {
+    setRequestedLens('my_today');
+  }, [organizationId]);
 
   const dismissReasons: Array<{
     code: ActionOsDismissCode;
@@ -227,6 +298,9 @@ export function EcosystemWorkspaceHome({
       (musicScaleAccess?.catalogState as MusicScaleDisplayStatus) ?? 'unavailable';
     const musicScaleExperience = appExperiences.find(experience => experience.app.id === 'musicscale');
     const operationalApps = appExperiences.filter(experience => experience.installed);
+    const primaryOperationalExperience = operationalApps.find(
+      experience => experience.canOpen && experience.isOperational
+    ) ?? null;
     const discoveryApps = appExperiences.filter(experience =>
       !experience.installed &&
       (experience.state === 'coming_soon' || experience.state === 'development')
@@ -268,7 +342,7 @@ export function EcosystemWorkspaceHome({
       if (experience.state === 'trialing' || experience.state === 'cancel_scheduled') {
         return 'bg-amber-500/10 text-amber-300 border-amber-500/20';
       }
-      if (experience.state === 'administrative') {
+      if (experience.state === 'administrative' || experience.state === 'development') {
         return 'bg-purple-500/10 text-purple-300 border-purple-500/20';
       }
       if (experience.installed) {
@@ -288,13 +362,15 @@ export function EcosystemWorkspaceHome({
         .replace(/\b\w/g, character => character.toUpperCase());
     };
 
-    const projectedTodayActions = deriveReadOnlyHubActions({
+    const adaptiveWorkspace = buildCurrentAdaptiveWorkspace({
+      organizationId,
+      appExperiences,
+      requestedLens,
+      canManageOrganization,
+      canManageMembers,
+      musicScaleAccess: musicScaleAuthority,
       organization: {
         isConfigured: Boolean(organization?.name && organization?.slug)
-      },
-      permissions: {
-        canManageOrganization,
-        canManageMembers
       },
       pendingInvitesCount: pendingInvites.length,
       musicScale: {
@@ -304,7 +380,11 @@ export function EcosystemWorkspaceHome({
               id: musicScaleSummary.nextScale.id,
               startsAtMs: musicScaleSummary.nextScale.startsAtMs,
               responseSummaryAvailable: musicScaleSummary.nextScale.responseSummaryAvailable,
-              pendingResponses: musicScaleSummary.nextScale.responseCounts.pending || 0
+              pendingResponses: musicScaleSummary.nextScale.responseCounts.pending || 0,
+              pendingByFunction: musicScaleSummary.nextScale.pendingByFunction,
+              declinedResponses: musicScaleSummary.nextScale.responseCounts.declined || 0,
+              declinedByFunction: musicScaleSummary.nextScale.declinedByFunction,
+              repertoireContent: musicScaleSummary.nextScale.repertoireContent
             }
           : null,
         nextPersonalScale: musicScaleSummary.nextPersonalScale
@@ -316,23 +396,50 @@ export function EcosystemWorkspaceHome({
               pendingResponses: musicScaleSummary.nextPersonalScale.pendingResponses
             }
           : null
-      }
+      },
+      actionPreferences
     });
-    const todayActions = applyActionPreferences(projectedTodayActions, actionPreferences);
-    const hasSuppressedTodayActions = projectedTodayActions.length > todayActions.length;
+    const todayActions = adaptiveWorkspace.actionsForActiveLens;
+    const hasSuppressedTodayActions = adaptiveWorkspace.hasSuppressedActionsForActiveLens;
+    const nextBestAction = selectNextBestMinistryAction({
+      actions: todayActions,
+      resolutions: actionResolutions
+    });
+    const musicScaleResolutionReadiness = {
+      scalesReady: musicScaleSummary.readiness.scalesReady,
+      songsReady: musicScaleSummary.readiness.songsReady,
+      nextScaleId: musicScaleSummary.nextScale?.id ?? null,
+      responseSummaryAvailable:
+        musicScaleSummary.nextScale?.responseSummaryAvailable === true
+    };
 
-    const commitments = deriveReadOnlyHubCommitments({
+    const commitments = deriveEvidenceBackedHubCommitments({
+      organizationId,
       musicScale: {
         ready: isMusicScaleReady && appSummaryReady,
+        observedAtMs: musicScaleSummary.updatedAtMs,
         nextPersonalScale: musicScaleSummary.nextPersonalScale
       }
     });
 
-    const changes = deriveReadOnlyHubChanges(
+    const changes = deriveEvidenceBackedHubChanges(
+      organizationId,
       isMusicScaleReady && appSummaryReady
         ? musicScaleChanges
         : []
     );
+
+    const worshipDistribution =
+      musicScaleSummary.recentAssignmentDistribution &&
+      hasMusicScaleDistributionData(
+        musicScaleSummary.recentAssignmentDistribution
+      )
+        ? deriveEvidenceBackedMusicScaleDistribution({
+            organizationId,
+            snapshot: musicScaleSummary.recentAssignmentDistribution,
+            observedAtMs: musicScaleSummary.updatedAtMs
+          })
+        : null;
 
     const attentionApp = operationalApps.find(experience => experience.needsAttention);
 
@@ -487,7 +594,9 @@ export function EcosystemWorkspaceHome({
         nextStep.tone === 'success' &&
         todayActions.length > 0);
 
-    const handleTodayAction = (action: ReadOnlyHubAction) => {
+    const handleTodayAction = async (
+      action: ReadOnlyHubAction
+    ) => {
       onActionOsInteraction({
         kind: 'action_opened',
         lane: 'action',
@@ -503,6 +612,32 @@ export function EcosystemWorkspaceHome({
         if (destination.section === 'members') onNavigateToOrganizationMembers();
         if (destination.section === 'billing') onNavigateToBilling();
         return;
+      }
+
+      const toolNavigation =
+        await onExecuteActionTool(action);
+
+      if (
+        toolNavigation?.appId ===
+          destination.appId
+      ) {
+        const toolExperience =
+          appExperiences.find(
+            item =>
+              item.app.id ===
+              toolNavigation.appId
+          );
+
+        if (
+          toolExperience?.app &&
+          toolExperience.canOpen
+        ) {
+          onLaunchApp(
+            toolExperience.app,
+            toolNavigation.path
+          );
+          return;
+        }
       }
 
       const experience = appExperiences.find(item => item.app.id === destination.appId);
@@ -581,6 +716,12 @@ export function EcosystemWorkspaceHome({
 
     return (
       <div className="mb-8 animate-in fade-in slide-in-from-bottom-3 duration-300 space-y-8 md:space-y-10">
+        <ActionResolutionObserver
+          resolutions={actionResolutions}
+          sourceActions={adaptiveWorkspace.sourceActions}
+          musicScaleReadiness={musicScaleResolutionReadiness}
+          onClearedObserved={onObserveActionResolutionOutcome}
+        />
         <section aria-labelledby="hub-home-title" className="relative overflow-hidden rounded-[2rem] border border-white/[0.08] bg-[#07090D] p-5 shadow-[0_30px_90px_rgba(0,0,0,.28)] sm:p-7 md:p-8">
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute right-[-10%] top-[-45%] h-96 w-96 rounded-full bg-[#2B85EB]/16 blur-[110px]" />
@@ -630,19 +771,51 @@ export function EcosystemWorkspaceHome({
           </div>
 
           <div className="relative mt-7 grid gap-2 border-t border-white/[0.06] pt-5 sm:grid-cols-2 xl:grid-cols-4">
-            <button
-              type="button"
-              onClick={() => onSelectWorkspace('musicscale')}
-              className="group flex min-h-[78px] items-center gap-3 rounded-2xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.055] px-4 text-left transition hover:border-[#2B85EB]/30 hover:bg-[#2B85EB]/[0.08]"
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2B85EB]/15 bg-black/20">
-                <img src="/LogoIconMusicScale-1.png" alt="" className="h-6 w-6 object-contain" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-semibold text-white">MusicScale</p>
-                <p className="mt-1 truncate text-[10px] text-[#7D8999]">{t('workspace.apps_hint', 'Entre para ver dados, acessos e configurações de cada produto.')}</p>
-              </div>
-            </button>
+            {primaryOperationalExperience ? (
+              <button
+                type="button"
+                onClick={() => onLaunchApp(primaryOperationalExperience.app)}
+                className="group flex min-h-[78px] items-center gap-3 rounded-2xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.055] px-4 text-left transition hover:border-[#2B85EB]/30 hover:bg-[#2B85EB]/[0.08]"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2B85EB]/15 bg-black/20">
+                  {primaryOperationalExperience.app.id === 'musicscale' ? (
+                    <img src="/LogoIconMusicScale-1.png" alt="" className="h-6 w-6 object-contain" />
+                  ) : (
+                    <EcosystemAppIcon
+                      app={primaryOperationalExperience.app}
+                      iconClassName="h-5 w-5"
+                      assetClassName="h-8 w-8"
+                    />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-white">
+                    {t('workspace.open_app', 'Abrir {{appName}}', { appName: primaryOperationalExperience.app.name })}
+                  </p>
+                  <p className="mt-1 truncate text-[10px] text-[#7D8999]">
+                    {primaryOperationalExperience.app.shortDescription || primaryOperationalExperience.app.description}
+                  </p>
+                </div>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onNavigateToBilling}
+                className="group flex min-h-[78px] items-center gap-3 rounded-2xl border border-[#2B85EB]/15 bg-[#2B85EB]/[0.055] px-4 text-left transition hover:border-[#2B85EB]/30 hover:bg-[#2B85EB]/[0.08]"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2B85EB]/15 bg-black/20">
+                  <LayoutGrid className="h-4 w-4 text-[#9CC8FF]" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-white">
+                    {t('workspace.next_step.view_products_action', 'Ver produtos')}
+                  </p>
+                  <p className="mt-1 truncate text-[10px] text-[#7D8999]">
+                    {t('workspace.no_apps_found', 'Os aplicativos liberados para sua organização aparecerão aqui.')}
+                  </p>
+                </div>
+              </button>
+            )}
 
             <button
               type="button"
@@ -691,6 +864,32 @@ export function EcosystemWorkspaceHome({
           </div>
         </section>
 
+        <HubAppLaunchpad
+          appExperiences={appExperiences}
+          onOpenApp={(experience) => onLaunchApp(experience.app)}
+          onViewApp={(experience) => onSelectWorkspace(experience.app.id)}
+        />
+
+        <HubLensSwitcher
+          lenses={adaptiveWorkspace.lenses}
+          activeLens={adaptiveWorkspace.activeLens}
+          onChange={setRequestedLens}
+        />
+
+        {adaptiveWorkspace.activeLens === 'worship' &&
+          worshipDistribution &&
+          musicScaleExperience?.app && (
+            <MusicScaleDistributionSnapshot
+              snapshot={worshipDistribution}
+              onOpen={() =>
+                onLaunchApp(
+                  musicScaleExperience.app,
+                  '/scales'
+                )
+              }
+            />
+          )}
+
         <section
           aria-labelledby="hub-today-title"
           className="relative overflow-hidden rounded-[1.9rem] border border-white/[0.08] bg-[#080A0F] p-5 shadow-[0_26px_80px_rgba(0,0,0,.24)] sm:p-6 md:p-7"
@@ -736,6 +935,17 @@ export function EcosystemWorkspaceHome({
               {todayActions.map((action, index) => {
                 const isMusicScaleAction = action.sourceApp === 'musicscale';
                 const highPriority = action.priority === 'high' || action.priority === 'urgent';
+                const resolutionEligible = isActionResolutionEligible(action);
+                const activeResolution = resolutionEligible
+                  ? actionResolutions.find(resolution =>
+                      resolutionMatchesAction(resolution, action)
+                    ) ?? null
+                  : null;
+                const resolutionBusy =
+                  actionResolutionBusyKey === action.dedupeKey;
+                const isNextBest =
+                  nextBestAction?.action.dedupeKey === action.dedupeKey &&
+                  nextBestAction?.action.fingerprint === action.fingerprint;
 
                 return (
                   <article
@@ -773,6 +983,16 @@ export function EcosystemWorkspaceHome({
                             : t('workspace.actions.priority_normal')}
                         </span>
                         <span className="text-[9px] font-medium text-[#4F5968]">#{index + 1}</span>
+                        {activeResolution && (
+                          <span className="rounded-full border border-[#2B85EB]/20 bg-[#2B85EB]/[0.08] px-2 py-0.5 text-[9px] font-semibold text-[#9CC8FF]">
+                            {t('workspace.actions.resolution_in_progress')}
+                          </span>
+                        )}
+                        {isNextBest && (
+                          <span className="rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-2 py-0.5 text-[9px] font-semibold text-emerald-300">
+                            {t('workspace.actions.nbma.recommended')}
+                          </span>
+                        )}
                       </div>
                       <h4 className="text-[15px] font-semibold leading-snug text-white sm:text-base">
                         {t(action.titleKey, action.translationParams ?? {})}
@@ -780,16 +1000,31 @@ export function EcosystemWorkspaceHome({
                       <p className="mt-1 text-xs leading-relaxed text-[#8A95A4] sm:text-[13px]">
                         {t(action.descriptionKey, action.translationParams ?? {})}
                       </p>
+                      {isNextBest && nextBestAction && (
+                        <p className="mt-2 text-[10px] font-medium leading-relaxed text-emerald-300/80">
+                          {t(`workspace.actions.nbma.${nextBestAction.reason}`)}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex w-full flex-col gap-2 sm:w-auto">
                       <button
                         type="button"
-                        onClick={() => handleTodayAction(action)}
-                        className="min-h-[44px] w-full rounded-xl border border-white/[0.08] bg-white px-4 py-2.5 text-xs font-semibold text-[#07090D] transition-all hover:bg-[#F2F5F8] active:scale-[0.985] sm:min-w-[108px]"
+                        disabled={resolutionBusy}
+                        onClick={async () => {
+                          if (resolutionEligible && !activeResolution) {
+                            await onStartActionResolution(action);
+                          }
+                          await handleTodayAction(action);
+                        }}
+                        className="min-h-[44px] w-full rounded-xl border border-white/[0.08] bg-white px-4 py-2.5 text-xs font-semibold text-[#07090D] transition-all hover:bg-[#F2F5F8] active:scale-[0.985] disabled:cursor-wait disabled:opacity-60 sm:min-w-[108px]"
                       >
                         <span className="inline-flex items-center justify-center gap-1.5">
-                          {t('workspace.actions.open_action')}
+                          {resolutionEligible
+                            ? activeResolution
+                              ? t('workspace.actions.continue_resolution_action')
+                              : t('workspace.actions.resolve_action')
+                            : t('workspace.actions.open_action')}
                           <ChevronRight className="h-3.5 w-3.5" />
                         </span>
                       </button>
@@ -1551,15 +1786,18 @@ export function EcosystemWorkspaceHome({
           .filter((metric: any) => metric && typeof metric.label === 'string' && ['string', 'number'].includes(typeof metric.value))
           .slice(0, 4)
       : [];
-    const planLabel = experience.plan
-      ? String(experience.plan).replace(/[_-]/g, ' ').replace(/\b\w/g, character => character.toUpperCase())
-      : t('workspace.plan_included', 'Incluído');
+    const planLabel = experience.state === 'development'
+      ? t('workspace.plan_internal_preview', 'Preview interno')
+      : experience.plan
+        ? String(experience.plan).replace(/[_-]/g, ' ').replace(/\b\w/g, character => character.toUpperCase())
+        : t('workspace.plan_included', 'Incluído');
     const statusLabel: Record<string, string> = {
       active: t('workspace.app_state.active', 'Ativo'),
       trialing: t('workspace.app_state.trialing', 'Em teste'),
       cancel_scheduled: t('workspace.app_state.cancel_scheduled', 'Cancelamento agendado'),
       payment_issue: t('workspace.app_state.payment_issue', 'Pagamento pendente'),
       administrative: t('workspace.app_state.administrative', 'Acesso administrativo'),
+      development: t('workspace.app_state.development', 'Em desenvolvimento · acesso interno'),
       error: t('workspace.app_state.error', 'Precisa de atenção')
     };
 
@@ -1578,7 +1816,7 @@ export function EcosystemWorkspaceHome({
                   <span className={`px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wider ${
                     experience.needsAttention
                       ? 'bg-red-500/10 text-red-300 border-red-500/20'
-                      : experience.state === 'administrative'
+                      : experience.state === 'administrative' || experience.state === 'development'
                         ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
                         : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
                   }`}>

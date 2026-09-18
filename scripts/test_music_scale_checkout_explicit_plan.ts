@@ -6,7 +6,7 @@ const source = fs.readFileSync(checkoutPath, 'utf8');
 
 const required = [
   "const requestedPlan = planParam",
-  "data.plans?.find((p: any) => p.lookupKey === planParam)",
+  "appPlans.find((p: any) => p.lookupKey === planParam)",
   "setSelectedPlanLookup(null);",
   "Never silently default a generic or direct checkout visit to Pro",
   "Never switch the customer to another tier",

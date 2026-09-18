@@ -679,13 +679,65 @@ export default {
     starts_after_trial: "Starts after your 7-day free trial.",
     savings: "You save",
     cta: "Start 7-Day Free Trial",
-    encrypted: "Encrypted transaction by Stripe",
+    encrypted: "Secure transaction processed by Stripe",
     cancel_info: "Cancel anytime before trial ends and you will not be charged.",
     loading: "Loading premium catalog...",
     monthly_period: "month",
     yearly_period: "year",
     one_time_badge: "One-Time Payment",
-    error_plan: "Please select a primary plan."
+    error_plan: "Please select a primary plan.",
+    purchase_journey: {
+      kicker: "From subscription to first use",
+      subtitle: "Choose your organization's plan, complete payment securely, and start through the guided path.",
+      recurring_note: "Recurring billing follows the selected plan and billing cycle.",
+      choose_title: "1. Choose the plan",
+      choose_desc: "Select the plan for your organization. The team uses the same purchased access.",
+      pay_title: "2. Complete securely",
+      pay_desc: "You will be redirected to Stripe to complete the purchase.",
+      open_title: "3. Open and get started",
+      open_desc: "After activation, you return to MillionsNest with direct app access and getting-started guidance.",
+      cta: "Continue to secure payment",
+      trial_note: "Eligible organizations receive a 7-day trial. If this organization has already used its trial, the subscription starts directly under the selected plan."
+    },
+    activation: {
+      loading_title: "Activating your subscription",
+      loading_message: "Your checkout is complete. We are confirming the subscription and preparing {{app}} for your organization.",
+      activated_title: "Subscription activated",
+      activated_message: "All set. {{app}} is now available to your organization.",
+      next_title: "What to do next",
+      musicscale_step_1: "Open MusicScale using the button below.",
+      musicscale_step_2: "Add your first songs and configure your team.",
+      musicscale_step_3: "Build your first schedule and track confirmations.",
+      nestlocal_step_1: "Open NestLocal using the button below.",
+      nestlocal_step_2: "Configure your services and public page.",
+      nestlocal_step_3: "Start receiving and organizing requests and quotes.",
+      access_note: "After that, you can always open {{app}} from the Hub under My apps.",
+      open_app: "Open {{app}}",
+      opening_app: "Opening {{app}}...",
+      guide_action: "View getting started in the Hub",
+      dashboard_action: "Go to dashboard",
+      launch_failed: "Your subscription is active. We could not open {{app}} from this button, but you can still access it from the Hub.",
+      session_expired: "Your session expired. Sign in again to confirm your subscription.",
+      provisioning_delayed: "Your purchase is complete, but activation is still being finalized. Try confirming again.",
+      confirmation_failed: "We could not confirm your subscription right now.",
+      verification_error: "An error occurred while verifying your purchase.",
+      warning_title: "Activation notice",
+      retry_action: "Try activation again",
+      billing_action: "Back to subscription and billing"
+    },
+    nestlocal: {
+      title: "Turn requests into an organized operation.",
+      subtitle: "Your service page, guided quotes, and request inbox in one plan for your business.",
+      essential: "Essential",
+      growth: "Growth",
+      scope_title: "Subscription per business",
+      scope_description: "The plan belongs to the selected business and unlocks NestLocal for the included team.",
+      features: {
+        essential: ["1 user", "Public service page", "Guided quotes", "Up to 100 requests per month", "Requests, customers, and schedule in one place"],
+        growth: ["Up to 3 users", "Everything in Essential", "Up to 500 requests per month", "Operational automations", "Opportunity tracking"],
+        pro: ["Up to 10 users", "Everything in Growth", "Fair-use requests", "Advanced features", "Priority access to new features"]
+      }
+    }
   },
   dashboard: {
     governance: {
@@ -974,6 +1026,19 @@ export default {
         priority_high: "High priority",
         priority_normal: "Keep an eye on",
         open_action: "View now",
+        resolve_action: "Resolve",
+        continue_resolution_action: "Continue resolution",
+        resolution_in_progress: "In progress",
+        resolution_start_error: "We will open MusicScale, but we could not register resolution tracking.",
+        resolution_cleared_feedback: "Resolved: the signal no longer appears in the source.",
+        nbma: {
+          recommended: "Recommended now",
+          continue_resolution: "Continue the work already in progress at this same priority level.",
+          urgent_priority: "This is the most important urgent action available now.",
+          high_priority: "This is the high-priority action currently first in the queue.",
+          due_soon: "This action is due soon and should be handled first.",
+          next_in_queue: "This is the next step in the canonical priority order."
+        },
         snooze_action: "Snooze 24h",
         dismiss_action: "Hide",
         dismiss_prompt: "Why isn't this useful right now? (optional)",
@@ -1007,7 +1072,21 @@ export default {
           title_one: "{{count}} confirmation is still awaiting a response",
           title_other: "{{count}} confirmations are still awaiting a response",
           description_one: "The next MusicScale schedule still has one participation without confirmation.",
-          description_other: "The next MusicScale schedule still has participations without confirmation."
+          description_other: "The next MusicScale schedule still has participations without confirmation.",
+          description_with_functions: "Functions still awaiting confirmation: {{functions}}."
+        },
+        musicscale_declined_responses: {
+          title_one: "{{count}} assignment was declined in the next schedule",
+          title_other: "{{count}} assignments were declined in the next schedule",
+          description_one: "The next schedule has one declined assignment that needs review.",
+          description_other: "The next schedule has declined assignments that need review.",
+          description_with_functions: "Functions with a declined assignment: {{functions}}."
+        },
+        musicscale_repertoire_content_gaps: {
+          title_one: "{{count}} repertoire item needs content",
+          title_other: "{{count}} repertoire items need content",
+          description: "In the next schedule: without lyrics or chords, {{empty}} · library references not found, {{missing}}.",
+          description_with_titles: "Without lyrics or chords: {{songs}}. Library references not found: {{missing}}."
         },
         musicscale_personal_confirmation: {
           title_one: "Confirm your participation in the next schedule",
@@ -1056,6 +1135,22 @@ export default {
         open: "Prepare schedule",
         preparation_badge: "Preparation · next 7 days",
         note: "Commitments help you prepare. Items that truly need action stay separate in Today."
+      },
+      worship_distribution: {
+        eyebrow: "Worship · last {{days}} days",
+        title: "Recent distribution",
+        subtitle: "Recorded assignments on completed schedules in the last {{days}} days.",
+        open: "View schedules in MusicScale",
+        completed_schedules_one: "{{count}} completed schedule included",
+        completed_schedules_other: "{{count}} completed schedules included",
+        assignments_one: "{{count}} recorded assignment",
+        assignments_other: "{{count}} recorded assignments",
+        people_one: "{{count}} person in the assignments",
+        people_other: "{{count}} people in the assignments",
+        assignment_badge_one: "{{count}} assignment",
+        assignment_badge_other: "{{count}} assignments",
+        function_summary: "People: {{people}} · per person: {{min}}–{{max}} · average {{average}}",
+        evidence_note: "This summary only describes recorded assignments on schedules marked completed. It does not measure attendance, performance, preference, or wellbeing."
       },
       spaces_title: "Quick access",
       apps_title: "Your apps",

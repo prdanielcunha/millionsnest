@@ -61,8 +61,16 @@ export function resolveHubAppExperience(params: {
     catalogState?: string | null;
   } | null;
   isGlobalAdmin?: boolean;
+  canAccessDevelopmentPreviews?: boolean;
 }): HubAppExperience {
-  const { app, organization, subscription, musicScaleAccess, isGlobalAdmin } = params;
+  const {
+    app,
+    organization,
+    subscription,
+    musicScaleAccess,
+    isGlobalAdmin,
+    canAccessDevelopmentPreviews
+  } = params;
   const appRecord = organization?.apps?.[app.id] || null;
   const enabledApps = Array.isArray(organization?.enabledApps) ? organization.enabledApps : [];
   const explicitlyEnabled = enabledApps.includes(app.id) || appRecord?.enabled === true;
@@ -89,6 +97,11 @@ export function resolveHubAppExperience(params: {
     };
   }
 
+  // Controlled Connect founder/admin pilot: keep the public catalog in beta and
+  // unavailable to normal organizations, while allowing canonical global admins
+  // to exercise the real handoff after the live Core is certified in production.
+  // The launcher/server still revalidate identity and organization; this is only
+  // a Hub presentation decision and never an authorization boundary.
   if (
     app.id === 'connect' &&
     app.status === 'beta' &&
@@ -109,6 +122,26 @@ export function resolveHubAppExperience(params: {
 
   if (!catalogOperational) {
     const state: HubAppState = app.status === 'coming_soon' ? 'coming_soon' : 'development';
+    const hasLaunchTarget = typeof app.url === 'string' && app.url.trim().length > 0;
+    const isInternalDevelopmentPreview =
+      canAccessDevelopmentPreviews === true &&
+      app.status !== 'disabled' &&
+      hasLaunchTarget;
+
+    if (isInternalDevelopmentPreview) {
+      return {
+        app,
+        installed: true,
+        canOpen: true,
+        state: 'development',
+        plan: null,
+        needsAttention: false,
+        // Critical distinction: CEO preview access is not a commercial/product
+        // entitlement and must never feed adaptive intelligence or customer UX.
+        isOperational: false
+      };
+    }
+
     return {
       app,
       installed: false,
@@ -160,6 +193,11 @@ function projectAdministrativePilotIntoCurrentHubSession(
     return;
   }
 
+  // The current Dashboard launcher still checks organization.enabledApps before
+  // invoking the canonical handoff. For the founder/admin pilot, project the
+  // already-authorized catalog decision into this in-memory Hub session only.
+  // This does not write Firestore, grant tenant membership, or bypass the server:
+  // create-handoff and Connect both revalidate the global identity + organization.
   const enabledApps = Array.isArray(organization.enabledApps)
     ? organization.enabledApps.filter((value: unknown): value is string => typeof value === 'string')
     : [];

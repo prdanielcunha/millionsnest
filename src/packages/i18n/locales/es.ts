@@ -688,13 +688,65 @@ export default {
     starts_after_trial: "Inicia después del período de prueba de 7 días.",
     savings: "Usted ahorra",
     cta: "Iniciar Prueba de 7 Días",
-    encrypted: "Transacción encriptada por Stripe",
+    encrypted: "Transacción segura procesada por Stripe",
     cancel_info: "Cancele en cualquier momento antes de finalizar la prueba y no recibirá cargos.",
     loading: "Cargando catálogo premium...",
     monthly_period: "mes",
     yearly_period: "año",
     one_time_badge: "Pago Único",
-    error_plan: "Por favor, seleccione un plan principal."
+    error_plan: "Por favor, seleccione un plan principal.",
+    purchase_journey: {
+      kicker: "De la suscripción al primer uso",
+      subtitle: "Elige el plan de tu organización, completa el pago con seguridad y comienza por el camino guiado.",
+      recurring_note: "La facturación recurrente sigue el plan y el ciclo seleccionados.",
+      choose_title: "1. Elige el plan",
+      choose_desc: "Selecciona el plan de tu organización. El equipo utiliza el mismo acceso contratado.",
+      pay_title: "2. Completa de forma segura",
+      pay_desc: "Serás dirigido a Stripe para finalizar la contratación.",
+      open_title: "3. Abre y comienza",
+      open_desc: "Después de la activación, vuelves a MillionsNest con acceso directo a la aplicación y una guía de primeros pasos.",
+      cta: "Continuar al pago seguro",
+      trial_note: "Las organizaciones elegibles reciben 7 días de prueba. Si esta organización ya utilizó su período de prueba, la suscripción comienza directamente con el plan seleccionado."
+    },
+    activation: {
+      loading_title: "Activando tu suscripción",
+      loading_message: "Tu checkout fue completado. Estamos confirmando la suscripción y preparando {{app}} para tu organización.",
+      activated_title: "Suscripción activada",
+      activated_message: "Todo listo. {{app}} ya está disponible para tu organización.",
+      next_title: "Qué hacer ahora",
+      musicscale_step_1: "Abre MusicScale con el botón de abajo.",
+      musicscale_step_2: "Agrega las primeras canciones y configura tu equipo.",
+      musicscale_step_3: "Crea la primera escala y acompaña las confirmaciones.",
+      nestlocal_step_1: "Abre NestLocal con el botón de abajo.",
+      nestlocal_step_2: "Configura tus servicios y tu página pública.",
+      nestlocal_step_3: "Empieza a recibir y organizar solicitudes y presupuestos.",
+      access_note: "Después podrás abrir {{app}} siempre desde el Hub, en Mis aplicaciones.",
+      open_app: "Abrir {{app}}",
+      opening_app: "Abriendo {{app}}...",
+      guide_action: "Ver primeros pasos en el Hub",
+      dashboard_action: "Ir al panel",
+      launch_failed: "Tu suscripción está activa. No pudimos abrir {{app}} desde este botón, pero todavía puedes acceder desde el Hub.",
+      session_expired: "Tu sesión expiró. Inicia sesión de nuevo para confirmar tu suscripción.",
+      provisioning_delayed: "Tu compra se completó, pero la activación aún está finalizando. Intenta confirmar de nuevo.",
+      confirmation_failed: "No pudimos confirmar tu suscripción en este momento.",
+      verification_error: "Ocurrió un error al verificar tu compra.",
+      warning_title: "Aviso de activación",
+      retry_action: "Intentar activar de nuevo",
+      billing_action: "Volver a suscripción y facturación"
+    },
+    nestlocal: {
+      title: "Convierte solicitudes en una operación organizada.",
+      subtitle: "Tu página de servicios, presupuestos guiados y bandeja de solicitudes en un plan para tu negocio.",
+      essential: "Esencial",
+      growth: "Crecimiento",
+      scope_title: "Suscripción por negocio",
+      scope_description: "El plan pertenece al negocio seleccionado y habilita NestLocal para el equipo incluido.",
+      features: {
+        essential: ["1 usuario", "Página pública de servicios", "Presupuestos guiados", "Hasta 100 solicitudes al mes", "Solicitudes, clientes y agenda en un solo lugar"],
+        growth: ["Hasta 3 usuarios", "Todo lo de Esencial", "Hasta 500 solicitudes al mes", "Automatizaciones operativas", "Seguimiento de oportunidades"],
+        pro: ["Hasta 10 usuarios", "Todo lo de Crecimiento", "Solicitudes con uso razonable", "Funciones avanzadas", "Prioridad en nuevas funciones"]
+      }
+    }
   },
   dashboard: {
     governance: {
@@ -983,6 +1035,19 @@ export default {
         priority_high: "Prioridad alta",
         priority_normal: "Acompañar",
         open_action: "Ver ahora",
+        resolve_action: "Resolver",
+        continue_resolution_action: "Continuar resolución",
+        resolution_in_progress: "En resolución",
+        resolution_start_error: "Abriremos MusicScale, pero no pudimos registrar el seguimiento de esta resolución.",
+        resolution_cleared_feedback: "Resuelto: la señal ya no aparece en la fuente.",
+        nbma: {
+          recommended: "Recomendado ahora",
+          continue_resolution: "Continúa lo que ya está en resolución dentro de este mismo nivel de prioridad.",
+          urgent_priority: "Es la acción urgente más importante disponible ahora.",
+          high_priority: "Es la acción de alta prioridad que está primero en la fila.",
+          due_soon: "Esta acción tiene un plazo próximo y debe tratarse primero.",
+          next_in_queue: "Es el siguiente paso según el orden canónico de prioridades."
+        },
         snooze_action: "Posponer 24h",
         dismiss_action: "Ocultar",
         dismiss_prompt: "¿Por qué esto no ayuda ahora? (opcional)",
@@ -1016,7 +1081,21 @@ export default {
           title_one: "{{count}} confirmación aún espera respuesta",
           title_other: "{{count}} confirmaciones aún esperan respuesta",
           description_one: "La próxima escala de MusicScale todavía tiene una participación sin confirmar.",
-          description_other: "La próxima escala de MusicScale todavía tiene participaciones sin confirmar."
+          description_other: "La próxima escala de MusicScale todavía tiene participaciones sin confirmar.",
+          description_with_functions: "Funciones que aún esperan confirmación: {{functions}}."
+        },
+        musicscale_declined_responses: {
+          title_one: "{{count}} participación fue rechazada en la próxima escala",
+          title_other: "{{count}} participaciones fueron rechazadas en la próxima escala",
+          description_one: "La próxima escala tiene una participación rechazada que necesita revisión.",
+          description_other: "La próxima escala tiene participaciones rechazadas que necesitan revisión.",
+          description_with_functions: "Funciones con una participación rechazada: {{functions}}."
+        },
+        musicscale_repertoire_content_gaps: {
+          title_one: "{{count}} elemento del repertorio necesita contenido",
+          title_other: "{{count}} elementos del repertorio necesitan contenido",
+          description: "En la próxima escala: sin letra ni acordes, {{empty}} · referencias ausentes de la biblioteca, {{missing}}.",
+          description_with_titles: "Sin letra ni acordes: {{songs}}. Referencias ausentes de la biblioteca: {{missing}}."
         },
         musicscale_personal_confirmation: {
           title_one: "Confirma tu participación en la próxima escala",
@@ -1065,6 +1144,22 @@ export default {
         open: "Preparar escala",
         preparation_badge: "Preparación · próximos 7 días",
         note: "Los compromisos te ayudan a prepararte. Lo que realmente necesita acción permanece separado en Hoy."
+      },
+      worship_distribution: {
+        eyebrow: "Adoración · últimos {{days}} días",
+        title: "Distribución reciente",
+        subtitle: "Asignaciones registradas en escalas concluidas durante los últimos {{days}} días.",
+        open: "Ver escalas en MusicScale",
+        completed_schedules_one: "{{count}} escala concluida incluida",
+        completed_schedules_other: "{{count}} escalas concluidas incluidas",
+        assignments_one: "{{count}} asignación registrada",
+        assignments_other: "{{count}} asignaciones registradas",
+        people_one: "{{count}} persona en las asignaciones",
+        people_other: "{{count}} personas en las asignaciones",
+        assignment_badge_one: "{{count}} asignación",
+        assignment_badge_other: "{{count}} asignaciones",
+        function_summary: "Personas: {{people}} · por persona: {{min}}–{{max}} · promedio {{average}}",
+        evidence_note: "Este resumen solo describe asignaciones registradas en escalas marcadas como concluidas. No mide presencia, desempeño, preferencia ni bienestar."
       },
       spaces_title: "Acceso rápido",
       apps_title: "Tus aplicaciones",

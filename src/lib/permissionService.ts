@@ -2,15 +2,27 @@ export const CANONICAL_GLOBAL_ROLES = ['ceo', 'global_admin', 'ecosystem_owner',
 export const LEGACY_GLOBAL_ROLES = ['admin'] as const;
 export const ECOSYSTEM_SUPPORT_ROLES = ['ecosystem_support'] as const;
 
-export const NESTFINANCE_DEVELOPMENT_SYSTEM_ROLES = CANONICAL_GLOBAL_ROLES;
+export const ECOSYSTEM_DEVELOPMENT_SYSTEM_ROLES = CANONICAL_GLOBAL_ROLES;
+export const NESTFINANCE_DEVELOPMENT_SYSTEM_ROLES = ECOSYSTEM_DEVELOPMENT_SYSTEM_ROLES;
 
-export function canAccessNestFinanceDevelopment(
+export function canAccessEcosystemDevelopment(
   systemRole: string | undefined | null
 ): boolean {
   if (!systemRole) return false;
-  return NESTFINANCE_DEVELOPMENT_SYSTEM_ROLES.includes(
-    systemRole as (typeof NESTFINANCE_DEVELOPMENT_SYSTEM_ROLES)[number]
+  return ECOSYSTEM_DEVELOPMENT_SYSTEM_ROLES.includes(
+    systemRole as (typeof ECOSYSTEM_DEVELOPMENT_SYSTEM_ROLES)[number]
   );
+}
+
+/**
+ * Backward-compatible alias retained while NestFinance still owns a dedicated
+ * development handoff route. New Hub preview decisions must use the ecosystem
+ * development capability instead of adding app-specific role checks.
+ */
+export function canAccessNestFinanceDevelopment(
+  systemRole: string | undefined | null
+): boolean {
+  return canAccessEcosystemDevelopment(systemRole);
 }
 
 
