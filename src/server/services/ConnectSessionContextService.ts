@@ -324,39 +324,65 @@ export async function handleConnectSessionContextRequest(
       ? authorizedOrganizations.find(o => o.id === activeOrganizationIdResolved) || null
       : null;
 
-    let appAccessResponse: { musicscale: ConnectSessionAppAccess } | null = null;
+    let appAccessResponse: { musicscale: ConnectSessionAppAccess; nestlocal: ConnectSessionAppAccess } | null = null;
     if (activeOrganizationIdResolved) {
-      const appAccessResult = await resolveEcosystemAppAccess({
-        uid,
-        organizationId: activeOrganizationIdResolved,
-        appId: 'musicscale',
-        db
-      });
+      const [musicScaleAccessResult, nestLocalAccessResult] = await Promise.all([
+        resolveEcosystemAppAccess({
+          uid,
+          organizationId: activeOrganizationIdResolved,
+          appId: 'musicscale',
+          db
+        }),
+        resolveEcosystemAppAccess({
+          uid,
+          organizationId: activeOrganizationIdResolved,
+          appId: 'nestlocal',
+          db
+        })
+      ]);
 
-      const catalogState = mapCanonicalDecisionToCatalogState(
-        appAccessResult.accessible,
-        appAccessResult.isGlobalAccess,
-        appAccessResult.denialReason,
-        appAccessResult.entitlement?.canonicalStatus,
-        appAccessResult.entitlement?.cancellationScheduled
+      const musicScaleCatalogState = mapCanonicalDecisionToCatalogState(
+        musicScaleAccessResult.accessible,
+        musicScaleAccessResult.isGlobalAccess,
+        musicScaleAccessResult.denialReason,
+        musicScaleAccessResult.entitlement?.canonicalStatus,
+        musicScaleAccessResult.entitlement?.cancellationScheduled
+      );
+      const nestLocalCatalogState = mapCanonicalDecisionToCatalogState(
+        nestLocalAccessResult.accessible,
+        nestLocalAccessResult.isGlobalAccess,
+        nestLocalAccessResult.denialReason,
+        undefined,
+        undefined
       );
 
       appAccessResponse = {
         musicscale: {
           appId: 'musicscale',
           organizationId: activeOrganizationIdResolved,
-          accessible: appAccessResult.accessible,
-          isGlobalAccess: appAccessResult.isGlobalAccess,
-          accessSource: appAccessResult.accessSource,
-          decisionState: appAccessResult.accessible ? 'granted' : 'denied',
-          denialReason: appAccessResult.denialReason || null,
-          catalogState,
-          entitlement: appAccessResult.entitlement ? {
-            canonicalStatus: appAccessResult.entitlement.canonicalStatus,
-            cancellationScheduled: appAccessResult.entitlement.cancellationScheduled,
-            currentPeriodEndMs: appAccessResult.entitlement.currentPeriodEndMs,
-            individualAccessSource: appAccessResult.entitlement.individualAccessSource
+          accessible: musicScaleAccessResult.accessible,
+          isGlobalAccess: musicScaleAccessResult.isGlobalAccess,
+          accessSource: musicScaleAccessResult.accessSource,
+          decisionState: musicScaleAccessResult.accessible ? 'granted' : 'denied',
+          denialReason: musicScaleAccessResult.denialReason || null,
+          catalogState: musicScaleCatalogState,
+          entitlement: musicScaleAccessResult.entitlement ? {
+            canonicalStatus: musicScaleAccessResult.entitlement.canonicalStatus,
+            cancellationScheduled: musicScaleAccessResult.entitlement.cancellationScheduled,
+            currentPeriodEndMs: musicScaleAccessResult.entitlement.currentPeriodEndMs,
+            individualAccessSource: musicScaleAccessResult.entitlement.individualAccessSource
           } : null
+        },
+        nestlocal: {
+          appId: 'nestlocal',
+          organizationId: activeOrganizationIdResolved,
+          accessible: nestLocalAccessResult.accessible,
+          isGlobalAccess: nestLocalAccessResult.isGlobalAccess,
+          accessSource: nestLocalAccessResult.accessSource,
+          decisionState: nestLocalAccessResult.accessible ? 'granted' : 'denied',
+          denialReason: nestLocalAccessResult.denialReason || null,
+          catalogState: nestLocalCatalogState,
+          entitlement: null
         }
       };
     }
