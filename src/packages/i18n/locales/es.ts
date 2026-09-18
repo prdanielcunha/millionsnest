@@ -1029,7 +1029,8 @@ export default {
           title_one: "{{count}} confirmación aún espera respuesta",
           title_other: "{{count}} confirmaciones aún esperan respuesta",
           description_one: "La próxima escala de MusicScale todavía tiene una participación sin confirmar.",
-          description_other: "La próxima escala de MusicScale todavía tiene participaciones sin confirmar."
+          description_other: "La próxima escala de MusicScale todavía tiene participaciones sin confirmar.",
+          description_with_functions: "Funciones que aún esperan confirmación: {{functions}}."
         },
         musicscale_personal_confirmation: {
           title_one: "Confirma tu participación en la próxima escala",
