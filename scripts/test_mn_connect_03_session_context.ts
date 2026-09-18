@@ -815,6 +815,22 @@ async function main() {
     await handleConnectSessionContextRequest(req, res, deps);
   });
 
+
+  add("NestLocal acessível é publicado no appAccess canônico.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1', status: 'active' });
+    db.setDoc('organizations/org1', { name: 'Org 1', apps: { nestlocal: { status: 'active' } } });
+    db.setDoc('organizations/org1/members/user123', { role: 'owner' });
+    db.setDoc('subscriptions/org1', { apps: { nestlocal: { status: 'active', plan: 'growth' } } });
+    const req = mockReq({ authorization: 'Bearer valid' }); const res = mockRes();
+    await handleConnectSessionContextRequest(req, res, deps);
+    assertEqual(res.statusCode, 200, 'status');
+    customAssert(!!res.body.appAccess?.nestlocal, 'nestlocal appAccess present');
+    assertEqual(res.body.appAccess.nestlocal.appId, 'nestlocal', 'nestlocal app id');
+    assertEqual(res.body.appAccess.nestlocal.organizationId, 'org1', 'nestlocal tenant');
+    assertEqual(res.body.appAccess.nestlocal.accessible, true, 'nestlocal accessible');
+    assertEqual(res.body.appAccess.nestlocal.decisionState, 'granted', 'nestlocal granted');
+  });
+
   for (const [name, fn] of tests) {
     reset();
     await runScenario(name, fn);
