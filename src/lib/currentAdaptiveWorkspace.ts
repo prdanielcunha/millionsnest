@@ -1,4 +1,3 @@
-import type { MusicScaleAccessProjection } from './ecosystemAccessProjection.js';
 import {
   buildAdaptiveWorkspaceModel,
   type AdaptiveWorkspaceModel
@@ -7,7 +6,10 @@ import type {
   ActionPreference,
   ActionProjectionInput
 } from './actionCenter.js';
-import { deriveCurrentHubLensAuthorization } from './hubLensAuthorization.js';
+import {
+  deriveCurrentHubLensAuthorization,
+  type CurrentMusicScaleLensAuthority
+} from './hubLensAuthorization.js';
 import type { HubLensId, HubResponsibility } from './lensResolver.js';
 import type { HubAppExperience } from './hubAppExperience.js';
 import { resolveEntitledAppIds } from './adaptiveEntitlements.js';
@@ -20,7 +22,7 @@ export interface CurrentAdaptiveWorkspaceInput {
   requestedLens?: HubLensId | string | null;
   canManageOrganization: boolean;
   canManageMembers: boolean;
-  musicScaleAccess?: MusicScaleAccessProjection | null;
+  musicScaleAccess?: CurrentMusicScaleLensAuthority | null;
   organization?: ActionProjectionInput['organization'];
   pendingInvitesCount: number;
   musicScale: ActionProjectionInput['musicScale'];
