@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import { createHash } from 'node:crypto';
 import { getAuth } from 'firebase-admin/auth';
 import {
   FieldValue,
@@ -16,6 +15,10 @@ import {
   resolveEcosystemAppAccess,
   type ResolvedAppAccess
 } from './EcosystemAccessResolver.js';
+import {
+  createScopedToolRecordId,
+  createToolRequestFingerprint
+} from './ToolActionIdentity.js';
 
 type Dependencies = {
   verifyIdToken?: (
@@ -151,71 +154,6 @@ async function authenticate(
   } catch {
     return null;
   }
-}
-
-function stableJson(
-  value: unknown
-): string {
-  if (
-    value === null ||
-    typeof value !== 'object'
-  ) {
-    return JSON.stringify(value);
-  }
-
-  if (Array.isArray(value)) {
-    return (
-      '[' +
-      value.map(stableJson).join(',') +
-      ']'
-    );
-  }
-
-  const object =
-    value as Record<string, unknown>;
-
-  return (
-    '{' +
-    Object.keys(object)
-      .sort()
-      .map(
-        key =>
-          `${JSON.stringify(key)}:${stableJson(
-            object[key]
-          )}`
-      )
-      .join(',') +
-    '}'
-  );
-}
-
-function requestFingerprint(input: {
-  toolId: string;
-  toolInput: Record<string, unknown>;
-  source: Record<string, unknown> | null;
-}): string {
-  return createHash('sha256')
-    .update(stableJson(input))
-    .digest('hex');
-}
-
-function toolActionId(input: {
-  organizationId: string;
-  actorUid: string;
-  toolId: string;
-  idempotencyKey: string;
-}): string {
-  return createHash('sha256')
-    .update(
-      [
-        input.organizationId,
-        input.actorUid,
-        input.toolId,
-        input.idempotencyKey
-      ].join(':')
-    )
-    .digest('hex')
-    .slice(0, 48);
 }
 
 function safeSource(
@@ -525,19 +463,18 @@ export async function executeToolAction(
     scaleId: toolInput.scaleId.trim()
   };
 
-  const fingerprint = requestFingerprint({
+  const fingerprint = createToolRequestFingerprint({
     toolId: definition.id,
     toolInput: normalizedInput,
     source
   });
 
-  const actionId = toolActionId({
+  const actionId = createScopedToolRecordId([
     organizationId,
     actorUid,
-    toolId: definition.id,
-    idempotencyKey:
-      idempotencyKey.trim()
-  });
+    definition.id,
+    idempotencyKey.trim()
+  ]);
 
   try {
     const db =
