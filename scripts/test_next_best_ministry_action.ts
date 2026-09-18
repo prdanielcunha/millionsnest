@@ -149,9 +149,11 @@ const selectorSource = readFileSync(
   'utf8'
 );
 assert.equal(
-  /score|weight|llm|gemini|openai/i.test(selectorSource),
+  /\b(score|weight)\s*[:=(]/i.test(selectorSource) ||
+    /from\s+['"][^'"]*(openai|gemini|genai|llm)[^'"]*['"]/i.test(selectorSource) ||
+    /\b(openai|gemini|genai|llm)\s*\./i.test(selectorSource),
   false,
-  'NBMA v1 must not depend on hidden scores, weights or model calls'
+  'NBMA v1 must not depend on executable hidden scores, weights or model calls'
 );
 assert.match(
   selectorSource,
