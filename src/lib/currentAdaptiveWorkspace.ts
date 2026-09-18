@@ -6,13 +6,10 @@ import type {
   ActionPreference,
   ActionProjectionInput
 } from './actionCenter.js';
-import {
-  deriveCurrentHubLensAuthorization,
-  type CurrentMusicScaleLensAuthority
-} from './hubLensAuthorization.js';
+import type { CurrentMusicScaleLensAuthority } from './hubLensAuthorization.js';
+import { buildCurrentContextGraph } from './currentContextGraph.js';
 import type { HubLensId, HubResponsibility } from './lensResolver.js';
 import type { HubAppExperience } from './hubAppExperience.js';
-import { resolveEntitledAppIds } from './adaptiveEntitlements.js';
 
 export interface CurrentAdaptiveWorkspaceInput {
   organizationId: string;
@@ -42,16 +39,9 @@ export interface CurrentAdaptiveWorkspaceInput {
 export function buildCurrentAdaptiveWorkspace(
   input: CurrentAdaptiveWorkspaceInput
 ): AdaptiveWorkspaceModel {
-  const resolvedEntitledAppIds = resolveEntitledAppIds(input.appExperiences);
-  const entitledAppIds = resolvedEntitledAppIds.filter(appId => {
-    if (appId !== 'musicscale') return true;
-
-    return (
-      input.musicScaleAccess?.accessible === true &&
-      input.musicScaleAccess?.decisionState === 'granted'
-    );
-  });
-  const authorizedDomains = deriveCurrentHubLensAuthorization({
+  const contextGraph = buildCurrentContextGraph({
+    organizationId: input.organizationId,
+    appExperiences: input.appExperiences,
     canManageOrganization: input.canManageOrganization,
     musicScaleAccess: input.musicScaleAccess
   });
@@ -59,15 +49,16 @@ export function buildCurrentAdaptiveWorkspace(
   return buildAdaptiveWorkspaceModel({
     organizationId: input.organizationId,
     systemRole: input.systemRole,
-    responsibilities: input.responsibilities,
-    authorizedDomains,
-    entitledAppIds,
+    responsibilities: input.responsibilities ?? contextGraph.responsibilities,
+    authorizedDomains: contextGraph.authorizedDomains,
+    entitledAppIds: contextGraph.entitledAppIds,
     requestedLens: input.requestedLens,
     organization: input.organization,
     permissions: {
       canManageOrganization: input.canManageOrganization,
       canManageMembers: input.canManageMembers,
-      canReadManagedMusicScaleResponses: authorizedDomains.worship === true
+      canReadManagedMusicScaleResponses:
+        contextGraph.authorizedDomains.worship === true
     },
     pendingInvitesCount: input.pendingInvitesCount,
     musicScale: input.musicScale,

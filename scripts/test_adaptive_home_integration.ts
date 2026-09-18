@@ -58,13 +58,23 @@ assert.match(
 );
 assert.match(
   currentBridge,
-  /resolveEntitledAppIds\s*\(input\.appExperiences\)/,
-  'current Hub bridge must derive entitlements from canonical Hub app experience'
+  /buildCurrentContextGraph\s*\(\{/,
+  'current Hub bridge must resolve entitlements and authority through the canonical Context Graph'
 );
 assert.match(
   currentBridge,
-  /decisionState === 'granted'/,
-  'server authority must be able to fail closed over stale catalog state'
+  /contextGraph\.authorizedDomains/,
+  'adaptive authorization must consume Context Graph domain authority'
+);
+assert.match(
+  currentBridge,
+  /contextGraph\.entitledAppIds/,
+  'adaptive product access must consume Context Graph operational entitlements'
+);
+assert.match(
+  currentBridge,
+  /contextGraph\.responsibilities/,
+  'adaptive Lens preference must consume canonical Context Graph responsibilities'
 );
 assert.equal(
   currentBridge.includes('availableAppIds'),
