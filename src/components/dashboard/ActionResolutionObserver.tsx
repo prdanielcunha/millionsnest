@@ -1,17 +1,20 @@
 import React from 'react';
 import type { ReadOnlyHubAction } from '../../lib/actionCenter.js';
 import {
-  deriveClearedActionResolutions,
   type ActionResolutionRecord,
   type MusicScaleResolutionProjectionReadiness
 } from '../../lib/actionResolution.js';
+import {
+  deriveActionOutcomeObservations,
+  type ActionOutcomeObservation
+} from '../../lib/outcomeEngine.js';
 
 interface ActionResolutionObserverProps {
   resolutions: readonly ActionResolutionRecord[];
   sourceActions: readonly ReadOnlyHubAction[];
   musicScaleReadiness: MusicScaleResolutionProjectionReadiness;
-  onClearedObserved: (
-    resolution: ActionResolutionRecord
+  onOutcomeObserved: (
+    observation: ActionOutcomeObservation
   ) => void | Promise<void>;
 }
 
@@ -19,26 +22,27 @@ export function ActionResolutionObserver({
   resolutions,
   sourceActions,
   musicScaleReadiness,
-  onClearedObserved
+  onOutcomeObserved
 }: ActionResolutionObserverProps) {
   const submittedRef = React.useRef(new Set<string>());
 
   React.useEffect(() => {
-    const candidates = deriveClearedActionResolutions({
-      resolutions,
-      sourceActions,
-      musicScaleReadiness
-    });
+    const candidates =
+      deriveActionOutcomeObservations({
+        resolutions,
+        sourceActions,
+        musicScaleReadiness
+      });
 
-    for (const resolution of candidates) {
+    for (const observation of candidates) {
       const key =
-        `${resolution.dedupeKey}\u0000${resolution.fingerprint}`;
+        `${observation.resolution.dedupeKey}\u0000${observation.resolution.fingerprint}\u0000${observation.result}\u0000${observation.code}`;
 
       if (submittedRef.current.has(key)) continue;
       submittedRef.current.add(key);
 
       void Promise.resolve(
-        onClearedObserved(resolution)
+        onOutcomeObserved(observation)
       );
     }
   }, [
@@ -48,7 +52,7 @@ export function ActionResolutionObserver({
     musicScaleReadiness.songsReady,
     musicScaleReadiness.nextScaleId,
     musicScaleReadiness.responseSummaryAvailable,
-    onClearedObserved
+    onOutcomeObserved
   ]);
 
   return null;
