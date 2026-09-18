@@ -17,6 +17,15 @@ const intelligence = {
       administration: 'Organizations, people, access, and ecosystem operations.'
     }
   },
+  onboarding: {
+    kicker: 'Start here',
+    single_title: 'Your {{app}} is ready to use',
+    single_description: 'You do not need to figure out where to go. Open the app here and MillionsNest will keep showing the next step for your team.',
+    multiple_title: 'Your apps are ready',
+    multiple_description: 'Choose the app you need right now. The Hub organizes access and shows the next step so you do not have to memorize where things live.',
+    open_app: 'Open {{app}}',
+    view_start: 'See how to start'
+  },
   evidence: {
     source_label: 'Source',
     verified_fact: 'Verified fact',
