@@ -43,6 +43,7 @@ import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "
 import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
 import { fetchActionPreferences, saveActionPreference } from "../services/actionCenterClient.js";
 import { trackActionOsInteraction, type ActionOsDismissCode } from "../lib/actionOsAnalytics.js";
+import { derivePendingConfirmationGapsByFunction } from "../lib/musicScaleLeaderIntelligence.js";
 
 type Tab = "overview" | "organization" | "account" | "billing";
 
@@ -112,6 +113,10 @@ type MusicScaleHubSummary = {
       maybe: number;
       declined: number;
     };
+    pendingByFunction: Array<{
+      functionName: string;
+      count: number;
+    }>;
   };
   nextPersonalScale: null | {
     id: string;
@@ -2042,6 +2047,7 @@ export function Dashboard() {
       configuredMembersCount: 0,
       responseSummaryAvailable: false,
       responseCounts: { pending: 0, accepted: 0, maybe: 0, declined: 0 },
+      pendingByFunction: [] as Array<{ functionName: string; count: number }>,
       personalResponseSummaryAvailable: false,
       personalPendingResponses: 0
     };
@@ -2151,6 +2157,7 @@ export function Dashboard() {
           maybe: 0,
           declined: 0
         };
+        live.pendingByFunction = [];
 
         if (nextScale?.id && canReadResponseSummary) {
           responsesUnsubscribe = onSnapshot(
@@ -2158,12 +2165,20 @@ export function Dashboard() {
             (responseSnapshot) => {
               const counts = { pending: 0, accepted: 0, maybe: 0, declined: 0 };
               const respondedAssignmentIds = new Set<string>();
-
-              responseSnapshot.docs.forEach(responseDoc => {
+              const responseObservations = responseSnapshot.docs.map(responseDoc => {
                 const data = responseDoc.data() as any;
-                if (data?.active === false) return;
-                respondedAssignmentIds.add(data.eventAssignmentId || responseDoc.id);
-                const status = String(data.status || 'pending').toLowerCase();
+                return {
+                  id: responseDoc.id,
+                  eventAssignmentId: data?.eventAssignmentId || responseDoc.id,
+                  status: String(data?.status || 'pending'),
+                  active: data?.active !== false
+                };
+              });
+
+              responseObservations.forEach(response => {
+                if (response.active === false) return;
+                respondedAssignmentIds.add(response.eventAssignmentId || response.id || '');
+                const status = String(response.status || 'pending').toLowerCase();
                 if (status === 'accepted') counts.accepted += 1;
                 else if (status === 'maybe') counts.maybe += 1;
                 else if (status === 'declined') counts.declined += 1;
@@ -2176,11 +2191,16 @@ export function Dashboard() {
 
               live.responseSummaryAvailable = true;
               live.responseCounts = counts;
+              live.pendingByFunction = derivePendingConfirmationGapsByFunction(
+                activeAssignments,
+                responseObservations
+              );
               publishSummary();
             },
             (error) => {
               live.responseSummaryAvailable = false;
               live.responseCounts = { pending: 0, accepted: 0, maybe: 0, declined: 0 };
+              live.pendingByFunction = [];
               publishSummary();
               console.warn('[Dashboard] MusicScale response summary listener failed:', error);
             }
@@ -2206,7 +2226,8 @@ export function Dashboard() {
           assignmentCount: activeAssignments.length,
           bandScaleId: nextScale.bandScaleId || null,
           responseSummaryAvailable: canReadResponseSummary && live.responseSummaryAvailable,
-          responseCounts: { ...live.responseCounts }
+          responseCounts: { ...live.responseCounts },
+          pendingByFunction: live.pendingByFunction.map(gap => ({ ...gap }))
         } : null,
         nextPersonalScale: nextPersonalScale ? {
           id: nextPersonalScale.id,
