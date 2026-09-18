@@ -30,6 +30,7 @@ export default function BillingSuccess() {
   >('loading');
   const [message, setMessage] = useState('');
   const [retryCount, setRetryCount] = useState(0);
+  const [manualRetryCount, setManualRetryCount] = useState(0);
   const [confirmedOrganizationId, setConfirmedOrganizationId] =
     useState<string | null>(null);
   const [launchingApp, setLaunchingApp] = useState(false);
@@ -269,7 +270,8 @@ export default function BillingSuccess() {
     user,
     loading,
     navigate,
-    t
+    t,
+    manualRetryCount
   ]);
 
   return (
@@ -418,6 +420,9 @@ export default function BillingSuccess() {
                 onClick={() => {
                   setStatus('loading');
                   setRetryCount(0);
+                  setManualRetryCount(
+                    current => current + 1
+                  );
                   setMessage(
                     t(
                       'activation.loading_message',
