@@ -50,6 +50,9 @@ export function HubAppLaunchpad({
                 ? t('onboarding.single_description', { app: single.app.name })
                 : t('onboarding.multiple_description')}
             </p>
+            <p className="mt-2 max-w-2xl text-[11px] leading-relaxed text-[#667487]">
+              {t('onboarding.access_note')}
+            </p>
           </div>
 
           {single && (
