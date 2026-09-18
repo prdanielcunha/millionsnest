@@ -60,6 +60,8 @@ before(async () => {
       ['care-a', 'care', ['unit-a'], {}],
       ['coord-a', 'coordinator', ['unit-a'], { canManagePeople: true }],
       ['pastor-a', 'pastor', ['unit-a', 'unit-b'], {}],
+      ['leader-a', 'group_leader', ['unit-a'], {}],
+      ['discipler-a', 'discipler', ['unit-a'], {}],
     ] as const;
 
     for (const [uid, role, congregationIds, permissions] of members) {
@@ -203,4 +205,34 @@ test('Presence session plus canonical fact can be created atomically by scoped c
     payload: { sessionId: 'session-a' },
   });
   await assertSucceeds(batch.commit());
+});
+
+
+test('group leader can manage a valid group only inside assigned scope', async () => {
+  const db = env.authenticatedContext('leader-a').firestore();
+  const ref = doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-a');
+  await assertSucceeds(setDoc(ref, {
+    organizationId: 'org-a', congregationId: 'unit-a', name: 'Casa Norte',
+    capacity: 12, participants: 0, createdAt: serverTimestamp(), createdBy: 'leader-a',
+  }));
+  await assertSucceeds(updateDoc(ref, { participants: 8 }));
+  await assertFails(updateDoc(ref, { participants: 13 }));
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-b'),
+    { organizationId: 'org-a', congregationId: 'unit-b', name: 'Outside', capacity: 12, participants: 0 },
+  ));
+});
+
+test('discipler relation is append-progressive and cannot be reassigned', async () => {
+  const db = env.authenticatedContext('discipler-a').firestore();
+  const ref = doc(db, 'organizations/org-a/products/raiz_e_mesa/discipleships/d-a');
+  await assertSucceeds(setDoc(ref, {
+    organizationId: 'org-a', congregationId: 'unit-a', personId: 'person-a',
+    personName: 'Person A', disciplerId: 'discipler-a', meeting: 1,
+    status: 'active', nextMeeting: 'Agendar encontro 1',
+  }));
+  await assertSucceeds(updateDoc(ref, { meeting: 2, nextMeeting: 'Agendar encontro 2' }));
+  await assertFails(updateDoc(ref, { meeting: 1 }));
+  await assertFails(updateDoc(ref, { personId: 'person-b' }));
+  await assertFails(updateDoc(ref, { meeting: 7, status: 'completed' }));
 });
