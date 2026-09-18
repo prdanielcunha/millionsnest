@@ -33,7 +33,7 @@ assert.match(
 );
 assert.match(
   dashboard,
-  /musicScaleAuthority={musicScaleProjection ? {/,
+  /musicScaleAuthority=\{musicScaleProjection\s+\?\s+\{/,
   'Dashboard must pass the backend-authoritative MusicScale capability projection to Home'
 );
 assert.match(
