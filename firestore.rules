@@ -187,13 +187,6 @@ service cloud.firestore {
         memberData.get('status', 'active') in ['active', 'ativo'];
     }
 
-    function journeyRole(orgId) {
-      let memberData = getMemberPermissions(orgId);
-      return journeyMemberActive(orgId)
-        ? memberData.get('organizationRole', memberData.get('role', ''))
-        : (journeyOwner(orgId) ? 'owner' : '');
-    }
-
     function journeyProductEnabled(orgId) {
       let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
       let apps = orgDoc != null ? orgDoc.data.get('apps', {}) : {};
@@ -210,42 +203,52 @@ service cloud.firestore {
 
     function journeyHasMembership(orgId) {
       return journeyProductEnabled(orgId) &&
-        (isSystemAdmin() || journeyOwner(orgId) || journeyMemberActive(orgId));
+        (journeyMemberActive(orgId) || journeyOwner(orgId) || isSystemAdmin());
     }
 
-    function journeyIsOrgAdmin(orgId) {
+    function journeyRole(orgId) {
+      let memberData = getMemberPermissions(orgId);
+      return journeyMemberActive(orgId)
+        ? memberData.get('organizationRole', memberData.get('role', ''))
+        : (journeyOwner(orgId) ? 'owner' : '');
+    }
+
+    function journeyRoleAllowed(orgId, allowed) {
       return journeyHasMembership(orgId) &&
-        (isSystemAdmin() || journeyRole(orgId) in ['owner', 'admin', 'pastor', 'data_admin']);
+        (isSystemAdmin() || journeyRole(orgId) in allowed);
     }
 
     function journeyHasPermission(orgId, permission) {
       let memberData = getMemberPermissions(orgId);
       let permissions = memberData != null ? memberData.get('permissions', {}) : {};
-      return journeyHasMembership(orgId) && (
-        journeyIsOrgAdmin(orgId) ||
-        (permissions is map && permissions.get(permission, false) == true)
-      );
+      return journeyRoleAllowed(orgId, ['owner', 'admin']) ||
+        (
+          journeyMemberActive(orgId) &&
+          permissions is map &&
+          permissions.get(permission, false) == true
+        );
+    }
+
+    function journeyIsOrgAdmin(orgId) {
+      return isSystemAdmin() ||
+        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'data_admin']);
     }
 
     function journeyCanManagePresence(orgId) {
-      return journeyHasMembership(orgId) && (
-        journeyIsOrgAdmin(orgId) ||
-        journeyRole(orgId) == 'coordinator' ||
-        journeyHasPermission(orgId, 'canManagePresence')
-      );
+      return isSystemAdmin() ||
+        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator']) ||
+        journeyHasPermission(orgId, 'canManagePresence');
     }
 
     function journeyCanManagePeople(orgId) {
-      return journeyHasMembership(orgId) &&
-        (journeyIsOrgAdmin(orgId) || journeyHasPermission(orgId, 'canManagePeople'));
+      return journeyIsOrgAdmin(orgId) ||
+        journeyHasPermission(orgId, 'canManagePeople');
     }
 
     function journeyCanManageCare(orgId) {
-      return journeyHasMembership(orgId) && (
-        journeyIsOrgAdmin(orgId) ||
-        journeyRole(orgId) == 'care' ||
-        journeyHasPermission(orgId, 'canManageCare')
-      );
+      return isSystemAdmin() ||
+        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'care']) ||
+        journeyHasPermission(orgId, 'canManageCare');
     }
 
     function journeyAssignedToCongregation(orgId, congregationId) {
@@ -258,8 +261,47 @@ service cloud.firestore {
     }
 
     function journeyCanAccessCongregation(orgId, congregationId) {
-      return journeyHasMembership(orgId) &&
+      return journeyProductEnabled(orgId) &&
         (journeyIsOrgAdmin(orgId) || journeyAssignedToCongregation(orgId, congregationId));
+    }
+
+    function journeyCanCreateCareInScope(orgId, congregationId, source) {
+      let memberData = getMemberPermissions(orgId);
+      let active = isAuthenticated() &&
+        memberData != null &&
+        memberData.get('status', 'active') in ['active', 'ativo'];
+      let roleName = active
+        ? memberData.get('organizationRole', memberData.get('role', ''))
+        : '';
+      let permissions = active ? memberData.get('permissions', {}) : {};
+      let privileged = isSystemAdmin() || journeyOwner(orgId);
+      let inScope = privileged || (
+        active && (
+          roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
+          (
+            congregationId is string &&
+            congregationId in memberData.get('congregationIds', [])
+          )
+        )
+      );
+      let careCapability = privileged || (
+        active && (
+          roleName in ['owner', 'admin', 'pastor', 'care'] ||
+          (permissions is map && permissions.get('canManageCare', false) == true)
+        )
+      );
+      let peopleCapability = privileged || (
+        active && (
+          roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
+          (permissions is map && permissions.get('canManagePeople', false) == true)
+        )
+      );
+      return journeyProductEnabled(orgId) &&
+        inScope &&
+        (
+          (source == 'manual' && careCapability) ||
+          (source == 'visitor_registration' && peopleCapability)
+        );
     }
 
     function journeyTenantCreate(orgId) {
@@ -619,10 +661,10 @@ service cloud.firestore {
         match /careRequests/{careRequestId} {
           allow read: if journeyCanManageCare(orgId) &&
             journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
-          allow create: if journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
-            (
-              (request.resource.data.get('source', '') == 'manual' && journeyCanManageCare(orgId)) ||
-              (request.resource.data.get('source', '') == 'visitor_registration' && journeyCanManagePeople(orgId))
+          allow create: if journeyCanCreateCareInScope(
+              orgId,
+              request.resource.data.get('congregationId', ''),
+              request.resource.data.get('source', '')
             ) &&
             journeyValidCareRequestCreate(orgId);
           allow update: if journeyCanManageCare(orgId) &&
