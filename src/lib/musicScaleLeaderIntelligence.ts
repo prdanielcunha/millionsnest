@@ -43,7 +43,7 @@ function responseAssignmentId(
  *
  * This projection answers only: which ministry functions still have response
  * slots pending? It never emits user names, user ids, inferred availability,
- * burnout, preference or pastoral meaning.
+ * wellbeing state, preference or pastoral meaning.
  *
  * A terminal response (accepted/maybe/declined) wins over a stale duplicate
  * pending response for the same assignment, avoiding false pending gaps.
