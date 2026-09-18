@@ -138,17 +138,12 @@ export function collectActionSignals(
   return signals;
 }
 
-function buildSignalEvidence(
+function buildHubSignalEvidence(
   signal: EcosystemSignal,
   input: EvidenceBackedActionSignalCollectionInput
-): FactEvidenceReference {
+): FactEvidenceReference | null {
   const organizationId = input.organizationId.trim();
-  const observedAtMs =
-    typeof input.musicScale.observedAtMs === 'number' &&
-    Number.isFinite(input.musicScale.observedAtMs) &&
-    input.musicScale.observedAtMs >= 0
-      ? input.musicScale.observedAtMs
-      : undefined;
+  if (!organizationId || signal.sourceApp !== 'hub') return null;
 
   if (signal.signalType === 'organization_incomplete') {
     return {
@@ -174,34 +169,9 @@ function buildSignalEvidence(
     };
   }
 
-  if (signal.signalType === 'musicscale_personal_confirmation') {
-    return {
-      organizationId,
-      sourceApp: 'musicscale',
-      sourceKind: 'runtime_projection',
-      sourceRef: 'musicscale.read_model.personal_schedule_confirmation',
-      entityType: 'scale',
-      entityId: signal.sourceEntityId,
-      fieldPaths: [
-        'responseSummaryAvailable',
-        'pendingResponses',
-        'publishRevision',
-        'startsAtMs'
-      ],
-      observedAtMs
-    };
-  }
-
-  return {
-    organizationId,
-    sourceApp: 'musicscale',
-    sourceKind: 'runtime_projection',
-    sourceRef: 'musicscale.read_model.schedule_response_summary',
-    entityType: 'scale',
-    entityId: signal.sourceEntityId,
-    fieldPaths: ['responseSummaryAvailable', 'pendingResponses', 'startsAtMs'],
-    observedAtMs
-  };
+  // MusicScale evidence must come from Canonical Facts. Any other source fails
+  // closed here instead of silently recreating a legacy direct adapter.
+  return null;
 }
 
 /**
@@ -226,17 +196,19 @@ export function collectEvidenceBackedActionSignals(
       nextScale: null,
       nextPersonalScale: null
     }
-  }).map(signal => {
+  }).flatMap(signal => {
     const normalizedSignal: EcosystemSignal =
       signal.signalType === 'organization_incomplete'
         ? { ...signal, sourceEntityId: organizationId }
         : signal;
+    const evidence = buildHubSignalEvidence(normalizedSignal, input);
+    if (!evidence) return [];
 
-    return {
+    return [{
       ...normalizedSignal,
       organizationId,
-      evidence: [buildSignalEvidence(normalizedSignal, input)]
-    } satisfies EvidenceBackedEcosystemSignal;
+      evidence: [evidence]
+    } satisfies EvidenceBackedEcosystemSignal];
   });
 
   const musicScaleFacts = projectCurrentMusicScaleFacts({
