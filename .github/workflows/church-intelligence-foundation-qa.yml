@@ -13,6 +13,7 @@ on:
       - 'src/packages/i18n/locales/pt.ts'
       - 'src/lib/actionCenter.ts'
       - 'src/lib/actionResolution.ts'
+      - 'src/lib/nextBestMinistryAction.ts'
       - 'src/lib/actionSignals.ts'
       - 'src/services/actionCenterClient.ts'
       - 'src/server/services/ActionResolutionCommandService.ts'
@@ -46,6 +47,7 @@ on:
       - 'scripts/test_musicscale_distribution_intelligence.ts'
       - 'scripts/test_musicscale_repertoire_intelligence.ts'
       - 'scripts/test_action_resolution_loop.ts'
+      - 'scripts/test_next_best_ministry_action.ts'
       - 'scripts/test_evidence_backed_timeline.ts'
       - 'scripts/test_action_center_evidence_projection.ts'
       - 'scripts/test_lens_resolver.ts'
@@ -106,6 +108,9 @@ jobs:
 
       - name: Action Loop Resolver and factual outcomes
         run: npx tsx scripts/test_action_resolution_loop.ts
+
+      - name: Explainable Next Best Ministry Action
+        run: npx tsx scripts/test_next_best_ministry_action.ts
 
       - name: Evidence-backed commitments and changes
         run: npx tsx scripts/test_evidence_backed_timeline.ts
