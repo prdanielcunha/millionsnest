@@ -1047,6 +1047,9 @@ export default {
         resolution_in_progress: "Em resolução",
         resolution_start_error: "Abriremos o MusicScale, mas não foi possível registrar o acompanhamento desta resolução.",
         resolution_cleared_feedback: "Resolvido: o sinal não aparece mais na fonte.",
+        outcome_resolved_feedback: "Resolvido: a condição de origem foi confirmada como concluída.",
+        outcome_superseded_feedback: "A situação mudou: o Hub manteve a nova pendência como uma ação separada.",
+        outcome_no_longer_actionable_feedback: "Essa ação saiu da janela operacional atual sem ser marcada como resolvida.",
         nbma: {
           recommended: "Recomendado agora",
           continue_resolution: "Continue o que já está em resolução neste mesmo nível de prioridade.",

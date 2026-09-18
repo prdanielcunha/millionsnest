@@ -58,6 +58,9 @@ jobs:
       - name: Action OS recent changes projection
         run: npx tsx scripts/test_change_center_projection.ts
 
+      - name: Outcome Engine classification and audit
+        run: npx tsx scripts/test_outcome_engine.ts
+
       - name: Tool Gateway safety and approvals
         run: npx tsx scripts/test_tool_gateway.ts
 

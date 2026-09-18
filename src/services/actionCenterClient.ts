@@ -2,6 +2,10 @@ import type { ActionPreference, ActionPreferenceMode } from '../lib/actionCenter
 import type {
   ActionResolutionRecord
 } from '../lib/actionResolution.js';
+import type {
+  ActionOutcomeCode,
+  ActionOutcomeResult
+} from '../lib/outcomeEngine.js';
 
 type PreferenceResponse = {
   success: boolean;
@@ -130,7 +134,10 @@ export async function observeActionResolutionOutcome(
   input: Pick<
     ActionResolutionRecord,
     'dedupeKey' | 'fingerprint' | 'sourceApp' | 'signalType'
-  >
+  > & {
+    outcomeResult: ActionOutcomeResult;
+    outcomeCode: ActionOutcomeCode;
+  }
 ): Promise<ActionResolutionRecord> {
   const response = await fetch(
     `/api/v1/organizations/${encodeURIComponent(organizationId)}/action-resolution/outcome`,
@@ -142,10 +149,7 @@ export async function observeActionResolutionOutcome(
         Accept: 'application/json',
         'Cache-Control': 'no-store'
       },
-      body: JSON.stringify({
-        ...input,
-        outcome: 'signal_cleared'
-      })
+      body: JSON.stringify(input)
     }
   );
 

@@ -296,6 +296,135 @@ test('Casa membership lifecycle is status-based and cannot be hard-deleted', asy
   await assertFails(deleteDoc(ref));
 });
 
+test('Casa entry request is routed by pastor and private to target leader', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-entry-a'), {
+      organizationId: 'org-a', congregationId: 'unit-a', name: 'Casa A',
+      leaderId: 'leader-a', capacity: 12, participants: 0, createdBy: 'leader-a',
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-entry-b'), {
+      organizationId: 'org-a', congregationId: 'unit-a', name: 'Casa B',
+      leaderId: 'leader-b', capacity: 12, participants: 0, createdBy: 'leader-b',
+    });
+  });
+
+  const pastorDb = env.authenticatedContext('pastor-a').firestore();
+  const requestRef = doc(
+    pastorDb,
+    'organizations/org-a/products/raiz_e_mesa/groupEntryRequests/request-entry-a',
+  );
+  await assertSucceeds(setDoc(requestRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    groupId: 'group-entry-a',
+    personId: 'person-a',
+    personName: 'Person A',
+    status: 'pending',
+    requestedAt: serverTimestamp(),
+    requestedBy: 'pastor-a',
+    resolvedAt: null,
+    resolvedBy: '',
+  }));
+
+  const leaderDb = env.authenticatedContext('leader-a').firestore();
+  await assertSucceeds(getDoc(doc(
+    leaderDb,
+    'organizations/org-a/products/raiz_e_mesa/groupEntryRequests/request-entry-a',
+  )));
+
+  const otherLeaderDb = env.authenticatedContext('leader-b').firestore();
+  await assertFails(getDoc(doc(
+    otherLeaderDb,
+    'organizations/org-a/products/raiz_e_mesa/groupEntryRequests/request-entry-a',
+  )));
+
+  await assertFails(setDoc(
+    doc(leaderDb, 'organizations/org-a/products/raiz_e_mesa/groupEntryRequests/leader-created'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      groupId: 'group-entry-a',
+      personId: 'person-a',
+      personName: 'Person A',
+      status: 'pending',
+      requestedAt: serverTimestamp(),
+      requestedBy: 'leader-a',
+      resolvedAt: null,
+      resolvedBy: '',
+    },
+  ));
+});
+
+test('accepted Casa entry request requires active membership in same write', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-entry-accept'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      name: 'Casa Accept',
+      leaderId: 'leader-a',
+      capacity: 12,
+      participants: 0,
+      createdBy: 'leader-a',
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/groupEntryRequests/request-entry-accept'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      groupId: 'group-entry-accept',
+      personId: 'person-a',
+      personName: 'Person A',
+      status: 'pending',
+      requestedAt: new Date(),
+      requestedBy: 'pastor-a',
+      resolvedAt: null,
+      resolvedBy: '',
+    });
+  });
+
+  const db = env.authenticatedContext('leader-a').firestore();
+  const requestRef = doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/groupEntryRequests/request-entry-accept',
+  );
+  await assertFails(updateDoc(requestRef, {
+    status: 'accepted',
+    resolvedAt: serverTimestamp(),
+    resolvedBy: 'leader-a',
+  }));
+
+  const membershipRef = doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/groupMemberships/group-entry-accept__person-a',
+  );
+  const groupRef = doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/groups/group-entry-accept',
+  );
+  const batch = writeBatch(db);
+  batch.set(membershipRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    groupId: 'group-entry-accept',
+    personId: 'person-a',
+    personName: 'Person A',
+    status: 'active',
+    joinedAt: serverTimestamp(),
+    joinedBy: 'leader-a',
+    leftAt: null,
+    leftBy: '',
+  });
+  batch.update(groupRef, { participants: 1 });
+  batch.update(requestRef, {
+    status: 'accepted',
+    resolvedAt: serverTimestamp(),
+    resolvedBy: 'leader-a',
+  });
+  await assertSucceeds(batch.commit());
+  await assertSucceeds(getDoc(membershipRef));
+  await assertFails(deleteDoc(requestRef));
+});
+
 test('discipler relation is append-progressive and cannot be reassigned', async () => {
   const db = env.authenticatedContext('discipler-a').firestore();
   const ref = doc(db, 'organizations/org-a/products/raiz_e_mesa/discipleships/d-a');

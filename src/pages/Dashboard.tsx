@@ -57,6 +57,9 @@ import {
   isActionResolutionEligible,
   type ActionResolutionRecord
 } from "../lib/actionResolution.js";
+import type {
+  ActionOutcomeObservation
+} from "../lib/outcomeEngine.js";
 import { trackActionOsInteraction, type ActionOsDismissCode } from "../lib/actionOsAnalytics.js";
 import {
   countDeclinedConfirmations,
@@ -812,8 +815,10 @@ export function Dashboard() {
   };
 
   const handleObserveActionResolutionOutcome = async (
-    resolution: ActionResolutionRecord
+    observation: ActionOutcomeObservation
   ): Promise<void> => {
+    const resolution = observation.resolution;
+
     if (
       !user ||
       !activeContextOrgId ||
@@ -837,7 +842,9 @@ export function Dashboard() {
           dedupeKey: resolution.dedupeKey,
           fingerprint: resolution.fingerprint,
           sourceApp: resolution.sourceApp,
-          signalType: resolution.signalType
+          signalType: resolution.signalType,
+          outcomeResult: observation.result,
+          outcomeCode: observation.code
         }
       );
 
@@ -853,11 +860,22 @@ export function Dashboard() {
         updated
       ]);
 
+      const feedbackKey =
+        observation.result === 'resolved'
+          ? 'workspace.actions.outcome_resolved_feedback'
+          : observation.result === 'superseded'
+            ? 'workspace.actions.outcome_superseded_feedback'
+            : 'workspace.actions.outcome_no_longer_actionable_feedback';
+
+      const feedbackFallback =
+        observation.result === 'resolved'
+          ? 'Resolvido: a condição de origem foi confirmada como concluída.'
+          : observation.result === 'superseded'
+            ? 'A situação mudou: o Hub manteve a nova pendência como uma ação separada.'
+            : 'Essa ação saiu da janela operacional atual sem ser marcada como resolvida.';
+
       feedback.success(
-        t(
-          'workspace.actions.resolution_cleared_feedback',
-          'Resolvido: o sinal não aparece mais na fonte.'
-        )
+        t(feedbackKey, feedbackFallback)
       );
     } catch (error) {
       console.warn(
