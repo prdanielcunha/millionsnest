@@ -8,7 +8,7 @@ const worshipWorkspace = buildAdaptiveWorkspaceModel({
   authorizedDomains: {
     worship: true
   },
-  availableAppIds: ['musicscale'],
+  entitledAppIds: ['musicscale'],
   requestedLens: 'my_today',
   organization: { isConfigured: true },
   permissions: {
@@ -69,7 +69,7 @@ const dismissedWorkspace = buildAdaptiveWorkspaceModel({
   systemRole: 'user',
   responsibilities: ['worship_leadership'],
   authorizedDomains: { worship: true },
-  availableAppIds: ['musicscale'],
+  entitledAppIds: ['musicscale'],
   requestedLens: 'worship',
   organization: { isConfigured: true },
   permissions: {
@@ -110,7 +110,7 @@ assert.equal(dismissedWorkspace.actionsForActiveLens.length, 1);
 const administrativeWorkspace = buildAdaptiveWorkspaceModel({
   organizationId: 'org-adaptive-2',
   systemRole: 'ceo',
-  availableAppIds: ['musicscale', 'nestjourney', 'nestfinance'],
+  entitledAppIds: ['musicscale', 'nestjourney', 'nestfinance'],
   requestedLens: 'worship',
   organization: { isConfigured: false },
   permissions: {
@@ -154,11 +154,51 @@ assert.deepEqual(
   administrativeWorkspace.actions.map(action => action.signalType).sort()
 );
 
+const staleMusicScaleWithoutEntitlement = buildAdaptiveWorkspaceModel({
+  organizationId: 'org-without-musicscale',
+  systemRole: 'user',
+  authorizedDomains: { worship: true },
+  entitledAppIds: ['nestfinance'],
+  requestedLens: 'worship',
+  organization: { isConfigured: true },
+  permissions: {
+    canManageOrganization: false,
+    canManageMembers: false,
+    canReadManagedMusicScaleResponses: true
+  },
+  pendingInvitesCount: 0,
+  musicScale: {
+    ready: true,
+    nextScale: {
+      id: 'stale-scale-from-unentitled-product',
+      responseSummaryAvailable: true,
+      pendingResponses: 3
+    },
+    nextPersonalScale: {
+      id: 'stale-personal-scale-from-unentitled-product',
+      responseSummaryAvailable: true,
+      pendingResponses: 1
+    }
+  }
+});
+
+assert.deepEqual(
+  staleMusicScaleWithoutEntitlement.lenses.map(lens => lens.id),
+  ['my_today'],
+  'Worship Lens must remain hidden when MusicScale is not entitled even if a stale domain bit exists'
+);
+assert.deepEqual(
+  staleMusicScaleWithoutEntitlement.actions,
+  [],
+  'My Today must not surface stale actions from a product the organization does not own'
+);
+assert.equal(staleMusicScaleWithoutEntitlement.activeLens, 'my_today');
+
 const noTenantWorkspace = buildAdaptiveWorkspaceModel({
   organizationId: '   ',
   systemRole: 'user',
   authorizedDomains: { worship: true },
-  availableAppIds: ['musicscale'],
+  entitledAppIds: ['musicscale'],
   requestedLens: 'worship',
   organization: { isConfigured: true },
   permissions: {
