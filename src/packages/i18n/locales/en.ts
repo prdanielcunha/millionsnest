@@ -1020,7 +1020,8 @@ export default {
           title_one: "{{count}} confirmation is still awaiting a response",
           title_other: "{{count}} confirmations are still awaiting a response",
           description_one: "The next MusicScale schedule still has one participation without confirmation.",
-          description_other: "The next MusicScale schedule still has participations without confirmation."
+          description_other: "The next MusicScale schedule still has participations without confirmation.",
+          description_with_functions: "Functions still awaiting confirmation: {{functions}}."
         },
         musicscale_personal_confirmation: {
           title_one: "Confirm your participation in the next schedule",
