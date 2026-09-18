@@ -17,6 +17,14 @@ const hubExperience = readFileSync(
   'src/lib/hubAppExperience.ts',
   'utf8'
 );
+const dashboard = readFileSync(
+  'src/pages/Dashboard.tsx',
+  'utf8'
+);
+const workspaceHome = readFileSync(
+  'src/components/dashboard/EcosystemWorkspaceHome.tsx',
+  'utf8'
+);
 
 for (const key of [
   'purchase_journey.choose_title',
@@ -67,6 +75,37 @@ assert.match(
   checkout,
   /checkout\.stripe\.com|endsWith\('stripe\.com'\)/,
   'checkout redirect must remain constrained to Stripe'
+);
+
+assert.match(
+  workspaceHome,
+  /choose_plan_action/,
+  'Hub Home must keep a visible choose-plan next step before purchase'
+);
+assert.match(
+  workspaceHome,
+  /onNavigateToBilling/,
+  'choose-plan next step must lead to subscription management'
+);
+assert.match(
+  dashboard,
+  /onNavigateToBilling=\{\(\) => setActiveTab\('billing'\)\}/,
+  'Hub next-step billing CTA must open the billing tab directly'
+);
+assert.match(
+  dashboard,
+  /const handleSubscribe = async/,
+  'billing page must retain a canonical subscription action'
+);
+assert.match(
+  dashboard,
+  /navigate\(\`\/checkout\?plan=\$\{lookupKey\}\`\)/,
+  'plan purchase must move directly from billing to checkout'
+);
+assert.match(
+  dashboard,
+  /Assinar MusicScale Starter/,
+  'billing page must expose a plain-language subscription CTA'
 );
 
 assert.match(
