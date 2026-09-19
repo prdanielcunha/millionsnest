@@ -3,6 +3,7 @@ import {
   CONNECT_OFFICIAL_URL,
   buildConnectLoginPath,
   resolveCanonicalConnectOrganizationId,
+  resolveSafeConnectReturnTo,
   resolveSafePostLoginPath,
 } from '../src/lib/connectLaunchPolicy.js';
 
@@ -15,6 +16,9 @@ function assert(value: unknown, message: string) {
 assert(CONNECT_OFFICIAL_URL === 'https://connect.millionsnest.com', 'Connect official URL is canonical');
 assert(CONNECT_HUB_LAUNCH_PATH === '/connect/launch', 'Hub launch route is fixed');
 assert(buildConnectLoginPath() === '/login?next=%2Fconnect%2Flaunch', 'login return path is encoded and internal');
+assert(resolveSafeConnectReturnTo('/journey-followup/first-contact-care1') === '/journey-followup/first-contact-care1', 'Journey follow-up destination is allow-listed');
+assert(resolveSafeConnectReturnTo('/admin') === null, 'unpublished Connect destination is rejected');
+assert(buildConnectLoginPath('/journey-followup/first-contact-care1').includes('returnTo'), 'login round-trip preserves safe Journey destination');
 assert(resolveSafePostLoginPath('?next=%2Fconnect%2Flaunch') === '/connect/launch', 'Connect launch return is allowed');
 assert(resolveSafePostLoginPath('?next=https%3A%2F%2Fevil.example') === null, 'external login return is rejected');
 assert(resolveSafePostLoginPath('?next=%2F%2Fevil.example') === null, 'protocol-relative login return is rejected');
@@ -22,4 +26,4 @@ assert(resolveSafePostLoginPath('?next=%2Fdashboard%2Foverview') === null, 'unre
 assert(resolveCanonicalConnectOrganizationId({ activeOrganizationId: ' org-1 ' }) === 'org-1', 'canonical active organization is normalized');
 assert(resolveCanonicalConnectOrganizationId({}) === null, 'launch fails closed without canonical active organization');
 
-console.log(`✅ Connect official launch policy: ${passed} / 9`);
+console.log(`✅ Connect official launch policy: ${passed} / 12`);
