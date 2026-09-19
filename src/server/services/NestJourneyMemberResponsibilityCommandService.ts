@@ -175,9 +175,13 @@ export async function updateNestJourneyMemberResponsibility(
 
       const targetData = targetMemberSnap.data() ?? {};
       const previousResponsibility = normalize(targetData.journeyRole) || 'member';
-      const previousCongregationIds = Array.isArray(targetData.congregationIds)
-        ? targetData.congregationIds.filter((value: unknown): value is string => typeof value === 'string')
-        : [];
+      const previousScopeSource = Array.isArray(targetData.journeyCongregationIds)
+        ? targetData.journeyCongregationIds
+        : Array.isArray(targetData.congregationIds)
+          ? targetData.congregationIds
+          : [];
+      const previousCongregationIds = previousScopeSource
+        .filter((value: unknown): value is string => typeof value === 'string');
       const congregationIds = requestedCongregationIds ?? previousCongregationIds;
       const sameScope =
         congregationIds.length === previousCongregationIds.length &&
@@ -194,7 +198,7 @@ export async function updateNestJourneyMemberResponsibility(
 
       const patch = {
         journeyRole: responsibility,
-        congregationIds,
+        journeyCongregationIds: congregationIds,
         updatedAt: FieldValue.serverTimestamp(),
       };
 
