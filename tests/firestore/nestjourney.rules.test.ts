@@ -551,6 +551,108 @@ test('Presence session plus canonical fact can be created atomically by scoped c
 });
 
 
+test('Presence correction is append-only, evidence-backed, and limited to an open session', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-correction'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      eventRef: 'event:session-correction',
+      eventName: 'Correction service',
+      openedAt: new Date(),
+      closedAt: null,
+      status: 'open',
+      expectedPeopleCount: 1,
+      minimumCoveragePercent: 90,
+      createdBy: 'coord-a',
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceChecks/original-correction'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      sessionId: 'session-correction',
+      personId: 'person-a',
+      state: 'present_confirmed',
+      source: 'human_check',
+      actorId: 'coord-a',
+      recordedAt: new Date(),
+    });
+  });
+
+  const db = env.authenticatedContext('coord-a').firestore();
+  const checkRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceChecks/correction-a');
+  const factRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/facts/presence-correction-a');
+  const batch = writeBatch(db);
+  batch.set(checkRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-correction',
+    personId: 'person-a',
+    state: 'absent_confirmed',
+    source: 'retroactive_human_correction',
+    actorId: 'coord-a',
+    recordedAt: serverTimestamp(),
+    correctedFromCheckId: 'original-correction',
+  });
+  batch.set(factRef, {
+    eventId: 'presence-correction-a',
+    eventType: 'PRESENCE_CORRECTED',
+    occurredAt: serverTimestamp(),
+    recordedAt: serverTimestamp(),
+    organizationId: 'org-a',
+    actorId: 'coord-a',
+    subjectRef: 'person:person-a',
+    sourceApp: 'nestjourney',
+    scope: 'congregation:unit-a',
+    evidenceRef: 'presenceCheck:correction-a',
+    sensitivity: 'confidential',
+    version: 1,
+    payload: {
+      checkId: 'correction-a',
+      sessionId: 'session-correction',
+      state: 'absent_confirmed',
+      source: 'retroactive_human_correction',
+      correctedFromCheckId: 'original-correction',
+    },
+  });
+  await assertSucceeds(batch.commit());
+
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceChecks/correction-same-state'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      sessionId: 'session-correction',
+      personId: 'person-a',
+      state: 'present_confirmed',
+      source: 'retroactive_human_correction',
+      actorId: 'coord-a',
+      recordedAt: serverTimestamp(),
+      correctedFromCheckId: 'original-correction',
+    },
+  ));
+
+  const sessionRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-correction');
+  await assertSucceeds(updateDoc(sessionRef, {
+    status: 'closed',
+    closedAt: serverTimestamp(),
+    closedBy: 'coord-a',
+  }));
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceChecks/correction-after-close'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      sessionId: 'session-correction',
+      personId: 'person-a',
+      state: 'present_confirmed',
+      source: 'retroactive_human_correction',
+      actorId: 'coord-a',
+      recordedAt: serverTimestamp(),
+      correctedFromCheckId: 'correction-a',
+    },
+  ));
+});
+
 test('group leader can manage a valid group only inside assigned scope', async () => {
   const db = env.authenticatedContext('leader-a').firestore();
   const ref = doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-a');
