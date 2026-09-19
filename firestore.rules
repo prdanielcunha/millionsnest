@@ -213,6 +213,13 @@ service cloud.firestore {
         : (journeyOwner(orgId) ? 'owner' : '');
     }
 
+    function journeyAppRole(orgId) {
+      let memberData = getMemberPermissions(orgId);
+      return journeyMemberActive(orgId)
+        ? memberData.get('journeyRole', '')
+        : '';
+    }
+
     function journeyRoleAllowed(orgId, allowed) {
       return journeyHasMembership(orgId) &&
         (isSystemAdmin() || journeyRole(orgId) in allowed);
@@ -237,11 +244,13 @@ service cloud.firestore {
     function journeyCanManagePresence(orgId) {
       return isSystemAdmin() ||
         journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator']) ||
+        journeyAppRole(orgId) in ['presence_host', 'coordinator', 'pastor'] ||
         journeyHasPermission(orgId, 'canManagePresence');
     }
     function journeyCanManageMesa(orgId) {
       return isSystemAdmin() ||
         journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator', 'mesa', 'table_host']) ||
+        journeyAppRole(orgId) in ['mesa_team', 'coordinator', 'pastor'] ||
         journeyHasPermission(orgId, 'canManageMesa') ||
         journeyHasPermission(orgId, 'canManagePresence');
     }
@@ -253,6 +262,7 @@ service cloud.firestore {
       let roleName = active
         ? memberData.get('organizationRole', memberData.get('role', ''))
         : '';
+      let appRole = active ? memberData.get('journeyRole', '') : '';
       let permissions = active ? memberData.get('permissions', {}) : {};
       let congregationIds = active ? memberData.get('congregationIds', []) : [];
       let privileged = isSystemAdmin() || journeyOwner(orgId);
@@ -260,6 +270,7 @@ service cloud.firestore {
       let capable = privileged || (
         active && (
           roleName in ['owner', 'admin', 'pastor', 'coordinator', 'mesa', 'table_host'] ||
+          appRole in ['mesa_team', 'coordinator', 'pastor'] ||
           (
             permissions is map &&
             (
@@ -285,6 +296,7 @@ service cloud.firestore {
       let roleName = active
         ? memberData.get('organizationRole', memberData.get('role', ''))
         : '';
+      let appRole = active ? memberData.get('journeyRole', '') : '';
       let permissions = active ? memberData.get('permissions', {}) : {};
       let congregationIds = active ? memberData.get('congregationIds', []) : [];
       let privileged = isSystemAdmin() || journeyOwner(orgId);
@@ -292,6 +304,7 @@ service cloud.firestore {
       let capable = privileged || (
         active && (
           roleName in ['owner', 'admin', 'pastor', 'coordinator'] ||
+          appRole in ['presence_host', 'coordinator', 'pastor'] ||
           (permissions is map && permissions.get('canManagePresence', false) == true)
         )
       );
@@ -306,12 +319,14 @@ service cloud.firestore {
 
     function journeyCanManagePeople(orgId) {
       return journeyIsOrgAdmin(orgId) ||
+        journeyAppRole(orgId) in ['presence_host', 'coordinator', 'pastor'] ||
         journeyHasPermission(orgId, 'canManagePeople');
     }
 
     function journeyCanManageCare(orgId) {
       return isSystemAdmin() ||
         journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'care']) ||
+        journeyAppRole(orgId) in ['caregiver', 'coordinator', 'pastor'] ||
         journeyHasPermission(orgId, 'canManageCare');
     }
 
@@ -321,6 +336,7 @@ service cloud.firestore {
       return isSystemAdmin() ||
         journeyOwner(orgId) ||
         journeyRoleAllowed(orgId, ['owner', 'pastor']) ||
+        journeyAppRole(orgId) == 'pastor' ||
         (
           journeyMemberActive(orgId) &&
           permissions is map &&
@@ -331,6 +347,7 @@ service cloud.firestore {
     function journeyCanManageGroups(orgId) {
       return isSystemAdmin() ||
         journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'group_leader']) ||
+        journeyAppRole(orgId) in ['group_leader', 'coordinator', 'pastor'] ||
         journeyHasPermission(orgId, 'canManageGroups');
     }
 
@@ -343,10 +360,11 @@ service cloud.firestore {
       let roleName = active
         ? memberData.get('organizationRole', memberData.get('role', ''))
         : '';
+      let appRole = active ? memberData.get('journeyRole', '') : '';
       let permissions = active ? memberData.get('permissions', {}) : {};
       let ids = active ? memberData.get('congregationIds', []) : [];
       let privileged = isSystemAdmin() || journeyOwner(orgId);
-      let broad = roleName in ['owner', 'admin', 'pastor'];
+      let broad = roleName in ['owner', 'admin', 'pastor'] || appRole in ['coordinator', 'pastor'];
       return exists(groupPath) &&
         journeyProductEnabled(orgId) &&
         (
@@ -360,6 +378,7 @@ service cloud.firestore {
               (
                 (
                   roleName == 'group_leader' ||
+                  appRole == 'group_leader' ||
                   (permissions is map && permissions.get('canManageGroups', false) == true)
                 ) &&
                 (
@@ -381,6 +400,7 @@ service cloud.firestore {
       let roleName = active
         ? memberData.get('organizationRole', memberData.get('role', ''))
         : '';
+      let appRole = active ? memberData.get('journeyRole', '') : '';
       let ids = active ? memberData.get('congregationIds', []) : [];
       let privileged = isSystemAdmin() || journeyOwner(orgId);
       return exists(groupPath) &&
@@ -391,14 +411,22 @@ service cloud.firestore {
             active &&
             ids is list &&
             get(groupPath).data.get('congregationId', '') in ids &&
-            roleName in ['owner', 'admin', 'pastor']
+            (roleName in ['owner', 'admin', 'pastor'] || appRole in ['coordinator', 'pastor'])
           )
         );
+    }
+
+    function journeyCanManageDiscipleship(orgId) {
+      return isSystemAdmin() ||
+        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'discipler']) ||
+        journeyAppRole(orgId) in ['discipler', 'coordinator', 'pastor'] ||
+        journeyHasPermission(orgId, 'canManageDiscipleship');
     }
 
     function journeyCanManageImplementation(orgId) {
       return isSystemAdmin() ||
         journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator']) ||
+        journeyAppRole(orgId) in ['coordinator', 'pastor'] ||
         journeyHasPermission(orgId, 'canManageImplementation');
     }
 
@@ -436,11 +464,13 @@ service cloud.firestore {
       let roleName = active
         ? memberData.get('organizationRole', memberData.get('role', ''))
         : '';
+      let appRole = active ? memberData.get('journeyRole', '') : '';
       let permissions = active ? memberData.get('permissions', {}) : {};
       let privileged = isSystemAdmin() || journeyOwner(orgId);
       let inScope = privileged || (
         active && (
           roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
+          appRole == 'pastor' ||
           (
             congregationId is string &&
             congregationId in memberData.get('congregationIds', [])
@@ -450,12 +480,14 @@ service cloud.firestore {
       let careCapability = privileged || (
         active && (
           roleName in ['owner', 'admin', 'pastor', 'care'] ||
+          appRole in ['caregiver', 'coordinator', 'pastor'] ||
           (permissions is map && permissions.get('canManageCare', false) == true)
         )
       );
       let peopleCapability = privileged || (
         active && (
           roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
+          appRole in ['presence_host', 'coordinator', 'pastor'] ||
           (permissions is map && permissions.get('canManagePeople', false) == true)
         )
       );
@@ -1744,16 +1776,19 @@ service cloud.firestore {
         }
 
         match /discipleships/{discipleshipId} {
-          allow read: if journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
-            (journeyIsOrgAdmin(orgId) || resource.data.get('disciplerId', '') == request.auth.uid);
-          allow create: if journeyTenantCreate(orgId) &&
+          allow read: if journeyCanManageDiscipleship(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
+            (journeyIsOrgAdmin(orgId) || journeyAppRole(orgId) in ['coordinator', 'pastor'] || resource.data.get('disciplerId', '') == request.auth.uid);
+          allow create: if journeyCanManageDiscipleship(orgId) &&
+            journeyTenantCreate(orgId) &&
             journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
-            (journeyIsOrgAdmin(orgId) || request.resource.data.get('disciplerId', '') == request.auth.uid) &&
+            (journeyIsOrgAdmin(orgId) || journeyAppRole(orgId) in ['coordinator', 'pastor'] || request.resource.data.get('disciplerId', '') == request.auth.uid) &&
             journeyValidDiscipleshipCreate();
-          allow update: if journeyTenantUnchanged(orgId) &&
+          allow update: if journeyCanManageDiscipleship(orgId) &&
+            journeyTenantUnchanged(orgId) &&
             journeyCongregationUnchanged() &&
             journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
-            (journeyIsOrgAdmin(orgId) || resource.data.get('disciplerId', '') == request.auth.uid) &&
+            (journeyIsOrgAdmin(orgId) || journeyAppRole(orgId) in ['coordinator', 'pastor'] || resource.data.get('disciplerId', '') == request.auth.uid) &&
             request.resource.data.get('disciplerId', '') == resource.data.get('disciplerId', '') &&
             journeyValidDiscipleshipUpdate();
           allow delete: if false;
@@ -1771,9 +1806,9 @@ service cloud.firestore {
         }
 
         match /pastoral/{pastoralId} {
-          allow read: if journeyHasMembership(orgId) && journeyRole(orgId) in ['owner', 'pastor'];
-          allow create: if journeyTenantCreate(orgId) && journeyHasMembership(orgId) && journeyRole(orgId) in ['owner', 'pastor'];
-          allow update: if journeyTenantUnchanged(orgId) && journeyHasMembership(orgId) && journeyRole(orgId) in ['owner', 'pastor'];
+          allow read: if journeyHasMembership(orgId) && (journeyRole(orgId) in ['owner', 'pastor'] || journeyAppRole(orgId) == 'pastor');
+          allow create: if journeyTenantCreate(orgId) && journeyHasMembership(orgId) && (journeyRole(orgId) in ['owner', 'pastor'] || journeyAppRole(orgId) == 'pastor');
+          allow update: if journeyTenantUnchanged(orgId) && journeyHasMembership(orgId) && (journeyRole(orgId) in ['owner', 'pastor'] || journeyAppRole(orgId) == 'pastor');
           allow delete: if false;
         }
 
