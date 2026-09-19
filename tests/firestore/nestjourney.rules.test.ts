@@ -522,6 +522,110 @@ test('raw canonical facts remain hidden from operational roles and visible to Jo
   await assertSucceeds(getDoc(doc(pastorDb, 'organizations/org-a/products/raiz_e_mesa/facts/fact-a')));
 });
 
+test('Mesa participation is presence-scoped, factual, and bound to an open session', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-mesa'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      eventRef: 'event:mesa',
+      eventName: 'Mesa service',
+      openedAt: new Date(),
+      closedAt: null,
+      status: 'open',
+      expectedPeopleCount: 1,
+      minimumCoveragePercent: 90,
+      createdBy: 'coord-a',
+    });
+  });
+
+  const coordDb = env.authenticatedContext('coord-a').firestore();
+  const mesaRef = doc(
+    coordDb,
+    'organizations/org-a/products/raiz_e_mesa/mesaParticipations/session-mesa__person-a',
+  );
+
+  await assertSucceeds(setDoc(mesaRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-mesa',
+    personId: 'person-a',
+    status: 'invited',
+    bondHostRef: 'coord-a',
+    updatedAt: serverTimestamp(),
+    updatedBy: 'coord-a',
+  }));
+
+  await assertSucceeds(updateDoc(mesaRef, {
+    status: 'joined',
+    updatedAt: serverTimestamp(),
+    updatedBy: 'coord-a',
+  }));
+
+  const ordinaryDb = env.authenticatedContext('member-a').firestore();
+  await assertFails(getDoc(doc(
+    ordinaryDb,
+    'organizations/org-a/products/raiz_e_mesa/mesaParticipations/session-mesa__person-a',
+  )));
+
+  await assertFails(setDoc(doc(
+    coordDb,
+    'organizations/org-a/products/raiz_e_mesa/mesaParticipations/wrong-id',
+  ), {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-mesa',
+    personId: 'person-a',
+    status: 'joined',
+    bondHostRef: 'coord-a',
+    updatedAt: serverTimestamp(),
+    updatedBy: 'coord-a',
+  }));
+});
+
+test('module labels are readable by Journey members and writable only by authorized leadership', async () => {
+  const pastorDb = env.authenticatedContext('pastor-a').firestore();
+  const ref = doc(
+    pastorDb,
+    'organizations/org-a/products/raiz_e_mesa/settings/moduleLabels',
+  );
+
+  await assertSucceeds(setDoc(ref, {
+    organizationId: 'org-a',
+    labels: {
+      presence: 'Recepção',
+      table: 'Café da Família',
+      care: 'Cuidado',
+      groups: 'PG',
+      discipleship: 'Caminho',
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: 'pastor-a',
+  }));
+
+  const memberDb = env.authenticatedContext('member-a').firestore();
+  await assertSucceeds(getDoc(doc(
+    memberDb,
+    'organizations/org-a/products/raiz_e_mesa/settings/moduleLabels',
+  )));
+
+  const coordDb = env.authenticatedContext('coord-a').firestore();
+  await assertFails(updateDoc(doc(
+    coordDb,
+    'organizations/org-a/products/raiz_e_mesa/settings/moduleLabels',
+  ), {
+    labels: {
+      presence: 'Entrada',
+      table: 'Mesa',
+      care: 'Cuidado',
+      groups: 'Casa',
+      discipleship: 'Raiz',
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: 'coord-a',
+  }));
+});
+
 test('other product namespaces preserve previous generic tenant behavior', async () => {
   const db = env.authenticatedContext('member-a').firestore();
   const ref = doc(db, 'organizations/org-a/products/example_product/state/example');
