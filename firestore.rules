@@ -403,6 +403,66 @@ service cloud.firestore {
         );
     }
 
+    // Follow-up runtime uses a flattened authorization check to stay below
+    // Firestore's expression budget while preserving product, role and
+    // congregation boundaries. This intentionally avoids composing the
+    // generic Journey helpers several times in the same rule evaluation.
+    function journeyCanAccessFollowup(orgId, congregationId, ownerRef) {
+      let userDoc = isAuthenticated()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid))
+        : null;
+      let systemRole = userDoc != null ? userDoc.data.get('systemRole', '') : '';
+      let systemAdmin = systemRole in ['ceo', 'admin', 'global_admin', 'ecosystem_owner', 'founder'];
+      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
+      let owner = isAuthenticated() && orgDoc != null && (
+        orgDoc.data.get('ownerUid', '') == request.auth.uid ||
+        orgDoc.data.get('ownerId', '') == request.auth.uid ||
+        orgDoc.data.get('owner_user_id', '') == request.auth.uid ||
+        orgDoc.data.get('ownerUserId', '') == request.auth.uid
+      );
+      let apps = orgDoc != null ? orgDoc.data.get('apps', {}) : {};
+      let nestJourney = apps is map ? apps.get('nestjourney', {}) : {};
+      let legacyJourney = apps is map ? apps.get('raiz_e_mesa', {}) : {};
+      let productEnabled = systemAdmin || (
+        orgDoc != null &&
+        (
+          (nestJourney is map && nestJourney.get('status', '') in ['active', 'trialing']) ||
+          (legacyJourney is map && legacyJourney.get('status', '') in ['active', 'trialing'])
+        )
+      );
+      let memberData = getMemberPermissions(orgId);
+      let active = isAuthenticated() &&
+        memberData != null &&
+        memberData.get('status', 'active') in ['active', 'ativo'];
+      let roleName = active
+        ? memberData.get('organizationRole', memberData.get('role', ''))
+        : '';
+      let permissions = active ? memberData.get('permissions', {}) : {};
+      let ids = active ? memberData.get('congregationIds', []) : [];
+      let careCapability = systemAdmin || owner || (
+        active &&
+        (
+          roleName in ['owner', 'admin', 'pastor', 'care'] ||
+          (permissions is map && permissions.get('canManageCare', false) == true)
+        )
+      );
+      let broad = systemAdmin || owner || (
+        active && roleName in ['owner', 'admin', 'pastor', 'data_admin']
+      );
+      let inScope = systemAdmin || owner || (
+        active &&
+        (
+          roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
+          (ids is list && congregationId is string && congregationId in ids)
+        )
+      );
+      return isAuthenticated() &&
+        productEnabled &&
+        careCapability &&
+        inScope &&
+        (broad || ownerRef == request.auth.uid);
+    }
+
     function journeyTenantCreate(orgId) {
       return request.resource.data.get('organizationId', '') == orgId;
     }
@@ -603,7 +663,6 @@ service cloud.firestore {
         request.resource.data.get('completedBy', '') == '' &&
         request.resource.data.get('outcomeCode', '') == '' &&
         request.resource.data.get('nextActionCode', '') == '' &&
-        journeyCanManageCare(orgId) &&
         careData.get('status', '') == 'open' &&
         careData.get('careType', '') == 'first_contact' &&
         careData.get('ownerRef', '') == request.auth.uid &&
@@ -1213,11 +1272,23 @@ service cloud.firestore {
         }
 
         match /followups/{followupId} {
-          allow read: if journeyCanManageCare(orgId) &&
-            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
-            (journeyIsOrgAdmin(orgId) || resource.data.get('ownerRef', '') == request.auth.uid);
-          allow create: if journeyValidFollowupCreate(orgId, followupId);
-          allow update: if journeyValidFollowupComplete(orgId);
+          allow read: if journeyCanAccessFollowup(
+            orgId,
+            resource.data.get('congregationId', ''),
+            resource.data.get('ownerRef', '')
+          );
+          allow create: if journeyCanAccessFollowup(
+              orgId,
+              request.resource.data.get('congregationId', ''),
+              request.resource.data.get('ownerRef', '')
+            ) &&
+            journeyValidFollowupCreate(orgId, followupId);
+          allow update: if journeyCanAccessFollowup(
+              orgId,
+              resource.data.get('congregationId', ''),
+              resource.data.get('ownerRef', '')
+            ) &&
+            journeyValidFollowupComplete(orgId);
           allow delete: if false;
         }
 
