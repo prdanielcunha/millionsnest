@@ -60,6 +60,7 @@ before(async () => {
       ['member-a', 'member', ['unit-a'], {}],
       ['care-a', 'care', ['unit-a'], {}],
       ['coord-a', 'coordinator', ['unit-a'], { canManagePeople: true }],
+      ['mesa-a', 'mesa', ['unit-a'], {}],
       ['pastor-a', 'pastor', ['unit-a', 'unit-b'], {}],
       ['leader-a', 'group_leader', ['unit-a'], {}],
       ['leader-b', 'group_leader', ['unit-a'], {}],
@@ -520,6 +521,59 @@ test('raw canonical facts remain hidden from operational roles and visible to Jo
   const ref = doc(careDb, 'organizations/org-a/products/raiz_e_mesa/facts/fact-a');
   await assertFails(getDoc(ref));
   await assertSucceeds(getDoc(doc(pastorDb, 'organizations/org-a/products/raiz_e_mesa/facts/fact-a')));
+});
+
+test('dedicated Mesa role can operate Mesa without gaining Presence confirmation writes', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-mesa-role'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      eventRef: 'event:mesa-role',
+      eventName: 'Sunday',
+      openedAt: new Date(),
+      closedAt: null,
+      status: 'open',
+      expectedPeopleCount: 1,
+      minimumCoveragePercent: 90,
+      createdBy: 'coord-a',
+    });
+  });
+
+  const db = env.authenticatedContext('mesa-a').firestore();
+  await assertSucceeds(getDoc(doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-mesa-role',
+  )));
+
+  await assertSucceeds(setDoc(doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/mesaParticipations/session-mesa-role__person-a',
+  ), {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-mesa-role',
+    personId: 'person-a',
+    status: 'invited',
+    bondHostRef: 'mesa-a',
+    updatedAt: serverTimestamp(),
+    updatedBy: 'mesa-a',
+  }));
+
+  await assertFails(setDoc(doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/presenceChecks/mesa-cannot-confirm',
+  ), {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-mesa-role',
+    personId: 'person-a',
+    state: 'present_confirmed',
+    source: 'human_check',
+    actorId: 'mesa-a',
+    recordedAt: serverTimestamp(),
+    correctedFromCheckId: '',
+  }));
 });
 
 test('Mesa participation is presence-scoped, factual, and bound to an open session', async () => {
