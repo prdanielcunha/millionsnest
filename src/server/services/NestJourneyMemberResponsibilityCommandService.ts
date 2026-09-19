@@ -29,6 +29,69 @@ export type NestJourneyResponsibility =
   | 'coordinator'
   | 'pastor';
 
+const JOURNEY_PERMISSION_KEYS = [
+  'canManagePresence',
+  'canManageMesa',
+  'canManagePeople',
+  'canManageCare',
+  'canManageGroups',
+  'canManageDiscipleship',
+  'canManageImplementation',
+  'canManagePastoral',
+  'canViewGovernance',
+  'canCoordinateJourney',
+] as const;
+
+function projectedJourneyPermissions(responsibility: NestJourneyResponsibility) {
+  const projected: Record<(typeof JOURNEY_PERMISSION_KEYS)[number], boolean> = {
+    canManagePresence: false,
+    canManageMesa: false,
+    canManagePeople: false,
+    canManageCare: false,
+    canManageGroups: false,
+    canManageDiscipleship: false,
+    canManageImplementation: false,
+    canManagePastoral: false,
+    canViewGovernance: false,
+    canCoordinateJourney: false,
+  };
+
+  if (responsibility === 'presence_host') {
+    projected.canManagePresence = true;
+    projected.canManagePeople = true;
+  } else if (responsibility === 'mesa_team') {
+    projected.canManageMesa = true;
+  } else if (responsibility === 'caregiver') {
+    projected.canManageCare = true;
+  } else if (responsibility === 'group_leader') {
+    projected.canManageGroups = true;
+  } else if (responsibility === 'discipler') {
+    projected.canManageDiscipleship = true;
+  } else if (responsibility === 'coordinator') {
+    projected.canManagePresence = true;
+    projected.canManageMesa = true;
+    projected.canManagePeople = true;
+    projected.canManageCare = true;
+    projected.canManageGroups = true;
+    projected.canManageDiscipleship = true;
+    projected.canManageImplementation = true;
+    projected.canCoordinateJourney = true;
+  } else if (responsibility === 'pastor') {
+    projected.canManagePresence = true;
+    projected.canManageMesa = true;
+    projected.canManagePeople = true;
+    projected.canManageCare = true;
+    projected.canManageGroups = true;
+    projected.canManageDiscipleship = true;
+    projected.canManageImplementation = true;
+    projected.canManagePastoral = true;
+    projected.canViewGovernance = true;
+    projected.canCoordinateJourney = true;
+  }
+
+  return projected;
+}
+
 const INACTIVE_ORGANIZATION_STATUSES = new Set([
   'archived', 'inactive', 'suspended', 'disabled',
 ]);
@@ -196,9 +259,19 @@ export async function updateNestJourneyMemberResponsibility(
         };
       }
 
+      const previousPermissions =
+        targetData.permissions && typeof targetData.permissions === 'object'
+          ? targetData.permissions as Record<string, unknown>
+          : {};
+      const permissions = {
+        ...previousPermissions,
+        ...projectedJourneyPermissions(responsibility),
+      };
       const patch = {
         journeyRole: responsibility,
         journeyCongregationIds: congregationIds,
+        journeyAllCongregations: responsibility === 'pastor',
+        permissions,
         updatedAt: FieldValue.serverTimestamp(),
       };
 
@@ -225,6 +298,7 @@ export async function updateNestJourneyMemberResponsibility(
         responsibility,
         previousCongregationIds,
         congregationIds,
+        journeyAllCongregations: responsibility === 'pastor',
         timestamp: FieldValue.serverTimestamp(),
       });
 
