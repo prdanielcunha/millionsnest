@@ -124,8 +124,14 @@ export async function handleNestJourneyFollowupContextRequest(
   ) {
     return res.status(409).json({ success: false, code: 'FOLLOWUP_NOT_ACTIONABLE' });
   }
-  if (!broad && (!congregationIds.includes(congregationId) || clean(followup.ownerRef) !== uid)) {
+  if (!broad && !congregationIds.includes(congregationId)) {
     return res.status(403).json({ success: false, code: 'FOLLOWUP_SCOPE_DENIED' });
+  }
+  // Oversight roles may read queues inside NestJourney, but communication
+  // execution is deliberately owner-only. A broad Lens must not impersonate
+  // the assigned caregiver in Connect.
+  if (clean(followup.ownerRef) !== uid) {
+    return res.status(403).json({ success: false, code: 'FOLLOWUP_OWNER_REQUIRED' });
   }
 
   const careRequestId = validId(followup.careRequestId);
