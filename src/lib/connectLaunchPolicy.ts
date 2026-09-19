@@ -1,8 +1,11 @@
+import { isAllowedAppDestinationPath } from './appExperienceRegistry.js';
+
 export const CONNECT_OFFICIAL_URL = 'https://connect.millionsnest.com';
 export const CONNECT_HUB_LAUNCH_PATH = '/connect/launch';
 
 const ECOSYSTEM_LAUNCH_PATH = /^\/apps\/(musicscale|nestfinance|nestlocal|nestjourney)\/launch$/;
 const MUSICSCALE_MAIN_PREVIEW_HOST = /^mn-musicscale-555464791734--main-review-[a-z0-9-]+\.web\.app$/;
+const MAX_RETURN_TO_CHARS = 512;
 
 export function resolveTrustedEcosystemReturnOrigin(
   appId: string,
@@ -30,6 +33,12 @@ export function resolveTrustedEcosystemReturnOrigin(
   }
 }
 
+export function resolveSafeConnectReturnTo(candidate?: string | null): string | null {
+  const value = String(candidate || '').trim();
+  if (!value || value.length > MAX_RETURN_TO_CHARS) return null;
+  return isAllowedAppDestinationPath('connect', value) ? value : null;
+}
+
 function isSafeLaunchNext(next: string): boolean {
   if (!next.startsWith('/') || next.startsWith('//') || next.includes('\\')) return false;
 
@@ -50,13 +59,17 @@ function isSafeLaunchNext(next: string): boolean {
   }
 
   const returnTo = params.get('returnTo');
-  if (returnTo && !(
-    returnTo.startsWith('/') &&
-    !returnTo.startsWith('//') &&
-    !returnTo.includes('://') &&
-    !returnTo.includes('\\')
-  )) {
-    return false;
+  if (returnTo) {
+    if (pathname === CONNECT_HUB_LAUNCH_PATH) {
+      if (!resolveSafeConnectReturnTo(returnTo)) return false;
+    } else if (!(
+      returnTo.startsWith('/') &&
+      !returnTo.startsWith('//') &&
+      !returnTo.includes('://') &&
+      !returnTo.includes('\\')
+    )) {
+      return false;
+    }
   }
 
   const returnOrigin = params.get('returnOrigin');
@@ -74,8 +87,12 @@ export function resolveSafePostLoginPath(search: string): string | null {
   return next && isSafeLaunchNext(next) ? next : null;
 }
 
-export function buildConnectLoginPath(): string {
-  return `/login?next=${encodeURIComponent(CONNECT_HUB_LAUNCH_PATH)}`;
+export function buildConnectLoginPath(returnTo?: string | null): string {
+  const launchUrl = new URL(CONNECT_HUB_LAUNCH_PATH, 'https://www.millionsnest.com');
+  const safeReturnTo = resolveSafeConnectReturnTo(returnTo);
+  if (safeReturnTo) launchUrl.searchParams.set('returnTo', safeReturnTo);
+  const next = `${launchUrl.pathname}${launchUrl.search}`;
+  return `/login?next=${encodeURIComponent(next)}`;
 }
 
 export function buildEcosystemLoginPath(
