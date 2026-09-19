@@ -34,14 +34,14 @@ jobs:
           workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
           service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
 
-      - name: Prove least-privilege bootstrap capability
+      - name: Prove project IAM policy authority
         shell: bash
         run: |
           set -euo pipefail
           gcloud config set project "$PROJECT_ID"
 
           TOKEN="$(gcloud auth print-access-token)"
-          BODY='{"permissions":["iam.roles.create","iam.roles.get","iam.roles.update","resourcemanager.projects.getIamPolicy","resourcemanager.projects.setIamPolicy"]}'
+          BODY='{"permissions":["resourcemanager.projects.getIamPolicy","resourcemanager.projects.setIamPolicy"]}'
           RESPONSE="$(mktemp)"
           trap 'rm -f "$RESPONSE"' EXIT
 
@@ -51,31 +51,67 @@ jobs:
             -H 'Content-Type: application/json' \
             --data "$BODY" \
             "https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT_ID}:testIamPermissions")"
-
           test "$STATUS" = "200"
 
           python3 - "$RESPONSE" <<'PY'
           import json, sys
           required = {
-              "iam.roles.create",
-              "iam.roles.get",
-              "iam.roles.update",
               "resourcemanager.projects.getIamPolicy",
               "resourcemanager.projects.setIamPolicy",
           }
           granted = set(json.load(open(sys.argv[1], encoding="utf-8")).get("permissions") or [])
           missing = sorted(required - granted)
           for permission in sorted(required):
-              print(f"CONNECT_IAM_BOOTSTRAP_PERMISSION={permission}:{'granted' if permission in granted else 'missing'}")
+              print(f"CONNECT_IAM_POLICY_PERMISSION={permission}:{'granted' if permission in granted else 'missing'}")
           if missing:
-              raise SystemExit("Missing IAM bootstrap permissions: " + ", ".join(missing))
-          print("CONNECT_IAM_BOOTSTRAP_CAPABILITY=available")
+              raise SystemExit("Missing project IAM permissions: " + ", ".join(missing))
+          print("CONNECT_IAM_POLICY_AUTHORITY=available")
           PY
 
-      - name: Create or update Connect Inbox custom role
+      - name: Bootstrap exact custom role with expiring Role Admin
         shell: bash
         run: |
           set -euo pipefail
+
+          ADMIN_MEMBER="serviceAccount:mn-infra-admin@millionsnest.iam.gserviceaccount.com"
+          RUNTIME_MEMBER="serviceAccount:${RUNTIME_SA}"
+          ROLE_NAME="projects/${PROJECT_ID}/roles/${ROLE_ID}"
+          TEMP_TITLE="connectInboxRoleBootstrap"
+          EXPIRY="$(date -u -d '+20 minutes' '+%Y-%m-%dT%H:%M:%SZ')"
+          TEMP_CONDITION="expression=request.time < timestamp('${EXPIRY}'),title=${TEMP_TITLE},description=Temporary Connect Inbox custom-role bootstrap"
+
+          cleanup_role_admin() {
+            set +e
+            gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
+              --member="$ADMIN_MEMBER" \
+              --role="roles/iam.roleAdmin" \
+              --condition="$TEMP_CONDITION" \
+              --quiet >/dev/null 2>&1
+            echo "CONNECT_TEMP_ROLE_ADMIN_CLEANUP_ATTEMPTED"
+          }
+          trap cleanup_role_admin EXIT
+
+          # mn-infra-admin already has project get/setIamPolicy. It receives
+          # Role Administrator only for this short, time-bounded bootstrap so
+          # the runtime itself never receives a broad predefined datastore role.
+          gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member="$ADMIN_MEMBER" \
+            --role="roles/iam.roleAdmin" \
+            --condition="$TEMP_CONDITION" \
+            --quiet >/dev/null
+
+          echo "CONNECT_TEMP_ROLE_ADMIN_GRANTED_UNTIL=$EXPIRY"
+
+          ready=false
+          for attempt in $(seq 1 20); do
+            if gcloud iam roles list --project="$PROJECT_ID" --limit=1 >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 3
+          done
+          test "$ready" = "true"
+
           cat > /tmp/connect-inbox-runtime-role.yaml <<'YAML'
           title: "MillionsNest Connect Inbox Runtime"
           description: "Minimum Firestore data-plane permissions for the canonical Connect Inbox thread event and snapshot store."
@@ -103,52 +139,47 @@ jobs:
             echo "CONNECT_INBOX_RUNTIME_ROLE_CREATED"
           fi
 
-      - name: Bind custom role to dedicated Connect runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          ROLE_NAME="projects/${PROJECT_ID}/roles/${ROLE_ID}"
-          MEMBER="serviceAccount:${RUNTIME_SA}"
-
           if gcloud projects get-iam-policy "$PROJECT_ID" \
             --flatten="bindings[].members" \
-            --filter="bindings.role:${ROLE_NAME} AND bindings.members:${MEMBER}" \
+            --filter="bindings.role:${ROLE_NAME} AND bindings.members:${RUNTIME_MEMBER}" \
             --format='value(bindings.role)' | grep -Fxq "$ROLE_NAME"; then
             echo "CONNECT_INBOX_RUNTIME_ROLE_ALREADY_BOUND=$ROLE_NAME"
           else
             gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-              --member="$MEMBER" \
+              --member="$RUNTIME_MEMBER" \
               --role="$ROLE_NAME" \
               --condition=None \
               --quiet >/dev/null
             echo "CONNECT_INBOX_RUNTIME_ROLE_BOUND=$ROLE_NAME"
           fi
 
-      - name: Verify exact runtime permissions
-        shell: bash
-        run: |
-          set -euo pipefail
-          ROLE_NAME="projects/${PROJECT_ID}/roles/${ROLE_ID}"
-          MEMBER="serviceAccount:${RUNTIME_SA}"
-
           FOUND="$(gcloud projects get-iam-policy "$PROJECT_ID" \
             --flatten="bindings[].members" \
-            --filter="bindings.role:${ROLE_NAME} AND bindings.members:${MEMBER}" \
+            --filter="bindings.role:${ROLE_NAME} AND bindings.members:${RUNTIME_MEMBER}" \
             --format='value(bindings.role)' | head -n1)"
           test "$FOUND" = "$ROLE_NAME"
 
-          gcloud iam roles describe "$ROLE_ID" \
+          PERMISSIONS="$(gcloud iam roles describe "$ROLE_ID" \
             --project="$PROJECT_ID" \
-            --format='value(includedPermissions)' >/tmp/connect-role-permissions.txt
+            --format='value(includedPermissions)')"
 
           for PERMISSION in \
             datastore.entities.get \
             datastore.entities.list \
             datastore.entities.create \
             datastore.entities.update; do
-            grep -Fq "$PERMISSION" /tmp/connect-role-permissions.txt
+            printf '%s\n' "$PERMISSIONS" | grep -Fq "$PERMISSION"
             echo "CONNECT_RUNTIME_PERMISSION_DECLARED=$PERMISSION"
           done
+
+          if printf '%s\n' "$PERMISSIONS" | grep -Fq 'datastore.entities.delete'; then
+            echo "Refusing role: delete permission must not be present." >&2
+            exit 1
+          fi
+
+          cleanup_role_admin
+          trap - EXIT
+          echo "CONNECT_EXACT_RUNTIME_ROLE_BOOTSTRAP_OK"
 
       - name: Wait for Connect runtime self-probe
         shell: bash
