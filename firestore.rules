@@ -245,6 +245,38 @@ service cloud.firestore {
         journeyHasPermission(orgId, 'canManageMesa') ||
         journeyHasPermission(orgId, 'canManagePresence');
     }
+    function journeyCanManageMesaInScope(orgId, congregationId) {
+      let memberData = getMemberPermissions(orgId);
+      let active = isAuthenticated() &&
+        memberData != null &&
+        memberData.get('status', 'active') in ['active', 'ativo'];
+      let roleName = active
+        ? memberData.get('organizationRole', memberData.get('role', ''))
+        : '';
+      let permissions = active ? memberData.get('permissions', {}) : {};
+      let congregationIds = active ? memberData.get('congregationIds', []) : [];
+      let privileged = isSystemAdmin() || journeyOwner(orgId);
+      let broad = roleName in ['owner', 'admin', 'pastor'];
+      let capable = privileged || (
+        active && (
+          roleName in ['owner', 'admin', 'pastor', 'coordinator', 'mesa', 'table_host'] ||
+          (
+            permissions is map &&
+            (
+              permissions.get('canManageMesa', false) == true ||
+              permissions.get('canManagePresence', false) == true
+            )
+          )
+        )
+      );
+      let inScope = privileged || broad || (
+        active &&
+        congregationId is string &&
+        congregationIds is list &&
+        congregationId in congregationIds
+      );
+      return journeyProductEnabled(orgId) && capable && inScope;
+    }
     function journeyCanManagePresenceInScope(orgId, congregationId) {
       let memberData = getMemberPermissions(orgId);
       let active = isAuthenticated() &&
@@ -1484,13 +1516,19 @@ service cloud.firestore {
         }
 
         match /mesaParticipations/{recordId} {
-          allow read: if journeyCanManageMesa(orgId) &&
-            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
-          allow create: if journeyCanManageMesa(orgId) &&
-            journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
+          allow read: if journeyCanManageMesaInScope(
+            orgId,
+            resource.data.get('congregationId', '')
+          );
+          allow create: if journeyCanManageMesaInScope(
+              orgId,
+              request.resource.data.get('congregationId', '')
+            ) &&
             journeyValidMesaParticipationCreate(orgId, recordId);
-          allow update: if journeyCanManageMesa(orgId) &&
-            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
+          allow update: if journeyCanManageMesaInScope(
+              orgId,
+              resource.data.get('congregationId', '')
+            ) &&
             journeyValidMesaParticipationUpdate(orgId);
           allow delete: if false;
         }
@@ -1516,8 +1554,13 @@ service cloud.firestore {
         }
 
         match /presenceSessions/{sessionId} {
-          allow read: if (journeyCanManagePresence(orgId) || journeyCanManageMesa(orgId)) &&
-            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow read: if journeyCanManagePresenceInScope(
+              orgId,
+              resource.data.get('congregationId', '')
+            ) || journeyCanManageMesaInScope(
+              orgId,
+              resource.data.get('congregationId', '')
+            );
           allow create: if journeyCanManagePresence(orgId) &&
             journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
             journeyValidPresenceSessionCreate(orgId);
@@ -1541,8 +1584,10 @@ service cloud.firestore {
         }
 
         match /mesaPreparations/{preparationId} {
-          allow read: if journeyCanManageMesa(orgId) &&
-            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow read: if journeyCanManageMesaInScope(
+            orgId,
+            resource.data.get('congregationId', '')
+          );
           allow create: if journeyValidMesaPreparationCreate(orgId, preparationId);
           allow update: if journeyValidMesaPreparationUpdate(orgId);
           allow delete: if false;
