@@ -602,6 +602,101 @@ service cloud.firestore {
         ]);
     }
 
+    function journeyValidMesaPreparationCreate(orgId, preparationId) {
+      let congregationId = request.resource.data.get('congregationId', '');
+      let sessionId = request.resource.data.get('sessionId', '');
+      let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
+      let items = request.resource.data.get('items', {});
+      let owners = request.resource.data.get('owners', {});
+      let allReady = items.get('environment', false) &&
+        items.get('hosts', false) &&
+        items.get('hospitality', false) &&
+        items.get('supplies', false);
+      return request.resource.data.keys().hasOnly([
+          'organizationId', 'congregationId', 'sessionId', 'status',
+          'items', 'owners', 'updatedAt', 'updatedBy'
+        ]) &&
+        journeyTenantCreate(orgId) &&
+        preparationId == sessionId &&
+        congregationId is string && congregationId.size() > 0 &&
+        sessionId is string && sessionId.size() > 0 &&
+        items is map &&
+        owners is map &&
+        items.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
+        owners.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
+        items.get('environment', false) is bool &&
+        items.get('hosts', false) is bool &&
+        items.get('hospitality', false) is bool &&
+        items.get('supplies', false) is bool &&
+        owners.get('environment', '') == (items.get('environment', false) ? request.auth.uid : '') &&
+        owners.get('hosts', '') == (items.get('hosts', false) ? request.auth.uid : '') &&
+        owners.get('hospitality', '') == (items.get('hospitality', false) ? request.auth.uid : '') &&
+        owners.get('supplies', '') == (items.get('supplies', false) ? request.auth.uid : '') &&
+        request.resource.data.get('status', '') == (allReady ? 'ready' : 'preparing') &&
+        request.resource.data.get('updatedAt', null) == request.time &&
+        request.resource.data.get('updatedBy', '') == request.auth.uid &&
+        journeyCanManageMesa(orgId) &&
+        exists(sessionPath) &&
+        get(sessionPath).data.get('congregationId', '') == congregationId &&
+        get(sessionPath).data.get('status', '') == 'open';
+    }
+
+    function journeyValidMesaPreparationUpdate(orgId) {
+      let congregationId = resource.data.get('congregationId', '');
+      let sessionId = resource.data.get('sessionId', '');
+      let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
+      let items = request.resource.data.get('items', {});
+      let owners = request.resource.data.get('owners', {});
+      let oldItems = resource.data.get('items', {});
+      let oldOwners = resource.data.get('owners', {});
+      let allReady = items.get('environment', false) &&
+        items.get('hosts', false) &&
+        items.get('hospitality', false) &&
+        items.get('supplies', false);
+      return journeyTenantUnchanged(orgId) &&
+        journeyCongregationUnchanged() &&
+        request.resource.data.get('sessionId', '') == sessionId &&
+        request.resource.data.keys().hasOnly([
+          'organizationId', 'congregationId', 'sessionId', 'status',
+          'items', 'owners', 'updatedAt', 'updatedBy'
+        ]) &&
+        items is map &&
+        owners is map &&
+        items.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
+        owners.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
+        items.get('environment', false) is bool &&
+        items.get('hosts', false) is bool &&
+        items.get('hospitality', false) is bool &&
+        items.get('supplies', false) is bool &&
+        owners.get('environment', '') == (
+          items.get('environment', false) == oldItems.get('environment', false)
+            ? oldOwners.get('environment', '')
+            : (items.get('environment', false) ? request.auth.uid : '')
+        ) &&
+        owners.get('hosts', '') == (
+          items.get('hosts', false) == oldItems.get('hosts', false)
+            ? oldOwners.get('hosts', '')
+            : (items.get('hosts', false) ? request.auth.uid : '')
+        ) &&
+        owners.get('hospitality', '') == (
+          items.get('hospitality', false) == oldItems.get('hospitality', false)
+            ? oldOwners.get('hospitality', '')
+            : (items.get('hospitality', false) ? request.auth.uid : '')
+        ) &&
+        owners.get('supplies', '') == (
+          items.get('supplies', false) == oldItems.get('supplies', false)
+            ? oldOwners.get('supplies', '')
+            : (items.get('supplies', false) ? request.auth.uid : '')
+        ) &&
+        request.resource.data.get('status', '') == (allReady ? 'ready' : 'preparing') &&
+        request.resource.data.get('updatedAt', null) == request.time &&
+        request.resource.data.get('updatedBy', '') == request.auth.uid &&
+        journeyCanManageMesa(orgId) &&
+        exists(sessionPath) &&
+        get(sessionPath).data.get('congregationId', '') == congregationId &&
+        get(sessionPath).data.get('status', '') == 'open';
+    }
+
     function journeyValidCareRequestCreate(orgId) {
       let source = request.resource.data.get('source', '');
       let ownerRef = request.resource.data.get('ownerRef', '');
@@ -1443,6 +1538,14 @@ service cloud.firestore {
           allow create: if journeyCanManagePresenceInScope(orgId, request.resource.data.get('congregationId', '')) &&
             journeyValidPresenceCheckCreate(orgId);
           allow update, delete: if false;
+        }
+
+        match /mesaPreparations/{preparationId} {
+          allow read: if journeyCanManageMesa(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if journeyValidMesaPreparationCreate(orgId, preparationId);
+          allow update: if journeyValidMesaPreparationUpdate(orgId);
+          allow delete: if false;
         }
 
         match /careRequests/{careRequestId} {
