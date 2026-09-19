@@ -1,0 +1,169 @@
+name: Connect Inbox Runtime IAM Bootstrap
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/connect-inbox-runtime-iam-bootstrap.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: connect-inbox-runtime-iam-bootstrap
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: millionsnest
+  RUNTIME_SA: mn-connect-runtime@millionsnest.iam.gserviceaccount.com
+  ROLE_ID: millionsNestConnectInboxRuntime
+  READINESS_URL: https://mn-connect-555464791734.web.app/api/health/storage-readiness
+
+jobs:
+  grant:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact production commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate as MillionsNest Infra Admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Prove least-privilege bootstrap capability
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud config set project "$PROJECT_ID"
+
+          TOKEN="$(gcloud auth print-access-token)"
+          BODY='{"permissions":["iam.roles.create","iam.roles.get","iam.roles.update","resourcemanager.projects.getIamPolicy","resourcemanager.projects.setIamPolicy"]}'
+          RESPONSE="$(mktemp)"
+          trap 'rm -f "$RESPONSE"' EXIT
+
+          STATUS="$(curl --silent --show-error -o "$RESPONSE" -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data "$BODY" \
+            "https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT_ID}:testIamPermissions")"
+
+          test "$STATUS" = "200"
+
+          python3 - "$RESPONSE" <<'PY'
+          import json, sys
+          required = {
+              "iam.roles.create",
+              "iam.roles.get",
+              "iam.roles.update",
+              "resourcemanager.projects.getIamPolicy",
+              "resourcemanager.projects.setIamPolicy",
+          }
+          granted = set(json.load(open(sys.argv[1], encoding="utf-8")).get("permissions") or [])
+          missing = sorted(required - granted)
+          for permission in sorted(required):
+              print(f"CONNECT_IAM_BOOTSTRAP_PERMISSION={permission}:{'granted' if permission in granted else 'missing'}")
+          if missing:
+              raise SystemExit("Missing IAM bootstrap permissions: " + ", ".join(missing))
+          print("CONNECT_IAM_BOOTSTRAP_CAPABILITY=available")
+          PY
+
+      - name: Create or update Connect Inbox custom role
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/connect-inbox-runtime-role.yaml <<'YAML'
+          title: "MillionsNest Connect Inbox Runtime"
+          description: "Minimum Firestore data-plane permissions for the canonical Connect Inbox thread event and snapshot store."
+          stage: "GA"
+          includedPermissions:
+            - datastore.entities.get
+            - datastore.entities.list
+            - datastore.entities.create
+            - datastore.entities.update
+          YAML
+
+          if gcloud iam roles describe "$ROLE_ID" \
+            --project="$PROJECT_ID" \
+            --format='value(name)' >/dev/null 2>&1; then
+            gcloud iam roles update "$ROLE_ID" \
+              --project="$PROJECT_ID" \
+              --file=/tmp/connect-inbox-runtime-role.yaml \
+              --quiet
+            echo "CONNECT_INBOX_RUNTIME_ROLE_UPDATED"
+          else
+            gcloud iam roles create "$ROLE_ID" \
+              --project="$PROJECT_ID" \
+              --file=/tmp/connect-inbox-runtime-role.yaml \
+              --quiet
+            echo "CONNECT_INBOX_RUNTIME_ROLE_CREATED"
+          fi
+
+      - name: Bind custom role to dedicated Connect runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROLE_NAME="projects/${PROJECT_ID}/roles/${ROLE_ID}"
+          MEMBER="serviceAccount:${RUNTIME_SA}"
+
+          if gcloud projects get-iam-policy "$PROJECT_ID" \
+            --flatten="bindings[].members" \
+            --filter="bindings.role:${ROLE_NAME} AND bindings.members:${MEMBER}" \
+            --format='value(bindings.role)' | grep -Fxq "$ROLE_NAME"; then
+            echo "CONNECT_INBOX_RUNTIME_ROLE_ALREADY_BOUND=$ROLE_NAME"
+          else
+            gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+              --member="$MEMBER" \
+              --role="$ROLE_NAME" \
+              --condition=None \
+              --quiet >/dev/null
+            echo "CONNECT_INBOX_RUNTIME_ROLE_BOUND=$ROLE_NAME"
+          fi
+
+      - name: Verify exact runtime permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROLE_NAME="projects/${PROJECT_ID}/roles/${ROLE_ID}"
+          MEMBER="serviceAccount:${RUNTIME_SA}"
+
+          FOUND="$(gcloud projects get-iam-policy "$PROJECT_ID" \
+            --flatten="bindings[].members" \
+            --filter="bindings.role:${ROLE_NAME} AND bindings.members:${MEMBER}" \
+            --format='value(bindings.role)' | head -n1)"
+          test "$FOUND" = "$ROLE_NAME"
+
+          gcloud iam roles describe "$ROLE_ID" \
+            --project="$PROJECT_ID" \
+            --format='value(includedPermissions)' >/tmp/connect-role-permissions.txt
+
+          for PERMISSION in \
+            datastore.entities.get \
+            datastore.entities.list \
+            datastore.entities.create \
+            datastore.entities.update; do
+            grep -Fq "$PERMISSION" /tmp/connect-role-permissions.txt
+            echo "CONNECT_RUNTIME_PERMISSION_DECLARED=$PERMISSION"
+          done
+
+      - name: Wait for Connect runtime self-probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            PAYLOAD="$(curl --fail --silent --show-error "$READINESS_URL" || true)"
+            STATE="$(printf '%s' "$PAYLOAD" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const x=JSON.parse(s);process.stdout.write(String(x.storageReadiness||''))}catch{}})")"
+            echo "CONNECT_RUNTIME_FIRESTORE_SELF_PROBE_STATE=${STATE:-unavailable}"
+            if [ "$STATE" = "read_write_confirmed" ]; then
+              echo "CONNECT_INBOX_IAM_BOOTSTRAP_OK"
+              exit 0
+            fi
+            sleep 6
+          done
+
+          echo "Runtime role was bound, but readiness did not confirm within the propagation window." >&2
+          exit 1
