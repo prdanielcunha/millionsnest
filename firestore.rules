@@ -481,34 +481,28 @@ service cloud.firestore {
           'organizationId', 'congregationId', 'sessionId', 'personId', 'state',
           'source', 'actorId', 'recordedAt', 'correctedFromCheckId'
         ]) &&
-        sessionId is string &&
-        congregationId is string &&
-        personId is string &&
         request.resource.data.get('actorId', '') == request.auth.uid &&
         request.resource.data.get('recordedAt', null) == request.time &&
         request.resource.data.get('state', '') in ['present_confirmed', 'absent_confirmed', 'unverified'] &&
+        exists(sessionPath) &&
+        get(sessionPath).data.get('congregationId', '') == congregationId &&
+        get(sessionPath).data.get('status', '') == 'open' &&
+        exists(personPath) &&
+        get(personPath).data.get('congregationId', '') == congregationId &&
         (
           (source == 'human_check' && correctedFromCheckId == '')
           ||
           (
             source == 'retroactive_human_correction' &&
-            correctedFromCheckId is string &&
-            correctedFromCheckId.size() > 0 &&
-            request.resource.data.get('state', '') in ['present_confirmed', 'absent_confirmed'] &&
+            correctedFromCheckId != '' &&
+            request.resource.data.get('state', '') != 'unverified' &&
             exists(correctionPath) &&
-            get(correctionPath).data.get('organizationId', '') == orgId &&
             get(correctionPath).data.get('congregationId', '') == congregationId &&
             get(correctionPath).data.get('sessionId', '') == sessionId &&
             get(correctionPath).data.get('personId', '') == personId &&
-            get(correctionPath).data.get('state', '') in ['present_confirmed', 'absent_confirmed'] &&
             get(correctionPath).data.get('state', '') != request.resource.data.get('state', '')
           )
-        ) &&
-        exists(sessionPath) &&
-        get(sessionPath).data.get('congregationId', '') == congregationId &&
-        get(sessionPath).data.get('status', '') == 'open' &&
-        exists(personPath) &&
-        get(personPath).data.get('congregationId', '') == congregationId;
+        );
     }
 
     function journeyValidCareRequestCreate(orgId) {
@@ -1020,23 +1014,17 @@ service cloud.firestore {
             request.resource.data.get('evidenceRef', '') == 'presenceCheck:' + checkId &&
             existsAfter(checkPath) &&
             getAfter(checkPath).data.get('state', '') != 'unverified' &&
-            payload.get('sessionId', '') == getAfter(checkPath).data.get('sessionId', '') &&
-            payload.get('state', '') == getAfter(checkPath).data.get('state', '') &&
-            payload.get('source', '') == getAfter(checkPath).data.get('source', '') &&
             (
               (
                 eventType == 'PRESENCE_CONFIRMED' &&
                 getAfter(checkPath).data.get('source', '') == 'human_check' &&
-                getAfter(checkPath).data.get('correctedFromCheckId', '') == '' &&
-                payload.get('correctedFromCheckId', '') == ''
+                getAfter(checkPath).data.get('correctedFromCheckId', '') == ''
               )
               ||
               (
                 eventType == 'PRESENCE_CORRECTED' &&
                 getAfter(checkPath).data.get('source', '') == 'retroactive_human_correction' &&
-                getAfter(checkPath).data.get('correctedFromCheckId', '') is string &&
-                getAfter(checkPath).data.get('correctedFromCheckId', '').size() > 0 &&
-                payload.get('correctedFromCheckId', '') == getAfter(checkPath).data.get('correctedFromCheckId', '')
+                getAfter(checkPath).data.get('correctedFromCheckId', '') != ''
               )
             ) &&
             request.resource.data.get('subjectRef', '') == 'person:' + getAfter(checkPath).data.get('personId', '') &&
