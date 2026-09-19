@@ -12,6 +12,7 @@ import { updateOrganizationMemberRole } from './src/server/services/Organization
 import { repairOrganizationOwnership } from './src/server/services/OrganizationOwnershipRepairService.js';
 import { transferOrganizationOwnership } from './src/server/services/OrganizationOwnershipTransferService.js';
 import { updateMusicScaleMemberCapability } from './src/server/services/MusicScaleMemberCapabilityCommandService.js';
+import { updateNestJourneyMemberResponsibility } from './src/server/services/NestJourneyMemberResponsibilityCommandService.js';
 import {
   getActionPreferences,
   updateActionPreference
@@ -1466,6 +1467,7 @@ async function startServer() {
     getFirestore: () => getDb()!,
   }));
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/musicscale-capability', express.json({ limit: '8kb' }), (req, res) => updateMusicScaleMemberCapability(req, res));
+  app.patch('/api/v1/organizations/:organizationId/members/:memberId/nestjourney-responsibility', express.json({ limit: '8kb' }), (req, res) => updateNestJourneyMemberResponsibility(req, res));
   app.get('/api/v1/organizations/:organizationId/action-preferences', (req, res) => getActionPreferences(req, res));
   app.put('/api/v1/organizations/:organizationId/action-preference', express.json({ limit: '8kb' }), (req, res) => updateActionPreference(req, res));
   app.get('/api/v1/organizations/:organizationId/action-resolutions', (req, res) => getActionResolutions(req, res));
