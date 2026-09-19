@@ -1040,6 +1040,78 @@ service cloud.firestore {
         );
     }
 
+    function journeyValidGroupMeetingCreate(orgId) {
+      let groupId = request.resource.data.get('groupId', '');
+      let congregationId = request.resource.data.get('congregationId', '');
+      let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
+      return request.resource.data.keys().hasOnly([
+          'organizationId', 'congregationId', 'groupId', 'status',
+          'startedAt', 'createdBy', 'endedAt', 'closedBy'
+        ]) &&
+        journeyTenantCreate(orgId) &&
+        groupId is string &&
+        groupId.size() > 0 &&
+        congregationId is string &&
+        congregationId.size() > 0 &&
+        request.resource.data.get('status', '') == 'open' &&
+        request.resource.data.get('startedAt', null) == request.time &&
+        request.resource.data.get('createdBy', '') == request.auth.uid &&
+        request.resource.data.get('endedAt', null) == null &&
+        request.resource.data.get('closedBy', '') == '' &&
+        journeyCanManageGroupRoster(orgId, groupId) &&
+        exists(groupPath) &&
+        get(groupPath).data.get('congregationId', '') == congregationId;
+    }
+
+    function journeyValidGroupMeetingClose(orgId) {
+      let groupId = resource.data.get('groupId', '');
+      return journeyTenantUnchanged(orgId) &&
+        journeyCongregationUnchanged() &&
+        request.resource.data.get('groupId', '') == groupId &&
+        request.resource.data.get('startedAt', null) == resource.data.get('startedAt', null) &&
+        request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '') &&
+        resource.data.get('status', '') == 'open' &&
+        request.resource.data.get('status', '') == 'closed' &&
+        request.resource.data.get('endedAt', null) == request.time &&
+        request.resource.data.get('closedBy', '') == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'endedAt', 'closedBy'
+        ]) &&
+        journeyCanManageGroupRoster(orgId, groupId);
+    }
+
+    function journeyValidGroupAttendanceCreate(orgId, attendanceId) {
+      let groupId = request.resource.data.get('groupId', '');
+      let meetingId = request.resource.data.get('meetingId', '');
+      let personId = request.resource.data.get('personId', '');
+      let congregationId = request.resource.data.get('congregationId', '');
+      let meetingPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groupMeetings/$(meetingId);
+      let membershipPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groupMemberships/$(groupId + '__' + personId);
+      return request.resource.data.keys().hasOnly([
+          'organizationId', 'congregationId', 'groupId', 'meetingId',
+          'personId', 'status', 'recordedAt', 'recordedBy'
+        ]) &&
+        journeyTenantCreate(orgId) &&
+        attendanceId == meetingId + '__' + personId &&
+        groupId is string && groupId.size() > 0 &&
+        meetingId is string && meetingId.size() > 0 &&
+        personId is string && personId.size() > 0 &&
+        congregationId is string && congregationId.size() > 0 &&
+        request.resource.data.get('status', '') == 'present_confirmed' &&
+        request.resource.data.get('recordedAt', null) == request.time &&
+        request.resource.data.get('recordedBy', '') == request.auth.uid &&
+        journeyCanManageGroupRoster(orgId, groupId) &&
+        exists(meetingPath) &&
+        get(meetingPath).data.get('groupId', '') == groupId &&
+        get(meetingPath).data.get('congregationId', '') == congregationId &&
+        get(meetingPath).data.get('status', '') == 'open' &&
+        exists(membershipPath) &&
+        get(membershipPath).data.get('groupId', '') == groupId &&
+        get(membershipPath).data.get('personId', '') == personId &&
+        get(membershipPath).data.get('congregationId', '') == congregationId &&
+        get(membershipPath).data.get('status', '') == 'active';
+    }
+
     function journeyValidDiscipleshipCreate() {
       return request.resource.data.get('personId', '') is string &&
         request.resource.data.get('personId', '').size() > 0 &&
@@ -1502,6 +1574,25 @@ service cloud.firestore {
           allow create: if journeyValidGroupMembershipCreate(orgId, membershipId);
           allow update: if journeyValidGroupMembershipUpdate(orgId);
           allow delete: if false;
+        }
+
+        match /groupMeetings/{meetingId} {
+          allow read: if journeyCanManageGroupRoster(
+            orgId,
+            resource.data.get('groupId', '')
+          );
+          allow create: if journeyValidGroupMeetingCreate(orgId);
+          allow update: if journeyValidGroupMeetingClose(orgId);
+          allow delete: if false;
+        }
+
+        match /groupAttendance/{attendanceId} {
+          allow read: if journeyCanManageGroupRoster(
+            orgId,
+            resource.data.get('groupId', '')
+          );
+          allow create: if journeyValidGroupAttendanceCreate(orgId, attendanceId);
+          allow update, delete: if false;
         }
 
         match /discipleships/{discipleshipId} {
