@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, Firestore, getFirestore } from 'firebase-admin/firestore';
 import { canManageTenantMembers } from '../../lib/permissionService.js';
+import { CURRENT_PERMISSIONS_VERSION } from '../../lib/rbac.js';
 
 type Dependencies = {
   verifyIdToken?: (token: string) => Promise<{ uid: string }>;
@@ -227,7 +228,19 @@ export async function updateNestJourneyMemberResponsibility(
 
       const targetData = targetMemberSnap.data() ?? {};
       const previousResponsibility = normalize(targetData.journeyRole) || 'member';
-      if (previousResponsibility === responsibility) {
+      const previousPermissions =
+        targetData.permissions && typeof targetData.permissions === 'object'
+          ? targetData.permissions as Record<string, unknown>
+          : {};
+      const projectedPermissions = projectedJourneyPermissions(responsibility);
+      const permissions = {
+        ...previousPermissions,
+        ...projectedPermissions,
+      };
+      const projectionAlreadyCurrent = JOURNEY_PERMISSION_KEYS.every(
+        key => previousPermissions[key] === projectedPermissions[key],
+      );
+      if (previousResponsibility === responsibility && projectionAlreadyCurrent) {
         return {
           success: true as const,
           reasonCode: 'ALREADY_SET',
@@ -235,18 +248,10 @@ export async function updateNestJourneyMemberResponsibility(
           previousResponsibility,
         };
       }
-
-      const previousPermissions =
-        targetData.permissions && typeof targetData.permissions === 'object'
-          ? targetData.permissions as Record<string, unknown>
-          : {};
-      const permissions = {
-        ...previousPermissions,
-        ...projectedJourneyPermissions(responsibility),
-      };
       const patch = {
         journeyRole: responsibility,
         permissions,
+        permissionsVersion: CURRENT_PERMISSIONS_VERSION,
         updatedAt: FieldValue.serverTimestamp(),
       };
 
