@@ -477,25 +477,27 @@ service cloud.firestore {
       let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
       let correctionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceChecks/$(correctedFromCheckId);
       return journeyTenantCreate(orgId) &&
-        request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'sessionId', 'personId', 'state',
-          'source', 'actorId', 'recordedAt', 'correctedFromCheckId'
-        ]) &&
         request.resource.data.get('actorId', '') == request.auth.uid &&
         request.resource.data.get('recordedAt', null) == request.time &&
         request.resource.data.get('state', '') in ['present_confirmed', 'absent_confirmed', 'unverified'] &&
-        exists(sessionPath) &&
-        get(sessionPath).data.get('congregationId', '') == congregationId &&
-        get(sessionPath).data.get('status', '') == 'open' &&
-        exists(personPath) &&
-        get(personPath).data.get('congregationId', '') == congregationId &&
         (
-          (source == 'human_check' && correctedFromCheckId == '')
+          (
+            source == 'human_check' &&
+            correctedFromCheckId == '' &&
+            exists(sessionPath) &&
+            get(sessionPath).data.get('congregationId', '') == congregationId &&
+            get(sessionPath).data.get('status', '') == 'open' &&
+            exists(personPath) &&
+            get(personPath).data.get('congregationId', '') == congregationId
+          )
           ||
           (
             source == 'retroactive_human_correction' &&
             correctedFromCheckId != '' &&
             request.resource.data.get('state', '') != 'unverified' &&
+            exists(sessionPath) &&
+            get(sessionPath).data.get('congregationId', '') == congregationId &&
+            get(sessionPath).data.get('status', '') == 'open' &&
             exists(correctionPath) &&
             get(correctionPath).data.get('congregationId', '') == congregationId &&
             get(correctionPath).data.get('sessionId', '') == sessionId &&
@@ -1015,17 +1017,9 @@ service cloud.firestore {
             existsAfter(checkPath) &&
             getAfter(checkPath).data.get('state', '') != 'unverified' &&
             (
-              (
-                eventType == 'PRESENCE_CONFIRMED' &&
-                getAfter(checkPath).data.get('source', '') == 'human_check' &&
-                getAfter(checkPath).data.get('correctedFromCheckId', '') == ''
-              )
+              (eventType == 'PRESENCE_CONFIRMED' && getAfter(checkPath).data.get('source', '') == 'human_check')
               ||
-              (
-                eventType == 'PRESENCE_CORRECTED' &&
-                getAfter(checkPath).data.get('source', '') == 'retroactive_human_correction' &&
-                getAfter(checkPath).data.get('correctedFromCheckId', '') != ''
-              )
+              (eventType == 'PRESENCE_CORRECTED' && getAfter(checkPath).data.get('source', '') == 'retroactive_human_correction')
             ) &&
             request.resource.data.get('subjectRef', '') == 'person:' + getAfter(checkPath).data.get('personId', '') &&
             request.resource.data.get('scope', '') == 'congregation:' + getAfter(checkPath).data.get('congregationId', ''))
