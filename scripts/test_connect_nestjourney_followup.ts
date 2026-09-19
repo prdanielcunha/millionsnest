@@ -64,7 +64,7 @@ async function execute(db: MockDb, query={organizationId:'org1',followupId:'firs
   db.docs['organizations/org1/products/raiz_e_mesa/followups/first-contact-care1'].ownerRef='other';
   const res=await execute(db);
   assert.equal(res.statusCode,403);
-  assert.equal(res.body.code,'FOLLOWUP_SCOPE_DENIED');
+  assert.equal(res.body.code,'FOLLOWUP_OWNER_REQUIRED');
 }
 {
   const db=new MockDb(); seed(db,'admin');
