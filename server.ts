@@ -52,6 +52,7 @@ import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccess
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { handleEcosystemAccessProjectionRequest } from './src/server/services/EcosystemAccessProjectionService.js';
 import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
+import { handleNestJourneyFollowupContextRequest } from './src/server/services/NestJourneyFollowupContextService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
 import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy, canManageTenantMembers, canManageTenantBilling, canManageTenantSettings } from './src/lib/permissionService.js';
@@ -5473,6 +5474,15 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     return handleConnectSessionContextRequest(req, res, {
       verifyIdToken: (token) => admin.auth().verifyIdToken(token),
       getDb: () => db || null,
+      logger: console
+    });
+  });
+
+  app.get('/api/ecosystem/connect/nestjourney/followup-context', async (req, res) => {
+    return handleNestJourneyFollowupContextRequest(req, res, {
+      verifyIdToken: (token) => admin.auth().verifyIdToken(token),
+      getDb: () => db || null,
+      resolveAccess: resolveEcosystemAppAccess,
       logger: console
     });
   });
