@@ -95,7 +95,10 @@ export const APP_EXPERIENCE_REGISTRY: Readonly<Record<string, AppExperienceDefin
   connect: {
     appId: 'connect',
     sections: APP_EXPERIENCE_SECTIONS,
-    destinations: { home: '/' }
+    destinations: { home: '/' },
+    dynamicDestinations: {
+      journey_followup: '/journey-followup/:id'
+    }
   }
 };
 

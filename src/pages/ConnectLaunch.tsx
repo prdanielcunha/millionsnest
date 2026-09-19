@@ -1,24 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import {
   buildConnectLoginPath,
   resolveCanonicalConnectOrganizationId,
+  resolveSafeConnectReturnTo,
 } from '../lib/connectLaunchPolicy.js';
 
 export function ConnectLaunch() {
   const { user, profile, canonicalContext, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const launchStartedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const returnTo = useMemo(
+    () => resolveSafeConnectReturnTo(new URLSearchParams(location.search).get('returnTo')),
+    [location.search],
+  );
 
   useEffect(() => {
     if (loading) return;
 
     if (!user) {
-      navigate(buildConnectLoginPath(), { replace: true });
+      navigate(buildConnectLoginPath(returnTo), { replace: true });
       return;
     }
 
@@ -51,6 +57,8 @@ export function ConnectLaunch() {
       profile,
       organization,
       canonicalContext,
+      undefined,
+      returnTo || undefined,
     ).catch((launchError) => {
       launchStartedRef.current = false;
       setError(
@@ -59,7 +67,7 @@ export function ConnectLaunch() {
           : 'Não foi possível preparar o acesso seguro ao MillionsNest Connect.',
       );
     });
-  }, [canonicalContext, loading, navigate, profile, user]);
+  }, [canonicalContext, loading, navigate, profile, returnTo, user]);
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#050505] px-6 text-white">
