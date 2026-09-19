@@ -1024,6 +1024,74 @@ test('accepted Casa entry request requires active membership in same write', asy
   await assertFails(deleteDoc(requestRef));
 });
 
+test('Casa leader records factual meeting attendance without inferred absences', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-meeting-a'), {
+      organizationId: 'org-a', congregationId: 'unit-a', name: 'Casa Meeting',
+      leaderId: 'leader-a', capacity: 12, participants: 1, createdBy: 'leader-a',
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/groupMemberships/group-meeting-a__person-a'), {
+      organizationId: 'org-a', congregationId: 'unit-a', groupId: 'group-meeting-a',
+      personId: 'person-a', personName: 'Person A', status: 'active',
+      joinedAt: new Date(), joinedBy: 'leader-a', leftAt: null, leftBy: '',
+    });
+  });
+
+  const db = env.authenticatedContext('leader-a').firestore();
+  const meetingRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/groupMeetings/meeting-a');
+  await assertSucceeds(setDoc(meetingRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    groupId: 'group-meeting-a',
+    status: 'open',
+    startedAt: serverTimestamp(),
+    createdBy: 'leader-a',
+    endedAt: null,
+    closedBy: '',
+  }));
+
+  const attendanceRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/groupAttendance/meeting-a__person-a');
+  await assertSucceeds(setDoc(attendanceRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    groupId: 'group-meeting-a',
+    meetingId: 'meeting-a',
+    personId: 'person-a',
+    status: 'present_confirmed',
+    recordedAt: serverTimestamp(),
+    recordedBy: 'leader-a',
+  }));
+
+  await assertFails(updateDoc(attendanceRef, { status: 'absent_confirmed' }));
+
+  await assertSucceeds(updateDoc(meetingRef, {
+    status: 'closed',
+    endedAt: serverTimestamp(),
+    closedBy: 'leader-a',
+  }));
+
+  await assertFails(setDoc(doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/groupAttendance/meeting-a__person-b',
+  ), {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    groupId: 'group-meeting-a',
+    meetingId: 'meeting-a',
+    personId: 'person-b',
+    status: 'present_confirmed',
+    recordedAt: serverTimestamp(),
+    recordedBy: 'leader-a',
+  }));
+
+  const otherLeaderDb = env.authenticatedContext('leader-b').firestore();
+  await assertFails(getDoc(doc(
+    otherLeaderDb,
+    'organizations/org-a/products/raiz_e_mesa/groupMeetings/meeting-a',
+  )));
+});
+
 test('discipler relation is append-progressive and cannot be reassigned', async () => {
   const db = env.authenticatedContext('discipler-a').firestore();
   const ref = doc(db, 'organizations/org-a/products/raiz_e_mesa/discipleships/d-a');
