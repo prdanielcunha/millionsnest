@@ -239,6 +239,12 @@ service cloud.firestore {
         journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator']) ||
         journeyHasPermission(orgId, 'canManagePresence');
     }
+    function journeyCanManageMesa(orgId) {
+      return isSystemAdmin() ||
+        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator', 'mesa', 'table_host']) ||
+        journeyHasPermission(orgId, 'canManageMesa') ||
+        journeyHasPermission(orgId, 'canManagePresence');
+    }
     function journeyCanManagePresenceInScope(orgId, congregationId) {
       let memberData = getMemberPermissions(orgId);
       let active = isAuthenticated() &&
@@ -1311,19 +1317,13 @@ service cloud.firestore {
         }
 
         match /mesaParticipations/{recordId} {
-          allow read: if journeyCanManagePresenceInScope(
-            orgId,
-            resource.data.get('congregationId', '')
-          );
-          allow create: if journeyCanManagePresenceInScope(
-              orgId,
-              request.resource.data.get('congregationId', '')
-            ) &&
+          allow read: if journeyCanManageMesa(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
+          allow create: if journeyCanManageMesa(orgId) &&
+            journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
             journeyValidMesaParticipationCreate(orgId, recordId);
-          allow update: if journeyCanManagePresenceInScope(
-              orgId,
-              resource.data.get('congregationId', '')
-            ) &&
+          allow update: if journeyCanManageMesa(orgId) &&
+            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
             journeyValidMesaParticipationUpdate(orgId);
           allow delete: if false;
         }
@@ -1349,7 +1349,7 @@ service cloud.firestore {
         }
 
         match /presenceSessions/{sessionId} {
-          allow read: if journeyCanManagePresence(orgId) &&
+          allow read: if (journeyCanManagePresence(orgId) || journeyCanManageMesa(orgId)) &&
             journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
           allow create: if journeyCanManagePresence(orgId) &&
             journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
