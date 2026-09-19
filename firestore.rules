@@ -453,7 +453,11 @@ service cloud.firestore {
 
     function journeyCanAccessCongregation(orgId, congregationId) {
       return journeyProductEnabled(orgId) &&
-        (journeyIsOrgAdmin(orgId) || journeyAssignedToCongregation(orgId, congregationId));
+        (
+          journeyIsOrgAdmin(orgId) ||
+          journeyAppRole(orgId) == 'pastor' ||
+          journeyAssignedToCongregation(orgId, congregationId)
+        );
     }
 
     function journeyCanCreateCareInScope(orgId, congregationId, source) {
@@ -510,16 +514,21 @@ service cloud.firestore {
       let roleName = active
         ? memberData.get('organizationRole', memberData.get('role', ''))
         : '';
+      let appRole = active ? memberData.get('journeyRole', '') : '';
       let permissions = active ? memberData.get('permissions', {}) : {};
       let ids = active ? memberData.get('congregationIds', []) : [];
       let privileged = isSystemAdmin() || journeyOwner(orgId);
       let broad = privileged || (
-        active && roleName in ['owner', 'admin', 'pastor', 'data_admin']
+        active && (
+          roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
+          appRole in ['coordinator', 'pastor']
+        )
       );
       let careCapability = privileged || (
         active &&
         (
           roleName in ['owner', 'admin', 'pastor', 'care'] ||
+          appRole in ['caregiver', 'coordinator', 'pastor'] ||
           (permissions is map && permissions.get('canManageCare', false) == true)
         )
       );
@@ -527,6 +536,7 @@ service cloud.firestore {
         active &&
         (
           roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
+          appRole == 'pastor' ||
           (ids is list && congregationId is string && congregationId in ids)
         )
       );
