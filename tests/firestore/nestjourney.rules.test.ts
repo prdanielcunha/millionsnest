@@ -576,6 +576,83 @@ test('dedicated Mesa role can operate Mesa without gaining Presence confirmation
   }));
 });
 
+test('Mesa team can prepare the next service checklist without forging another owner', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-mesa-prep'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      eventRef: 'event:mesa-prep',
+      eventName: 'Sunday preparation',
+      openedAt: new Date(),
+      closedAt: null,
+      status: 'open',
+      expectedPeopleCount: 1,
+      minimumCoveragePercent: 90,
+      createdBy: 'coord-a',
+    });
+  });
+
+  const db = env.authenticatedContext('mesa-a').firestore();
+  const ref = doc(db, 'organizations/org-a/products/raiz_e_mesa/mesaPreparations/session-mesa-prep');
+  await assertSucceeds(setDoc(ref, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-mesa-prep',
+    status: 'preparing',
+    items: {
+      environment: true,
+      hosts: false,
+      hospitality: false,
+      supplies: false,
+    },
+    owners: {
+      environment: 'mesa-a',
+      hosts: '',
+      hospitality: '',
+      supplies: '',
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: 'mesa-a',
+  }));
+
+  await assertSucceeds(updateDoc(ref, {
+    status: 'preparing',
+    items: {
+      environment: true,
+      hosts: true,
+      hospitality: false,
+      supplies: false,
+    },
+    owners: {
+      environment: 'mesa-a',
+      hosts: 'mesa-a',
+      hospitality: '',
+      supplies: '',
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: 'mesa-a',
+  }));
+
+  await assertFails(updateDoc(ref, {
+    status: 'preparing',
+    items: {
+      environment: true,
+      hosts: true,
+      hospitality: true,
+      supplies: false,
+    },
+    owners: {
+      environment: 'mesa-a',
+      hosts: 'mesa-a',
+      hospitality: 'someone-else',
+      supplies: '',
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: 'mesa-a',
+  }));
+});
+
 test('Mesa participation is presence-scoped, factual, and bound to an open session', async () => {
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
