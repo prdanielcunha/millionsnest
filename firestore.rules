@@ -667,7 +667,7 @@ service cloud.firestore {
         request.resource.data.get('status', '') == (allReady ? 'ready' : 'preparing') &&
         request.resource.data.get('updatedAt', null) == request.time &&
         request.resource.data.get('updatedBy', '') == request.auth.uid &&
-        journeyCanManageMesa(orgId) &&
+        journeyCanManageMesaInScope(orgId, congregationId) &&
         exists(sessionPath) &&
         get(sessionPath).data.get('congregationId', '') == congregationId &&
         get(sessionPath).data.get('status', '') == 'open';
