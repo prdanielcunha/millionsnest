@@ -179,17 +179,6 @@ export async function updateNestJourneyMemberResponsibility(
   if (!NESTJOURNEY_RESPONSIBILITIES.has(responsibility)) {
     return res.status(400).json({ success: false, reasonCode: 'INVALID_RESPONSIBILITY' });
   }
-  const requestedCongregationIds = Array.isArray(req.body?.congregationIds)
-    ? Array.from(new Set(
-        req.body.congregationIds
-          .filter((value: unknown): value is string => isSafeDocumentId(value))
-          .map((value: string) => value.trim()),
-      )).slice(0, 50)
-    : null;
-  if (Array.isArray(req.body?.congregationIds) && requestedCongregationIds?.length !== req.body.congregationIds.length) {
-    return res.status(400).json({ success: false, reasonCode: 'INVALID_CONGREGATION_SCOPE' });
-  }
-
   try {
     const db = (dependencies.getFirestore ?? getFirestore)();
     const auditRef = db.collection(`organizations/${organizationId}/audit_logs`).doc();
@@ -238,24 +227,12 @@ export async function updateNestJourneyMemberResponsibility(
 
       const targetData = targetMemberSnap.data() ?? {};
       const previousResponsibility = normalize(targetData.journeyRole) || 'member';
-      const previousScopeSource = Array.isArray(targetData.journeyCongregationIds)
-        ? targetData.journeyCongregationIds
-        : Array.isArray(targetData.congregationIds)
-          ? targetData.congregationIds
-          : [];
-      const previousCongregationIds = previousScopeSource
-        .filter((value: unknown): value is string => typeof value === 'string');
-      const congregationIds = requestedCongregationIds ?? previousCongregationIds;
-      const sameScope =
-        congregationIds.length === previousCongregationIds.length &&
-        congregationIds.every((value, index) => value === previousCongregationIds[index]);
-      if (previousResponsibility === responsibility && sameScope) {
+      if (previousResponsibility === responsibility) {
         return {
           success: true as const,
           reasonCode: 'ALREADY_SET',
           responsibility,
           previousResponsibility,
-          congregationIds,
         };
       }
 
@@ -269,8 +246,6 @@ export async function updateNestJourneyMemberResponsibility(
       };
       const patch = {
         journeyRole: responsibility,
-        journeyCongregationIds: congregationIds,
-        journeyAllCongregations: responsibility === 'pastor',
         permissions,
         updatedAt: FieldValue.serverTimestamp(),
       };
@@ -296,9 +271,6 @@ export async function updateNestJourneyMemberResponsibility(
         organizationId,
         previousResponsibility,
         responsibility,
-        previousCongregationIds,
-        congregationIds,
-        journeyAllCongregations: responsibility === 'pastor',
         timestamp: FieldValue.serverTimestamp(),
       });
 
@@ -307,7 +279,6 @@ export async function updateNestJourneyMemberResponsibility(
         reasonCode: 'RESPONSIBILITY_UPDATED',
         responsibility,
         previousResponsibility,
-        congregationIds,
       };
     });
 
