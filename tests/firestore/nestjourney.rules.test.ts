@@ -60,6 +60,7 @@ before(async () => {
       ['member-a', 'member', ['unit-a'], {}],
       ['care-a', 'care', ['unit-a'], {}],
       ['coord-a', 'coordinator', ['unit-a'], { canManagePeople: true }],
+      ['mesa-a', 'mesa', ['unit-a'], {}],
       ['pastor-a', 'pastor', ['unit-a', 'unit-b'], {}],
       ['leader-a', 'group_leader', ['unit-a'], {}],
       ['leader-b', 'group_leader', ['unit-a'], {}],
@@ -522,6 +523,240 @@ test('raw canonical facts remain hidden from operational roles and visible to Jo
   await assertSucceeds(getDoc(doc(pastorDb, 'organizations/org-a/products/raiz_e_mesa/facts/fact-a')));
 });
 
+test('dedicated Mesa role can operate Mesa without gaining Presence confirmation writes', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-mesa-role'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      eventRef: 'event:mesa-role',
+      eventName: 'Sunday',
+      openedAt: new Date(),
+      closedAt: null,
+      status: 'open',
+      expectedPeopleCount: 1,
+      minimumCoveragePercent: 90,
+      createdBy: 'coord-a',
+    });
+  });
+
+  const db = env.authenticatedContext('mesa-a').firestore();
+  await assertSucceeds(getDoc(doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-mesa-role',
+  )));
+
+  await assertSucceeds(setDoc(doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/mesaParticipations/session-mesa-role__person-a',
+  ), {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-mesa-role',
+    personId: 'person-a',
+    status: 'invited',
+    bondHostRef: 'mesa-a',
+    updatedAt: serverTimestamp(),
+    updatedBy: 'mesa-a',
+  }));
+
+  await assertFails(setDoc(doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/presenceChecks/mesa-cannot-confirm',
+  ), {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-mesa-role',
+    personId: 'person-a',
+    state: 'present_confirmed',
+    source: 'human_check',
+    actorId: 'mesa-a',
+    recordedAt: serverTimestamp(),
+    correctedFromCheckId: '',
+  }));
+});
+
+test('Mesa team can prepare the next service checklist without forging another owner', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-mesa-prep'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      eventRef: 'event:mesa-prep',
+      eventName: 'Sunday preparation',
+      openedAt: new Date(),
+      closedAt: null,
+      status: 'open',
+      expectedPeopleCount: 1,
+      minimumCoveragePercent: 90,
+      createdBy: 'coord-a',
+    });
+  });
+
+  const db = env.authenticatedContext('mesa-a').firestore();
+  const ref = doc(db, 'organizations/org-a/products/raiz_e_mesa/mesaPreparations/session-mesa-prep');
+  await assertSucceeds(setDoc(ref, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-mesa-prep',
+    status: 'preparing',
+    items: {
+      environment: true,
+      hosts: false,
+      hospitality: false,
+      supplies: false,
+    },
+    owners: {
+      environment: 'mesa-a',
+      hosts: '',
+      hospitality: '',
+      supplies: '',
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: 'mesa-a',
+  }));
+
+  await assertSucceeds(updateDoc(ref, {
+    status: 'preparing',
+    items: {
+      environment: true,
+      hosts: true,
+      hospitality: false,
+      supplies: false,
+    },
+    owners: {
+      environment: 'mesa-a',
+      hosts: 'mesa-a',
+      hospitality: '',
+      supplies: '',
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: 'mesa-a',
+  }));
+
+  await assertFails(updateDoc(ref, {
+    status: 'preparing',
+    items: {
+      environment: true,
+      hosts: true,
+      hospitality: true,
+      supplies: false,
+    },
+    owners: {
+      environment: 'mesa-a',
+      hosts: 'mesa-a',
+      hospitality: 'someone-else',
+      supplies: '',
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: 'mesa-a',
+  }));
+});
+
+test('Mesa participation is presence-scoped, factual, and bound to an open session', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-mesa'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      eventRef: 'event:mesa',
+      eventName: 'Mesa service',
+      openedAt: new Date(),
+      closedAt: null,
+      status: 'open',
+      expectedPeopleCount: 1,
+      minimumCoveragePercent: 90,
+      createdBy: 'coord-a',
+    });
+  });
+
+  const coordDb = env.authenticatedContext('coord-a').firestore();
+  const mesaRef = doc(
+    coordDb,
+    'organizations/org-a/products/raiz_e_mesa/mesaParticipations/session-mesa__person-a',
+  );
+
+  await assertSucceeds(setDoc(mesaRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-mesa',
+    personId: 'person-a',
+    status: 'invited',
+    bondHostRef: 'coord-a',
+    updatedAt: serverTimestamp(),
+    updatedBy: 'coord-a',
+  }));
+
+  await assertSucceeds(updateDoc(mesaRef, {
+    status: 'joined',
+    updatedAt: serverTimestamp(),
+    updatedBy: 'coord-a',
+  }));
+
+  const ordinaryDb = env.authenticatedContext('member-a').firestore();
+  await assertFails(getDoc(doc(
+    ordinaryDb,
+    'organizations/org-a/products/raiz_e_mesa/mesaParticipations/session-mesa__person-a',
+  )));
+
+  await assertFails(setDoc(doc(
+    coordDb,
+    'organizations/org-a/products/raiz_e_mesa/mesaParticipations/wrong-id',
+  ), {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-mesa',
+    personId: 'person-a',
+    status: 'joined',
+    bondHostRef: 'coord-a',
+    updatedAt: serverTimestamp(),
+    updatedBy: 'coord-a',
+  }));
+});
+
+test('module labels are readable by Journey members and writable only by authorized leadership', async () => {
+  const pastorDb = env.authenticatedContext('pastor-a').firestore();
+  const ref = doc(
+    pastorDb,
+    'organizations/org-a/products/raiz_e_mesa/settings/moduleLabels',
+  );
+
+  await assertSucceeds(setDoc(ref, {
+    organizationId: 'org-a',
+    labels: {
+      presence: 'Recepção',
+      table: 'Café da Família',
+      care: 'Cuidado',
+      groups: 'PG',
+      discipleship: 'Caminho',
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: 'pastor-a',
+  }));
+
+  const memberDb = env.authenticatedContext('member-a').firestore();
+  await assertSucceeds(getDoc(doc(
+    memberDb,
+    'organizations/org-a/products/raiz_e_mesa/settings/moduleLabels',
+  )));
+
+  const coordDb = env.authenticatedContext('coord-a').firestore();
+  await assertFails(updateDoc(doc(
+    coordDb,
+    'organizations/org-a/products/raiz_e_mesa/settings/moduleLabels',
+  ), {
+    labels: {
+      presence: 'Entrada',
+      table: 'Mesa',
+      care: 'Cuidado',
+      groups: 'Casa',
+      discipleship: 'Raiz',
+    },
+    updatedAt: serverTimestamp(),
+    updatedBy: 'coord-a',
+  }));
+});
+
 test('other product namespaces preserve previous generic tenant behavior', async () => {
   const db = env.authenticatedContext('member-a').firestore();
   const ref = doc(db, 'organizations/org-a/products/example_product/state/example');
@@ -550,6 +785,108 @@ test('Presence session plus canonical fact can be created atomically by scoped c
   await assertSucceeds(batch.commit());
 });
 
+
+test('Presence correction is append-only, evidence-backed, and limited to an open session', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-correction'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      eventRef: 'event:session-correction',
+      eventName: 'Correction service',
+      openedAt: new Date(),
+      closedAt: null,
+      status: 'open',
+      expectedPeopleCount: 1,
+      minimumCoveragePercent: 90,
+      createdBy: 'coord-a',
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceChecks/original-correction'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      sessionId: 'session-correction',
+      personId: 'person-a',
+      state: 'present_confirmed',
+      source: 'human_check',
+      actorId: 'coord-a',
+      recordedAt: new Date(),
+    });
+  });
+
+  const db = env.authenticatedContext('coord-a').firestore();
+  const checkRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceChecks/correction-a');
+  const factRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/facts/presence-correction-a');
+  const batch = writeBatch(db);
+  batch.set(checkRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    sessionId: 'session-correction',
+    personId: 'person-a',
+    state: 'absent_confirmed',
+    source: 'retroactive_human_correction',
+    actorId: 'coord-a',
+    recordedAt: serverTimestamp(),
+    correctedFromCheckId: 'original-correction',
+  });
+  batch.set(factRef, {
+    eventId: 'presence-correction-a',
+    eventType: 'PRESENCE_CORRECTED',
+    occurredAt: serverTimestamp(),
+    recordedAt: serverTimestamp(),
+    organizationId: 'org-a',
+    actorId: 'coord-a',
+    subjectRef: 'person:person-a',
+    sourceApp: 'nestjourney',
+    scope: 'congregation:unit-a',
+    evidenceRef: 'presenceCheck:correction-a',
+    sensitivity: 'confidential',
+    version: 1,
+    payload: {
+      checkId: 'correction-a',
+      sessionId: 'session-correction',
+      state: 'absent_confirmed',
+      source: 'retroactive_human_correction',
+      correctedFromCheckId: 'original-correction',
+    },
+  });
+  await assertSucceeds(batch.commit());
+
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceChecks/correction-same-state'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      sessionId: 'session-correction',
+      personId: 'person-a',
+      state: 'present_confirmed',
+      source: 'retroactive_human_correction',
+      actorId: 'coord-a',
+      recordedAt: serverTimestamp(),
+      correctedFromCheckId: 'original-correction',
+    },
+  ));
+
+  const sessionRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceSessions/session-correction');
+  await assertSucceeds(updateDoc(sessionRef, {
+    status: 'closed',
+    closedAt: serverTimestamp(),
+    closedBy: 'coord-a',
+  }));
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceChecks/correction-after-close'),
+    {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      sessionId: 'session-correction',
+      personId: 'person-a',
+      state: 'present_confirmed',
+      source: 'retroactive_human_correction',
+      actorId: 'coord-a',
+      recordedAt: serverTimestamp(),
+      correctedFromCheckId: 'correction-a',
+    },
+  ));
+});
 
 test('group leader can manage a valid group only inside assigned scope', async () => {
   const db = env.authenticatedContext('leader-a').firestore();
@@ -762,6 +1099,74 @@ test('accepted Casa entry request requires active membership in same write', asy
   await assertSucceeds(batch.commit());
   await assertSucceeds(getDoc(membershipRef));
   await assertFails(deleteDoc(requestRef));
+});
+
+test('Casa leader records factual meeting attendance without inferred absences', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/groups/group-meeting-a'), {
+      organizationId: 'org-a', congregationId: 'unit-a', name: 'Casa Meeting',
+      leaderId: 'leader-a', capacity: 12, participants: 1, createdBy: 'leader-a',
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/groupMemberships/group-meeting-a__person-a'), {
+      organizationId: 'org-a', congregationId: 'unit-a', groupId: 'group-meeting-a',
+      personId: 'person-a', personName: 'Person A', status: 'active',
+      joinedAt: new Date(), joinedBy: 'leader-a', leftAt: null, leftBy: '',
+    });
+  });
+
+  const db = env.authenticatedContext('leader-a').firestore();
+  const meetingRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/groupMeetings/meeting-a');
+  await assertSucceeds(setDoc(meetingRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    groupId: 'group-meeting-a',
+    status: 'open',
+    startedAt: serverTimestamp(),
+    createdBy: 'leader-a',
+    endedAt: null,
+    closedBy: '',
+  }));
+
+  const attendanceRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/groupAttendance/meeting-a__person-a');
+  await assertSucceeds(setDoc(attendanceRef, {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    groupId: 'group-meeting-a',
+    meetingId: 'meeting-a',
+    personId: 'person-a',
+    status: 'present_confirmed',
+    recordedAt: serverTimestamp(),
+    recordedBy: 'leader-a',
+  }));
+
+  await assertFails(updateDoc(attendanceRef, { status: 'absent_confirmed' }));
+
+  await assertSucceeds(updateDoc(meetingRef, {
+    status: 'closed',
+    endedAt: serverTimestamp(),
+    closedBy: 'leader-a',
+  }));
+
+  await assertFails(setDoc(doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/groupAttendance/meeting-a__person-b',
+  ), {
+    organizationId: 'org-a',
+    congregationId: 'unit-a',
+    groupId: 'group-meeting-a',
+    meetingId: 'meeting-a',
+    personId: 'person-b',
+    status: 'present_confirmed',
+    recordedAt: serverTimestamp(),
+    recordedBy: 'leader-a',
+  }));
+
+  const otherLeaderDb = env.authenticatedContext('leader-b').firestore();
+  await assertFails(getDoc(doc(
+    otherLeaderDb,
+    'organizations/org-a/products/raiz_e_mesa/groupMeetings/meeting-a',
+  )));
 });
 
 test('discipler relation is append-progressive and cannot be reassigned', async () => {

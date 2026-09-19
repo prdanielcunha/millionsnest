@@ -1,0 +1,67 @@
+name: Firebase Firestore Rules Deploy
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - "firestore.rules"
+      - "firebase.rules-test.json"
+      - "tests/firestore/nestjourney.rules.test.ts"
+      - ".github/workflows/firebase-firestore-rules-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: millionsnest-firestore-rules-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact production commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Java 21 for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Authenticate with MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Certify NestJourney Firestore boundary
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-millionsnest-nestjourney-release
+          "npx tsx --test --test-concurrency=1 tests/firestore/nestjourney.rules.test.ts"
+
+      - name: Deploy canonical Firestore rules
+        run: >-
+          npx firebase-tools@15.26.0 deploy
+          --only firestore:rules
+          --config firebase.rules-test.json
+          --project millionsnest
+          --non-interactive
+
+      - name: Confirm deployment contract
+        run: echo "MILLIONSNEST_FIRESTORE_RULES_DEPLOY_OK"

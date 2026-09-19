@@ -251,3 +251,12 @@ As regras a seguir são mandatórias para qualquer IA que for modificar, analisa
    - configurações manuais;
    - confirmação de ausência de mudanças fora do escopo.
 25. Nunca afirmar que um teste passou sem evidência da execução.
+
+
+## Entrada e autenticação dos aplicativos — regra canônica
+
+Antes de criar ou alterar login, SSO, PWA, deep link, troca de conta, seleção de organização ou lançamento de qualquer app, leia obrigatoriamente `docs/ECOSYSTEM_APP_ENTRY_AUTH_STANDARD.md`.
+
+Regra permanente para apps atuais e futuros: o Hub é a autoridade canônica de identidade organizacional, membership, entitlement e RBAC, mas não deve ser um pedágio de UX. Todo app standalone deve conseguir restaurar sessão ou oferecer login Google no próprio produto e depois revalidar acesso pela autoridade canônica. Handoff pelo Hub continua suportado. Login direto e handoff devem convergir no mesmo resultado de autorização.
+
+Nunca implemente login direto como bypass de tenant, entitlement, membership, capabilities ou autorização server-side/Rules.
