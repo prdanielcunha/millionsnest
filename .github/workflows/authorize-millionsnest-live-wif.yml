@@ -1,0 +1,85 @@
+name: Authorize MillionsNest Live Production WIF
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - ".github/workflows/authorize-millionsnest-live-wif.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: authorize-millionsnest-live-wif
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: millionsnest
+  PROJECT_NUMBER: "555464791734"
+  POOL_ID: mn-prod-github
+  PROVIDER_ID: github
+  LIVE_REPOSITORY: prdanielcunha/musicscale-live
+  WEB_DEPLOYER: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate as MillionsNest infrastructure admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Extend provider condition only for Live production
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CURRENT="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID"             --workload-identity-pool="$POOL_ID"             --location=global             --project="$PROJECT_ID"             --format='value(attributeCondition)')"
+
+          test -n "$CURRENT"
+          echo "CURRENT_CONDITION_PRESENT=true"
+
+          if grep -Fq "$LIVE_REPOSITORY" <<<"$CURRENT"; then
+            echo "LIVE_REPOSITORY_ALREADY_ALLOWED=true"
+          else
+            LIVE_CLAUSE="(assertion.repository == '$LIVE_REPOSITORY' && assertion.ref == 'refs/heads/production')"
+            UPDATED="($CURRENT) || $LIVE_CLAUSE"
+
+            gcloud iam workload-identity-pools providers update-oidc "$PROVIDER_ID"               --workload-identity-pool="$POOL_ID"               --location=global               --project="$PROJECT_ID"               --attribute-condition="$UPDATED"               --quiet
+
+            echo "LIVE_REPOSITORY_ADDED_TO_PROVIDER=true"
+          fi
+
+      - name: Allow Live repository to impersonate web deployer
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$LIVE_REPOSITORY"
+
+          gcloud iam service-accounts add-iam-policy-binding "$WEB_DEPLOYER"             --project="$PROJECT_ID"             --role="roles/iam.workloadIdentityUser"             --member="$MEMBER"             --quiet >/tmp/live-wif-binding.json
+
+          echo "LIVE_WEB_DEPLOYER_BINDING_READY=true"
+
+      - name: Verify constrained Live authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CONDITION="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID"             --workload-identity-pool="$POOL_ID"             --location=global             --project="$PROJECT_ID"             --format='value(attributeCondition)')"
+
+          grep -F "$LIVE_REPOSITORY" <<<"$CONDITION" >/dev/null
+          grep -F "refs/heads/production" <<<"$CONDITION" >/dev/null
+
+          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$LIVE_REPOSITORY"
+          gcloud iam service-accounts get-iam-policy "$WEB_DEPLOYER"             --project="$PROJECT_ID"             --format=json >/tmp/web-deployer-policy.json
+
+          jq -e --arg member "$MEMBER"             '.bindings[] | select(.role == "roles/iam.workloadIdentityUser") | .members[] | select(. == $member)'             /tmp/web-deployer-policy.json >/dev/null
+
+          echo "MILLIONSNEST_LIVE_PRODUCTION_WIF_READY=true"
