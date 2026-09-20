@@ -771,6 +771,56 @@ test('Presence responsibility can explicitly claim a relationship host with cano
   });
   await assertSucceeds(batch.commit());
 
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'organizations/org-a/members/presence-host-bond-other'), {
+      uid: 'presence-host-bond-other',
+      status: 'active',
+      role: 'member',
+      organizationRole: 'member',
+      journeyRole: 'presence_host',
+      congregationIds: ['unit-a'],
+      permissions: {
+        canManagePresence: true,
+        canManagePeople: true,
+      },
+    });
+  });
+  const otherDb = env.authenticatedContext('presence-host-bond-other').firestore();
+  const takeover = writeBatch(otherDb);
+  takeover.update(
+    doc(otherDb, 'organizations/org-a/products/raiz_e_mesa/people/person-bond'),
+    {
+      bondHostRef: 'presence-host-bond-other',
+      bondAssignedAt: serverTimestamp(),
+      bondAssignedBy: 'presence-host-bond-other',
+    },
+  );
+  takeover.set(
+    doc(
+      otherDb,
+      'organizations/org-a/products/raiz_e_mesa/facts/bond-host-person-bond-presence-host-bond-other',
+    ),
+    {
+      eventId: 'bond-host-person-bond-presence-host-bond-other',
+      eventType: 'BOND_HOST_ASSIGNED',
+      occurredAt: serverTimestamp(),
+      recordedAt: serverTimestamp(),
+      organizationId: 'org-a',
+      actorId: 'presence-host-bond-other',
+      subjectRef: 'person:person-bond',
+      sourceApp: 'nestjourney',
+      scope: 'congregation:unit-a',
+      evidenceRef: 'person:person-bond',
+      sensitivity: 'confidential',
+      version: 1,
+      payload: {
+        personId: 'person-bond',
+        bondHostRef: 'presence-host-bond-other',
+      },
+    },
+  );
+  await assertFails(takeover.commit());
+
   const ordinaryDb = env.authenticatedContext('member-a').firestore();
   await assertFails(updateDoc(
     doc(ordinaryDb, 'organizations/org-a/products/raiz_e_mesa/people/person-bond'),
