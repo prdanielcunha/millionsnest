@@ -418,9 +418,9 @@ export function Dashboard() {
         !nestJourneyWorkspaceProjection ||
         nestJourneyWorkspaceProjection.organizationId !== activeContextOrgId ||
         nestJourneyWorkspaceProjection.accessible !== true ||
-        nestJourneyWorkspaceProjection.decisionState !== 'granted' ||
+        currentNestJourneyProjection.decisionState !== 'granted' ||
         (
-          nestJourneyWorkspaceProjection.canReadJourneyOperational !== true &&
+          currentNestJourneyProjection.canReadJourneyOperational !== true &&
           !canAccessDevelopmentPreviews
         ) ||
         nestJourneyProjectionLoading ||
@@ -635,6 +635,11 @@ export function Dashboard() {
       || profile?.activeOrganizationId 
       || profile?.primaryOrganizationId 
       || profile?.organizationId;
+
+  const currentNestJourneyProjection =
+    nestJourneyWorkspaceProjection?.organizationId === activeContextOrgId
+      ? nestJourneyWorkspaceProjection
+      : null;
 
   const canLaunchNestFinance =
     Boolean(user) &&
@@ -2839,12 +2844,12 @@ export function Dashboard() {
           ? 'loading'
           : musicScaleProjection?.catalogState || 'unavailable'
     },
-    nestJourneyAccess: nestJourneyWorkspaceProjection
+    nestJourneyAccess: currentNestJourneyProjection
       ? {
-          accessible: nestJourneyWorkspaceProjection.accessible,
-          decisionState: nestJourneyWorkspaceProjection.decisionState,
-          canReadJourneyOperational: nestJourneyWorkspaceProjection.canReadJourneyOperational,
-          isGlobalAccess: nestJourneyWorkspaceProjection.isGlobalAccess
+          accessible: currentNestJourneyProjection.accessible,
+          decisionState: currentNestJourneyProjection.decisionState,
+          canReadJourneyOperational: currentNestJourneyProjection.canReadJourneyOperational,
+          isGlobalAccess: currentNestJourneyProjection.isGlobalAccess
         }
       : null,
     isGlobalAdmin,
@@ -3159,13 +3164,13 @@ export function Dashboard() {
                   canReadManagedScaleResponses: musicScaleProjection.canReadManagedScaleResponses,
                   isGlobalAccess: musicScaleProjection.isGlobalAccess
                 } : null}
-                nestJourneyAuthority={nestJourneyWorkspaceProjection ? {
-                  accessible: nestJourneyWorkspaceProjection.accessible,
-                  decisionState: nestJourneyWorkspaceProjection.decisionState,
-                  canReadJourneyOperational: nestJourneyWorkspaceProjection.canReadJourneyOperational,
-                  isGlobalAccess: nestJourneyWorkspaceProjection.isGlobalAccess
+                nestJourneyAuthority={currentNestJourneyProjection ? {
+                  accessible: currentNestJourneyProjection.accessible,
+                  decisionState: currentNestJourneyProjection.decisionState,
+                  canReadJourneyOperational: currentNestJourneyProjection.canReadJourneyOperational,
+                  isGlobalAccess: currentNestJourneyProjection.isGlobalAccess
                 } : null}
-                nestJourneyWorkspace={nestJourneyWorkspaceProjection}
+                nestJourneyWorkspace={currentNestJourneyProjection}
                 musicScaleApp={musicScaleApp}
                 occupiedSlots={occupiedSlots}
                 maxUsersLimit={maxUsersLimit}
