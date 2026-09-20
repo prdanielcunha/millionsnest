@@ -115,6 +115,50 @@ export function isResolutionSourceSignalPair(input: {
   );
 }
 
+
+export function hasValidResolutionIdentity(input: {
+  sourceApp: unknown;
+  signalType: unknown;
+  dedupeKey: unknown;
+}): input is {
+  sourceApp: ActionResolutionRecord['sourceApp'];
+  signalType: ResolvableActionSignal;
+  dedupeKey: string;
+} {
+  if (
+    !isResolutionSourceSignalPair(input) ||
+    typeof input.dedupeKey !== 'string'
+  ) {
+    return false;
+  }
+
+  if (input.sourceApp === 'musicscale') {
+    const prefix =
+      SCALE_DEDUPE_PREFIX_BY_SIGNAL[
+        input.signalType as ResolvableMusicScaleSignal
+      ];
+    return (
+      input.dedupeKey.startsWith(prefix) &&
+      clean(input.dedupeKey.slice(prefix.length)).length > 0
+    );
+  }
+
+  const signalType =
+    input.signalType as ResolvableNestJourneySignal;
+  const expectedQueueId =
+    signalType ===
+      'nestjourney_assigned_first_contacts'
+      ? 'assigned:first_contact'
+      : 'unassigned:first_contact';
+  const prefix =
+    JOURNEY_DEDUPE_PREFIX_BY_SIGNAL[signalType];
+
+  return (
+    input.dedupeKey ===
+    `${prefix}${expectedQueueId}`
+  );
+}
+
 export function isActionResolutionEligible(
   action: ReadOnlyHubAction
 ): action is ReadOnlyHubAction & {
