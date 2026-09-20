@@ -20,10 +20,12 @@ import {
   type ActionResolutionRecord
 } from '../../lib/actionResolution.js';
 import {
-  EMPTY_NESTJOURNEY_CAPABILITIES,
   hasNestJourneyOperationalCapability,
   type NestJourneyOperationalCapabilities
 } from '../../lib/nestJourneyWorkspaceProjection.js';
+import {
+  capabilitiesFromMembership
+} from './NestJourneyWorkspaceProjectionService.js';
 
 type Dependencies = {
   verifyIdToken?: (
@@ -36,19 +38,6 @@ type Dependencies = {
 
 const MAX_RESOLUTIONS = 100;
 const MAX_SIGNAL_TEXT = 512;
-
-const NESTJOURNEY_CAPABILITY_KEYS = [
-  'canManagePresence',
-  'canManageMesa',
-  'canManagePeople',
-  'canManageCare',
-  'canManageGroups',
-  'canManageDiscipleship',
-  'canManageImplementation',
-  'canManagePastoral',
-  'canViewGovernance',
-  'canCoordinateJourney'
-] as const;
 
 function isSafeDocumentId(
   value: unknown
@@ -199,18 +188,7 @@ async function resolveNestJourneyCapabilities(
     return null;
   }
 
-  const permissions =
-    data.permissions && typeof data.permissions === 'object'
-      ? data.permissions as Record<string, unknown>
-      : {};
-
-  return NESTJOURNEY_CAPABILITY_KEYS.reduce(
-    (result, key) => {
-      result[key] = permissions[key] === true;
-      return result;
-    },
-    { ...EMPTY_NESTJOURNEY_CAPABILITIES } as NestJourneyOperationalCapabilities
-  );
+  return capabilitiesFromMembership(data);
 }
 
 function canResolveNestJourneySignal(
