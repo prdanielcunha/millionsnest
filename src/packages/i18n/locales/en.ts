@@ -1091,6 +1091,22 @@ export default {
           description: "In the next schedule: without lyrics or chords, {{empty}} · library references not found, {{missing}}.",
           description_with_titles: "Without lyrics or chords: {{songs}}. Library references not found: {{missing}}."
         },
+        nestjourney_assigned_first_contacts: {
+          title_one: "{{count}} first contact needs your action",
+          title_other: "{{count}} first contacts need your action",
+          description_one: "A first-contact follow-up assigned to you is awaiting completion.",
+          description_other: "First-contact follow-ups assigned to you are awaiting completion.",
+          description_overdue_one: "One first contact assigned to you has passed the agreed deadline.",
+          description_overdue_other: "{{overdue}} first contacts assigned to you have passed the agreed deadline."
+        },
+        nestjourney_unassigned_first_contacts: {
+          title_one: "{{count}} first contact still has no owner",
+          title_other: "{{count}} first contacts still have no owner",
+          description_one: "A first-contact care commitment still needs a responsible person.",
+          description_other: "First-contact care commitments still need a responsible person.",
+          description_overdue_one: "One unassigned first contact has already passed the agreed deadline.",
+          description_overdue_other: "{{overdue}} unassigned first contacts have already passed the agreed deadline."
+        },
         musicscale_personal_confirmation: {
           title_one: "Confirm your participation in the next schedule",
           title_other: "Confirm your participations in the next schedule",

@@ -1,14 +1,22 @@
 import type { MusicScaleAccessProjection } from './ecosystemAccessProjection.js';
+import type { NestJourneyWorkspaceProjection } from './nestJourneyWorkspaceProjection.js';
 
 export type CurrentMusicScaleLensAuthority = Pick<
   MusicScaleAccessProjection,
   'accessible' | 'decisionState' | 'canReadManagedScaleResponses' | 'isGlobalAccess'
 >;
+
+export type CurrentNestJourneyLensAuthority = Pick<
+  NestJourneyWorkspaceProjection,
+  'accessible' | 'decisionState' | 'canReadJourneyOperational' | 'isGlobalAccess'
+>;
+
 import type { HubLensAuthorizationProjection } from './lensResolver.js';
 
 export interface CurrentHubLensAuthorityInput {
   canManageOrganization: boolean;
   musicScaleAccess?: CurrentMusicScaleLensAuthority | null;
+  nestJourneyAccess?: CurrentNestJourneyLensAuthority | null;
 }
 
 /**
@@ -23,6 +31,7 @@ export function deriveCurrentHubLensAuthorization(
   input: CurrentHubLensAuthorityInput
 ): HubLensAuthorizationProjection {
   const musicScaleAccess = input.musicScaleAccess;
+  const nestJourneyAccess = input.nestJourneyAccess;
 
   // Global ecosystem access is intentionally not treated as worship-domain
   // content authority. Administrative authority and ministry-content access are
@@ -34,9 +43,16 @@ export function deriveCurrentHubLensAuthorization(
     musicScaleAccess?.isGlobalAccess !== true
   );
 
+  const journey = Boolean(
+    nestJourneyAccess?.accessible === true &&
+    nestJourneyAccess?.decisionState === 'granted' &&
+    nestJourneyAccess?.canReadJourneyOperational === true &&
+    nestJourneyAccess?.isGlobalAccess !== true
+  );
+
   return {
     pastoral: false,
-    journey: false,
+    journey,
     worship,
     finance: false,
     administration: input.canManageOrganization === true

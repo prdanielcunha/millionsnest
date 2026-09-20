@@ -20,7 +20,11 @@ export function projectActionsForLens<TAction extends EvidenceBackedReadOnlyHubA
     return actions.filter(action => action.sourceApp === 'musicscale');
   }
 
-  // Pastoral, Journey and Finance intentionally expose no actions until their
-  // owning domains provide canonical evidence-backed action sources.
+  if (lensId === 'journey') {
+    return actions.filter(action => action.sourceApp === 'nestjourney');
+  }
+
+  // Pastoral and Finance intentionally expose no actions until their owning
+  // domains provide canonical evidence-backed action sources.
   return [];
 }

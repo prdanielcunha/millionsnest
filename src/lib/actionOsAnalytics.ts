@@ -22,7 +22,7 @@ export interface ActionOsInteractionInput {
   userId: string;
   kind: ActionOsInteractionKind;
   lane: ActionOsLane;
-  sourceApp: 'hub' | 'musicscale';
+  sourceApp: 'hub' | 'musicscale' | 'nestjourney';
   signalType?: string;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   dismissCode?: ActionOsDismissCode;
@@ -35,7 +35,7 @@ export interface ActionOsAnalyticsPayload {
   metadata: {
     action: ActionOsInteractionKind;
     lane: ActionOsLane;
-    sourceApp: 'hub' | 'musicscale';
+    sourceApp: 'hub' | 'musicscale' | 'nestjourney';
     signalType?: string;
     priority?: 'low' | 'normal' | 'high' | 'urgent';
     dismissCode?: ActionOsDismissCode;

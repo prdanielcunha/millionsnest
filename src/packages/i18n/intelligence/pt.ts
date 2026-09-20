@@ -14,6 +14,7 @@ const intelligence = {
       journey: 'Visitantes, jornadas, acompanhamentos e compromissos de cuidado.',
       worship: 'Escalas, confirmações, pendências e preparação do ministério.',
       finance: 'Operação financeira conforme suas permissões.',
+      follow_up: 'O que está pendente no acompanhamento?',
       administration: 'Organizações, pessoas, acessos e operação do ecossistema.'
     }
   },
@@ -73,6 +74,7 @@ const intelligence = {
       worship_schedule: 'Agenda de louvor',
       organization: 'Organização',
       workspace: 'Central adaptativa',
+      followup_queue: 'Fila de acompanhamento',
       verified_record: 'Registro verificado',
       observed_at: 'Observado em {{date}}',
       authorized_projection: 'Projeção autorizada do contexto atual'
@@ -85,6 +87,9 @@ const intelligence = {
       distribution_window: '{{schedules}} escala(s) concluída(s), {{assignments}} atribuição(ões) e {{people}} pessoa(s) no recorte de 30 dias.',
       distribution_function: 'Em {{function}}, o maior registro individual foi {{max}} escala(s), com média de {{average}}.',
       next_scale_is_not_sunday: 'A próxima escala disponível no recorte atual não é de domingo.',
+      journey_assigned: '{{count}} primeiro(s) contato(s) atribuído(s) a você aguardando conclusão.',
+      journey_unassigned: '{{count}} primeiro(s) contato(s) sem responsável no seu escopo autorizado.',
+      journey_overdue: '{{count}} compromisso(s) de primeiro contato acima do prazo combinado.',
       action_item: 'Ação autorizada'
     },
     answers: {
@@ -121,7 +126,9 @@ const intelligence = {
         insufficient: 'Consigo mostrar a distribuição agregada, mas os dados atuais não sustentam apontar quem está “acima da carga” como uma conclusão individual.'
       },
       journey_follow_up: {
-        insufficient: 'O Hub ainda não possui uma fonte Journey autorizada e estruturada neste contexto que sustente responder quem aguarda acompanhamento.'
+        title: 'Acompanhamentos do Journey',
+        summary: 'No seu escopo autorizado há {{assigned}} primeiro(s) contato(s) atribuídos a você, {{unassigned}} sem responsável e {{overdue}} acima do prazo combinado.',
+        insufficient: 'A Journey Lens está disponível, mas não há uma fila de acompanhamento aberta com evidência suficiente para responder essa pergunta agora.'
       },
       finance: {
         insufficient: 'O Hub ainda não possui uma fonte financeira autorizada e estruturada neste contexto que sustente responder essa pergunta.'

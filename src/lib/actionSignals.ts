@@ -1,4 +1,8 @@
-import type { FactEvidenceReference } from '../packages/events/factContract.js';
+import {
+  hasValidFactEvidence,
+  type FactEvidenceReference
+} from '../packages/events/factContract.js';
+import type { NestJourneyQueueSummary } from './nestJourneyWorkspaceProjection.js';
 import { projectCurrentMusicScaleFacts } from './musicScaleFactProjection.js';
 import { collectMusicScaleSignalsFromFacts } from './factSignalAdapter.js';
 
@@ -8,12 +12,14 @@ export type ActionSignalType =
   | 'musicscale_pending_responses'
   | 'musicscale_declined_responses'
   | 'musicscale_repertoire_content_gaps'
-  | 'musicscale_personal_confirmation';
+  | 'musicscale_personal_confirmation'
+  | 'nestjourney_assigned_first_contacts'
+  | 'nestjourney_unassigned_first_contacts';
 
 export interface EcosystemSignal {
-  sourceApp: 'hub' | 'musicscale';
+  sourceApp: 'hub' | 'musicscale' | 'nestjourney';
   signalType: ActionSignalType;
-  sourceEntityType: 'organization' | 'invitation_set' | 'scale';
+  sourceEntityType: 'organization' | 'invitation_set' | 'scale' | 'followup_queue';
   sourceEntityId: string;
   dedupeKey: string;
   fingerprint: string;
@@ -31,6 +37,12 @@ export interface ActionSignalCollectionInput {
     isConfigured: boolean;
   } | null;
   pendingInvitesCount: number;
+  journey?: {
+    ready: boolean;
+    observedAtMs?: number | null;
+    assignedFirstContacts: NestJourneyQueueSummary;
+    unassignedFirstContacts: NestJourneyQueueSummary;
+  };
   musicScale: {
     ready: boolean;
     observedAtMs?: number | null;
@@ -154,6 +166,57 @@ export function collectActionSignals(
     });
   }
 
+  const journey = input.journey;
+  if (journey?.ready === true) {
+    const queueSignals: Array<{
+      type: Extract<ActionSignalType, 'nestjourney_assigned_first_contacts' | 'nestjourney_unassigned_first_contacts'>;
+      entityId: string;
+      queue: NestJourneyQueueSummary;
+    }> = [
+      {
+        type: 'nestjourney_assigned_first_contacts',
+        entityId: 'assigned:first_contact',
+        queue: journey.assignedFirstContacts
+      },
+      {
+        type: 'nestjourney_unassigned_first_contacts',
+        entityId: 'unassigned:first_contact',
+        queue: journey.unassignedFirstContacts
+      }
+    ];
+
+    for (const item of queueSignals) {
+      if (item.queue.count <= 0) continue;
+      const earliestDueAtMs =
+        typeof item.queue.earliestDueAtMs === 'number' &&
+        Number.isFinite(item.queue.earliestDueAtMs)
+          ? item.queue.earliestDueAtMs
+          : null;
+
+      signals.push({
+        sourceApp: 'nestjourney',
+        signalType: item.type,
+        sourceEntityType: 'followup_queue',
+        sourceEntityId: item.entityId,
+        dedupeKey: `nestjourney:${item.type}:${item.entityId}`,
+        fingerprint: [
+          'nestjourney',
+          item.type,
+          item.queue.count,
+          item.queue.overdueCount,
+          item.queue.dueSoonCount,
+          earliestDueAtMs ?? 'none'
+        ].join(':'),
+        occurredAtMs: earliestDueAtMs,
+        payload: {
+          count: item.queue.count,
+          overdueCount: item.queue.overdueCount,
+          dueSoonCount: item.queue.dueSoonCount
+        }
+      });
+    }
+  }
+
   return signals;
 }
 
@@ -240,5 +303,45 @@ export function collectEvidenceBackedActionSignals(
 
   const musicScaleSignals = collectMusicScaleSignalsFromFacts(musicScaleFacts);
 
-  return [...hubSignals, ...musicScaleSignals];
+  const journeySignals = input.journey?.ready === true
+    ? collectActionSignals({
+        organization: null,
+        pendingInvitesCount: 0,
+        journey: input.journey,
+        musicScale: {
+          ready: false,
+          nextScale: null,
+          nextPersonalScale: null
+        }
+      }).flatMap(signal => {
+        if (signal.sourceApp !== 'nestjourney') return [];
+
+        const queue =
+          signal.signalType === 'nestjourney_assigned_first_contacts'
+            ? input.journey?.assignedFirstContacts
+            : signal.signalType === 'nestjourney_unassigned_first_contacts'
+              ? input.journey?.unassignedFirstContacts
+              : null;
+
+        if (
+          !queue ||
+          !hasValidFactEvidence(queue.evidence, organizationId) ||
+          queue.evidence.some(reference =>
+            reference.sourceApp !== 'nestjourney' ||
+            reference.entityType !== signal.sourceEntityType ||
+            reference.entityId !== signal.sourceEntityId
+          )
+        ) {
+          return [];
+        }
+
+        return [{
+          ...signal,
+          organizationId,
+          evidence: queue.evidence
+        } satisfies EvidenceBackedEcosystemSignal];
+      })
+    : [];
+
+  return [...hubSignals, ...musicScaleSignals, ...journeySignals];
 }

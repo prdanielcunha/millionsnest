@@ -90,7 +90,13 @@ export const APP_EXPERIENCE_REGISTRY: Readonly<Record<string, AppExperienceDefin
   nestjourney: {
     appId: 'nestjourney',
     sections: APP_EXPERIENCE_SECTIONS,
-    destinations: { home: '/' }
+    destinations: {
+      home: '/',
+      my_today: '/my-today',
+      care: '/care-integrity',
+      followup: '/followup-runtime',
+      overview: '/journey-overview'
+    }
   },
   connect: {
     appId: 'connect',
