@@ -16,6 +16,7 @@ import {
   type ActionOutcomeResult
 } from '../../lib/outcomeEngine.js';
 import {
+  hasValidResolutionIdentity,
   isResolutionSourceSignalPair,
   type ActionResolutionRecord
 } from '../../lib/actionResolution.js';
@@ -356,9 +357,10 @@ function parseResolutionInput(
   if (
     !isSafeSignalText(dedupeKey) ||
     !isSafeSignalText(fingerprint) ||
-    !isResolutionSourceSignalPair({
+    !hasValidResolutionIdentity({
       sourceApp,
-      signalType
+      signalType,
+      dedupeKey
     })
   ) {
     return null;
