@@ -83,6 +83,29 @@ export interface EvidenceBackedActionSignalCollectionInput extends ActionSignalC
   organizationId: string;
 }
 
+
+export function fingerprintNestJourneyQueue(input: {
+  signalType:
+    | 'nestjourney_assigned_first_contacts'
+    | 'nestjourney_unassigned_first_contacts';
+  queue: NestJourneyQueueSummary;
+}): string {
+  const earliestDueAtMs =
+    typeof input.queue.earliestDueAtMs === 'number' &&
+    Number.isFinite(input.queue.earliestDueAtMs)
+      ? input.queue.earliestDueAtMs
+      : null;
+
+  return [
+    'nestjourney',
+    input.signalType,
+    input.queue.count,
+    input.queue.overdueCount,
+    input.queue.dueSoonCount,
+    earliestDueAtMs ?? 'none'
+  ].join(':');
+}
+
 /**
  * Source adapters collect facts only. They do not decide whether the current
  * user may see an action and they do not write UI cards.
@@ -199,14 +222,10 @@ export function collectActionSignals(
         sourceEntityType: 'followup_queue',
         sourceEntityId: item.entityId,
         dedupeKey: `nestjourney:${item.type}:${item.entityId}`,
-        fingerprint: [
-          'nestjourney',
-          item.type,
-          item.queue.count,
-          item.queue.overdueCount,
-          item.queue.dueSoonCount,
-          earliestDueAtMs ?? 'none'
-        ].join(':'),
+        fingerprint: fingerprintNestJourneyQueue({
+          signalType: item.type,
+          queue: item.queue
+        }),
         occurredAtMs: earliestDueAtMs,
         payload: {
           count: item.queue.count,
