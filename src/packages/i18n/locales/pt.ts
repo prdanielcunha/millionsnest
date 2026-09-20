@@ -1107,6 +1107,22 @@ export default {
           description: "Na próxima escala: sem letra ou cifra, {{empty}} · referências ausentes da biblioteca, {{missing}}.",
           description_with_titles: "Sem letra ou cifra: {{songs}}. Referências ausentes da biblioteca: {{missing}}."
         },
+        nestjourney_assigned_first_contacts: {
+          title_one: "{{count}} primeiro contato aguarda sua ação",
+          title_other: "{{count}} primeiros contatos aguardam sua ação",
+          description_one: "Há um acompanhamento de primeiro contato atribuído a você aguardando conclusão.",
+          description_other: "Há acompanhamentos de primeiro contato atribuídos a você aguardando conclusão.",
+          description_overdue_one: "Um primeiro contato atribuído a você ultrapassou o prazo combinado.",
+          description_overdue_other: "{{overdue}} primeiros contatos atribuídos a você ultrapassaram o prazo combinado."
+        },
+        nestjourney_unassigned_first_contacts: {
+          title_one: "{{count}} primeiro contato ainda está sem responsável",
+          title_other: "{{count}} primeiros contatos ainda estão sem responsável",
+          description_one: "Há um compromisso de cuidado de primeiro contato que ainda precisa de responsável.",
+          description_other: "Há compromissos de cuidado de primeiro contato que ainda precisam de responsável.",
+          description_overdue_one: "Um primeiro contato sem responsável já ultrapassou o prazo combinado.",
+          description_overdue_other: "{{overdue}} primeiros contatos sem responsável já ultrapassaram o prazo combinado."
+        },
         musicscale_personal_confirmation: {
           title_one: "Confirme sua participação na próxima escala",
           title_other: "Confirme suas participações na próxima escala",
