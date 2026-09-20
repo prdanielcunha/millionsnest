@@ -15,6 +15,7 @@ on:
       - 'src/lib/askMillionsNest.ts'
       - 'src/lib/actionResolution.ts'
       - 'src/lib/outcomeEngine.ts'
+      - 'src/lib/journeyOutcomeAttestation.ts'
       - 'src/lib/nextBestMinistryAction.ts'
       - 'src/lib/toolGateway.ts'
       - 'src/lib/actionToolGatewayBridge.ts'
@@ -62,6 +63,7 @@ on:
       - 'scripts/test_musicscale_repertoire_intelligence.ts'
       - 'scripts/test_action_resolution_loop.ts'
       - 'scripts/test_outcome_engine.ts'
+      - 'scripts/test_journey_outcome_attestation.ts'
       - 'scripts/test_next_best_ministry_action.ts'
       - 'scripts/test_tool_gateway.ts'
       - 'scripts/test_tool_approval_gateway.ts'
@@ -131,6 +133,9 @@ jobs:
 
       - name: Outcome Engine classification and audit
         run: npx tsx scripts/test_outcome_engine.ts
+
+      - name: Journey server-side outcome attestation
+        run: npx tsx scripts/test_journey_outcome_attestation.ts
 
       - name: Explainable Next Best Ministry Action
         run: npx tsx scripts/test_next_best_ministry_action.ts

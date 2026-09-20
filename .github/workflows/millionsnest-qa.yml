@@ -61,6 +61,9 @@ jobs:
       - name: Outcome Engine classification and audit
         run: npx tsx scripts/test_outcome_engine.ts
 
+      - name: Journey server-side outcome attestation
+        run: npx tsx scripts/test_journey_outcome_attestation.ts
+
       - name: Tool Gateway safety and approvals
         run: npx tsx scripts/test_tool_gateway.ts
 
