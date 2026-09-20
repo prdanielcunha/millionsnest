@@ -1029,7 +1029,7 @@ export default {
         resolve_action: "Resolve",
         continue_resolution_action: "Continue resolution",
         resolution_in_progress: "In progress",
-        resolution_start_error: "We will open MusicScale, but we could not register resolution tracking.",
+        resolution_start_error: "We will open the app, but we could not register resolution tracking.",
         resolution_cleared_feedback: "Resolved: the signal no longer appears in the source.",
         outcome_resolved_feedback: "Resolved: the source condition was confirmed as completed.",
         outcome_superseded_feedback: "The situation changed: the Hub kept the new pending state as a separate action.",
