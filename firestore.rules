@@ -603,6 +603,18 @@ service cloud.firestore {
         );
     }
 
+    function journeyPersonBondEmptyOnCreate() {
+      return request.resource.data.get('bondHostRef', '') == '' &&
+        request.resource.data.get('bondAssignedAt', null) == null &&
+        request.resource.data.get('bondAssignedBy', '') == '';
+    }
+
+    function journeyPersonBondUnchanged() {
+      return request.resource.data.get('bondHostRef', '') == resource.data.get('bondHostRef', '') &&
+        request.resource.data.get('bondAssignedAt', null) == resource.data.get('bondAssignedAt', null) &&
+        request.resource.data.get('bondAssignedBy', '') == resource.data.get('bondAssignedBy', '');
+    }
+
     function journeyCanManageSettings(orgId) {
       return isSystemAdmin() ||
         journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor']);
@@ -1577,11 +1589,13 @@ service cloud.firestore {
           allow create: if journeyTenantCreate(orgId) &&
             request.resource.data.get('deletedAt', null) == null &&
             journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
-            journeyCanManagePeople(orgId);
+            journeyCanManagePeople(orgId) &&
+            journeyPersonBondEmptyOnCreate();
           allow update: if journeyTenantUnchanged(orgId) &&
             journeyCongregationUnchanged() &&
             journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
-            journeyCanManagePeople(orgId);
+            journeyCanManagePeople(orgId) &&
+            journeyPersonBondUnchanged();
           allow delete: if false;
         }
 
