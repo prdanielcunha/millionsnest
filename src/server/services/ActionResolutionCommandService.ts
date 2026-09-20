@@ -501,6 +501,17 @@ export async function getActionResolutions(
         isResolutionSourceSignalPair(record) &&
         allowedSourceApps.has(record.sourceApp) &&
         (
+          record.sourceApp !== 'nestjourney' ||
+          (
+            nestJourneyAuthorization.allowed === true &&
+            nestJourneyAuthorization.journeyCapabilities != null &&
+            canResolveNestJourneySignal(
+              nestJourneyAuthorization.journeyCapabilities,
+              record.signalType
+            )
+          )
+        ) &&
+        (
           record.status === 'started' ||
           record.status === 'cleared_observed' ||
           record.status === 'outcome_observed'
@@ -571,7 +582,8 @@ export async function startActionResolution(
       organizationId,
       actorUid,
       input.sourceApp,
-      dependencies
+      dependencies,
+      input.signalType
     );
 
     if (authorization.allowed === false) {
@@ -760,7 +772,8 @@ export async function observeActionResolutionOutcome(
       organizationId,
       actorUid,
       input.sourceApp,
-      dependencies
+      dependencies,
+      input.signalType
     );
 
     if (authorization.allowed === false) {
