@@ -38,6 +38,8 @@ import { EcosystemAppIcon } from "../components/apps/EcosystemAppIcon.js";
 import { SupportHubProvider } from "../components/support/SupportHubContext.js";
 import { SupportHub } from "../components/support/SupportHub.js";
 import { MusicScaleAccessProjection } from "../lib/ecosystemAccessProjection.js";
+import type { NestJourneyWorkspaceProjection } from "../lib/nestJourneyWorkspaceProjection.js";
+import { fetchNestJourneyWorkspaceProjection } from "../services/nestJourneyWorkspaceClient.js";
 import { resolveHubAppCatalog } from "../lib/hubAppExperience.js";
 import type { ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from "../lib/actionCenter.js";
 import {
@@ -274,6 +276,9 @@ export function Dashboard() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const [musicScaleProjection, setMusicScaleProjection] = useState<MusicScaleAccessProjection | null>(null);
+  const [nestJourneyWorkspaceProjection, setNestJourneyWorkspaceProjection] = useState<NestJourneyWorkspaceProjection | null>(null);
+  const [nestJourneyProjectionLoading, setNestJourneyProjectionLoading] = useState(false);
+  const [nestJourneyProjectionError, setNestJourneyProjectionError] = useState<string | null>(null);
   const [musicScaleProjectionLoading, setMusicScaleProjectionLoading] = useState(false);
   const [musicScaleProjectionError, setMusicScaleProjectionError] = useState<string | null>(null);
   const musicScaleProjectionAbortControllerRef = useRef<AbortController | null>(null);
@@ -406,6 +411,22 @@ export function Dashboard() {
         musicScaleProjectionError
       ) {
         feedback.error('Acesso indisponível ao MusicScale.');
+        return;
+      }
+    } else if (app.id === 'nestjourney') {
+      if (
+        !nestJourneyWorkspaceProjection ||
+        nestJourneyWorkspaceProjection.organizationId !== activeContextOrgId ||
+        nestJourneyWorkspaceProjection.accessible !== true ||
+        nestJourneyWorkspaceProjection.decisionState !== 'granted' ||
+        (
+          nestJourneyWorkspaceProjection.canReadJourneyOperational !== true &&
+          !canAccessDevelopmentPreviews
+        ) ||
+        nestJourneyProjectionLoading ||
+        nestJourneyProjectionError
+      ) {
+        feedback.error('Acesso indisponível ao NestJourney.');
         return;
       }
     } else if (
@@ -621,6 +642,55 @@ export function Dashboard() {
     hasNestFinanceDevelopmentAccess &&
     nestFinanceLaunchEnabled &&
     !nestFinanceLaunching;
+
+  useEffect(() => {
+    if (!user || !activeContextOrgId) {
+      setNestJourneyWorkspaceProjection(null);
+      setNestJourneyProjectionLoading(false);
+      setNestJourneyProjectionError(null);
+      return;
+    }
+
+    const organizationId = activeContextOrgId;
+    const controller = new AbortController();
+    let active = true;
+
+    setNestJourneyProjectionLoading(true);
+    setNestJourneyProjectionError(null);
+
+    void (async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const projection = await fetchNestJourneyWorkspaceProjection(
+          idToken,
+          organizationId,
+          controller.signal
+        );
+
+        if (active && activeContextOrgId === organizationId) {
+          setNestJourneyWorkspaceProjection(projection);
+        }
+      } catch (error: any) {
+        if (error?.name !== 'AbortError' && active) {
+          console.warn(
+            '[Dashboard] NestJourney workspace projection failed closed:',
+            error
+          );
+          setNestJourneyWorkspaceProjection(null);
+          setNestJourneyProjectionError(
+            error?.message || 'NESTJOURNEY_WORKSPACE_UNAVAILABLE'
+          );
+        }
+      } finally {
+        if (active) setNestJourneyProjectionLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [user, activeContextOrgId]);
 
   useEffect(() => {
     if (!user || !activeContextOrgId) {
@@ -2769,6 +2839,14 @@ export function Dashboard() {
           ? 'loading'
           : musicScaleProjection?.catalogState || 'unavailable'
     },
+    nestJourneyAccess: nestJourneyWorkspaceProjection
+      ? {
+          accessible: nestJourneyWorkspaceProjection.accessible,
+          decisionState: nestJourneyWorkspaceProjection.decisionState,
+          canReadJourneyOperational: nestJourneyWorkspaceProjection.canReadJourneyOperational,
+          isGlobalAccess: nestJourneyWorkspaceProjection.isGlobalAccess
+        }
+      : null,
     isGlobalAdmin,
     canAccessDevelopmentPreviews
   });
@@ -3081,6 +3159,13 @@ export function Dashboard() {
                   canReadManagedScaleResponses: musicScaleProjection.canReadManagedScaleResponses,
                   isGlobalAccess: musicScaleProjection.isGlobalAccess
                 } : null}
+                nestJourneyAuthority={nestJourneyWorkspaceProjection ? {
+                  accessible: nestJourneyWorkspaceProjection.accessible,
+                  decisionState: nestJourneyWorkspaceProjection.decisionState,
+                  canReadJourneyOperational: nestJourneyWorkspaceProjection.canReadJourneyOperational,
+                  isGlobalAccess: nestJourneyWorkspaceProjection.isGlobalAccess
+                } : null}
+                nestJourneyWorkspace={nestJourneyWorkspaceProjection}
                 musicScaleApp={musicScaleApp}
                 occupiedSlots={occupiedSlots}
                 maxUsersLimit={maxUsersLimit}
