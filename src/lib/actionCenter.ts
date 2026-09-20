@@ -483,6 +483,7 @@ export function deriveEvidenceBackedHubActions(
     organizationId: input.organizationId,
     organization: input.organization,
     pendingInvitesCount: input.pendingInvitesCount,
+    journey: input.journey,
     musicScale: input.musicScale
   })
     .map(signal => projectEvidenceBackedSignalToAction(signal, input.permissions))
