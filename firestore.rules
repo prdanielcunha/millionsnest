@@ -1319,7 +1319,7 @@ service cloud.firestore {
         request.resource.data.get('evidenceRef', '').size() > 0 &&
         request.resource.data.get('sensitivity', '') in ['public', 'internal', 'confidential', 'restricted'] &&
         eventType in [
-          'VISITOR_REGISTERED', 'PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED', 'PRESENCE_CORRECTED',
+          'VISITOR_REGISTERED', 'BOND_HOST_ASSIGNED', 'PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED', 'PRESENCE_CORRECTED',
           'CARE_REQUESTED', 'CARE_ASSIGNED'
         ] &&
         (
@@ -1328,6 +1328,17 @@ service cloud.firestore {
             request.resource.data.get('subjectRef', '') == 'person:' + personId &&
             request.resource.data.get('evidenceRef', '') == 'person:' + personId &&
             existsAfter(personPath) &&
+            request.resource.data.get('scope', '') == 'congregation:' + getAfter(personPath).data.get('congregationId', ''))
+          ||
+          (eventType == 'BOND_HOST_ASSIGNED' &&
+            personId is string &&
+            payload.get('bondHostRef', '') == request.auth.uid &&
+            request.resource.data.get('subjectRef', '') == 'person:' + personId &&
+            request.resource.data.get('evidenceRef', '') == 'person:' + personId &&
+            existsAfter(personPath) &&
+            getAfter(personPath).data.get('bondHostRef', '') == request.auth.uid &&
+            getAfter(personPath).data.get('bondAssignedBy', '') == request.auth.uid &&
+            getAfter(personPath).data.get('bondAssignedAt', null) == request.time &&
             request.resource.data.get('scope', '') == 'congregation:' + getAfter(personPath).data.get('congregationId', ''))
           ||
           (eventType == 'PRESENCE_SESSION_OPENED' &&
