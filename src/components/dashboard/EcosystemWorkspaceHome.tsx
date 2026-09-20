@@ -1068,7 +1068,11 @@ export function EcosystemWorkspaceHome({
                     <div className="min-w-0">
                       <div className="mb-1.5 flex flex-wrap items-center gap-2">
                         <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#687486]">
-                          {isMusicScaleAction ? 'MusicScale' : t('workspace.actions.source_hub')}
+                          {isMusicScaleAction
+                            ? 'MusicScale'
+                            : isNestJourneyAction
+                              ? 'NestJourney'
+                              : t('workspace.actions.source_hub')}
                         </span>
                         <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${
                           highPriority
