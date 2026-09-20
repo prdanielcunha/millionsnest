@@ -58,6 +58,7 @@ function sourceEntityKey(entityType: string): string {
   if (entityType === 'worship_schedule') return 'ask.sources.worship_schedule';
   if (entityType === 'organization') return 'ask.sources.organization';
   if (entityType === 'adaptive_workspace') return 'ask.sources.workspace';
+  if (entityType === 'followup_queue') return 'ask.sources.followup_queue';
   return 'ask.sources.verified_record';
 }
 
@@ -338,7 +339,9 @@ export function AskMillionsNest({
                             <p className="text-xs font-semibold text-white">
                               {source.sourceApp === 'musicscale'
                                 ? 'MusicScale'
-                                : t('ask.sources.hub', { ns: 'intelligence' })}
+                                : source.sourceApp === 'nestjourney'
+                                  ? 'NestJourney'
+                                  : t('ask.sources.hub', { ns: 'intelligence' })}
                               <span className="px-1.5 text-[#4F5968]">·</span>
                               {t(sourceEntityKey(source.entityType), { ns: 'intelligence' })}
                             </p>
