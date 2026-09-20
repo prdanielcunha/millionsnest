@@ -7,8 +7,18 @@ import {
   isValidOutcomeForSignal
 } from '../src/lib/outcomeEngine.js';
 
-function action(
-  signalType: ActionResolutionRecord['signalType'],
+const EMPTY_MUSIC_READINESS = {
+  scalesReady: false,
+  songsReady: false,
+  nextScaleId: null,
+  responseSummaryAvailable: false
+};
+
+function musicAction(
+  signalType:
+    | 'musicscale_pending_responses'
+    | 'musicscale_declined_responses'
+    | 'musicscale_repertoire_content_gaps',
   fingerprint = 'fp-1',
   scaleId = 'scale-1'
 ): ReadOnlyHubAction {
@@ -36,14 +46,52 @@ function action(
   };
 }
 
+function journeyAction(
+  signalType:
+    | 'nestjourney_assigned_first_contacts'
+    | 'nestjourney_unassigned_first_contacts',
+  fingerprint = 'journey-fp-1'
+): ReadOnlyHubAction {
+  const entityId =
+    signalType === 'nestjourney_assigned_first_contacts'
+      ? 'assigned:first_contact'
+      : 'unassigned:first_contact';
+
+  return {
+    id: `nestjourney:${signalType}:${entityId}`,
+    dedupeKey: `nestjourney:${signalType}:${entityId}`,
+    fingerprint,
+    sourceApp: 'nestjourney',
+    signalType,
+    priority: 'urgent',
+    titleKey: 'test.title',
+    descriptionKey: 'test.description',
+    destination: {
+      kind: 'app',
+      appId: 'nestjourney',
+      path:
+        signalType === 'nestjourney_assigned_first_contacts'
+          ? '/followup-runtime'
+          : '/care-integrity'
+    }
+  };
+}
+
 function resolution(
   source: ReadOnlyHubAction
 ): ActionResolutionRecord {
+  if (
+    source.sourceApp !== 'musicscale' &&
+    source.sourceApp !== 'nestjourney'
+  ) {
+    throw new Error('Unsupported test resolution source');
+  }
+
   return {
     organizationId: 'org-outcome',
     dedupeKey: source.dedupeKey,
     fingerprint: source.fingerprint,
-    sourceApp: 'musicscale',
+    sourceApp: source.sourceApp,
     signalType:
       source.signalType as
         ActionResolutionRecord['signalType'],
@@ -52,7 +100,7 @@ function resolution(
   };
 }
 
-const pending = action(
+const pending = musicAction(
   'musicscale_pending_responses'
 );
 const pendingResolution =
@@ -73,7 +121,7 @@ assert.deepEqual(
   'an exact active source signal must never become an outcome'
 );
 
-const changedPending = action(
+const changedPending = musicAction(
   'musicscale_pending_responses',
   'fp-2'
 );
@@ -164,7 +212,7 @@ assert.equal(
   'musicscale_pending_responses_cleared'
 );
 
-const repertoire = action(
+const repertoire = musicAction(
   'musicscale_repertoire_content_gaps'
 );
 const repertoireResolution =
@@ -206,6 +254,99 @@ assert.equal(
   'musicscale_repertoire_content_cleared'
 );
 
+const assignedJourney = journeyAction(
+  'nestjourney_assigned_first_contacts'
+);
+const assignedJourneyResolution =
+  resolution(assignedJourney);
+
+assert.deepEqual(
+  deriveActionOutcomeObservations({
+    resolutions: [assignedJourneyResolution],
+    sourceActions: [assignedJourney],
+    musicScaleReadiness: EMPTY_MUSIC_READINESS,
+    journeyReadiness: { ready: true }
+  }),
+  [],
+  'an exact active Journey care queue must never become an outcome'
+);
+
+assert.deepEqual(
+  deriveActionOutcomeObservations({
+    resolutions: [assignedJourneyResolution],
+    sourceActions: [],
+    musicScaleReadiness: EMPTY_MUSIC_READINESS,
+    journeyReadiness: { ready: false }
+  }),
+  [],
+  'Journey absence before projection readiness must fail closed'
+);
+
+const resolvedAssignedJourney =
+  deriveActionOutcomeObservations({
+    resolutions: [assignedJourneyResolution],
+    sourceActions: [],
+    musicScaleReadiness: EMPTY_MUSIC_READINESS,
+    journeyReadiness: { ready: true }
+  });
+
+assert.equal(
+  resolvedAssignedJourney.length,
+  1
+);
+assert.equal(
+  resolvedAssignedJourney[0].result,
+  'resolved'
+);
+assert.equal(
+  resolvedAssignedJourney[0].code,
+  'nestjourney_assigned_first_contacts_cleared'
+);
+assert.equal(
+  resolvedAssignedJourney[0].targetId,
+  'assigned:first_contact',
+  'Journey Outcome Engine must keep the target at privacy-safe queue level'
+);
+
+const changedAssignedJourney = journeyAction(
+  'nestjourney_assigned_first_contacts',
+  'journey-fp-2'
+);
+const supersededJourney =
+  deriveActionOutcomeObservations({
+    resolutions: [assignedJourneyResolution],
+    sourceActions: [changedAssignedJourney],
+    musicScaleReadiness: EMPTY_MUSIC_READINESS,
+    journeyReadiness: { ready: true }
+  });
+
+assert.equal(
+  supersededJourney[0]?.result,
+  'superseded'
+);
+assert.equal(
+  supersededJourney[0]?.code,
+  'source_signal_updated'
+);
+
+const unassignedJourney = journeyAction(
+  'nestjourney_unassigned_first_contacts'
+);
+const unassignedJourneyResolution =
+  resolution(unassignedJourney);
+const resolvedUnassignedJourney =
+  deriveActionOutcomeObservations({
+    resolutions: [unassignedJourneyResolution],
+    sourceActions: [],
+    musicScaleReadiness: EMPTY_MUSIC_READINESS,
+    journeyReadiness: { ready: true }
+  });
+
+assert.equal(
+  resolvedUnassignedJourney[0]?.code,
+  'nestjourney_unassigned_first_contacts_cleared'
+);
+
 assert.equal(
   isValidOutcomeForSignal({
     signalType:
@@ -236,6 +377,27 @@ assert.equal(
   }),
   true
 );
+assert.equal(
+  isValidOutcomeForSignal({
+    signalType:
+      'nestjourney_assigned_first_contacts',
+    result: 'resolved',
+    code:
+      'nestjourney_assigned_first_contacts_cleared'
+  }),
+  true,
+  'Journey queue resolution must use its exact factual outcome code'
+);
+assert.equal(
+  isValidOutcomeForSignal({
+    signalType:
+      'nestjourney_assigned_first_contacts',
+    result: 'no_longer_actionable',
+    code: 'target_left_active_window'
+  }),
+  false,
+  'Journey queues must never inherit MusicScale active-window semantics'
+);
 
 const observer = readFileSync(
   'src/components/dashboard/ActionResolutionObserver.tsx',
@@ -245,6 +407,11 @@ assert.match(
   observer,
   /deriveActionOutcomeObservations/,
   'runtime observer must use the classified Outcome Engine'
+);
+assert.match(
+  observer,
+  /journeyReadiness/,
+  'runtime observer must require explicit Journey projection readiness'
 );
 assert.equal(
   observer.includes(
@@ -298,6 +465,11 @@ assert.match(
   server,
   /ACTION_RESOLUTION_NOT_STARTED/
 );
+assert.match(
+  server,
+  /JOURNEY_SIGNAL_RESOLUTION_AUTHORITY_REQUIRED/,
+  'server must authorize Journey outcomes with queue-specific canonical capability'
+);
 
 const dashboard = readFileSync(
   'src/pages/Dashboard.tsx',
@@ -339,5 +511,5 @@ for (const language of [
 }
 
 console.log(
-  'Outcome Engine classification, anti-false-resolution and audit contract checks passed.'
+  'Outcome Engine classification, anti-false-resolution and Journey queue outcome checks passed.'
 );
