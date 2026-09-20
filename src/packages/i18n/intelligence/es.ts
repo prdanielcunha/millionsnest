@@ -14,6 +14,7 @@ const intelligence = {
       journey: 'Visitantes, procesos, seguimientos y compromisos de cuidado.',
       worship: 'Programaciones, confirmaciones, pendientes y preparación del ministerio.',
       finance: 'Operación financiera de acuerdo con tus permisos.',
+      follow_up: '¿Qué está pendiente en el seguimiento?',
       administration: 'Organizaciones, personas, accesos y operación del ecosistema.'
     }
   },
@@ -73,6 +74,7 @@ const intelligence = {
       worship_schedule: 'Agenda de alabanza',
       organization: 'Organización',
       workspace: 'Centro adaptativo',
+      followup_queue: 'Cola de seguimiento',
       verified_record: 'Registro verificado',
       observed_at: 'Observado el {{date}}',
       authorized_projection: 'Proyección autorizada del contexto actual'
@@ -85,6 +87,9 @@ const intelligence = {
       distribution_window: '{{schedules}} escala(s) completada(s), {{assignments}} asignación(es) y {{people}} persona(s) en la ventana de 30 días.',
       distribution_function: 'En {{function}}, el mayor registro individual fue de {{max}} escala(s), con un promedio de {{average}}.',
       next_scale_is_not_sunday: 'La próxima escala disponible en la proyección actual no es del domingo.',
+      journey_assigned: '{{count}} seguimiento(s) de primer contacto asignado(s) a ti y pendiente(s) de conclusión.',
+      journey_unassigned: '{{count}} seguimiento(s) de primer contacto sin responsable en tu alcance autorizado.',
+      journey_overdue: '{{count}} compromiso(s) de primer contacto por encima del plazo acordado.',
       action_item: 'Acción autorizada'
     },
     answers: {
@@ -121,7 +126,9 @@ const intelligence = {
         insufficient: 'Puedo mostrar la distribución agregada, pero los datos actuales no sustentan identificar quién está “por encima de la carga” como una conclusión individual.'
       },
       journey_follow_up: {
-        insufficient: 'El Hub todavía no tiene una fuente Journey autorizada y estructurada en este contexto que sustente identificar quién espera seguimiento.'
+        title: 'Seguimientos de Journey',
+        summary: 'En tu alcance autorizado hay {{assigned}} primer(os) contacto(s) asignado(s) a ti, {{unassigned}} sin responsable y {{overdue}} por encima del plazo acordado.',
+        insufficient: 'La Journey Lens está disponible, pero no hay una cola abierta de seguimiento con evidencia suficiente para responder esta pregunta ahora.'
       },
       finance: {
         insufficient: 'El Hub todavía no tiene una fuente financiera autorizada y estructurada en este contexto que sustente responder esa pregunta.'
