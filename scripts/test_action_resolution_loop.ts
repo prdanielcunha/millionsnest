@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   deriveClearedActionResolutions,
+  hasValidResolutionIdentity,
   isActionResolutionEligible,
   isResolutionProjectionReady,
   resolutionMatchesAction,
@@ -127,6 +128,35 @@ assert.equal(
   isActionResolutionEligible(unassignedJourneyAction),
   true,
   'unassigned first-contact queue must participate in the Action Loop'
+);
+
+assert.equal(
+  hasValidResolutionIdentity({
+    sourceApp: assignedJourneyAction.sourceApp,
+    signalType: assignedJourneyAction.signalType,
+    dedupeKey: assignedJourneyAction.dedupeKey
+  }),
+  true,
+  'canonical Journey queue identity must be accepted'
+);
+assert.equal(
+  hasValidResolutionIdentity({
+    sourceApp: 'nestjourney',
+    signalType: 'nestjourney_assigned_first_contacts',
+    dedupeKey:
+      'nestjourney:nestjourney_assigned_first_contacts:person-123'
+  }),
+  false,
+  'Journey resolution identity must stay at aggregate queue level'
+);
+assert.equal(
+  hasValidResolutionIdentity({
+    sourceApp: 'musicscale',
+    signalType: 'nestjourney_assigned_first_contacts',
+    dedupeKey: assignedJourneyAction.dedupeKey
+  }),
+  false,
+  'source app and signal type must remain a canonical pair'
 );
 
 const personalAction: ReadOnlyHubAction = {
@@ -400,6 +430,11 @@ assert.match(
   server,
   /JOURNEY_SIGNAL_RESOLUTION_AUTHORITY_REQUIRED/,
   'Journey resolution must fail closed when queue-specific authority is absent'
+);
+assert.match(
+  server,
+  /hasValidResolutionIdentity/,
+  'server must reject forged or non-canonical resolution targets before persistence'
 );
 assert.match(
   server,
