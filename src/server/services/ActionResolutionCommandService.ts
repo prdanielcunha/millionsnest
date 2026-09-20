@@ -25,8 +25,13 @@ import {
   type NestJourneyOperationalCapabilities
 } from '../../lib/nestJourneyWorkspaceProjection.js';
 import {
-  capabilitiesFromMembership
+  capabilitiesFromMembership,
+  resolveNestJourneyWorkspaceProjectionForActor
 } from './NestJourneyWorkspaceProjectionService.js';
+import {
+  attestNestJourneyOutcome,
+  type JourneyOutcomeAttestation
+} from '../../lib/journeyOutcomeAttestation.js';
 
 type Dependencies = {
   verifyIdToken?: (
@@ -34,6 +39,7 @@ type Dependencies = {
   ) => Promise<{ uid: string }>;
   getFirestore?: () => Firestore;
   resolveAccess?: typeof resolveEcosystemAppAccess;
+  resolveJourneyProjection?: typeof resolveNestJourneyWorkspaceProjectionForActor;
   now?: () => number;
 };
 
@@ -337,6 +343,30 @@ function timestampToMs(
   }
 
   return null;
+}
+
+
+function resolutionIdentityMatches(
+  data: FirebaseFirestore.DocumentData,
+  input: {
+    organizationId: string;
+    actorUid: string;
+    dedupeKey: string;
+    fingerprint: string;
+    sourceApp: ActionResolutionRecord['sourceApp'];
+    signalType: ActionResolutionRecord['signalType'];
+  }
+): boolean {
+  return (
+    data.organizationId ===
+      input.organizationId &&
+    data.actorUid === input.actorUid &&
+    data.dedupeKey === input.dedupeKey &&
+    data.fingerprint ===
+      input.fingerprint &&
+    data.sourceApp === input.sourceApp &&
+    data.signalType === input.signalType
+  );
 }
 
 function parseResolutionInput(
@@ -776,6 +806,135 @@ export async function observeActionResolutionOutcome(
     const nowMs =
       (dependencies.now ?? Date.now)();
 
+    const preflightSnapshot =
+      await ref.get();
+
+    if (!preflightSnapshot.exists) {
+      return res.status(404).json({
+        success: false,
+        reasonCode:
+          'ACTION_RESOLUTION_NOT_STARTED'
+      });
+    }
+
+    const preflightData =
+      preflightSnapshot.data() ?? {};
+
+    if (
+      !resolutionIdentityMatches(
+        preflightData,
+        {
+          organizationId,
+          actorUid,
+          dedupeKey: input.dedupeKey,
+          fingerprint: input.fingerprint,
+          sourceApp: input.sourceApp,
+          signalType: input.signalType
+        }
+      )
+    ) {
+      return res.status(409).json({
+        success: false,
+        reasonCode:
+          'ACTION_RESOLUTION_IDENTITY_MISMATCH'
+      });
+    }
+
+    const alreadyObserved =
+      preflightData.status ===
+        'outcome_observed' &&
+      preflightData.outcome ===
+        outcomeResult &&
+      preflightData.outcomeCode ===
+        outcomeCode;
+
+    const legacyAlreadyResolved =
+      preflightData.status ===
+        'cleared_observed' &&
+      preflightData.outcome ===
+        'signal_cleared' &&
+      outcomeResult === 'resolved';
+
+    if (
+      !alreadyObserved &&
+      !legacyAlreadyResolved &&
+      preflightData.status !== 'started'
+    ) {
+      return res.status(409).json({
+        success: false,
+        reasonCode:
+          'ACTION_RESOLUTION_INVALID_STATE'
+      });
+    }
+
+    let journeyAttestation:
+      | Extract<
+          JourneyOutcomeAttestation,
+          { attested: true }
+        >
+      | null = null;
+
+    if (
+      input.sourceApp === 'nestjourney' &&
+      !alreadyObserved &&
+      !legacyAlreadyResolved
+    ) {
+      try {
+        const resolveProjection =
+          dependencies.resolveJourneyProjection ??
+          resolveNestJourneyWorkspaceProjectionForActor;
+
+        const projection =
+          await resolveProjection(
+            {
+              uid: actorUid,
+              organizationId
+            },
+            {
+              db,
+              resolveAccess:
+                dependencies.resolveAccess,
+              now: dependencies.now
+            }
+          );
+
+        const attestation =
+          attestNestJourneyOutcome({
+            resolution: {
+              organizationId,
+              sourceApp: input.sourceApp,
+              signalType: input.signalType,
+              fingerprint: input.fingerprint
+            },
+            result: outcomeResult,
+            code: outcomeCode,
+            projection
+          });
+
+        if (!attestation.attested) {
+          return res.status(409).json({
+            success: false,
+            reasonCode:
+              attestation.reasonCode
+          });
+        }
+
+        journeyAttestation =
+          attestation;
+      } catch (error) {
+        console.warn(
+          '[ActionLoop] Journey outcome attestation failed closed',
+          error
+        );
+
+        return res.status(503).json({
+          success: false,
+          reasonCode:
+            'JOURNEY_OUTCOME_ATTESTATION_UNAVAILABLE'
+        });
+      }
+    }
+
     const result = await db.runTransaction(
       async transaction => {
         const existing =
@@ -793,17 +952,17 @@ export async function observeActionResolutionOutcome(
           existing.data() ?? {};
 
         if (
-          data.organizationId !==
-            organizationId ||
-          data.actorUid !== actorUid ||
-          data.dedupeKey !==
-            input.dedupeKey ||
-          data.fingerprint !==
-            input.fingerprint ||
-          data.sourceApp !==
-            input.sourceApp ||
-          data.signalType !==
-            input.signalType
+          !resolutionIdentityMatches(
+            data,
+            {
+              organizationId,
+              actorUid,
+              dedupeKey: input.dedupeKey,
+              fingerprint: input.fingerprint,
+              sourceApp: input.sourceApp,
+              signalType: input.signalType
+            }
+          )
         ) {
           return {
             status: 409,
@@ -854,7 +1013,24 @@ export async function observeActionResolutionOutcome(
             outcome: outcomeResult,
             outcomeCode,
             outcomeBasis:
-              'authorized_canonical_projection',
+              journeyAttestation
+                ? 'server_revalidated_canonical_projection'
+                : 'authorized_canonical_projection',
+            ...(journeyAttestation
+              ? {
+                  outcomeAttestation: {
+                    sourceApp: 'nestjourney',
+                    queueId:
+                      journeyAttestation.queueId,
+                    sourceObservedAtMs:
+                      journeyAttestation.observedAtMs,
+                    sourceQueueCount:
+                      journeyAttestation.currentCount,
+                    sourceFingerprint:
+                      journeyAttestation.currentFingerprint
+                  }
+                }
+              : {}),
             outcomeObservedAt:
               FieldValue.serverTimestamp(),
             updatedAt:
