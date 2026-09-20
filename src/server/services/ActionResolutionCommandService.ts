@@ -161,24 +161,24 @@ async function authenticate(
   }
 }
 
-async function canResolveNestJourneyAction(
+async function resolveNestJourneyCapabilities(
   db: Firestore,
   organizationId: string,
   actorUid: string,
   access: ResolvedAppAccess
-): Promise<boolean> {
+): Promise<NestJourneyOperationalCapabilities | null> {
   if (
     access.accessible !== true ||
     access.isGlobalAccess === true
   ) {
-    return false;
+    return null;
   }
 
   const member = await db
     .doc(`organizations/${organizationId}/members/${actorUid}`)
     .get();
 
-  if (!member.exists) return false;
+  if (!member.exists) return null;
 
   const data = member.data() ?? {};
   const status = String(data.status || '')
@@ -196,7 +196,7 @@ async function canResolveNestJourneyAction(
       'disabled'
     ].includes(status)
   ) {
-    return false;
+    return null;
   }
 
   const permissions =
@@ -204,18 +204,37 @@ async function canResolveNestJourneyAction(
       ? data.permissions as Record<string, unknown>
       : {};
 
-  const capabilities =
-    NESTJOURNEY_CAPABILITY_KEYS.reduce(
-      (result, key) => {
-        result[key] = permissions[key] === true;
-        return result;
-      },
-      { ...EMPTY_NESTJOURNEY_CAPABILITIES } as NestJourneyOperationalCapabilities
-    );
-
-  return hasNestJourneyOperationalCapability(
-    capabilities
+  return NESTJOURNEY_CAPABILITY_KEYS.reduce(
+    (result, key) => {
+      result[key] = permissions[key] === true;
+      return result;
+    },
+    { ...EMPTY_NESTJOURNEY_CAPABILITIES } as NestJourneyOperationalCapabilities
   );
+}
+
+function canResolveNestJourneySignal(
+  capabilities: NestJourneyOperationalCapabilities,
+  signalType: ActionResolutionRecord['signalType']
+): boolean {
+  if (
+    signalType ===
+    'nestjourney_assigned_first_contacts'
+  ) {
+    return capabilities.canManageCare === true;
+  }
+
+  if (
+    signalType ===
+    'nestjourney_unassigned_first_contacts'
+  ) {
+    return (
+      capabilities.canCoordinateJourney === true ||
+      capabilities.canManagePastoral === true
+    );
+  }
+
+  return false;
 }
 
 async function authorizeSource(
@@ -223,9 +242,14 @@ async function authorizeSource(
   organizationId: string,
   actorUid: string,
   sourceApp: ActionResolutionRecord['sourceApp'],
-  dependencies: Dependencies
+  dependencies: Dependencies,
+  signalType?: ActionResolutionRecord['signalType']
 ): Promise<
-  | { allowed: true; sourceApp: ActionResolutionRecord['sourceApp'] }
+  | {
+      allowed: true;
+      sourceApp: ActionResolutionRecord['sourceApp'];
+      journeyCapabilities?: NestJourneyOperationalCapabilities;
+    }
   | {
       allowed: false;
       status: number;
@@ -271,13 +295,19 @@ async function authorizeSource(
     };
   }
 
-  if (
-    !(await canResolveNestJourneyAction(
+  const capabilities =
+    await resolveNestJourneyCapabilities(
       db,
       organizationId,
       actorUid,
       access
-    ))
+    );
+
+  if (
+    !capabilities ||
+    !hasNestJourneyOperationalCapability(
+      capabilities
+    )
   ) {
     return {
       allowed: false,
@@ -286,7 +316,25 @@ async function authorizeSource(
     };
   }
 
-  return { allowed: true, sourceApp };
+  if (
+    signalType &&
+    !canResolveNestJourneySignal(
+      capabilities,
+      signalType
+    )
+  ) {
+    return {
+      allowed: false,
+      status: 403,
+      reasonCode: 'JOURNEY_SIGNAL_RESOLUTION_AUTHORITY_REQUIRED'
+    };
+  }
+
+  return {
+    allowed: true,
+    sourceApp,
+    journeyCapabilities: capabilities
+  };
 }
 
 function resolutionId(
