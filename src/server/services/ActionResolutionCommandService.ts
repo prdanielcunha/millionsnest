@@ -15,6 +15,15 @@ import {
   type ActionOutcomeCode,
   type ActionOutcomeResult
 } from '../../lib/outcomeEngine.js';
+import {
+  isResolutionSourceSignalPair,
+  type ActionResolutionRecord
+} from '../../lib/actionResolution.js';
+import {
+  EMPTY_NESTJOURNEY_CAPABILITIES,
+  hasNestJourneyOperationalCapability,
+  type NestJourneyOperationalCapabilities
+} from '../../lib/nestJourneyWorkspaceProjection.js';
 
 type Dependencies = {
   verifyIdToken?: (
@@ -28,11 +37,18 @@ type Dependencies = {
 const MAX_RESOLUTIONS = 100;
 const MAX_SIGNAL_TEXT = 512;
 
-const RESOLVABLE_SIGNAL_TYPES = new Set([
-  'musicscale_pending_responses',
-  'musicscale_declined_responses',
-  'musicscale_repertoire_content_gaps'
-]);
+const NESTJOURNEY_CAPABILITY_KEYS = [
+  'canManagePresence',
+  'canManageMesa',
+  'canManagePeople',
+  'canManageCare',
+  'canManageGroups',
+  'canManageDiscipleship',
+  'canManageImplementation',
+  'canManagePastoral',
+  'canViewGovernance',
+  'canCoordinateJourney'
+] as const;
 
 function isSafeDocumentId(
   value: unknown
@@ -145,13 +161,71 @@ async function authenticate(
   }
 }
 
-async function authorize(
+async function canResolveNestJourneyAction(
   db: Firestore,
   organizationId: string,
   actorUid: string,
+  access: ResolvedAppAccess
+): Promise<boolean> {
+  if (
+    access.accessible !== true ||
+    access.isGlobalAccess === true
+  ) {
+    return false;
+  }
+
+  const member = await db
+    .doc(`organizations/${organizationId}/members/${actorUid}`)
+    .get();
+
+  if (!member.exists) return false;
+
+  const data = member.data() ?? {};
+  const status = String(data.status || '')
+    .trim()
+    .toLowerCase();
+
+  if (
+    [
+      'suspended',
+      'inactive',
+      'removed',
+      'revoked',
+      'deleted',
+      'archived',
+      'disabled'
+    ].includes(status)
+  ) {
+    return false;
+  }
+
+  const permissions =
+    data.permissions && typeof data.permissions === 'object'
+      ? data.permissions as Record<string, unknown>
+      : {};
+
+  const capabilities =
+    NESTJOURNEY_CAPABILITY_KEYS.reduce(
+      (result, key) => {
+        result[key] = permissions[key] === true;
+        return result;
+      },
+      { ...EMPTY_NESTJOURNEY_CAPABILITIES } as NestJourneyOperationalCapabilities
+    );
+
+  return hasNestJourneyOperationalCapability(
+    capabilities
+  );
+}
+
+async function authorizeSource(
+  db: Firestore,
+  organizationId: string,
+  actorUid: string,
+  sourceApp: ActionResolutionRecord['sourceApp'],
   dependencies: Dependencies
 ): Promise<
-  | { allowed: true }
+  | { allowed: true; sourceApp: ActionResolutionRecord['sourceApp'] }
   | {
       allowed: false;
       status: number;
@@ -165,27 +239,54 @@ async function authorize(
   const access = await resolveAccess({
     uid: actorUid,
     organizationId,
-    appId: 'musicscale',
+    appId: sourceApp,
     db
   });
+
+  if (sourceApp === 'musicscale') {
+    if (!access.accessible) {
+      return {
+        allowed: false,
+        status: 403,
+        reasonCode: 'MUSICSCALE_ACCESS_DENIED'
+      };
+    }
+
+    if (!canResolveManagedMusicScaleAction(access)) {
+      return {
+        allowed: false,
+        status: 403,
+        reasonCode: 'WORSHIP_RESOLUTION_AUTHORITY_REQUIRED'
+      };
+    }
+
+    return { allowed: true, sourceApp };
+  }
 
   if (!access.accessible) {
     return {
       allowed: false,
       status: 403,
-      reasonCode: 'MUSICSCALE_ACCESS_DENIED'
+      reasonCode: 'NESTJOURNEY_ACCESS_DENIED'
     };
   }
 
-  if (!canResolveManagedMusicScaleAction(access)) {
+  if (
+    !(await canResolveNestJourneyAction(
+      db,
+      organizationId,
+      actorUid,
+      access
+    ))
+  ) {
     return {
       allowed: false,
       status: 403,
-      reasonCode: 'WORSHIP_RESOLUTION_AUTHORITY_REQUIRED'
+      reasonCode: 'JOURNEY_RESOLUTION_AUTHORITY_REQUIRED'
     };
   }
 
-  return { allowed: true };
+  return { allowed: true, sourceApp };
 }
 
 function resolutionId(
@@ -217,11 +318,8 @@ function parseResolutionInput(
   | {
       dedupeKey: string;
       fingerprint: string;
-      sourceApp: 'musicscale';
-      signalType:
-        | 'musicscale_pending_responses'
-        | 'musicscale_declined_responses'
-        | 'musicscale_repertoire_content_gaps';
+      sourceApp: ActionResolutionRecord['sourceApp'];
+      signalType: ActionResolutionRecord['signalType'];
     }
   | null {
   const dedupeKey = body?.dedupeKey;
@@ -232,8 +330,10 @@ function parseResolutionInput(
   if (
     !isSafeSignalText(dedupeKey) ||
     !isSafeSignalText(fingerprint) ||
-    sourceApp !== 'musicscale' ||
-    !RESOLVABLE_SIGNAL_TYPES.has(signalType)
+    !isResolutionSourceSignalPair({
+      sourceApp,
+      signalType
+    })
   ) {
     return null;
   }
