@@ -728,12 +728,18 @@ export function Dashboard() {
   }, [user, activeContextOrgId, isEcosystemSupport]);
 
   useEffect(() => {
-    const canLoadResolutions =
-      Boolean(user) &&
-      Boolean(activeContextOrgId) &&
+    const canLoadMusicScaleResolutions =
       musicScaleProjection?.accessible === true &&
       musicScaleProjection?.canReadManagedScaleResponses === true &&
       musicScaleProjection?.isGlobalAccess !== true;
+    const canLoadJourneyResolutions =
+      currentNestJourneyProjection?.accessible === true &&
+      currentNestJourneyProjection?.canReadJourneyOperational === true &&
+      currentNestJourneyProjection?.isGlobalAccess !== true;
+    const canLoadResolutions =
+      Boolean(user) &&
+      Boolean(activeContextOrgId) &&
+      (canLoadMusicScaleResolutions || canLoadJourneyResolutions);
 
     if (!canLoadResolutions || !user || !activeContextOrgId) {
       setActionResolutions([]);
@@ -775,7 +781,10 @@ export function Dashboard() {
     activeContextOrgId,
     musicScaleProjection?.accessible,
     musicScaleProjection?.canReadManagedScaleResponses,
-    musicScaleProjection?.isGlobalAccess
+    musicScaleProjection?.isGlobalAccess,
+    currentNestJourneyProjection?.accessible,
+    currentNestJourneyProjection?.canReadJourneyOperational,
+    currentNestJourneyProjection?.isGlobalAccess
   ]);
 
   const handleStartActionResolution = async (
@@ -827,7 +836,7 @@ export function Dashboard() {
       feedback.error(
         t(
           'workspace.actions.resolution_start_error',
-          'Abriremos o MusicScale, mas não foi possível registrar o acompanhamento desta resolução.'
+          'Abriremos o app, mas não foi possível registrar o acompanhamento desta resolução.'
         )
       );
       return null;
