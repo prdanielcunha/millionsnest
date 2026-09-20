@@ -14,6 +14,7 @@ const intelligence = {
       journey: 'Visitors, journeys, follow-ups, and care commitments.',
       worship: 'Schedules, confirmations, pending items, and ministry preparation.',
       finance: 'Financial operations within your permissions.',
+      follow_up: 'What is pending in follow-up?',
       administration: 'Organizations, people, access, and ecosystem operations.'
     }
   },
@@ -73,6 +74,7 @@ const intelligence = {
       worship_schedule: 'Worship schedule',
       organization: 'Organization',
       workspace: 'Adaptive command center',
+      followup_queue: 'Follow-up queue',
       verified_record: 'Verified record',
       observed_at: 'Observed on {{date}}',
       authorized_projection: 'Authorized projection of the current context'
@@ -85,6 +87,9 @@ const intelligence = {
       distribution_window: '{{schedules}} completed schedule(s), {{assignments}} assignment(s), and {{people}} person(s) in the 30-day window.',
       distribution_function: 'For {{function}}, the highest individual record was {{max}} schedule(s), with an average of {{average}}.',
       next_scale_is_not_sunday: 'The next schedule available in the current projection is not on Sunday.',
+      journey_assigned: '{{count}} first-contact follow-up(s) assigned to you and awaiting completion.',
+      journey_unassigned: '{{count}} first-contact follow-up(s) without an owner in your authorized scope.',
+      journey_overdue: '{{count}} first-contact commitment(s) past the agreed deadline.',
       action_item: 'Authorized action'
     },
     answers: {
@@ -121,7 +126,9 @@ const intelligence = {
         insufficient: 'I can show the aggregate distribution, but the current data does not support identifying who is “above the load” as an individual conclusion.'
       },
       journey_follow_up: {
-        insufficient: 'The Hub does not yet have an authorized, structured Journey source in this context that supports identifying who is awaiting follow-up.'
+        title: 'Journey follow-ups',
+        summary: 'In your authorized scope, {{assigned}} first-contact follow-up(s) are assigned to you, {{unassigned}} have no owner, and {{overdue}} are past the agreed deadline.',
+        insufficient: 'The Journey Lens is available, but there is no open evidence-backed follow-up queue that supports answering this question right now.'
       },
       finance: {
         insufficient: 'The Hub does not yet have an authorized, structured financial source in this context that supports answering that question.'
