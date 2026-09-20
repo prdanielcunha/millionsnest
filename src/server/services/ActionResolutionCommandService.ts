@@ -374,17 +374,42 @@ export async function getActionResolutions(
     const db =
       (dependencies.getFirestore ?? getFirestore)();
 
-    const authorization = await authorize(
-      db,
-      organizationId,
-      actorUid,
-      dependencies
-    );
+    const [
+      musicScaleAuthorization,
+      nestJourneyAuthorization
+    ] = await Promise.all([
+      authorizeSource(
+        db,
+        organizationId,
+        actorUid,
+        'musicscale',
+        dependencies
+      ),
+      authorizeSource(
+        db,
+        organizationId,
+        actorUid,
+        'nestjourney',
+        dependencies
+      )
+    ]);
 
-    if (authorization.allowed === false) {
-      return res.status(authorization.status).json({
+    const allowedSourceApps = new Set<
+      ActionResolutionRecord['sourceApp']
+    >();
+
+    if (musicScaleAuthorization.allowed) {
+      allowedSourceApps.add('musicscale');
+    }
+    if (nestJourneyAuthorization.allowed) {
+      allowedSourceApps.add('nestjourney');
+    }
+
+    if (allowedSourceApps.size === 0) {
+      return res.status(403).json({
         success: false,
-        reasonCode: authorization.reasonCode
+        reasonCode:
+          'ACTION_RESOLUTION_AUTHORITY_REQUIRED'
       });
     }
 
@@ -425,8 +450,8 @@ export async function getActionResolutions(
         record.organizationId === organizationId &&
         isSafeSignalText(record.dedupeKey) &&
         isSafeSignalText(record.fingerprint) &&
-        record.sourceApp === 'musicscale' &&
-        RESOLVABLE_SIGNAL_TYPES.has(record.signalType) &&
+        isResolutionSourceSignalPair(record) &&
+        allowedSourceApps.has(record.sourceApp) &&
         (
           record.status === 'started' ||
           record.status === 'cleared_observed' ||
