@@ -243,6 +243,7 @@ export async function resolveNestJourneyWorkspaceProjectionForActor(
     db: admin.firestore.Firestore;
     resolveAccess?: typeof resolveEcosystemAppAccess;
     now?: () => number;
+    completeQueues?: boolean;
   }
 ): Promise<NestJourneyWorkspaceProjection> {
   const uid = clean(input.uid);
@@ -336,32 +337,42 @@ export async function resolveNestJourneyWorkspaceProjectionForActor(
     };
   }
 
+  const assignedQuery =
+    db.collection(
+      `organizations/${organizationId}/products/raiz_e_mesa/followups`
+    )
+      .where('ownerRef', '==', uid);
+
   const assignedPromise =
     capabilities.canManageCare
-      ? db.collection(
-          `organizations/${organizationId}/products/raiz_e_mesa/followups`
-        )
-          .where('ownerRef', '==', uid)
-          .limit(100)
-          .get()
+      ? (
+          dependencies.completeQueues
+            ? assignedQuery
+            : assignedQuery.limit(100)
+        ).get()
       : Promise.resolve(null);
 
   const canSuperviseCare =
     capabilities.canCoordinateJourney ||
     capabilities.canManagePastoral;
 
+  const unassignedQuery =
+    db.collection(
+      `organizations/${organizationId}/products/raiz_e_mesa/careRequests`
+    )
+      .where(
+        'careType',
+        '==',
+        'first_contact'
+      );
+
   const unassignedPromise =
     canSuperviseCare
-      ? db.collection(
-          `organizations/${organizationId}/products/raiz_e_mesa/careRequests`
-        )
-          .where(
-            'careType',
-            '==',
-            'first_contact'
-          )
-          .limit(200)
-          .get()
+      ? (
+          dependencies.completeQueues
+            ? unassignedQuery
+            : unassignedQuery.limit(200)
+        ).get()
       : Promise.resolve(null);
 
   const [
