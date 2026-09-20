@@ -340,7 +340,8 @@ for (const expected of [
   'JOURNEY_OUTCOME_ATTESTATION_UNAVAILABLE',
   'outcomeAttestation',
   'sourceQueueCount',
-  'sourceFingerprint'
+  'sourceFingerprint',
+  'completeQueues: true'
 ]) {
   assert.equal(
     server.includes(expected),
@@ -357,6 +358,16 @@ assert.match(
   projectionService,
   /export async function resolveNestJourneyWorkspaceProjectionForActor/,
   'HTTP workspace projection and server attestation must reuse one canonical Journey resolver'
+);
+assert.match(
+  projectionService,
+  /dependencies\.completeQueues[\s\S]*assignedQuery[\s\S]*assignedQuery\.limit\(100\)/,
+  'dashboard projection may stay bounded while attestation can request the full assigned queue'
+);
+assert.match(
+  projectionService,
+  /dependencies\.completeQueues[\s\S]*unassignedQuery[\s\S]*unassignedQuery\.limit\(200\)/,
+  'dashboard projection may stay bounded while attestation can request the full unassigned queue'
 );
 
 const attestationSource = readFileSync(
