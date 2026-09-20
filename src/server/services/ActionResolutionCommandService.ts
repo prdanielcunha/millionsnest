@@ -912,7 +912,7 @@ export async function observeActionResolutionOutcome(
             projection
           });
 
-        if (!attestation.attested) {
+        if ('reasonCode' in attestation) {
           return res.status(409).json({
             success: false,
             reasonCode:
