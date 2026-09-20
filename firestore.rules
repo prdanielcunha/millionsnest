@@ -603,6 +603,43 @@ service cloud.firestore {
         );
     }
 
+    function journeyValidPersonBondCreate() {
+      let bondHostRef = request.resource.data.get('bondHostRef', '');
+      return (
+          bondHostRef == ''
+          && request.resource.data.get('bondAssignedAt', null) == null
+          && request.resource.data.get('bondAssignedBy', '') == ''
+        )
+        || (
+          bondHostRef == request.auth.uid
+          && request.resource.data.get('bondAssignedAt', null) == request.time
+          && request.resource.data.get('bondAssignedBy', '') == request.auth.uid
+        );
+    }
+
+    function journeyValidPersonUpdate(orgId, personId) {
+      let oldBond = resource.data.get('bondHostRef', '');
+      let newBond = request.resource.data.get('bondHostRef', '');
+      let factPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/facts/$(('bond-host-' + personId + '-' + request.auth.uid));
+      return journeyTenantUnchanged(orgId) &&
+        journeyCongregationUnchanged() &&
+        (
+          (
+            newBond == oldBond &&
+            request.resource.data.get('bondAssignedAt', null) == resource.data.get('bondAssignedAt', null) &&
+            request.resource.data.get('bondAssignedBy', '') == resource.data.get('bondAssignedBy', '')
+          )
+          ||
+          (
+            oldBond == '' &&
+            newBond == request.auth.uid &&
+            request.resource.data.get('bondAssignedAt', null) == request.time &&
+            request.resource.data.get('bondAssignedBy', '') == request.auth.uid &&
+            existsAfter(factPath)
+          )
+        );
+    }
+
     function journeyCanManageSettings(orgId) {
       return isSystemAdmin() ||
         journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor']);
@@ -1588,9 +1625,9 @@ service cloud.firestore {
           allow create: if journeyTenantCreate(orgId) &&
             request.resource.data.get('deletedAt', null) == null &&
             journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
-            journeyCanManagePeople(orgId);
-          allow update: if journeyTenantUnchanged(orgId) &&
-            journeyCongregationUnchanged() &&
+            journeyCanManagePeople(orgId) &&
+            journeyValidPersonBondCreate();
+          allow update: if journeyValidPersonUpdate(orgId, personId) &&
             journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
             journeyCanManagePeople(orgId);
           allow delete: if false;
