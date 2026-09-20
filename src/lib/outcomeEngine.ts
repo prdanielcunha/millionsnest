@@ -203,7 +203,8 @@ export function isValidOutcomeForSignal(input: {
   ) {
     return (
       input.code ===
-      'target_left_active_window'
+        'target_left_active_window' &&
+      input.signalType.startsWith('musicscale_')
     );
   }
 
