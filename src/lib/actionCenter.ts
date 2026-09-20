@@ -22,7 +22,7 @@ export interface ReadOnlyHubAction {
   id: string;
   dedupeKey: string;
   fingerprint: string;
-  sourceApp: 'hub' | 'musicscale';
+  sourceApp: 'hub' | 'musicscale' | 'nestjourney';
   signalType: ActionSignalType;
   priority: ActionPriority;
   titleKey: string;
@@ -54,8 +54,15 @@ export interface ActionProjectionInput {
     canManageOrganization: boolean;
     canManageMembers: boolean;
     canReadManagedMusicScaleResponses?: boolean;
+    canReadJourneyOperational?: boolean;
   };
   pendingInvitesCount: number;
+  journey?: {
+    ready: boolean;
+    observedAtMs?: number | null;
+    assignedFirstContacts: import('./nestJourneyWorkspaceProjection.js').NestJourneyQueueSummary;
+    unassignedFirstContacts: import('./nestJourneyWorkspaceProjection.js').NestJourneyQueueSummary;
+  };
   musicScale: {
     ready: boolean;
     observedAtMs?: number | null;
@@ -158,6 +165,59 @@ export function projectSignalToAction(
       descriptionKey: 'workspace.actions.pending_invites.description',
       translationParams: { count },
       destination: { kind: 'hub', section: 'members' }
+    };
+  }
+
+  if (signal.signalType === 'nestjourney_assigned_first_contacts') {
+    const count = numberPayload(signal, 'count');
+    const overdueCount = numberPayload(signal, 'overdueCount');
+    const dueSoonCount = numberPayload(signal, 'dueSoonCount');
+    if (count <= 0 || signal.sourceEntityType !== 'followup_queue') return null;
+
+    return {
+      id: signal.dedupeKey,
+      dedupeKey: signal.dedupeKey,
+      fingerprint: signal.fingerprint,
+      sourceApp: signal.sourceApp,
+      signalType: signal.signalType,
+      priority: overdueCount > 0 ? 'urgent' : dueSoonCount > 0 ? 'high' : 'normal',
+      titleKey: 'workspace.actions.nestjourney_assigned_first_contacts.title',
+      descriptionKey: overdueCount > 0
+        ? 'workspace.actions.nestjourney_assigned_first_contacts.description_overdue'
+        : 'workspace.actions.nestjourney_assigned_first_contacts.description',
+      translationParams: { count, overdue: overdueCount },
+      destination: {
+        kind: 'app',
+        appId: 'nestjourney',
+        path: '/followup-runtime'
+      },
+      dueAtMs: signal.occurredAtMs ?? null
+    };
+  }
+
+  if (signal.signalType === 'nestjourney_unassigned_first_contacts') {
+    const count = numberPayload(signal, 'count');
+    const overdueCount = numberPayload(signal, 'overdueCount');
+    if (count <= 0 || signal.sourceEntityType !== 'followup_queue') return null;
+
+    return {
+      id: signal.dedupeKey,
+      dedupeKey: signal.dedupeKey,
+      fingerprint: signal.fingerprint,
+      sourceApp: signal.sourceApp,
+      signalType: signal.signalType,
+      priority: overdueCount > 0 ? 'urgent' : 'high',
+      titleKey: 'workspace.actions.nestjourney_unassigned_first_contacts.title',
+      descriptionKey: overdueCount > 0
+        ? 'workspace.actions.nestjourney_unassigned_first_contacts.description_overdue'
+        : 'workspace.actions.nestjourney_unassigned_first_contacts.description',
+      translationParams: { count, overdue: overdueCount },
+      destination: {
+        kind: 'app',
+        appId: 'nestjourney',
+        path: '/care-integrity'
+      },
+      dueAtMs: signal.occurredAtMs ?? null
     };
   }
 
@@ -350,6 +410,16 @@ export function projectEvidenceBackedSignalToAction(
     return null;
   }
 
+  if (
+    (
+      signal.signalType === 'nestjourney_assigned_first_contacts' ||
+      signal.signalType === 'nestjourney_unassigned_first_contacts'
+    ) &&
+    permissions.canReadJourneyOperational !== true
+  ) {
+    return null;
+  }
+
   const action = projectSignalToAction(signal, permissions);
   if (!action) return null;
 
@@ -390,6 +460,7 @@ export function deriveReadOnlyHubActions(input: ActionProjectionInput): ReadOnly
   const actions = collectActionSignals({
     organization: input.organization,
     pendingInvitesCount: input.pendingInvitesCount,
+    journey: input.journey,
     musicScale: input.musicScale
   })
     .map(signal => projectSignalToAction(signal, input.permissions))

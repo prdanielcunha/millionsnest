@@ -1,7 +1,8 @@
 import type { HubAppExperience } from './hubAppExperience.js';
 import {
   deriveCurrentHubLensAuthorization,
-  type CurrentMusicScaleLensAuthority
+  type CurrentMusicScaleLensAuthority,
+  type CurrentNestJourneyLensAuthority
 } from './hubLensAuthorization.js';
 import {
   resolveEntitledAppIds
@@ -51,6 +52,7 @@ export interface CurrentContextGraphInput {
   appExperiences: readonly HubAppExperience[];
   canManageOrganization: boolean;
   musicScaleAccess?: CurrentMusicScaleLensAuthority | null;
+  nestJourneyAccess?: CurrentNestJourneyLensAuthority | null;
 }
 
 const ACTOR_NODE_ID = 'actor:current';
@@ -83,16 +85,42 @@ function addEdge(
 function resolveCurrentEntitlements(
   input: CurrentContextGraphInput
 ): string[] {
-  return resolveEntitledAppIds(input.appExperiences).filter(appId => {
-    if (appId !== 'musicscale') return true;
+  const current = resolveEntitledAppIds(input.appExperiences).filter(appId => {
+    if (appId === 'musicscale') {
+      // A stale installed/catalog bit can never overrule the current
+      // backend-authoritative MusicScale access decision.
+      return (
+        input.musicScaleAccess?.accessible === true &&
+        input.musicScaleAccess?.decisionState === 'granted'
+      );
+    }
 
-    // A stale installed/catalog bit can never overrule the current
-    // backend-authoritative MusicScale access decision.
-    return (
-      input.musicScaleAccess?.accessible === true &&
-      input.musicScaleAccess?.decisionState === 'granted'
-    );
+    if (appId === 'nestjourney') {
+      return (
+        input.nestJourneyAccess?.accessible === true &&
+        input.nestJourneyAccess?.decisionState === 'granted' &&
+        input.nestJourneyAccess?.isGlobalAccess !== true
+      );
+    }
+
+    return true;
   });
+
+  // NestJourney is still a controlled pilot in the public catalog. A canonical
+  // backend grant plus operational Journey capability may therefore materialize
+  // the product entitlement into this runtime graph even while the public card
+  // remains marked as coming soon. Global governance alone never qualifies.
+  if (
+    input.nestJourneyAccess?.accessible === true &&
+    input.nestJourneyAccess?.decisionState === 'granted' &&
+    input.nestJourneyAccess?.canReadJourneyOperational === true &&
+    input.nestJourneyAccess?.isGlobalAccess !== true &&
+    !current.includes('nestjourney')
+  ) {
+    current.push('nestjourney');
+  }
+
+  return current;
 }
 
 function deriveCanonicalResponsibilities(
@@ -106,6 +134,10 @@ function deriveCanonicalResponsibilities(
   // leadership responsibility. Display names/titles are deliberately ignored.
   if (authorizedDomains.worship === true && entitlements.has('musicscale')) {
     responsibilities.push('worship_leadership');
+  }
+
+  if (authorizedDomains.journey === true && entitlements.has('nestjourney')) {
+    responsibilities.push('journey_leadership');
   }
 
   if (authorizedDomains.administration === true) {
@@ -151,7 +183,8 @@ export function buildCurrentContextGraph(
   const entitledAppIds = resolveCurrentEntitlements(input);
   const authorizedDomains = deriveCurrentHubLensAuthorization({
     canManageOrganization: input.canManageOrganization,
-    musicScaleAccess: input.musicScaleAccess
+    musicScaleAccess: input.musicScaleAccess,
+    nestJourneyAccess: input.nestJourneyAccess
   });
   const responsibilities = deriveCanonicalResponsibilities(
     authorizedDomains,
@@ -199,6 +232,20 @@ export function buildCurrentContextGraph(
         id: domainNodeId,
         kind: 'domain',
         key: 'worship'
+      });
+      addEdge(edges, edgeIds, {
+        from: appNodeId,
+        to: domainNodeId,
+        relation: 'owns_domain'
+      });
+    }
+
+    if (appId === 'nestjourney') {
+      const domainNodeId = nodeId('domain', 'journey');
+      addNode(nodes, nodeIds, {
+        id: domainNodeId,
+        kind: 'domain',
+        key: 'journey'
       });
       addEdge(edges, edgeIds, {
         from: appNodeId,

@@ -55,6 +55,7 @@ import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScale
 import { handleEcosystemAccessProjectionRequest } from './src/server/services/EcosystemAccessProjectionService.js';
 import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
 import { handleNestJourneyFollowupContextRequest } from './src/server/services/NestJourneyFollowupContextService.js';
+import { handleNestJourneyWorkspaceProjectionRequest } from './src/server/services/NestJourneyWorkspaceProjectionService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
 import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy, canManageTenantMembers, canManageTenantBilling, canManageTenantSettings } from './src/lib/permissionService.js';
@@ -5466,6 +5467,16 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
   app.post('/api/ecosystem/access-projection', express.json(), async (req, res) => {
     return handleEcosystemAccessProjectionRequest(req, res, {
+      verifyIdToken: (token) => admin.auth().verifyIdToken(token),
+      getDb: () => db || null,
+      resolveAccess: resolveEcosystemAppAccess,
+      now: () => Date.now(),
+      logger: console
+    });
+  });
+
+  app.get('/api/ecosystem/nestjourney/workspace-projection', async (req, res) => {
+    return handleNestJourneyWorkspaceProjectionRequest(req, res, {
       verifyIdToken: (token) => admin.auth().verifyIdToken(token),
       getDb: () => db || null,
       resolveAccess: resolveEcosystemAppAccess,

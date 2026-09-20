@@ -437,7 +437,61 @@ export function answerAskMillionsNest(
 
   if (intent === 'journey_follow_up') {
     if (!hasLens(input.lenses, 'journey')) return notAvailable(intent);
-    return insufficient(intent);
+
+    const journeyActions = input.actions.filter(action =>
+      action.sourceApp === 'nestjourney' &&
+      (
+        action.signalType === 'nestjourney_assigned_first_contacts' ||
+        action.signalType === 'nestjourney_unassigned_first_contacts'
+      )
+    );
+
+    if (journeyActions.length === 0) {
+      return insufficient(intent);
+    }
+
+    const assignedAction = journeyActions.find(
+      action => action.signalType === 'nestjourney_assigned_first_contacts'
+    );
+    const unassignedAction = journeyActions.find(
+      action => action.signalType === 'nestjourney_unassigned_first_contacts'
+    );
+
+    const assigned = Number(assignedAction?.translationParams?.count || 0);
+    const unassigned = Number(unassignedAction?.translationParams?.count || 0);
+    const overdue =
+      Number(assignedAction?.translationParams?.overdue || 0) +
+      Number(unassignedAction?.translationParams?.overdue || 0);
+
+    return answered({
+      intent,
+      titleKey: 'ask.answers.journey_follow_up.title',
+      summaryKey: 'ask.answers.journey_follow_up.summary',
+      translationParams: {
+        assigned,
+        unassigned,
+        overdue
+      },
+      facts: [
+        {
+          key: 'ask.facts.journey_assigned',
+          params: { count: assigned }
+        },
+        {
+          key: 'ask.facts.journey_unassigned',
+          params: { count: unassigned }
+        },
+        {
+          key: 'ask.facts.journey_overdue',
+          params: { count: overdue }
+        }
+      ],
+      evidence: sanitizeEvidence(
+        organizationId,
+        journeyActions.flatMap(action => [...action.evidence])
+      ),
+      destination: journeyActions[0]?.destination ?? null
+    });
   }
 
   if (intent === 'finance') {
@@ -783,6 +837,7 @@ export function answerAskMillionsNest(
     if (input.activeLens === 'my_today') return true;
     if (input.activeLens === 'administration') return action.sourceApp === 'hub';
     if (input.activeLens === 'worship') return action.sourceApp === 'musicscale';
+    if (input.activeLens === 'journey') return action.sourceApp === 'nestjourney';
     return true;
   });
 
@@ -833,6 +888,10 @@ export function getAskMillionsNestSuggestionKeys(
     );
   } else {
     suggestions.push('ask.suggestions.personal_schedule');
+  }
+
+  if (hasLens(lenses, 'journey')) {
+    suggestions.push('ask.suggestions.follow_up');
   }
 
   if (hasLens(lenses, 'administration')) {

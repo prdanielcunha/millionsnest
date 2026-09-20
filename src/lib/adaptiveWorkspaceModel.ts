@@ -84,6 +84,7 @@ export function buildAdaptiveWorkspaceModel(
           organization: input.organization,
           permissions: input.permissions,
           pendingInvitesCount: input.pendingInvitesCount,
+          journey: input.journey,
           musicScale: input.musicScale
         }),
         input.entitledAppIds ?? []

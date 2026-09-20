@@ -1,4 +1,5 @@
 import type { EcosystemApp } from './apps.js';
+import type { CurrentNestJourneyLensAuthority } from './hubLensAuthorization.js';
 
 export type HubAppState =
   | 'active'
@@ -60,6 +61,7 @@ export function resolveHubAppExperience(params: {
     accessible?: boolean;
     catalogState?: string | null;
   } | null;
+  nestJourneyAccess?: CurrentNestJourneyLensAuthority | null;
   isGlobalAdmin?: boolean;
   canAccessDevelopmentPreviews?: boolean;
 }): HubAppExperience {
@@ -68,6 +70,7 @@ export function resolveHubAppExperience(params: {
     organization,
     subscription,
     musicScaleAccess,
+    nestJourneyAccess,
     isGlobalAdmin,
     canAccessDevelopmentPreviews
   } = params;
@@ -94,6 +97,30 @@ export function resolveHubAppExperience(params: {
           : appRecord?.plan || subscription?.plan || subscription?.tier || organization?.subscriptionPlan || null,
       needsAttention: state === 'payment_issue' || state === 'error',
       isOperational: app.status === 'active'
+    };
+  }
+
+  // Controlled NestJourney pilot: the public catalog may remain "coming soon",
+  // but a tenant member with canonical backend access and an explicit Journey
+  // operational capability can use the real product. This does not grant access:
+  // the handoff and NestJourney both revalidate identity, tenant and capability.
+  if (
+    app.id === 'nestjourney' &&
+    nestJourneyAccess?.accessible === true &&
+    nestJourneyAccess?.decisionState === 'granted' &&
+    nestJourneyAccess?.canReadJourneyOperational === true &&
+    nestJourneyAccess?.isGlobalAccess !== true &&
+    typeof app.url === 'string' &&
+    app.url.trim().length > 0
+  ) {
+    return {
+      app,
+      installed: true,
+      canOpen: true,
+      state: 'active',
+      plan: appRecord?.plan || null,
+      needsAttention: false,
+      isOperational: true
     };
   }
 
