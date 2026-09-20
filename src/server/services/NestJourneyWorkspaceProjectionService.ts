@@ -234,117 +234,110 @@ function noStore(res: Response) {
   res.setHeader('Surrogate-Control', 'no-store');
 }
 
-export async function handleNestJourneyWorkspaceProjectionRequest(
-  req: Request,
-  res: Response,
-  dependencies: Dependencies
-) {
-  noStore(res);
-
-  const authHeader = req.headers.authorization;
-  if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, code: 'UNAUTHORIZED' });
+export async function resolveNestJourneyWorkspaceProjectionForActor(
+  input: {
+    uid: string;
+    organizationId: string;
+  },
+  dependencies: {
+    db: admin.firestore.Firestore;
+    resolveAccess?: typeof resolveEcosystemAppAccess;
+    now?: () => number;
   }
-
-  const token = authHeader.slice(7).trim();
-  if (!token) return res.status(401).json({ success: false, code: 'UNAUTHORIZED' });
-
-  let uid: string;
-  try {
-    uid = (await dependencies.verifyIdToken(token)).uid;
-  } catch {
-    return res.status(401).json({ success: false, code: 'UNAUTHORIZED' });
-  }
-
-  const organizationId = clean(req.query.organizationId);
-  if (!safeDocumentId(uid) || !safeDocumentId(organizationId)) {
-    return res.status(400).json({ success: false, code: 'INVALID_REQUEST' });
-  }
-
+): Promise<NestJourneyWorkspaceProjection> {
+  const uid = clean(input.uid);
+  const organizationId = clean(input.organizationId);
   const observedAtMs = (dependencies.now ?? Date.now)();
-  const db = dependencies.getDb();
-  if (!db) {
-    return res.status(503).json({ success: false, code: 'SERVICE_UNAVAILABLE' });
+
+  if (!safeDocumentId(uid) || !safeDocumentId(organizationId)) {
+    throw new Error('INVALID_NESTJOURNEY_PROJECTION_IDENTITY');
   }
 
-  try {
-    const access = await (dependencies.resolveAccess ?? resolveEcosystemAppAccess)({
-      uid,
+  const db = dependencies.db;
+  const access = await (
+    dependencies.resolveAccess ??
+    resolveEcosystemAppAccess
+  )({
+    uid,
+    organizationId,
+    appId: 'nestjourney',
+    db
+  });
+
+  if (!access.accessible) {
+    return emptyProjection({
       organizationId,
-      appId: 'nestjourney',
-      db
+      observedAtMs,
+      access
     });
+  }
 
-    if (!access.accessible) {
-      return res.status(200).json({
-        success: true,
-        projection: emptyProjection({
-          organizationId,
-          observedAtMs,
-          access
-        })
-      });
-    }
+  // Global governance can validate/preview the product, but it does not become
+  // Journey ministry-content authority merely because the actor is CEO/admin.
+  if (access.isGlobalAccess) {
+    return emptyProjection({
+      organizationId,
+      observedAtMs,
+      access
+    });
+  }
 
-    // Global governance can validate/preview the product, but it does not become
-    // Journey ministry-content authority merely because the actor is CEO/admin.
-    if (access.isGlobalAccess) {
-      return res.status(200).json({
-        success: true,
-        projection: emptyProjection({
-          organizationId,
-          observedAtMs,
-          access
-        })
-      });
-    }
+  const memberSnapshot = await db
+    .doc(`organizations/${organizationId}/members/${uid}`)
+    .get();
+  const membership =
+    memberSnapshot.exists
+      ? memberSnapshot.data()
+      : undefined;
 
-    const memberSnapshot = await db
-      .doc(`organizations/${organizationId}/members/${uid}`)
-      .get();
-    const membership = memberSnapshot.exists ? memberSnapshot.data() : undefined;
+  if (!activeMembership(membership)) {
+    return emptyProjection({
+      organizationId,
+      observedAtMs,
+      access: {
+        ...access,
+        accessible: false,
+        denialReason: 'MEMBERSHIP_INACTIVE'
+      }
+    });
+  }
 
-    if (!activeMembership(membership)) {
-      return res.status(200).json({
-        success: true,
-        projection: emptyProjection({
-          organizationId,
-          observedAtMs,
-          access: {
-            ...access,
-            accessible: false,
-            denialReason: 'MEMBERSHIP_INACTIVE'
-          }
-        })
-      });
-    }
-
-    const capabilities = capabilitiesFromMembership(membership);
-    const canReadJourneyOperational = hasNestJourneyOperationalCapability(capabilities);
-    const responsibility = responsibilityFromMembership(membership);
-    const congregationIds = congregationIdsFromMembership(membership);
-    const congregationScope = new Set(congregationIds);
-    const organizationRole = normalize(
-      membership?.organizationRole ?? membership?.role ?? access.organizationRole
+  const capabilities =
+    capabilitiesFromMembership(membership);
+  const canReadJourneyOperational =
+    hasNestJourneyOperationalCapability(capabilities);
+  const responsibility =
+    responsibilityFromMembership(membership);
+  const congregationIds =
+    congregationIdsFromMembership(membership);
+  const congregationScope =
+    new Set(congregationIds);
+  const organizationRole = normalize(
+    membership?.organizationRole ??
+    membership?.role ??
+    access.organizationRole
+  );
+  const broadScope =
+    BROAD_ORGANIZATION_ROLES.has(
+      organizationRole
     );
-    const broadScope = BROAD_ORGANIZATION_ROLES.has(organizationRole);
 
-    if (!canReadJourneyOperational) {
-      const projection: NestJourneyWorkspaceProjection = {
-        ...emptyProjection({
-          organizationId,
-          observedAtMs,
-          access
-        }),
-        responsibility,
-        capabilities,
-        congregationIds,
-        canReadJourneyOperational: false
-      };
-      return res.status(200).json({ success: true, projection });
-    }
+  if (!canReadJourneyOperational) {
+    return {
+      ...emptyProjection({
+        organizationId,
+        observedAtMs,
+        access
+      }),
+      responsibility,
+      capabilities,
+      congregationIds,
+      canReadJourneyOperational: false
+    };
+  }
 
-    const assignedPromise = capabilities.canManageCare
+  const assignedPromise =
+    capabilities.canManageCare
       ? db.collection(
           `organizations/${organizationId}/products/raiz_e_mesa/followups`
         )
@@ -353,88 +346,180 @@ export async function handleNestJourneyWorkspaceProjectionRequest(
           .get()
       : Promise.resolve(null);
 
-    const canSuperviseCare =
-      capabilities.canCoordinateJourney ||
-      capabilities.canManagePastoral;
+  const canSuperviseCare =
+    capabilities.canCoordinateJourney ||
+    capabilities.canManagePastoral;
 
-    const unassignedPromise = canSuperviseCare
+  const unassignedPromise =
+    canSuperviseCare
       ? db.collection(
           `organizations/${organizationId}/products/raiz_e_mesa/careRequests`
         )
-          .where('careType', '==', 'first_contact')
+          .where(
+            'careType',
+            '==',
+            'first_contact'
+          )
           .limit(200)
           .get()
       : Promise.resolve(null);
 
-    const [assignedSnapshot, unassignedSnapshot] = await Promise.all([
-      assignedPromise,
-      unassignedPromise
-    ]);
+  const [
+    assignedSnapshot,
+    unassignedSnapshot
+  ] = await Promise.all([
+    assignedPromise,
+    unassignedPromise
+  ]);
 
-    const assignedDueAt = assignedSnapshot
-      ? assignedSnapshot.docs
-          .map(document => document.data())
-          .filter(data =>
-            data.organizationId === organizationId &&
-            data.ownerRef === uid &&
-            data.status === 'pending' &&
-            data.kind === 'first_contact' &&
-            canAccessCongregation(
-              clean(data.congregationId),
-              broadScope,
-              congregationScope
-            )
+  const assignedDueAt = assignedSnapshot
+    ? assignedSnapshot.docs
+        .map(document => document.data())
+        .filter(data =>
+          data.organizationId === organizationId &&
+          data.ownerRef === uid &&
+          data.status === 'pending' &&
+          data.kind === 'first_contact' &&
+          canAccessCongregation(
+            clean(data.congregationId),
+            broadScope,
+            congregationScope
           )
-          .map(data => data.dueAt)
-      : [];
+        )
+        .map(data => data.dueAt)
+    : [];
 
-    const unassignedDueAt = unassignedSnapshot
-      ? unassignedSnapshot.docs
-          .map(document => document.data())
-          .filter(data =>
-            data.organizationId === organizationId &&
-            data.status === 'open' &&
-            data.careType === 'first_contact' &&
-            !clean(data.ownerRef) &&
-            canAccessCongregation(
-              clean(data.congregationId),
-              broadScope,
-              congregationScope
-            )
+  const unassignedDueAt = unassignedSnapshot
+    ? unassignedSnapshot.docs
+        .map(document => document.data())
+        .filter(data =>
+          data.organizationId === organizationId &&
+          data.status === 'open' &&
+          data.careType === 'first_contact' &&
+          !clean(data.ownerRef) &&
+          canAccessCongregation(
+            clean(data.congregationId),
+            broadScope,
+            congregationScope
           )
-          .map(data => data.dueAt)
-      : [];
+        )
+        .map(data => data.dueAt)
+    : [];
 
-    const projection: NestJourneyWorkspaceProjection = {
-      appId: 'nestjourney',
-      organizationId,
-      accessible: true,
-      isGlobalAccess: false,
-      decisionState: 'granted',
-      denialReason: null,
-      responsibility,
-      canReadJourneyOperational,
-      capabilities,
-      congregationIds,
-      ready: true,
-      observedAtMs,
-      assignedFirstContacts: summarizeJourneyQueue({
+  return {
+    appId: 'nestjourney',
+    organizationId,
+    accessible: true,
+    isGlobalAccess: false,
+    decisionState: 'granted',
+    denialReason: null,
+    responsibility,
+    canReadJourneyOperational,
+    capabilities,
+    congregationIds,
+    ready: true,
+    observedAtMs,
+    assignedFirstContacts:
+      summarizeJourneyQueue({
         organizationId,
-        sourceRef: 'hub.api.nestjourney.workspace.assigned_first_contacts',
-        entityId: 'assigned:first_contact',
+        sourceRef:
+          'hub.api.nestjourney.workspace.assigned_first_contacts',
+        entityId:
+          'assigned:first_contact',
         observedAtMs,
         dueAtValues: assignedDueAt
       }),
-      unassignedFirstContacts: summarizeJourneyQueue({
+    unassignedFirstContacts:
+      summarizeJourneyQueue({
         organizationId,
-        sourceRef: 'hub.api.nestjourney.workspace.unassigned_first_contacts',
-        entityId: 'unassigned:first_contact',
+        sourceRef:
+          'hub.api.nestjourney.workspace.unassigned_first_contacts',
+        entityId:
+          'unassigned:first_contact',
         observedAtMs,
         dueAtValues: unassignedDueAt
       })
-    };
+  };
+}
 
-    return res.status(200).json({ success: true, projection });
+export async function handleNestJourneyWorkspaceProjectionRequest(
+  req: Request,
+  res: Response,
+  dependencies: Dependencies
+) {
+  noStore(res);
+
+  const authHeader = req.headers.authorization;
+  if (
+    typeof authHeader !== 'string' ||
+    !authHeader.startsWith('Bearer ')
+  ) {
+    return res.status(401).json({
+      success: false,
+      code: 'UNAUTHORIZED'
+    });
+  }
+
+  const token = authHeader.slice(7).trim();
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      code: 'UNAUTHORIZED'
+    });
+  }
+
+  let uid: string;
+  try {
+    uid = (
+      await dependencies.verifyIdToken(token)
+    ).uid;
+  } catch {
+    return res.status(401).json({
+      success: false,
+      code: 'UNAUTHORIZED'
+    });
+  }
+
+  const organizationId =
+    clean(req.query.organizationId);
+
+  if (
+    !safeDocumentId(uid) ||
+    !safeDocumentId(organizationId)
+  ) {
+    return res.status(400).json({
+      success: false,
+      code: 'INVALID_REQUEST'
+    });
+  }
+
+  const db = dependencies.getDb();
+  if (!db) {
+    return res.status(503).json({
+      success: false,
+      code: 'SERVICE_UNAVAILABLE'
+    });
+  }
+
+  try {
+    const projection =
+      await resolveNestJourneyWorkspaceProjectionForActor(
+        {
+          uid,
+          organizationId
+        },
+        {
+          db,
+          resolveAccess:
+            dependencies.resolveAccess,
+          now: dependencies.now
+        }
+      );
+
+    return res.status(200).json({
+      success: true,
+      projection
+    });
   } catch (error) {
     dependencies.logger?.error?.(
       '[NestJourneyWorkspaceProjection] Failed closed',
@@ -442,7 +527,8 @@ export async function handleNestJourneyWorkspaceProjectionRequest(
     );
     return res.status(503).json({
       success: false,
-      code: 'NESTJOURNEY_WORKSPACE_PROJECTION_FAILED'
+      code:
+        'NESTJOURNEY_WORKSPACE_PROJECTION_FAILED'
     });
   }
 }
