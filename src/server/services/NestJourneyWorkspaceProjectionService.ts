@@ -349,7 +349,6 @@ export async function handleNestJourneyWorkspaceProjectionRequest(
           `organizations/${organizationId}/products/raiz_e_mesa/followups`
         )
           .where('ownerRef', '==', uid)
-          .where('status', '==', 'pending')
           .limit(100)
           .get()
       : Promise.resolve(null);
@@ -362,7 +361,6 @@ export async function handleNestJourneyWorkspaceProjectionRequest(
       ? db.collection(
           `organizations/${organizationId}/products/raiz_e_mesa/careRequests`
         )
-          .where('status', '==', 'open')
           .where('careType', '==', 'first_contact')
           .limit(200)
           .get()
