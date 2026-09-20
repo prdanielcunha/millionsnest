@@ -518,10 +518,11 @@ export async function startActionResolution(
     const db =
       (dependencies.getFirestore ?? getFirestore)();
 
-    const authorization = await authorize(
+    const authorization = await authorizeSource(
       db,
       organizationId,
       actorUid,
+      input.sourceApp,
       dependencies
     );
 
@@ -561,7 +562,7 @@ export async function startActionResolution(
           organizationId,
           dedupeKey: input.dedupeKey,
           fingerprint: input.fingerprint,
-          sourceApp: 'musicscale',
+          sourceApp: input.sourceApp,
           signalType: input.signalType,
           status: data.status,
           outcome:
@@ -706,10 +707,11 @@ export async function observeActionResolutionOutcome(
       (dependencies.getFirestore ??
         getFirestore)();
 
-    const authorization = await authorize(
+    const authorization = await authorizeSource(
       db,
       organizationId,
       actorUid,
+      input.sourceApp,
       dependencies
     );
 
