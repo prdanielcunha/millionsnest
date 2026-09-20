@@ -714,6 +714,95 @@ test('Mesa participation is presence-scoped, factual, and bound to an open sessi
   }));
 });
 
+test('Presence responsibility can explicitly claim a relationship host with canonical evidence', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/members/presence-host-bond'), {
+      uid: 'presence-host-bond',
+      status: 'active',
+      role: 'member',
+      organizationRole: 'member',
+      journeyRole: 'presence_host',
+      congregationIds: ['unit-a'],
+      permissions: {
+        canManagePresence: true,
+        canManagePeople: true,
+      },
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/people/person-bond'), {
+      organizationId: 'org-a',
+      congregationId: 'unit-a',
+      name: 'Visitor Bond',
+      bondHostRef: '',
+      bondAssignedAt: null,
+      bondAssignedBy: '',
+    });
+  });
+
+  const db = env.authenticatedContext('presence-host-bond').firestore();
+  const personRef = doc(db, 'organizations/org-a/products/raiz_e_mesa/people/person-bond');
+  const factRef = doc(
+    db,
+    'organizations/org-a/products/raiz_e_mesa/facts/bond-host-person-bond-presence-host-bond',
+  );
+  const batch = writeBatch(db);
+  batch.update(personRef, {
+    bondHostRef: 'presence-host-bond',
+    bondAssignedAt: serverTimestamp(),
+    bondAssignedBy: 'presence-host-bond',
+  });
+  batch.set(factRef, {
+    eventId: 'bond-host-person-bond-presence-host-bond',
+    eventType: 'BOND_HOST_ASSIGNED',
+    occurredAt: serverTimestamp(),
+    recordedAt: serverTimestamp(),
+    organizationId: 'org-a',
+    actorId: 'presence-host-bond',
+    subjectRef: 'person:person-bond',
+    sourceApp: 'nestjourney',
+    scope: 'congregation:unit-a',
+    evidenceRef: 'person:person-bond',
+    sensitivity: 'confidential',
+    version: 1,
+    payload: {
+      personId: 'person-bond',
+      bondHostRef: 'presence-host-bond',
+    },
+  });
+  await assertSucceeds(batch.commit());
+
+  const ordinaryDb = env.authenticatedContext('member-a').firestore();
+  await assertFails(updateDoc(
+    doc(ordinaryDb, 'organizations/org-a/products/raiz_e_mesa/people/person-bond'),
+    {
+      bondHostRef: 'member-a',
+      bondAssignedAt: serverTimestamp(),
+      bondAssignedBy: 'member-a',
+    },
+  ));
+  await assertFails(setDoc(
+    doc(ordinaryDb, 'organizations/org-a/products/raiz_e_mesa/facts/bond-host-forged-member-a'),
+    {
+      eventId: 'bond-host-forged-member-a',
+      eventType: 'BOND_HOST_ASSIGNED',
+      occurredAt: serverTimestamp(),
+      recordedAt: serverTimestamp(),
+      organizationId: 'org-a',
+      actorId: 'member-a',
+      subjectRef: 'person:person-bond',
+      sourceApp: 'nestjourney',
+      scope: 'congregation:unit-a',
+      evidenceRef: 'person:person-bond',
+      sensitivity: 'confidential',
+      version: 1,
+      payload: {
+        personId: 'person-bond',
+        bondHostRef: 'member-a',
+      },
+    },
+  ));
+});
+
 test('module labels are readable by Journey members and writable only by authorized leadership', async () => {
   const pastorDb = env.authenticatedContext('pastor-a').firestore();
   const ref = doc(
