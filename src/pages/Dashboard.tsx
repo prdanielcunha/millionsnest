@@ -415,9 +415,8 @@ export function Dashboard() {
       }
     } else if (app.id === 'nestjourney') {
       if (
-        !nestJourneyWorkspaceProjection ||
-        nestJourneyWorkspaceProjection.organizationId !== activeContextOrgId ||
-        nestJourneyWorkspaceProjection.accessible !== true ||
+        !currentNestJourneyProjection ||
+        currentNestJourneyProjection.accessible !== true ||
         currentNestJourneyProjection.decisionState !== 'granted' ||
         (
           currentNestJourneyProjection.canReadJourneyOperational !== true &&
