@@ -603,42 +603,16 @@ service cloud.firestore {
         );
     }
 
-    function journeyValidPersonBondCreate() {
-      let bondHostRef = request.resource.data.get('bondHostRef', '');
-      return (
-          bondHostRef == ''
-          && request.resource.data.get('bondAssignedAt', null) == null
-          && request.resource.data.get('bondAssignedBy', '') == ''
-        )
-        || (
-          bondHostRef == request.auth.uid
-          && request.resource.data.get('bondAssignedAt', null) == request.time
-          && request.resource.data.get('bondAssignedBy', '') == request.auth.uid
-        );
+    function journeyPersonBondEmptyOnCreate() {
+      return request.resource.data.get('bondHostRef', '') == '' &&
+        request.resource.data.get('bondAssignedAt', null) == null &&
+        request.resource.data.get('bondAssignedBy', '') == '';
     }
 
-    function journeyValidPersonUpdate(orgId, personId) {
-      let oldBond = resource.data.get('bondHostRef', '');
-      let newBond = request.resource.data.get('bondHostRef', '');
-      let factId = 'bond-host-' + personId + '-' + request.auth.uid;
-      let factPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/facts/$(factId);
-      return journeyTenantUnchanged(orgId) &&
-        journeyCongregationUnchanged() &&
-        (
-          (
-            newBond == oldBond &&
-            request.resource.data.get('bondAssignedAt', null) == resource.data.get('bondAssignedAt', null) &&
-            request.resource.data.get('bondAssignedBy', '') == resource.data.get('bondAssignedBy', '')
-          )
-          ||
-          (
-            oldBond == '' &&
-            newBond == request.auth.uid &&
-            request.resource.data.get('bondAssignedAt', null) == request.time &&
-            request.resource.data.get('bondAssignedBy', '') == request.auth.uid &&
-            existsAfter(factPath)
-          )
-        );
+    function journeyPersonBondUnchanged() {
+      return request.resource.data.get('bondHostRef', '') == resource.data.get('bondHostRef', '') &&
+        request.resource.data.get('bondAssignedAt', null) == resource.data.get('bondAssignedAt', null) &&
+        request.resource.data.get('bondAssignedBy', '') == resource.data.get('bondAssignedBy', '');
     }
 
     function journeyCanManageSettings(orgId) {
@@ -1333,32 +1307,6 @@ service cloud.firestore {
         (status != 'completed' || meeting == 7);
     }
 
-    function journeyValidBondHostFact(orgId, factId) {
-      let payload = request.resource.data.get('payload', {});
-      let personId = payload.get('personId', '');
-      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
-      return journeyTenantCreate(orgId) &&
-        request.resource.data.get('eventId', '') == factId &&
-        factId == 'bond-host-' + personId + '-' + request.auth.uid &&
-        request.resource.data.get('eventType', '') == 'BOND_HOST_ASSIGNED' &&
-        request.resource.data.get('actorId', '') == request.auth.uid &&
-        request.resource.data.get('sourceApp', '') == 'nestjourney' &&
-        request.resource.data.get('version', 0) == 1 &&
-        request.resource.data.get('recordedAt', null) == request.time &&
-        request.resource.data.get('occurredAt', null) == request.time &&
-        personId is string &&
-        personId.size() > 0 &&
-        payload.get('bondHostRef', '') == request.auth.uid &&
-        request.resource.data.get('subjectRef', '') == 'person:' + personId &&
-        request.resource.data.get('evidenceRef', '') == 'person:' + personId &&
-        request.resource.data.get('sensitivity', '') == 'confidential' &&
-        existsAfter(personPath) &&
-        getAfter(personPath).data.get('bondHostRef', '') == request.auth.uid &&
-        getAfter(personPath).data.get('bondAssignedBy', '') == request.auth.uid &&
-        getAfter(personPath).data.get('bondAssignedAt', null) == request.time &&
-        request.resource.data.get('scope', '') == 'congregation:' + getAfter(personPath).data.get('congregationId', '');
-    }
-
     function journeyValidCanonicalFact(orgId, factId) {
       let eventType = request.resource.data.get('eventType', '');
       let payload = request.resource.data.get('payload', {});
@@ -1642,10 +1590,12 @@ service cloud.firestore {
             request.resource.data.get('deletedAt', null) == null &&
             journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
             journeyCanManagePeople(orgId) &&
-            journeyValidPersonBondCreate();
-          allow update: if journeyValidPersonUpdate(orgId, personId) &&
+            journeyPersonBondEmptyOnCreate();
+          allow update: if journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
             journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
-            journeyCanManagePeople(orgId);
+            journeyCanManagePeople(orgId) &&
+            journeyPersonBondUnchanged();
           allow delete: if false;
         }
 
@@ -1728,10 +1678,6 @@ service cloud.firestore {
         match /facts/{factId} {
           allow read: if journeyIsOrgAdmin(orgId);
           allow create: if (
-              request.resource.data.get('eventType', '') == 'BOND_HOST_ASSIGNED' &&
-              journeyCanManagePeople(orgId) &&
-              journeyValidBondHostFact(orgId, factId)
-            ) || (
               request.resource.data.get('eventType', '') in ['FOLLOWUP_CREATED', 'FOLLOWUP_COMPLETED'] &&
               journeyValidFollowupFactDocument(orgId, factId)
             ) || (
