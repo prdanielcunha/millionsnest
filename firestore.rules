@@ -1681,7 +1681,7 @@ service cloud.firestore {
             ) || (
               journeyHasMembership(orgId) &&
               (
-                (request.resource.data.get('eventType', '') == 'VISITOR_REGISTERED' && journeyCanManagePeople(orgId)) ||
+                (request.resource.data.get('eventType', '') in ['VISITOR_REGISTERED', 'BOND_HOST_ASSIGNED'] && journeyCanManagePeople(orgId)) ||
                 (request.resource.data.get('eventType', '') in ['PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED'] && journeyCanManagePresence(orgId)) ||
                 request.resource.data.get('eventType', '') in ['CARE_REQUESTED', 'CARE_ASSIGNED']
               ) &&
