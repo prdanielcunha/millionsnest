@@ -10,7 +10,11 @@ import { MusicScaleDistributionSnapshot } from './MusicScaleDistributionSnapshot
 import { AskMillionsNest } from './AskMillionsNest.js';
 import { buildCurrentAdaptiveWorkspace } from '../../lib/currentAdaptiveWorkspace.js';
 import type { HubLensId } from '../../lib/lensResolver.js';
-import type { CurrentMusicScaleLensAuthority } from '../../lib/hubLensAuthorization.js';
+import type {
+  CurrentMusicScaleLensAuthority,
+  CurrentNestJourneyLensAuthority
+} from '../../lib/hubLensAuthorization.js';
+import type { NestJourneyWorkspaceProjection } from '../../lib/nestJourneyWorkspaceProjection.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
 import type { ActionDestination, ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from '../../lib/actionCenter.js';
@@ -79,6 +83,8 @@ interface EcosystemWorkspaceHomeProps {
   } | null;
   musicScaleApp?: EcosystemApp;
   musicScaleAuthority: CurrentMusicScaleLensAuthority | null;
+  nestJourneyAuthority: CurrentNestJourneyLensAuthority | null;
+  nestJourneyWorkspace: NestJourneyWorkspaceProjection | null;
   musicScaleSummary: {
     songsCount: number;
     songsWithContentCount: number;
@@ -185,6 +191,8 @@ export function EcosystemWorkspaceHome({
   musicScaleAccess,
   musicScaleApp,
   musicScaleAuthority,
+  nestJourneyAuthority,
+  nestJourneyWorkspace,
   musicScaleSummary,
   musicScaleChanges,
   onAcknowledgeMusicScaleChange,
@@ -373,10 +381,21 @@ export function EcosystemWorkspaceHome({
       canManageOrganization,
       canManageMembers,
       musicScaleAccess: musicScaleAuthority,
+      nestJourneyAccess: nestJourneyAuthority,
       organization: {
         isConfigured: Boolean(organization?.name && organization?.slug)
       },
       pendingInvitesCount: pendingInvites.length,
+      journey:
+        nestJourneyWorkspace?.ready === true &&
+        nestJourneyWorkspace.canReadJourneyOperational === true
+          ? {
+              ready: true,
+              observedAtMs: nestJourneyWorkspace.observedAtMs,
+              assignedFirstContacts: nestJourneyWorkspace.assignedFirstContacts,
+              unassignedFirstContacts: nestJourneyWorkspace.unassignedFirstContacts
+            }
+          : undefined,
       musicScale: {
         ready: isMusicScaleReady && appSummaryReady,
         nextScale: musicScaleSummary.nextScale
@@ -999,6 +1018,7 @@ export function EcosystemWorkspaceHome({
             <div className="relative mt-6 space-y-2.5">
               {todayActions.map((action, index) => {
                 const isMusicScaleAction = action.sourceApp === 'musicscale';
+                const isNestJourneyAction = action.sourceApp === 'nestjourney';
                 const highPriority = action.priority === 'high' || action.priority === 'urgent';
                 const resolutionEligible = isActionResolutionEligible(action);
                 const activeResolution = resolutionEligible
@@ -1026,6 +1046,18 @@ export function EcosystemWorkspaceHome({
                     }`}>
                       {isMusicScaleAction ? (
                         <img src="/LogoIconMusicScale-1.png" alt="" className="h-6 w-6 object-contain" />
+                      ) : isNestJourneyAction ? (
+                        <EcosystemAppIcon
+                          app={appExperiences.find(item => item.app.id === 'nestjourney')?.app || {
+                            id: 'nestjourney',
+                            name: 'NestJourney',
+                            description: 'Jornadas e cuidado',
+                            icon: 'Route',
+                            category: 'beta'
+                          }}
+                          iconClassName="h-4 w-4 text-emerald-300"
+                          assetClassName="h-5 w-5"
+                        />
                       ) : action.signalType === 'pending_invites' ? (
                         <UserPlus className="h-4 w-4 text-[#9CC8FF]" />
                       ) : (
