@@ -6,7 +6,10 @@ import type {
   ActionPreference,
   ActionProjectionInput
 } from './actionCenter.js';
-import type { CurrentMusicScaleLensAuthority } from './hubLensAuthorization.js';
+import type {
+  CurrentMusicScaleLensAuthority,
+  CurrentNestJourneyLensAuthority
+} from './hubLensAuthorization.js';
 import { buildCurrentContextGraph } from './currentContextGraph.js';
 import type { HubLensId, HubResponsibility } from './lensResolver.js';
 import type { HubAppExperience } from './hubAppExperience.js';
@@ -20,8 +23,10 @@ export interface CurrentAdaptiveWorkspaceInput {
   canManageOrganization: boolean;
   canManageMembers: boolean;
   musicScaleAccess?: CurrentMusicScaleLensAuthority | null;
+  nestJourneyAccess?: CurrentNestJourneyLensAuthority | null;
   organization?: ActionProjectionInput['organization'];
   pendingInvitesCount: number;
+  journey?: ActionProjectionInput['journey'];
   musicScale: ActionProjectionInput['musicScale'];
   actionPreferences?: readonly ActionPreference[];
   nowMs?: number;
@@ -43,7 +48,8 @@ export function buildCurrentAdaptiveWorkspace(
     organizationId: input.organizationId,
     appExperiences: input.appExperiences,
     canManageOrganization: input.canManageOrganization,
-    musicScaleAccess: input.musicScaleAccess
+    musicScaleAccess: input.musicScaleAccess,
+    nestJourneyAccess: input.nestJourneyAccess
   });
 
   return buildAdaptiveWorkspaceModel({
@@ -58,9 +64,12 @@ export function buildCurrentAdaptiveWorkspace(
       canManageOrganization: input.canManageOrganization,
       canManageMembers: input.canManageMembers,
       canReadManagedMusicScaleResponses:
-        contextGraph.authorizedDomains.worship === true
+        contextGraph.authorizedDomains.worship === true,
+      canReadJourneyOperational:
+        contextGraph.authorizedDomains.journey === true
     },
     pendingInvitesCount: input.pendingInvitesCount,
+    journey: input.journey,
     musicScale: input.musicScale,
     actionPreferences: input.actionPreferences,
     nowMs: input.nowMs
