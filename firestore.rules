@@ -620,7 +620,8 @@ service cloud.firestore {
     function journeyValidPersonUpdate(orgId, personId) {
       let oldBond = resource.data.get('bondHostRef', '');
       let newBond = request.resource.data.get('bondHostRef', '');
-      let factPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/facts/$(('bond-host-' + personId + '-' + request.auth.uid));
+      let factId = 'bond-host-' + personId + '-' + request.auth.uid;
+      let factPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/facts/$(factId);
       return journeyTenantUnchanged(orgId) &&
         journeyCongregationUnchanged() &&
         (
