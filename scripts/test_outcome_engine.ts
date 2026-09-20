@@ -455,7 +455,13 @@ assert.match(
 );
 assert.match(
   server,
-  /outcomeBasis:\s*'authorized_canonical_projection'/
+  /authorized_canonical_projection/,
+  'MusicScale outcomes must keep the authorized canonical projection basis'
+);
+assert.match(
+  server,
+  /server_revalidated_canonical_projection/,
+  'Journey outcomes must record server-side canonical source revalidation'
 );
 assert.match(
   server,
