@@ -13,15 +13,25 @@ export type ActionResolutionOutcome =
   | 'superseded'
   | 'no_longer_actionable';
 
+export type ResolvableMusicScaleSignal =
+  | 'musicscale_pending_responses'
+  | 'musicscale_declined_responses'
+  | 'musicscale_repertoire_content_gaps';
+
+export type ResolvableNestJourneySignal =
+  | 'nestjourney_assigned_first_contacts'
+  | 'nestjourney_unassigned_first_contacts';
+
+export type ResolvableActionSignal =
+  | ResolvableMusicScaleSignal
+  | ResolvableNestJourneySignal;
+
 export interface ActionResolutionRecord {
   organizationId: string;
   dedupeKey: string;
   fingerprint: string;
-  sourceApp: 'musicscale';
-  signalType:
-    | 'musicscale_pending_responses'
-    | 'musicscale_declined_responses'
-    | 'musicscale_repertoire_content_gaps';
+  sourceApp: 'musicscale' | 'nestjourney';
+  signalType: ResolvableActionSignal;
   status: ActionResolutionStatus;
   outcome?: ActionResolutionOutcome | null;
   outcomeCode?: string | null;
@@ -38,16 +48,23 @@ export interface MusicScaleResolutionProjectionReadiness {
   responseSummaryAvailable: boolean;
 }
 
-const RESOLVABLE_MUSICSCALE_SIGNALS = new Set<
-  ActionResolutionRecord['signalType']
->([
+export interface NestJourneyResolutionProjectionReadiness {
+  ready: boolean;
+}
+
+const RESOLVABLE_MUSICSCALE_SIGNALS = new Set<ResolvableMusicScaleSignal>([
   'musicscale_pending_responses',
   'musicscale_declined_responses',
   'musicscale_repertoire_content_gaps'
 ]);
 
+const RESOLVABLE_NESTJOURNEY_SIGNALS = new Set<ResolvableNestJourneySignal>([
+  'nestjourney_assigned_first_contacts',
+  'nestjourney_unassigned_first_contacts'
+]);
+
 const SCALE_DEDUPE_PREFIX_BY_SIGNAL: Record<
-  ActionResolutionRecord['signalType'],
+  ResolvableMusicScaleSignal,
   string
 > = {
   musicscale_pending_responses:
@@ -58,24 +75,53 @@ const SCALE_DEDUPE_PREFIX_BY_SIGNAL: Record<
     'musicscale:repertoire_content:'
 };
 
+const JOURNEY_DEDUPE_PREFIX_BY_SIGNAL: Record<
+  ResolvableNestJourneySignal,
+  string
+> = {
+  nestjourney_assigned_first_contacts:
+    'nestjourney:nestjourney_assigned_first_contacts:',
+  nestjourney_unassigned_first_contacts:
+    'nestjourney:nestjourney_unassigned_first_contacts:'
+};
+
 function clean(value: unknown): string {
   return typeof value === 'string'
     ? value.trim()
     : '';
 }
 
+export function isResolutionSourceSignalPair(input: {
+  sourceApp: unknown;
+  signalType: unknown;
+}): input is {
+  sourceApp: ActionResolutionRecord['sourceApp'];
+  signalType: ResolvableActionSignal;
+} {
+  if (
+    input.sourceApp === 'musicscale' &&
+    RESOLVABLE_MUSICSCALE_SIGNALS.has(
+      input.signalType as ResolvableMusicScaleSignal
+    )
+  ) {
+    return true;
+  }
+
+  return (
+    input.sourceApp === 'nestjourney' &&
+    RESOLVABLE_NESTJOURNEY_SIGNALS.has(
+      input.signalType as ResolvableNestJourneySignal
+    )
+  );
+}
+
 export function isActionResolutionEligible(
   action: ReadOnlyHubAction
 ): action is ReadOnlyHubAction & {
-  sourceApp: 'musicscale';
-  signalType: ActionResolutionRecord['signalType'];
+  sourceApp: ActionResolutionRecord['sourceApp'];
+  signalType: ResolvableActionSignal;
 } {
-  return (
-    action.sourceApp === 'musicscale' &&
-    RESOLVABLE_MUSICSCALE_SIGNALS.has(
-      action.signalType as ActionResolutionRecord['signalType']
-    )
-  );
+  return isResolutionSourceSignalPair(action);
 }
 
 export function resolutionMatchesAction(
@@ -95,8 +141,47 @@ export function resolutionMatchesAction(
 export function scaleIdFromResolution(
   resolution: ActionResolutionRecord
 ): string | null {
+  if (
+    resolution.sourceApp !== 'musicscale' ||
+    !RESOLVABLE_MUSICSCALE_SIGNALS.has(
+      resolution.signalType as ResolvableMusicScaleSignal
+    )
+  ) {
+    return null;
+  }
+
   const prefix =
-    SCALE_DEDUPE_PREFIX_BY_SIGNAL[resolution.signalType];
+    SCALE_DEDUPE_PREFIX_BY_SIGNAL[
+      resolution.signalType as ResolvableMusicScaleSignal
+    ];
+
+  if (!resolution.dedupeKey.startsWith(prefix)) {
+    return null;
+  }
+
+  const value = clean(
+    resolution.dedupeKey.slice(prefix.length)
+  );
+
+  return value || null;
+}
+
+export function journeyQueueIdFromResolution(
+  resolution: ActionResolutionRecord
+): string | null {
+  if (
+    resolution.sourceApp !== 'nestjourney' ||
+    !RESOLVABLE_NESTJOURNEY_SIGNALS.has(
+      resolution.signalType as ResolvableNestJourneySignal
+    )
+  ) {
+    return null;
+  }
+
+  const prefix =
+    JOURNEY_DEDUPE_PREFIX_BY_SIGNAL[
+      resolution.signalType as ResolvableNestJourneySignal
+    ];
 
   if (!resolution.dedupeKey.startsWith(prefix)) {
     return null;
@@ -115,8 +200,22 @@ export function scaleIdFromResolution(
  */
 export function isResolutionProjectionReady(
   resolution: ActionResolutionRecord,
-  readiness: MusicScaleResolutionProjectionReadiness
+  readiness: MusicScaleResolutionProjectionReadiness,
+  journeyReadiness: NestJourneyResolutionProjectionReadiness = {
+    ready: false
+  }
 ): boolean {
+  if (resolution.sourceApp === 'nestjourney') {
+    return (
+      journeyReadiness.ready === true &&
+      journeyQueueIdFromResolution(resolution) !== null
+    );
+  }
+
+  if (resolution.sourceApp !== 'musicscale') {
+    return false;
+  }
+
   if (!readiness.scalesReady) return false;
 
   const resolutionScaleId =
@@ -144,6 +243,7 @@ export function deriveClearedActionResolutions(input: {
   resolutions: readonly ActionResolutionRecord[];
   sourceActions: readonly ReadOnlyHubAction[];
   musicScaleReadiness: MusicScaleResolutionProjectionReadiness;
+  journeyReadiness?: NestJourneyResolutionProjectionReadiness;
 }): ActionResolutionRecord[] {
   const activeActions = new Set(
     input.sourceActions.map(
@@ -155,10 +255,7 @@ export function deriveClearedActionResolutions(input: {
   return input.resolutions.filter(resolution => {
     if (
       resolution.status !== 'started' ||
-      resolution.sourceApp !== 'musicscale' ||
-      !RESOLVABLE_MUSICSCALE_SIGNALS.has(
-        resolution.signalType
-      )
+      !isResolutionSourceSignalPair(resolution)
     ) {
       return false;
     }
@@ -173,7 +270,8 @@ export function deriveClearedActionResolutions(input: {
 
     return isResolutionProjectionReady(
       resolution,
-      input.musicScaleReadiness
+      input.musicScaleReadiness,
+      input.journeyReadiness
     );
   });
 }
