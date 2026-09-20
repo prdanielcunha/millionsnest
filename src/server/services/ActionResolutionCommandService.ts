@@ -894,7 +894,8 @@ export async function observeActionResolutionOutcome(
               db,
               resolveAccess:
                 dependencies.resolveAccess,
-              now: dependencies.now
+              now: dependencies.now,
+              completeQueues: true
             }
           );
 
