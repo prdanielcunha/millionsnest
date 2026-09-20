@@ -41,6 +41,11 @@ on:
       - 'src/lib/adaptiveEntitlements.ts'
       - 'src/lib/currentAdaptiveWorkspace.ts'
       - 'src/lib/currentContextGraph.ts'
+      - 'src/lib/nestJourneyWorkspaceProjection.ts'
+      - 'src/lib/hubAppExperience.ts'
+      - 'src/lib/appExperienceRegistry.ts'
+      - 'src/services/nestJourneyWorkspaceClient.ts'
+      - 'src/server/services/NestJourneyWorkspaceProjectionService.ts'
       - 'src/components/dashboard/HubLensSwitcher.tsx'
       - 'src/components/dashboard/AskMillionsNest.tsx'
       - 'src/components/dashboard/HubAppLaunchpad.tsx'
@@ -73,6 +78,8 @@ on:
       - 'scripts/test_current_context_graph.ts'
       - 'scripts/test_intelligence_i18n.ts'
       - 'scripts/test_ask_millionsnest.ts'
+      - 'scripts/test_nestjourney_adaptive_hub.ts'
+      - 'scripts/test_nestjourney_workspace_projection.ts'
       - '.github/workflows/church-intelligence-foundation-qa.yml'
   workflow_dispatch:
 
@@ -169,6 +176,9 @@ jobs:
 
       - name: Ask MillionsNest evidence and authorization
         run: npx tsx scripts/test_ask_millionsnest.ts
+
+      - name: NestJourney Adaptive Hub evidence and authorization
+        run: npx tsx scripts/test_nestjourney_adaptive_hub.ts
 
       - name: Church Intelligence PT/EN/ES coverage
         run: npx tsx scripts/test_intelligence_i18n.ts
