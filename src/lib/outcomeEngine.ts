@@ -1,8 +1,11 @@
 import type { ReadOnlyHubAction } from './actionCenter.js';
 import {
+  journeyQueueIdFromResolution,
   scaleIdFromResolution,
   type ActionResolutionRecord,
-  type MusicScaleResolutionProjectionReadiness
+  type MusicScaleResolutionProjectionReadiness,
+  type NestJourneyResolutionProjectionReadiness,
+  type ResolvableActionSignal
 } from './actionResolution.js';
 
 export type ActionOutcomeResult =
@@ -14,6 +17,8 @@ export type ActionOutcomeCode =
   | 'musicscale_pending_responses_cleared'
   | 'musicscale_declined_responses_cleared'
   | 'musicscale_repertoire_content_cleared'
+  | 'nestjourney_assigned_first_contacts_cleared'
+  | 'nestjourney_unassigned_first_contacts_cleared'
   | 'source_signal_updated'
   | 'target_left_active_window';
 
@@ -25,7 +30,7 @@ export interface ActionOutcomeObservation {
 }
 
 const RESOLVED_CODE_BY_SIGNAL: Record<
-  ActionResolutionRecord['signalType'],
+  ResolvableActionSignal,
   ActionOutcomeCode
 > = {
   musicscale_pending_responses:
@@ -33,7 +38,11 @@ const RESOLVED_CODE_BY_SIGNAL: Record<
   musicscale_declined_responses:
     'musicscale_declined_responses_cleared',
   musicscale_repertoire_content_gaps:
-    'musicscale_repertoire_content_cleared'
+    'musicscale_repertoire_content_cleared',
+  nestjourney_assigned_first_contacts:
+    'nestjourney_assigned_first_contacts_cleared',
+  nestjourney_unassigned_first_contacts:
+    'nestjourney_unassigned_first_contacts_cleared'
 };
 
 function projectionReadyForCurrentTarget(
@@ -53,19 +62,22 @@ function projectionReadyForCurrentTarget(
 }
 
 /**
- * Outcome Engine v1.
+ * Outcome Engine.
  *
  * Absence alone is never treated as "resolved".
- * - same dedupe key + new fingerprint => the situation changed, so the old
+ * - same dedupe key + new fingerprint => source truth changed, so the old
  *   resolution is superseded while the new action stays independently actionable.
- * - target left the current operational window => no longer actionable, not resolved.
- * - only a complete current-target projection that no longer emits the signal
+ * - MusicScale target leaving the active scale window => no longer actionable.
+ * - Journey queues only resolve after the tenant-bound Journey projection is
+ *   explicitly ready and no longer emits the queue signal.
+ * - only a complete current source projection that no longer emits the signal
  *   becomes a factual resolved outcome.
  */
 export function deriveActionOutcomeObservations(input: {
   resolutions: readonly ActionResolutionRecord[];
   sourceActions: readonly ReadOnlyHubAction[];
   musicScaleReadiness: MusicScaleResolutionProjectionReadiness;
+  journeyReadiness?: NestJourneyResolutionProjectionReadiness;
 }): ActionOutcomeObservation[] {
   const exactActive = new Set(
     input.sourceActions.map(
@@ -83,10 +95,7 @@ export function deriveActionOutcomeObservations(input: {
   const outcomes: ActionOutcomeObservation[] = [];
 
   for (const resolution of input.resolutions) {
-    if (
-      resolution.status !== 'started' ||
-      resolution.sourceApp !== 'musicscale'
-    ) {
+    if (resolution.status !== 'started') {
       continue;
     }
 
@@ -97,15 +106,17 @@ export function deriveActionOutcomeObservations(input: {
       continue;
     }
 
+    const updatedSignal =
+      activeByDedupe.get(resolution.dedupeKey);
+
     const targetId =
-      scaleIdFromResolution(resolution);
+      resolution.sourceApp === 'nestjourney'
+        ? journeyQueueIdFromResolution(resolution)
+        : scaleIdFromResolution(resolution);
 
     if (!targetId) {
       continue;
     }
-
-    const updatedSignal =
-      activeByDedupe.get(resolution.dedupeKey);
 
     if (updatedSignal) {
       outcomes.push({
@@ -114,6 +125,27 @@ export function deriveActionOutcomeObservations(input: {
         code: 'source_signal_updated',
         targetId
       });
+      continue;
+    }
+
+    if (resolution.sourceApp === 'nestjourney') {
+      if (input.journeyReadiness?.ready !== true) {
+        continue;
+      }
+
+      outcomes.push({
+        resolution,
+        result: 'resolved',
+        code:
+          RESOLVED_CODE_BY_SIGNAL[
+            resolution.signalType
+          ],
+        targetId
+      });
+      continue;
+    }
+
+    if (resolution.sourceApp !== 'musicscale') {
       continue;
     }
 
@@ -171,7 +203,8 @@ export function isValidOutcomeForSignal(input: {
   ) {
     return (
       input.code ===
-      'target_left_active_window'
+        'target_left_active_window' &&
+      input.signalType.startsWith('musicscale_')
     );
   }
 

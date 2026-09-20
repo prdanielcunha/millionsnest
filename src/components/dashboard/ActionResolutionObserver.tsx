@@ -2,7 +2,8 @@ import React from 'react';
 import type { ReadOnlyHubAction } from '../../lib/actionCenter.js';
 import {
   type ActionResolutionRecord,
-  type MusicScaleResolutionProjectionReadiness
+  type MusicScaleResolutionProjectionReadiness,
+  type NestJourneyResolutionProjectionReadiness
 } from '../../lib/actionResolution.js';
 import {
   deriveActionOutcomeObservations,
@@ -13,6 +14,7 @@ interface ActionResolutionObserverProps {
   resolutions: readonly ActionResolutionRecord[];
   sourceActions: readonly ReadOnlyHubAction[];
   musicScaleReadiness: MusicScaleResolutionProjectionReadiness;
+  journeyReadiness: NestJourneyResolutionProjectionReadiness;
   onOutcomeObserved: (
     observation: ActionOutcomeObservation
   ) => void | Promise<void>;
@@ -22,6 +24,7 @@ export function ActionResolutionObserver({
   resolutions,
   sourceActions,
   musicScaleReadiness,
+  journeyReadiness,
   onOutcomeObserved
 }: ActionResolutionObserverProps) {
   const submittedRef = React.useRef(new Set<string>());
@@ -31,7 +34,8 @@ export function ActionResolutionObserver({
       deriveActionOutcomeObservations({
         resolutions,
         sourceActions,
-        musicScaleReadiness
+        musicScaleReadiness,
+        journeyReadiness
       });
 
     for (const observation of candidates) {
@@ -52,6 +56,7 @@ export function ActionResolutionObserver({
     musicScaleReadiness.songsReady,
     musicScaleReadiness.nextScaleId,
     musicScaleReadiness.responseSummaryAvailable,
+    journeyReadiness.ready,
     onOutcomeObserved
   ]);
 

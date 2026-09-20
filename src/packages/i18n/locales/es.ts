@@ -1038,7 +1038,7 @@ export default {
         resolve_action: "Resolver",
         continue_resolution_action: "Continuar resolución",
         resolution_in_progress: "En resolución",
-        resolution_start_error: "Abriremos MusicScale, pero no pudimos registrar el seguimiento de esta resolución.",
+        resolution_start_error: "Abriremos la app, pero no pudimos registrar el seguimiento de esta resolución.",
         resolution_cleared_feedback: "Resuelto: la señal ya no aparece en la fuente.",
         outcome_resolved_feedback: "Resuelto: la condición de origen fue confirmada como concluida.",
         outcome_superseded_feedback: "La situación cambió: el Hub mantuvo la nueva pendiente como una acción separada.",

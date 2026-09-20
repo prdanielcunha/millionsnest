@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   deriveClearedActionResolutions,
+  hasValidResolutionIdentity,
   isActionResolutionEligible,
   isResolutionProjectionReady,
   resolutionMatchesAction,
@@ -9,6 +10,13 @@ import {
 } from '../src/lib/actionResolution.js';
 import type { ReadOnlyHubAction } from '../src/lib/actionCenter.js';
 import { buildAdaptiveWorkspaceModel } from '../src/lib/adaptiveWorkspaceModel.js';
+
+const EMPTY_MUSIC_READINESS = {
+  scalesReady: false,
+  songsReady: false,
+  nextScaleId: null,
+  responseSummaryAvailable: false
+};
 
 function musicAction(
   signalType:
@@ -42,17 +50,50 @@ function musicAction(
   };
 }
 
+function journeyAction(
+  signalType:
+    | 'nestjourney_assigned_first_contacts'
+    | 'nestjourney_unassigned_first_contacts',
+  fingerprint = 'journey-fp-1'
+): ReadOnlyHubAction {
+  const entityId =
+    signalType === 'nestjourney_assigned_first_contacts'
+      ? 'assigned:first_contact'
+      : 'unassigned:first_contact';
+
+  return {
+    id: `nestjourney:${signalType}:${entityId}`,
+    dedupeKey: `nestjourney:${signalType}:${entityId}`,
+    fingerprint,
+    sourceApp: 'nestjourney',
+    signalType,
+    priority: 'urgent',
+    titleKey: 'test.title',
+    descriptionKey: 'test.description',
+    destination: {
+      kind: 'app',
+      appId: 'nestjourney',
+      path:
+        signalType === 'nestjourney_assigned_first_contacts'
+          ? '/followup-runtime'
+          : '/care-integrity'
+    }
+  };
+}
+
 function resolutionFor(
   action: ReadOnlyHubAction
 ): ActionResolutionRecord {
-  assert.equal(isActionResolutionEligible(action), true);
+  if (!isActionResolutionEligible(action)) {
+    throw new Error('Test action must be resolution eligible');
+  }
 
   return {
     organizationId: 'org-action-loop',
     dedupeKey: action.dedupeKey,
     fingerprint: action.fingerprint,
-    sourceApp: 'musicscale',
-    signalType: action.signalType as ActionResolutionRecord['signalType'],
+    sourceApp: action.sourceApp,
+    signalType: action.signalType,
     status: 'started',
     outcome: null,
     startedAtMs: 1_800_000_000_000
@@ -68,10 +109,55 @@ const declinedAction = musicAction(
 const repertoireAction = musicAction(
   'musicscale_repertoire_content_gaps'
 );
+const assignedJourneyAction = journeyAction(
+  'nestjourney_assigned_first_contacts'
+);
+const unassignedJourneyAction = journeyAction(
+  'nestjourney_unassigned_first_contacts'
+);
 
 assert.equal(isActionResolutionEligible(pendingAction), true);
 assert.equal(isActionResolutionEligible(declinedAction), true);
 assert.equal(isActionResolutionEligible(repertoireAction), true);
+assert.equal(
+  isActionResolutionEligible(assignedJourneyAction),
+  true,
+  'assigned first-contact queue must participate in the Action Loop'
+);
+assert.equal(
+  isActionResolutionEligible(unassignedJourneyAction),
+  true,
+  'unassigned first-contact queue must participate in the Action Loop'
+);
+
+assert.equal(
+  hasValidResolutionIdentity({
+    sourceApp: assignedJourneyAction.sourceApp,
+    signalType: assignedJourneyAction.signalType,
+    dedupeKey: assignedJourneyAction.dedupeKey
+  }),
+  true,
+  'canonical Journey queue identity must be accepted'
+);
+assert.equal(
+  hasValidResolutionIdentity({
+    sourceApp: 'nestjourney',
+    signalType: 'nestjourney_assigned_first_contacts',
+    dedupeKey:
+      'nestjourney:nestjourney_assigned_first_contacts:person-123'
+  }),
+  false,
+  'Journey resolution identity must stay at aggregate queue level'
+);
+assert.equal(
+  hasValidResolutionIdentity({
+    sourceApp: 'musicscale',
+    signalType: 'nestjourney_assigned_first_contacts',
+    dedupeKey: assignedJourneyAction.dedupeKey
+  }),
+  false,
+  'source app and signal type must remain a canonical pair'
+);
 
 const personalAction: ReadOnlyHubAction = {
   ...pendingAction,
@@ -82,7 +168,7 @@ const personalAction: ReadOnlyHubAction = {
 assert.equal(
   isActionResolutionEligible(personalAction),
   false,
-  'P9 v1 must not create a managed resolution lifecycle for personal confirmation'
+  'personal confirmation must not create a managed resolution lifecycle'
 );
 
 const startedPending = resolutionFor(pendingAction);
@@ -94,12 +180,7 @@ assert.equal(
 assert.equal(
   isResolutionProjectionReady(
     startedPending,
-    {
-      scalesReady: false,
-      songsReady: false,
-      nextScaleId: null,
-      responseSummaryAvailable: false
-    }
+    EMPTY_MUSIC_READINESS
   ),
   false,
   'bootstrap without a scale snapshot must never imply resolution'
@@ -214,6 +295,76 @@ assert.deepEqual(
   [repertoireAction.dedupeKey]
 );
 
+const startedAssignedJourney =
+  resolutionFor(assignedJourneyAction);
+
+assert.equal(
+  isResolutionProjectionReady(
+    startedAssignedJourney,
+    EMPTY_MUSIC_READINESS,
+    { ready: false }
+  ),
+  false,
+  'Journey bootstrap must never imply a cleared care queue'
+);
+assert.equal(
+  isResolutionProjectionReady(
+    startedAssignedJourney,
+    EMPTY_MUSIC_READINESS,
+    { ready: true }
+  ),
+  true,
+  'a valid Journey queue can be evaluated only after its tenant-bound projection is ready'
+);
+
+assert.deepEqual(
+  deriveClearedActionResolutions({
+    resolutions: [startedAssignedJourney],
+    sourceActions: [assignedJourneyAction],
+    musicScaleReadiness: EMPTY_MUSIC_READINESS,
+    journeyReadiness: { ready: true }
+  }),
+  [],
+  'an active Journey care queue must remain unresolved'
+);
+
+assert.deepEqual(
+  deriveClearedActionResolutions({
+    resolutions: [startedAssignedJourney],
+    sourceActions: [],
+    musicScaleReadiness: EMPTY_MUSIC_READINESS,
+    journeyReadiness: { ready: false }
+  }),
+  [],
+  'an absent Journey signal before projection readiness must fail closed'
+);
+
+assert.deepEqual(
+  deriveClearedActionResolutions({
+    resolutions: [startedAssignedJourney],
+    sourceActions: [],
+    musicScaleReadiness: EMPTY_MUSIC_READINESS,
+    journeyReadiness: { ready: true }
+  }).map(item => item.dedupeKey),
+  [assignedJourneyAction.dedupeKey],
+  'an absent Journey queue may close only after a ready canonical projection'
+);
+
+const changedAssignedJourney = journeyAction(
+  'nestjourney_assigned_first_contacts',
+  'journey-fp-2'
+);
+assert.deepEqual(
+  deriveClearedActionResolutions({
+    resolutions: [startedAssignedJourney],
+    sourceActions: [changedAssignedJourney],
+    musicScaleReadiness: EMPTY_MUSIC_READINESS,
+    journeyReadiness: { ready: true }
+  }).map(item => item.fingerprint),
+  ['journey-fp-1'],
+  'a changed Journey queue fingerprint closes only the old snapshot'
+);
+
 // Preference filtering must not be mistaken for an outcome.
 const adaptive = buildAdaptiveWorkspaceModel({
   organizationId: 'org-action-loop',
@@ -268,12 +419,37 @@ const server = readFileSync(
 assert.match(
   server,
   /access\.isGlobalAccess === true/,
-  'global ecosystem access must not substitute for worship resolution authority'
+  'global ecosystem access must not substitute for ministry resolution authority'
 );
 assert.match(
   server,
   /scaleResponses\.readManaged/,
   'server must require managed MusicScale response authority'
+);
+assert.match(
+  server,
+  /JOURNEY_SIGNAL_RESOLUTION_AUTHORITY_REQUIRED/,
+  'Journey resolution must fail closed when queue-specific authority is absent'
+);
+assert.match(
+  server,
+  /hasValidResolutionIdentity/,
+  'server must reject forged or non-canonical resolution targets before persistence'
+);
+assert.match(
+  server,
+  /capabilities\.canManageCare === true/,
+  'assigned Journey queue resolution must require care authority'
+);
+assert.match(
+  server,
+  /capabilities\.canCoordinateJourney === true/,
+  'unassigned Journey queue resolution must support canonical coordinator authority'
+);
+assert.match(
+  server,
+  /capabilities\.canManagePastoral === true/,
+  'unassigned Journey queue resolution must support canonical pastoral authority'
 );
 assert.match(
   server,
@@ -328,7 +504,17 @@ assert.match(
 assert.match(
   dashboard,
   /musicScaleProjection\?\.isGlobalAccess !== true/,
-  'Dashboard must not fetch ministry resolution state for global-only access'
+  'Dashboard must not fetch worship resolution state for global-only access'
+);
+assert.match(
+  dashboard,
+  /currentNestJourneyProjection\?\.canReadJourneyOperational === true/,
+  'Dashboard must load Journey resolution state only from canonical operational authority'
+);
+assert.match(
+  dashboard,
+  /currentNestJourneyProjection\?\.isGlobalAccess !== true/,
+  'Dashboard must not fetch Journey ministry resolution state for global-only access'
 );
 
 const home = readFileSync(
@@ -347,13 +533,18 @@ assert.match(
 );
 assert.match(
   home,
+  /journeyReadiness=\{journeyResolutionReadiness\}/,
+  'Adaptive Home must pass tenant-bound Journey readiness to the Outcome Engine'
+);
+assert.match(
+  home,
   /continue_resolution_action/,
   'started resolutions must become Continue resolution instead of creating duplicates'
 );
 assert.match(
   home,
   /resolve_action/,
-  'eligible MusicScale actions must expose Resolver'
+  'eligible evidence-backed actions must expose Resolver'
 );
 
 for (const language of ['pt', 'en', 'es']) {
@@ -365,6 +556,7 @@ for (const language of ['pt', 'en', 'es']) {
     'resolve_action',
     'continue_resolution_action',
     'resolution_in_progress',
+    'resolution_start_error',
     'resolution_cleared_feedback'
   ]) {
     assert.equal(
