@@ -15,6 +15,18 @@ import {
   type ActionOutcomeCode,
   type ActionOutcomeResult
 } from '../../lib/outcomeEngine.js';
+import {
+  hasValidResolutionIdentity,
+  isResolutionSourceSignalPair,
+  type ActionResolutionRecord
+} from '../../lib/actionResolution.js';
+import {
+  hasNestJourneyOperationalCapability,
+  type NestJourneyOperationalCapabilities
+} from '../../lib/nestJourneyWorkspaceProjection.js';
+import {
+  capabilitiesFromMembership
+} from './NestJourneyWorkspaceProjectionService.js';
 
 type Dependencies = {
   verifyIdToken?: (
@@ -27,12 +39,6 @@ type Dependencies = {
 
 const MAX_RESOLUTIONS = 100;
 const MAX_SIGNAL_TEXT = 512;
-
-const RESOLVABLE_SIGNAL_TYPES = new Set([
-  'musicscale_pending_responses',
-  'musicscale_declined_responses',
-  'musicscale_repertoire_content_gaps'
-]);
 
 function isSafeDocumentId(
   value: unknown
@@ -145,13 +151,84 @@ async function authenticate(
   }
 }
 
-async function authorize(
+async function resolveNestJourneyCapabilities(
   db: Firestore,
   organizationId: string,
   actorUid: string,
-  dependencies: Dependencies
+  access: ResolvedAppAccess
+): Promise<NestJourneyOperationalCapabilities | null> {
+  if (
+    access.accessible !== true ||
+    access.isGlobalAccess === true
+  ) {
+    return null;
+  }
+
+  const member = await db
+    .doc(`organizations/${organizationId}/members/${actorUid}`)
+    .get();
+
+  if (!member.exists) return null;
+
+  const data = member.data() ?? {};
+  const status = String(data.status || '')
+    .trim()
+    .toLowerCase();
+
+  if (
+    [
+      'suspended',
+      'inactive',
+      'removed',
+      'revoked',
+      'deleted',
+      'archived',
+      'disabled'
+    ].includes(status)
+  ) {
+    return null;
+  }
+
+  return capabilitiesFromMembership(data);
+}
+
+function canResolveNestJourneySignal(
+  capabilities: NestJourneyOperationalCapabilities,
+  signalType: ActionResolutionRecord['signalType']
+): boolean {
+  if (
+    signalType ===
+    'nestjourney_assigned_first_contacts'
+  ) {
+    return capabilities.canManageCare === true;
+  }
+
+  if (
+    signalType ===
+    'nestjourney_unassigned_first_contacts'
+  ) {
+    return (
+      capabilities.canCoordinateJourney === true ||
+      capabilities.canManagePastoral === true
+    );
+  }
+
+  return false;
+}
+
+async function authorizeSource(
+  db: Firestore,
+  organizationId: string,
+  actorUid: string,
+  sourceApp: ActionResolutionRecord['sourceApp'],
+  dependencies: Dependencies,
+  signalType?: ActionResolutionRecord['signalType']
 ): Promise<
-  | { allowed: true }
+  | {
+      allowed: true;
+      sourceApp: ActionResolutionRecord['sourceApp'];
+      journeyCapabilities?: NestJourneyOperationalCapabilities;
+    }
   | {
       allowed: false;
       status: number;
@@ -165,27 +242,78 @@ async function authorize(
   const access = await resolveAccess({
     uid: actorUid,
     organizationId,
-    appId: 'musicscale',
+    appId: sourceApp,
     db
   });
+
+  if (sourceApp === 'musicscale') {
+    if (!access.accessible) {
+      return {
+        allowed: false,
+        status: 403,
+        reasonCode: 'MUSICSCALE_ACCESS_DENIED'
+      };
+    }
+
+    if (!canResolveManagedMusicScaleAction(access)) {
+      return {
+        allowed: false,
+        status: 403,
+        reasonCode: 'WORSHIP_RESOLUTION_AUTHORITY_REQUIRED'
+      };
+    }
+
+    return { allowed: true, sourceApp };
+  }
 
   if (!access.accessible) {
     return {
       allowed: false,
       status: 403,
-      reasonCode: 'MUSICSCALE_ACCESS_DENIED'
+      reasonCode: 'NESTJOURNEY_ACCESS_DENIED'
     };
   }
 
-  if (!canResolveManagedMusicScaleAction(access)) {
+  const capabilities =
+    await resolveNestJourneyCapabilities(
+      db,
+      organizationId,
+      actorUid,
+      access
+    );
+
+  if (
+    !capabilities ||
+    !hasNestJourneyOperationalCapability(
+      capabilities
+    )
+  ) {
     return {
       allowed: false,
       status: 403,
-      reasonCode: 'WORSHIP_RESOLUTION_AUTHORITY_REQUIRED'
+      reasonCode: 'JOURNEY_RESOLUTION_AUTHORITY_REQUIRED'
     };
   }
 
-  return { allowed: true };
+  if (
+    signalType &&
+    !canResolveNestJourneySignal(
+      capabilities,
+      signalType
+    )
+  ) {
+    return {
+      allowed: false,
+      status: 403,
+      reasonCode: 'JOURNEY_SIGNAL_RESOLUTION_AUTHORITY_REQUIRED'
+    };
+  }
+
+  return {
+    allowed: true,
+    sourceApp,
+    journeyCapabilities: capabilities
+  };
 }
 
 function resolutionId(
@@ -217,11 +345,8 @@ function parseResolutionInput(
   | {
       dedupeKey: string;
       fingerprint: string;
-      sourceApp: 'musicscale';
-      signalType:
-        | 'musicscale_pending_responses'
-        | 'musicscale_declined_responses'
-        | 'musicscale_repertoire_content_gaps';
+      sourceApp: ActionResolutionRecord['sourceApp'];
+      signalType: ActionResolutionRecord['signalType'];
     }
   | null {
   const dedupeKey = body?.dedupeKey;
@@ -232,8 +357,11 @@ function parseResolutionInput(
   if (
     !isSafeSignalText(dedupeKey) ||
     !isSafeSignalText(fingerprint) ||
-    sourceApp !== 'musicscale' ||
-    !RESOLVABLE_SIGNAL_TYPES.has(signalType)
+    !hasValidResolutionIdentity({
+      sourceApp,
+      signalType,
+      dedupeKey
+    })
   ) {
     return null;
   }
@@ -274,17 +402,42 @@ export async function getActionResolutions(
     const db =
       (dependencies.getFirestore ?? getFirestore)();
 
-    const authorization = await authorize(
-      db,
-      organizationId,
-      actorUid,
-      dependencies
-    );
+    const [
+      musicScaleAuthorization,
+      nestJourneyAuthorization
+    ] = await Promise.all([
+      authorizeSource(
+        db,
+        organizationId,
+        actorUid,
+        'musicscale',
+        dependencies
+      ),
+      authorizeSource(
+        db,
+        organizationId,
+        actorUid,
+        'nestjourney',
+        dependencies
+      )
+    ]);
 
-    if (authorization.allowed === false) {
-      return res.status(authorization.status).json({
+    const allowedSourceApps = new Set<
+      ActionResolutionRecord['sourceApp']
+    >();
+
+    if (musicScaleAuthorization.allowed) {
+      allowedSourceApps.add('musicscale');
+    }
+    if (nestJourneyAuthorization.allowed) {
+      allowedSourceApps.add('nestjourney');
+    }
+
+    if (allowedSourceApps.size === 0) {
+      return res.status(403).json({
         success: false,
-        reasonCode: authorization.reasonCode
+        reasonCode:
+          'ACTION_RESOLUTION_AUTHORITY_REQUIRED'
       });
     }
 
@@ -325,8 +478,19 @@ export async function getActionResolutions(
         record.organizationId === organizationId &&
         isSafeSignalText(record.dedupeKey) &&
         isSafeSignalText(record.fingerprint) &&
-        record.sourceApp === 'musicscale' &&
-        RESOLVABLE_SIGNAL_TYPES.has(record.signalType) &&
+        isResolutionSourceSignalPair(record) &&
+        allowedSourceApps.has(record.sourceApp) &&
+        (
+          record.sourceApp !== 'nestjourney' ||
+          (
+            nestJourneyAuthorization.allowed === true &&
+            nestJourneyAuthorization.journeyCapabilities != null &&
+            canResolveNestJourneySignal(
+              nestJourneyAuthorization.journeyCapabilities,
+              record.signalType
+            )
+          )
+        ) &&
         (
           record.status === 'started' ||
           record.status === 'cleared_observed' ||
@@ -393,11 +557,13 @@ export async function startActionResolution(
     const db =
       (dependencies.getFirestore ?? getFirestore)();
 
-    const authorization = await authorize(
+    const authorization = await authorizeSource(
       db,
       organizationId,
       actorUid,
-      dependencies
+      input.sourceApp,
+      dependencies,
+      input.signalType
     );
 
     if (authorization.allowed === false) {
@@ -436,7 +602,7 @@ export async function startActionResolution(
           organizationId,
           dedupeKey: input.dedupeKey,
           fingerprint: input.fingerprint,
-          sourceApp: 'musicscale',
+          sourceApp: input.sourceApp,
           signalType: input.signalType,
           status: data.status,
           outcome:
@@ -581,11 +747,13 @@ export async function observeActionResolutionOutcome(
       (dependencies.getFirestore ??
         getFirestore)();
 
-    const authorization = await authorize(
+    const authorization = await authorizeSource(
       db,
       organizationId,
       actorUid,
-      dependencies
+      input.sourceApp,
+      dependencies,
+      input.signalType
     );
 
     if (authorization.allowed === false) {
