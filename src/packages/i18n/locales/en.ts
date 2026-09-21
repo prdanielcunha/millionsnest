@@ -975,7 +975,8 @@ export default {
           overdue: "Items are past deadline",
           needs_assignment: "Items need an owner",
           due_soon: "Deadlines within 24 hours",
-          open: "Follow-up in progress"
+          open: "Follow-up in progress",
+          limited: "Partial read"
         },
         metrics: {
           open: "Open in scope",
