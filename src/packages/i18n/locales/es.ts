@@ -971,6 +971,27 @@ export default {
       open_cta: "Abrir",
       intro: "Todo lo de tu organización en un solo lugar",
       sub_intro: "Mira qué está funcionando, qué necesita atención y cuál es el siguiente paso.",
+      care_integrity: {
+        eyebrow: "NestJourney · vista operativa",
+        title: "Integridad del cuidado",
+        subtitle: "Un resumen agregado de lo que está abierto en tu alcance autorizado, sin exponer personas ni notas pastorales.",
+        open_action: "Abrir Care Integrity",
+        partial_scope: "Este resumen muestra solo las colas que tu responsabilidad actual puede consultar.",
+        full_scope: "Resumen calculado únicamente a partir de colas autorizadas y observadas ahora.",
+        state: {
+          clear: "Al día",
+          overdue: "Hay elementos fuera de plazo",
+          needs_assignment: "Hay elementos sin responsable",
+          due_soon: "Hay plazos en las próximas 24 h",
+          open: "Seguimiento en curso"
+        },
+        metrics: {
+          open: "Abiertos en el alcance",
+          overdue: "Fuera de plazo",
+          due_soon: "Próximas 24 h",
+          unassigned: "Sin responsable"
+        }
+      },
       public_page_label: "Página pública:",
       next_step: {
         eyebrow: "Siguiente paso",
