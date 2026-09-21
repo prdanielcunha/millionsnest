@@ -58,6 +58,7 @@ const intelligence = {
       confirmations: '¿Quién todavía no respondió a la escala?',
       workload: '¿Quién está por encima de la carga de servicio?',
       personal_schedule: '¿Cuál es mi próxima escala?',
+      follow_up: '¿Qué está pendiente en el seguimiento?',
       administration: '¿Hay algo pendiente en el equipo?'
     },
     why: {
