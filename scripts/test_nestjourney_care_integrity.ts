@@ -463,7 +463,8 @@ assert.match(
 );
 assert.match(
   server,
-  /\.\.\.emptyNestJourneyQueue\(\),\s*evidence/
+  /\.\.\.emptyNestJourneyQueue\(\),[\s\S]*complete:\s*input\.complete === true,[\s\S]*evidence/,
+  'an authorized empty queue must preserve both completeness metadata and zero-count evidence'
 );
 
 for (const source of [
