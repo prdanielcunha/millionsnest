@@ -181,6 +181,14 @@ assert.equal(
   res.body.projection.unassignedFirstContacts.evidence.length,
   0
 );
+assert.equal(
+  res.body.projection.assignedFirstContacts.complete,
+  false
+);
+assert.equal(
+  res.body.projection.unassignedFirstContacts.complete,
+  false
+);
 
 await clearInvitationEmulator();
 await seedMember('caregiver-1', {
@@ -226,6 +234,14 @@ assert.equal(
   'caregiver without supervisory scope must see unavailable queue, not a proven zero'
 );
 assert.equal(res.body.projection.assignedFirstContacts.evidence.length, 1);
+assert.equal(
+  res.body.projection.assignedFirstContacts.complete,
+  true
+);
+assert.equal(
+  res.body.projection.unassignedFirstContacts.complete,
+  false
+);
 assert.equal(
   res.body.projection.assignedFirstContacts.evidence[0].sourceApp,
   'nestjourney'
@@ -280,6 +296,10 @@ assert.equal(
   res.body.projection.unassignedFirstContacts.evidence[0].entityId,
   'unassigned:first_contact'
 );
+assert.equal(
+  res.body.projection.unassignedFirstContacts.complete,
+  true
+);
 
 await clearInvitationEmulator();
 await seedMember('coordinator-empty', {
@@ -310,6 +330,14 @@ assert.equal(
   res.body.projection.unassignedFirstContacts.evidence.length,
   1,
   'an authorized empty supervisory queue must retain evidence proving zero'
+);
+assert.equal(
+  res.body.projection.assignedFirstContacts.complete,
+  true
+);
+assert.equal(
+  res.body.projection.unassignedFirstContacts.complete,
+  true
 );
 
 await clearInvitationEmulator();
