@@ -1,49 +1,138 @@
 name: TEMP Authorize NestBalance WIF
 
 on:
-  pull_request_target:
+  push:
     branches:
       - production
+    paths:
+      - ".github/workflows/temp-authorize-nestbalance-wif.yml"
 
 permissions:
   contents: read
   id-token: write
+
+concurrency:
+  group: authorize-nestbalance-wif
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: millionsnest
+  PROJECT_NUMBER: "555464791734"
+  POOL_ID: mn-prod-github
+  PROVIDER_ID: github
+  NESTBALANCE_REPOSITORY: prdanielcunha/nestbalance
+  WEB_DEPLOYER: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+  NESTBALANCE_RUNTIME: nestbalance-runtime@millionsnest.iam.gserviceaccount.com
+  FIREBASE_STORAGE_BUCKET: millionsnest.firebasestorage.app
 
 jobs:
   authorize:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Verify exact temporary PR
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$GITHUB_HEAD_REF" = "ops/authorize-nestbalance-wif"
-          test "$GITHUB_BASE_REF" = "production"
-
-      - name: Authenticate through currently authorized production context
-        uses: google-github-actions/auth@v3
+      - name: Authenticate as MillionsNest infrastructure admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
-          project_id: millionsnest
           workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
-          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
 
       - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
         with:
           project_id: millionsnest
 
-      - name: Add exact NestBalance homologation trust
+      - name: Extend provider condition for NestBalance main
         shell: bash
         run: |
           set -euo pipefail
-          CONDITION="assertion.repository_owner=='prdanielcunha' && ((assertion.ref=='refs/heads/production' && (assertion.repository=='prdanielcunha/millionsnest' || assertion.repository=='prdanielcunha/musicscale' || assertion.repository=='prdanielcunha/nestfinance_millionsnest' || assertion.repository=='prdanielcunha/millionsnest-connect' || assertion.repository=='prdanielcunha/nestjourney' || assertion.repository=='prdanielcunha/nestlocal')) || (assertion.repository=='prdanielcunha/nestbalance' && (assertion.ref=='refs/heads/main' || assertion.ref=='refs/pull/11/merge')))"
 
-          gcloud iam workload-identity-pools providers update-oidc github             --project=millionsnest             --location=global             --workload-identity-pool=mn-prod-github             --attribute-condition="$CONDITION"             --quiet
+          CURRENT="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID" \
+            --workload-identity-pool="$POOL_ID" \
+            --location=global \
+            --project="$PROJECT_ID" \
+            --format='value(attributeCondition)')"
 
-          ACTUAL="$(gcloud iam workload-identity-pools providers describe github             --project=millionsnest             --location=global             --workload-identity-pool=mn-prod-github             --format='value(attributeCondition)')"
+          test -n "$CURRENT"
 
-          echo "$ACTUAL"
-          grep -Fq "prdanielcunha/nestbalance" <<<"$ACTUAL"
-          grep -Fq "refs/heads/main" <<<"$ACTUAL"
-          grep -Fq "refs/pull/11/merge" <<<"$ACTUAL"
+          if grep -Fq "$NESTBALANCE_REPOSITORY" <<<"$CURRENT"; then
+            echo "NESTBALANCE_ALREADY_ALLOWED=true"
+          else
+            NESTBALANCE_CLAUSE="(assertion.repository == '$NESTBALANCE_REPOSITORY' && assertion.ref == 'refs/heads/main')"
+            UPDATED="($CURRENT) || $NESTBALANCE_CLAUSE"
+
+            gcloud iam workload-identity-pools providers update-oidc "$PROVIDER_ID" \
+              --workload-identity-pool="$POOL_ID" \
+              --location=global \
+              --project="$PROJECT_ID" \
+              --attribute-condition="$UPDATED" \
+              --quiet
+
+            echo "NESTBALANCE_ADDED_TO_PROVIDER=true"
+          fi
+
+      - name: Allow NestBalance to impersonate web deployer
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$NESTBALANCE_REPOSITORY"
+
+          gcloud iam service-accounts add-iam-policy-binding "$WEB_DEPLOYER" \
+            --project="$PROJECT_ID" \
+            --role="roles/iam.workloadIdentityUser" \
+            --member="$MEMBER" \
+            --quiet >/dev/null
+
+          echo "NESTBALANCE_WEB_DEPLOYER_BINDING_READY=true"
+
+      - name: Bootstrap NestBalance runtime identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RUNTIME_NAME="${NESTBALANCE_RUNTIME%@*}"
+
+          if ! gcloud iam service-accounts describe "$NESTBALANCE_RUNTIME" \
+            --project "$PROJECT_ID" >/dev/null 2>&1; then
+            gcloud iam service-accounts create "$RUNTIME_NAME" \
+              --project "$PROJECT_ID" \
+              --display-name "NestBalance Runtime"
+          fi
+
+          gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member "serviceAccount:$NESTBALANCE_RUNTIME" \
+            --role "roles/datastore.user" \
+            --condition=None \
+            --quiet >/dev/null
+
+          gcloud storage buckets add-iam-policy-binding "gs://$FIREBASE_STORAGE_BUCKET" \
+            --member "serviceAccount:$NESTBALANCE_RUNTIME" \
+            --role "roles/storage.objectAdmin" \
+            --quiet >/dev/null
+
+          gcloud iam service-accounts add-iam-policy-binding "$NESTBALANCE_RUNTIME" \
+            --project "$PROJECT_ID" \
+            --member "serviceAccount:$WEB_DEPLOYER" \
+            --role "roles/iam.serviceAccountUser" \
+            --quiet >/dev/null
+
+          echo "NESTBALANCE_RUNTIME_IDENTITY_READY=true"
+
+      - name: Verify NestBalance infrastructure bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CONDITION="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID" \
+            --workload-identity-pool="$POOL_ID" \
+            --location=global \
+            --project="$PROJECT_ID" \
+            --format='value(attributeCondition)')"
+
+          grep -F "$NESTBALANCE_REPOSITORY" <<<"$CONDITION" >/dev/null
+          grep -F "refs/heads/main" <<<"$CONDITION" >/dev/null
+
+          gcloud iam service-accounts describe "$NESTBALANCE_RUNTIME" \
+            --project "$PROJECT_ID" >/dev/null
+
+          echo "NESTBALANCE_INFRA_BOOTSTRAP_READY=true"
