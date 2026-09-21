@@ -172,6 +172,15 @@ assert.equal(res.body.projection.isGlobalAccess, true);
 assert.equal(res.body.projection.canReadJourneyOperational, false);
 assert.equal(res.body.projection.assignedFirstContacts.count, 0);
 assert.equal(res.body.projection.unassignedFirstContacts.count, 0);
+assert.equal(
+  res.body.projection.assignedFirstContacts.evidence.length,
+  0,
+  'global-only governance must not manufacture zero-count ministry evidence'
+);
+assert.equal(
+  res.body.projection.unassignedFirstContacts.evidence.length,
+  0
+);
 
 await clearInvitationEmulator();
 await seedMember('caregiver-1', {
@@ -211,6 +220,11 @@ assert.equal(res.body.projection.assignedFirstContacts.count, 2);
 assert.equal(res.body.projection.assignedFirstContacts.overdueCount, 1);
 assert.equal(res.body.projection.assignedFirstContacts.dueSoonCount, 1);
 assert.equal(res.body.projection.unassignedFirstContacts.count, 0);
+assert.equal(
+  res.body.projection.unassignedFirstContacts.evidence.length,
+  0,
+  'caregiver without supervisory scope must see unavailable queue, not a proven zero'
+);
 assert.equal(res.body.projection.assignedFirstContacts.evidence.length, 1);
 assert.equal(
   res.body.projection.assignedFirstContacts.evidence[0].sourceApp,
@@ -265,6 +279,37 @@ assert.equal(res.body.projection.unassignedFirstContacts.dueSoonCount, 1);
 assert.equal(
   res.body.projection.unassignedFirstContacts.evidence[0].entityId,
   'unassigned:first_contact'
+);
+
+await clearInvitationEmulator();
+await seedMember('coordinator-empty', {
+  journeyRole: 'coordinator',
+  congregationIds: ['unit-a'],
+  permissions: {
+    canManageCare: true,
+    canManagePeople: true,
+    canCoordinateJourney: true
+  }
+});
+res = await call('coordinator-empty', granted());
+assert.equal(res.statusCode, 200);
+assert.equal(
+  res.body.projection.assignedFirstContacts.count,
+  0
+);
+assert.equal(
+  res.body.projection.assignedFirstContacts.evidence.length,
+  1,
+  'an authorized empty assigned queue must retain evidence proving zero'
+);
+assert.equal(
+  res.body.projection.unassignedFirstContacts.count,
+  0
+);
+assert.equal(
+  res.body.projection.unassignedFirstContacts.evidence.length,
+  1,
+  'an authorized empty supervisory queue must retain evidence proving zero'
 );
 
 await clearInvitationEmulator();
