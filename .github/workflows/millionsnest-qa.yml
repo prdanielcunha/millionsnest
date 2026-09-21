@@ -64,6 +64,9 @@ jobs:
       - name: Journey server-side outcome attestation
         run: npx tsx scripts/test_journey_outcome_attestation.ts
 
+      - name: Journey Care Integrity aggregate
+        run: npx tsx scripts/test_nestjourney_care_integrity.ts
+
       - name: Tool Gateway safety and approvals
         run: npx tsx scripts/test_tool_gateway.ts
 
