@@ -32,6 +32,9 @@ export function NestJourneyCareIntegritySnapshot({
     value: number
   ) => {
     if (!available) return '—';
+    if (!complete && value === 0) {
+      return '—';
+    }
     return complete
       ? String(value)
       : String(value) + '+';
@@ -39,9 +42,17 @@ export function NestJourneyCareIntegritySnapshot({
 
   const aggregateValue = (
     value: number
-  ) => snapshot.countsComplete
-    ? String(value)
-    : String(value) + '+';
+  ) => {
+    if (
+      !snapshot.countsComplete &&
+      value === 0
+    ) {
+      return '—';
+    }
+    return snapshot.countsComplete
+      ? String(value)
+      : String(value) + '+';
+  };
 
   const hasPartialScope =
     !snapshot.assignedAvailable ||
