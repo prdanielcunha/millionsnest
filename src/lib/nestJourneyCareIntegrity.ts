@@ -26,6 +26,9 @@ export interface NestJourneyCareIntegritySnapshot {
   earliestDueAtMs: number | null;
   assignedAvailable: boolean;
   unassignedAvailable: boolean;
+  assignedComplete: boolean;
+  unassignedComplete: boolean;
+  countsComplete: boolean;
   evidence: readonly FactEvidenceReference[];
 }
 
@@ -131,6 +134,16 @@ export function deriveNestJourneyCareIntegritySnapshot(
     return null;
   }
 
+  const assignedComplete =
+    assignedAvailable &&
+    projection.assignedFirstContacts.complete === true;
+  const unassignedComplete =
+    unassignedAvailable &&
+    projection.unassignedFirstContacts.complete === true;
+  const countsComplete =
+    (!assignedAvailable || assignedComplete) &&
+    (!unassignedAvailable || unassignedComplete);
+
   const assignedCount =
     assignedAvailable
       ? projection.assignedFirstContacts.count
@@ -221,6 +234,9 @@ export function deriveNestJourneyCareIntegritySnapshot(
         : null,
     assignedAvailable,
     unassignedAvailable,
+    assignedComplete,
+    unassignedComplete,
+    countsComplete,
     evidence
   };
 }
