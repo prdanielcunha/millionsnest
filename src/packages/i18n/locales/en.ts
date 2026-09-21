@@ -969,6 +969,7 @@ export default {
         open_action: "Open Care Integrity",
         partial_scope: "This summary shows only the queues your current responsibility is allowed to read.",
         full_scope: "Summary calculated only from queues that are authorized and observed now.",
+        bounded_scope: "The source reached the safe read limit. Values with + are observed minimums, not exact totals.",
         state: {
           clear: "Up to date",
           overdue: "Items are past deadline",
