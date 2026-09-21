@@ -41,7 +41,7 @@ jobs:
         with:
           project_id: millionsnest
 
-      - name: Extend provider condition for NestBalance main
+      - name: Extend provider condition for NestBalance main and production
         shell: bash
         run: |
           set -euo pipefail
@@ -54,12 +54,20 @@ jobs:
 
           test -n "$CURRENT"
 
-          if grep -Fq "$NESTBALANCE_REPOSITORY" <<<"$CURRENT"; then
-            echo "NESTBALANCE_ALREADY_ALLOWED=true"
-          else
-            NESTBALANCE_CLAUSE="(assertion.repository == '$NESTBALANCE_REPOSITORY' && assertion.ref == 'refs/heads/main')"
-            UPDATED="($CURRENT) || $NESTBALANCE_CLAUSE"
+          MAIN_CLAUSE="(assertion.repository == '$NESTBALANCE_REPOSITORY' && assertion.ref == 'refs/heads/main')"
+          PRODUCTION_CLAUSE="(assertion.repository == '$NESTBALANCE_REPOSITORY' && assertion.ref == 'refs/heads/production')"
 
+          UPDATED="$CURRENT"
+          if ! grep -Fq "assertion.repository == '$NESTBALANCE_REPOSITORY' && assertion.ref == 'refs/heads/main'" <<<"$UPDATED"; then
+            UPDATED="($UPDATED) || $MAIN_CLAUSE"
+          fi
+          if ! grep -Fq "assertion.repository == '$NESTBALANCE_REPOSITORY' && assertion.ref == 'refs/heads/production'" <<<"$UPDATED"; then
+            UPDATED="($UPDATED) || $PRODUCTION_CLAUSE"
+          fi
+
+          if [[ "$UPDATED" == "$CURRENT" ]]; then
+            echo "NESTBALANCE_MAIN_AND_PRODUCTION_ALREADY_ALLOWED=true"
+          else
             gcloud iam workload-identity-pools providers update-oidc "$PROVIDER_ID" \
               --workload-identity-pool="$POOL_ID" \
               --location=global \
@@ -67,7 +75,7 @@ jobs:
               --attribute-condition="$UPDATED" \
               --quiet
 
-            echo "NESTBALANCE_ADDED_TO_PROVIDER=true"
+            echo "NESTBALANCE_MAIN_AND_PRODUCTION_ADDED_TO_PROVIDER=true"
           fi
 
       - name: Allow NestBalance to impersonate web deployer
@@ -129,8 +137,8 @@ jobs:
             --project="$PROJECT_ID" \
             --format='value(attributeCondition)')"
 
-          grep -F "$NESTBALANCE_REPOSITORY" <<<"$CONDITION" >/dev/null
-          grep -F "refs/heads/main" <<<"$CONDITION" >/dev/null
+          grep -F "assertion.repository == '$NESTBALANCE_REPOSITORY' && assertion.ref == 'refs/heads/main'" <<<"$CONDITION" >/dev/null
+          grep -F "assertion.repository == '$NESTBALANCE_REPOSITORY' && assertion.ref == 'refs/heads/production'" <<<"$CONDITION" >/dev/null
 
           gcloud iam service-accounts describe "$NESTBALANCE_RUNTIME" \
             --project "$PROJECT_ID" >/dev/null
