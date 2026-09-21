@@ -28,8 +28,20 @@ export function NestJourneyCareIntegritySnapshot({
 
   const scopedValue = (
     available: boolean,
+    complete: boolean,
     value: number
-  ) => available ? String(value) : '—';
+  ) => {
+    if (!available) return '—';
+    return complete
+      ? String(value)
+      : String(value) + '+';
+  };
+
+  const aggregateValue = (
+    value: number
+  ) => snapshot.countsComplete
+    ? String(value)
+    : String(value) + '+';
 
   const hasPartialScope =
     !snapshot.assignedAvailable ||
@@ -87,7 +99,9 @@ export function NestJourneyCareIntegritySnapshot({
         <div className="mt-6 grid grid-cols-2 gap-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
             <p className="text-2xl font-semibold tracking-[-0.03em] text-white">
-              {snapshot.totalOpenCount}
+              {aggregateValue(
+                snapshot.totalOpenCount
+              )}
             </p>
             <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-[#748091]">
               {t(
@@ -99,7 +113,9 @@ export function NestJourneyCareIntegritySnapshot({
 
           <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
             <p className="text-2xl font-semibold tracking-[-0.03em] text-white">
-              {snapshot.overdueCount}
+              {aggregateValue(
+                snapshot.overdueCount
+              )}
             </p>
             <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-[#748091]">
               {t(
@@ -111,7 +127,9 @@ export function NestJourneyCareIntegritySnapshot({
 
           <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
             <p className="text-2xl font-semibold tracking-[-0.03em] text-white">
-              {snapshot.dueSoonCount}
+              {aggregateValue(
+                snapshot.dueSoonCount
+              )}
             </p>
             <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-[#748091]">
               {t(
@@ -125,6 +143,7 @@ export function NestJourneyCareIntegritySnapshot({
             <p className="text-2xl font-semibold tracking-[-0.03em] text-white">
               {scopedValue(
                 snapshot.unassignedAvailable,
+                snapshot.unassignedComplete,
                 snapshot.unassignedCount
               )}
             </p>
@@ -139,15 +158,20 @@ export function NestJourneyCareIntegritySnapshot({
 
         <div className="mt-5 flex flex-col gap-3 border-t border-white/[0.06] pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="max-w-2xl text-[11px] leading-relaxed text-[#748091]">
-            {hasPartialScope
+            {!snapshot.countsComplete
               ? t(
-                  'workspace.care_integrity.partial_scope',
-                  'Este resumo mostra apenas as filas que sua responsabilidade atual permite consultar.'
+                  'workspace.care_integrity.bounded_scope',
+                  'A fonte atingiu o limite seguro de leitura. Valores com + são mínimos observados, não totais exatos.'
                 )
-              : t(
-                  'workspace.care_integrity.full_scope',
-                  'Resumo calculado somente a partir das filas autorizadas e observadas agora.'
-                )}
+              : hasPartialScope
+                ? t(
+                    'workspace.care_integrity.partial_scope',
+                    'Este resumo mostra apenas as filas que sua responsabilidade atual permite consultar.'
+                  )
+                : t(
+                    'workspace.care_integrity.full_scope',
+                    'Resumo calculado somente a partir das filas autorizadas e observadas agora.'
+                  )}
           </p>
 
           <button
