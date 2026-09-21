@@ -58,6 +58,7 @@ const intelligence = {
       confirmations: 'Who has not responded to the schedule yet?',
       workload: 'Who is above the service load?',
       personal_schedule: 'What is my next schedule?',
+      follow_up: 'What is pending in follow-up?',
       administration: 'Is anything pending with the team?'
     },
     why: {
