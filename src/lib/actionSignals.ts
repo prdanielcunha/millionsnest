@@ -102,7 +102,10 @@ export function fingerprintNestJourneyQueue(input: {
     input.queue.count,
     input.queue.overdueCount,
     input.queue.dueSoonCount,
-    earliestDueAtMs ?? 'none'
+    earliestDueAtMs ?? 'none',
+    input.queue.complete === true
+      ? 'complete'
+      : 'bounded'
   ].join(':');
 }
 

@@ -962,6 +962,29 @@ export default {
       open_cta: "Open",
       intro: "Everything your organization needs, in one place",
       sub_intro: "See what is working, what needs attention, and what you should do next.",
+      care_integrity: {
+        eyebrow: "NestJourney · operational view",
+        title: "Care Integrity",
+        subtitle: "An aggregate summary of what is open in your authorized scope, without exposing people or pastoral notes.",
+        open_action: "Open Care Integrity",
+        partial_scope: "This summary shows only the queues your current responsibility is allowed to read.",
+        full_scope: "Summary calculated only from queues that are authorized and observed now.",
+        bounded_scope: "The source reached the safe read limit. Values with + are observed minimums, not exact totals.",
+        state: {
+          clear: "Up to date",
+          overdue: "Items are past deadline",
+          needs_assignment: "Items need an owner",
+          due_soon: "Deadlines within 24 hours",
+          open: "Follow-up in progress",
+          limited: "Partial read"
+        },
+        metrics: {
+          open: "Open in scope",
+          overdue: "Past deadline",
+          due_soon: "Next 24 hours",
+          unassigned: "Without owner"
+        }
+      },
       public_page_label: "Public page:",
       next_step: {
         eyebrow: "Next step",

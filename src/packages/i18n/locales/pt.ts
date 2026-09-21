@@ -978,6 +978,29 @@ export default {
       open_cta: "Abrir",
       intro: "Tudo da sua organização em um só lugar",
       sub_intro: "Veja o que está funcionando, o que precisa de atenção e qual é o próximo passo.",
+      care_integrity: {
+        eyebrow: "NestJourney · visão operacional",
+        title: "Integridade do cuidado",
+        subtitle: "Um resumo agregado do que está aberto no seu recorte autorizado, sem expor pessoas ou notas pastorais.",
+        open_action: "Abrir Care Integrity",
+        partial_scope: "Este resumo mostra apenas as filas que sua responsabilidade atual permite consultar.",
+        full_scope: "Resumo calculado somente a partir das filas autorizadas e observadas agora.",
+        bounded_scope: "A fonte atingiu o limite seguro de leitura. Valores com + são mínimos observados, não totais exatos.",
+        state: {
+          clear: "Em dia",
+          overdue: "Há itens acima do prazo",
+          needs_assignment: "Há itens sem responsável",
+          due_soon: "Há prazos nas próximas 24h",
+          open: "Acompanhamento em andamento",
+          limited: "Leitura parcial"
+        },
+        metrics: {
+          open: "Abertos no recorte",
+          overdue: "Acima do prazo",
+          due_soon: "Próximas 24h",
+          unassigned: "Sem responsável"
+        }
+      },
       public_page_label: "Página pública:",
       next_step: {
         eyebrow: "Próximo passo",

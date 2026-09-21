@@ -12,6 +12,9 @@ import type {
 import type {
   EvidenceBackedMusicScaleDistributionSnapshot
 } from './musicScaleDistributionFactProjection.js';
+import type {
+  NestJourneyCareIntegritySnapshot
+} from './nestJourneyCareIntegrity.js';
 
 export type AskMillionsNestIntent =
   | 'attention'
@@ -75,6 +78,7 @@ export interface AskMillionsNestInput {
     };
   };
   worshipDistribution?: EvidenceBackedMusicScaleDistributionSnapshot | null;
+  journey?: NestJourneyCareIntegritySnapshot | null;
   nowMs?: number;
 }
 
@@ -438,6 +442,120 @@ export function answerAskMillionsNest(
   if (intent === 'journey_follow_up') {
     if (!hasLens(input.lenses, 'journey')) return notAvailable(intent);
 
+    const journeySnapshot =
+      input.journey?.organizationId === organizationId
+        ? input.journey
+        : null;
+
+    if (journeySnapshot) {
+      const journeyEvidence =
+        sanitizeEvidence(
+          organizationId,
+          journeySnapshot.evidence
+        );
+      const destination: ActionDestination = {
+        kind: 'app',
+        appId: 'nestjourney',
+        path: '/care-integrity'
+      };
+
+      if (
+        !journeySnapshot.countsComplete &&
+        journeySnapshot.totalOpenCount === 0
+      ) {
+        return insufficient(
+          intent,
+          journeyEvidence,
+          [],
+          destination
+        );
+      }
+
+      const facts: AskMillionsNestFactLine[] = [
+        {
+          key: journeySnapshot.countsComplete
+            ? 'ask.facts.journey_total_open'
+            : 'ask.facts.journey_total_open_lower_bound',
+          params: {
+            count:
+              journeySnapshot.totalOpenCount
+          }
+        }
+      ];
+
+      if (journeySnapshot.assignedAvailable) {
+        facts.push({
+          key: journeySnapshot.assignedComplete
+            ? 'ask.facts.journey_assigned'
+            : 'ask.facts.journey_assigned_lower_bound',
+          params: {
+            count:
+              journeySnapshot.assignedCount
+          }
+        });
+      }
+
+      if (journeySnapshot.unassignedAvailable) {
+        facts.push({
+          key: journeySnapshot.unassignedComplete
+            ? 'ask.facts.journey_unassigned'
+            : 'ask.facts.journey_unassigned_lower_bound',
+          params: {
+            count:
+              journeySnapshot.unassignedCount
+          }
+        });
+      }
+
+      facts.push(
+        {
+          key: journeySnapshot.countsComplete
+            ? 'ask.facts.journey_overdue'
+            : 'ask.facts.journey_overdue_lower_bound',
+          params: {
+            count:
+              journeySnapshot.overdueCount
+          }
+        },
+        {
+          key: journeySnapshot.countsComplete
+            ? 'ask.facts.journey_due_soon'
+            : 'ask.facts.journey_due_soon_lower_bound',
+          params: {
+            count:
+              journeySnapshot.dueSoonCount
+          }
+        }
+      );
+
+      return answered({
+        intent,
+        titleKey:
+          'ask.answers.journey_follow_up.title',
+        summaryKey:
+          journeySnapshot.countsComplete
+            ? journeySnapshot.totalOpenCount === 0
+              ? 'ask.answers.journey_follow_up.summary_clear'
+              : 'ask.answers.journey_follow_up.summary'
+            : 'ask.answers.journey_follow_up.summary_lower_bound',
+        translationParams: {
+          total:
+            journeySnapshot.totalOpenCount,
+          assigned:
+            journeySnapshot.assignedCount,
+          unassigned:
+            journeySnapshot.unassignedCount,
+          overdue:
+            journeySnapshot.overdueCount,
+          dueSoon:
+            journeySnapshot.dueSoonCount
+        },
+        facts,
+        evidence: journeyEvidence,
+        destination
+      });
+    }
+
     const journeyActions = input.actions.filter(action =>
       action.sourceApp === 'nestjourney' &&
       (
@@ -468,11 +586,17 @@ export function answerAskMillionsNest(
       titleKey: 'ask.answers.journey_follow_up.title',
       summaryKey: 'ask.answers.journey_follow_up.summary',
       translationParams: {
+        total: assigned + unassigned,
         assigned,
         unassigned,
-        overdue
+        overdue,
+        dueSoon: 0
       },
       facts: [
+        {
+          key: 'ask.facts.journey_total_open',
+          params: { count: assigned + unassigned }
+        },
         {
           key: 'ask.facts.journey_assigned',
           params: { count: assigned }

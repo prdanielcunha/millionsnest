@@ -28,6 +28,7 @@ export interface NestJourneyQueueSummary {
   overdueCount: number;
   dueSoonCount: number;
   earliestDueAtMs: number | null;
+  complete?: boolean;
   evidence: readonly FactEvidenceReference[];
 }
 
@@ -73,6 +74,7 @@ export function emptyNestJourneyQueue(): NestJourneyQueueSummary {
     overdueCount: 0,
     dueSoonCount: 0,
     earliestDueAtMs: null,
+    complete: false,
     evidence: []
   };
 }

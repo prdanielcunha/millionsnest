@@ -58,6 +58,7 @@ const intelligence = {
       confirmations: '¿Quién todavía no respondió a la escala?',
       workload: '¿Quién está por encima de la carga de servicio?',
       personal_schedule: '¿Cuál es mi próxima escala?',
+      follow_up: '¿Qué está pendiente en el seguimiento?',
       administration: '¿Hay algo pendiente en el equipo?'
     },
     why: {
@@ -90,6 +91,13 @@ const intelligence = {
       journey_assigned: '{{count}} seguimiento(s) de primer contacto asignado(s) a ti y pendiente(s) de conclusión.',
       journey_unassigned: '{{count}} seguimiento(s) de primer contacto sin responsable en tu alcance autorizado.',
       journey_overdue: '{{count}} compromiso(s) de primer contacto por encima del plazo acordado.',
+      journey_total_open: '{{count}} seguimiento(s) de primer contacto abierto(s) en tu alcance autorizado.',
+      journey_due_soon: '{{count}} compromiso(s) de primer contacto con plazo en las próximas 24 horas.',
+      journey_total_open_lower_bound: 'Se observaron al menos {{count}} seguimiento(s) de primer contacto abierto(s) en tu alcance autorizado.',
+      journey_assigned_lower_bound: 'Se observaron al menos {{count}} seguimiento(s) de primer contacto asignado(s) a ti y pendiente(s) de conclusión.',
+      journey_unassigned_lower_bound: 'Se observaron al menos {{count}} seguimiento(s) de primer contacto sin responsable en tu alcance autorizado.',
+      journey_overdue_lower_bound: 'Se observaron al menos {{count}} compromiso(s) de primer contacto fuera de plazo.',
+      journey_due_soon_lower_bound: 'Se observaron al menos {{count}} compromiso(s) de primer contacto con vencimiento en las próximas 24 horas.',
       action_item: 'Acción autorizada'
     },
     answers: {
@@ -127,8 +135,10 @@ const intelligence = {
       },
       journey_follow_up: {
         title: 'Seguimientos de Journey',
-        summary: 'En tu alcance autorizado hay {{assigned}} primer(os) contacto(s) asignado(s) a ti, {{unassigned}} sin responsable y {{overdue}} por encima del plazo acordado.',
-        insufficient: 'La Journey Lens está disponible, pero no hay una cola abierta de seguimiento con evidencia suficiente para responder esta pregunta ahora.'
+        summary: 'En tu alcance autorizado hay {{total}} seguimiento(s) abierto(s), {{overdue}} fuera de plazo y {{dueSoon}} con vencimiento en las próximas 24 horas.',
+        summary_lower_bound: 'La lectura alcanzó el límite seguro. Se observaron al menos {{total}} seguimiento(s) abierto(s), {{overdue}} fuera de plazo y {{dueSoon}} con vencimiento en las próximas 24 horas.',
+        summary_clear: 'En el alcance autorizado observado ahora, no hay seguimientos de primer contacto abiertos.',
+        insufficient: 'La Journey Lens está disponible, pero la proyección autorizada de seguimiento todavía no está lista para sustentar esa respuesta.'
       },
       finance: {
         insufficient: 'El Hub todavía no tiene una fuente financiera autorizada y estructurada en este contexto que sustente responder esa pregunta.'
