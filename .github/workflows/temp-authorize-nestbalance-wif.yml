@@ -1,11 +1,9 @@
 name: TEMP Authorize NestBalance WIF
 
 on:
-  push:
+  pull_request_target:
     branches:
       - production
-    paths:
-      - ".github/workflows/temp-authorize-nestbalance-wif.yml"
 
 permissions:
   contents: read
@@ -13,10 +11,11 @@ permissions:
 
 jobs:
   authorize:
+    if: github.event.pull_request.head.repo.full_name == 'prdanielcunha/millionsnest' && github.event.pull_request.head.ref == 'ops/authorize-nestbalance-wif'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Authenticate to MillionsNest GCP
+      - name: Authenticate through currently authorized production context
         uses: google-github-actions/auth@v3
         with:
           project_id: millionsnest
@@ -28,7 +27,7 @@ jobs:
         with:
           project_id: millionsnest
 
-      - name: Add NestBalance homologation trust
+      - name: Add exact NestBalance homologation trust
         shell: bash
         run: |
           set -euo pipefail
@@ -38,8 +37,7 @@ jobs:
 
           ACTUAL="$(gcloud iam workload-identity-pools providers describe github             --project=millionsnest             --location=global             --workload-identity-pool=mn-prod-github             --format='value(attributeCondition)')"
 
-          printf '%s
-' "$ACTUAL"
+          echo "$ACTUAL"
           grep -Fq "prdanielcunha/nestbalance" <<<"$ACTUAL"
           grep -Fq "refs/heads/main" <<<"$ACTUAL"
           grep -Fq "refs/pull/11/merge" <<<"$ACTUAL"
