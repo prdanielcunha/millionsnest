@@ -984,7 +984,8 @@ export default {
           overdue: "Hay elementos fuera de plazo",
           needs_assignment: "Hay elementos sin responsable",
           due_soon: "Hay plazos en las próximas 24 h",
-          open: "Seguimiento en curso"
+          open: "Seguimiento en curso",
+          limited: "Lectura parcial"
         },
         metrics: {
           open: "Abiertos en el alcance",
