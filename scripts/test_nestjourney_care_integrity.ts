@@ -51,6 +51,7 @@ function queue(input: {
   dueSoon?: number;
   earliest?: number | null;
   observed?: boolean;
+  complete?: boolean;
 }): NestJourneyQueueSummary {
   return {
     count: input.count,
@@ -58,6 +59,7 @@ function queue(input: {
     dueSoonCount: input.dueSoon ?? 0,
     earliestDueAtMs:
       input.earliest ?? null,
+    complete: input.complete ?? true,
     evidence:
       input.observed === false
         ? []
@@ -192,6 +194,32 @@ assert.equal(
   'unavailable queue must not be counted as an observed zero'
 );
 assert.equal(partial?.evidence.length, 1);
+assert.equal(partial?.countsComplete, true);
+
+const bounded = deriveNestJourneyCareIntegritySnapshot({
+  organizationId: ORG_ID,
+  projection: projection({
+    assigned: queue({
+      entityId:
+        'assigned:first_contact',
+      count: 100,
+      overdue: 3,
+      dueSoon: 4,
+      complete: false
+    }),
+    unassigned: queue({
+      entityId:
+        'unassigned:first_contact',
+      count: 0,
+      complete: true
+    })
+  })
+});
+
+assert.ok(bounded);
+assert.equal(bounded?.countsComplete, false);
+assert.equal(bounded?.assignedComplete, false);
+assert.equal(bounded?.totalOpenCount, 100);
 
 for (const unsafe of [
   projection({ global: true }),
@@ -275,6 +303,75 @@ if (
 }
 assert.ok(clearAsk.evidence.length > 0);
 
+const boundedAsk = answerAskMillionsNest({
+  organizationId: ORG_ID,
+  question:
+    'O que está pendente no acompanhamento?',
+  activeLens: 'journey',
+  lenses: [{ id: 'journey' } as any],
+  actions: [],
+  journey: bounded,
+  musicScale: {
+    ready: false,
+    nextScale: null,
+    nextPersonalScale: null
+  },
+  nowMs: NOW
+});
+
+assert.equal(boundedAsk.status, 'answered');
+assert.equal(
+  boundedAsk.summaryKey,
+  'ask.answers.journey_follow_up.summary_lower_bound'
+);
+assert.ok(
+  boundedAsk.facts.some(
+    fact =>
+      fact.key ===
+      'ask.facts.journey_total_open_lower_bound'
+  )
+);
+
+const ambiguousZero = deriveNestJourneyCareIntegritySnapshot({
+  organizationId: ORG_ID,
+  projection: projection({
+    assigned: queue({
+      entityId:
+        'assigned:first_contact',
+      count: 0,
+      complete: false
+    }),
+    unassigned: queue({
+      entityId:
+        'unassigned:first_contact',
+      count: 0,
+      complete: true
+    })
+  })
+});
+
+assert.ok(ambiguousZero);
+const ambiguousZeroAsk = answerAskMillionsNest({
+  organizationId: ORG_ID,
+  question:
+    'O que está pendente no acompanhamento?',
+  activeLens: 'journey',
+  lenses: [{ id: 'journey' } as any],
+  actions: [],
+  journey: ambiguousZero,
+  musicScale: {
+    ready: false,
+    nextScale: null,
+    nextPersonalScale: null
+  },
+  nowMs: NOW
+});
+assert.equal(
+  ambiguousZeroAsk.status,
+  'insufficient_data',
+  'incomplete zero must never be presented as an all-clear claim'
+);
+
 const component = readFileSync(
   'src/components/dashboard/NestJourneyCareIntegritySnapshot.tsx',
   'utf8'
@@ -303,6 +400,14 @@ assert.match(
 assert.match(
   component,
   /snapshot\.unassignedAvailable/
+);
+assert.match(
+  component,
+  /snapshot\.countsComplete/
+);
+assert.match(
+  component,
+  /String\(value\) \+ '\+'/
 );
 assert.match(
   server,
@@ -369,7 +474,9 @@ for (const language of [
   for (const key of [
     'journey_total_open',
     'journey_due_soon',
+    'journey_total_open_lower_bound',
     'summary_clear',
+    'summary_lower_bound',
     'follow_up'
   ]) {
     assert.equal(
