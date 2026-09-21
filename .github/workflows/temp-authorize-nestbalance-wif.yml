@@ -1,0 +1,45 @@
+name: TEMP Authorize NestBalance WIF
+
+on:
+  push:
+    branches:
+      - production
+    paths:
+      - ".github/workflows/temp-authorize-nestbalance-wif.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Authenticate to MillionsNest GCP
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: millionsnest
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: millionsnest
+
+      - name: Add NestBalance homologation trust
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONDITION="assertion.repository_owner=='prdanielcunha' && ((assertion.ref=='refs/heads/production' && (assertion.repository=='prdanielcunha/millionsnest' || assertion.repository=='prdanielcunha/musicscale' || assertion.repository=='prdanielcunha/nestfinance_millionsnest' || assertion.repository=='prdanielcunha/millionsnest-connect' || assertion.repository=='prdanielcunha/nestjourney' || assertion.repository=='prdanielcunha/nestlocal')) || (assertion.repository=='prdanielcunha/nestbalance' && (assertion.ref=='refs/heads/main' || assertion.ref=='refs/pull/11/merge')))"
+
+          gcloud iam workload-identity-pools providers update-oidc github             --project=millionsnest             --location=global             --workload-identity-pool=mn-prod-github             --attribute-condition="$CONDITION"             --quiet
+
+          ACTUAL="$(gcloud iam workload-identity-pools providers describe github             --project=millionsnest             --location=global             --workload-identity-pool=mn-prod-github             --format='value(attributeCondition)')"
+
+          printf '%s
+' "$ACTUAL"
+          grep -Fq "prdanielcunha/nestbalance" <<<"$ACTUAL"
+          grep -Fq "refs/heads/main" <<<"$ACTUAL"
+          grep -Fq "refs/pull/11/merge" <<<"$ACTUAL"
