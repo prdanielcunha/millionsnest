@@ -448,33 +448,46 @@ export function answerAskMillionsNest(
         : null;
 
     if (journeySnapshot) {
+      const journeyEvidence =
+        sanitizeEvidence(
+          organizationId,
+          journeySnapshot.evidence
+        );
+      const destination: ActionDestination = {
+        kind: 'app',
+        appId: 'nestjourney',
+        path: '/care-integrity'
+      };
+
+      if (
+        !journeySnapshot.countsComplete &&
+        journeySnapshot.totalOpenCount === 0
+      ) {
+        return insufficient(
+          intent,
+          journeyEvidence,
+          [],
+          destination
+        );
+      }
+
       const facts: AskMillionsNestFactLine[] = [
         {
-          key: 'ask.facts.journey_total_open',
+          key: journeySnapshot.countsComplete
+            ? 'ask.facts.journey_total_open'
+            : 'ask.facts.journey_total_open_lower_bound',
           params: {
             count:
               journeySnapshot.totalOpenCount
-          }
-        },
-        {
-          key: 'ask.facts.journey_overdue',
-          params: {
-            count:
-              journeySnapshot.overdueCount
-          }
-        },
-        {
-          key: 'ask.facts.journey_due_soon',
-          params: {
-            count:
-              journeySnapshot.dueSoonCount
           }
         }
       ];
 
       if (journeySnapshot.assignedAvailable) {
-        facts.splice(1, 0, {
-          key: 'ask.facts.journey_assigned',
+        facts.push({
+          key: journeySnapshot.assignedComplete
+            ? 'ask.facts.journey_assigned'
+            : 'ask.facts.journey_assigned_lower_bound',
           params: {
             count:
               journeySnapshot.assignedCount
@@ -483,29 +496,48 @@ export function answerAskMillionsNest(
       }
 
       if (journeySnapshot.unassignedAvailable) {
-        facts.splice(
-          journeySnapshot.assignedAvailable
-            ? 2
-            : 1,
-          0,
-          {
-            key: 'ask.facts.journey_unassigned',
-            params: {
-              count:
-                journeySnapshot.unassignedCount
-            }
+        facts.push({
+          key: journeySnapshot.unassignedComplete
+            ? 'ask.facts.journey_unassigned'
+            : 'ask.facts.journey_unassigned_lower_bound',
+          params: {
+            count:
+              journeySnapshot.unassignedCount
           }
-        );
+        });
       }
+
+      facts.push(
+        {
+          key: journeySnapshot.countsComplete
+            ? 'ask.facts.journey_overdue'
+            : 'ask.facts.journey_overdue_lower_bound',
+          params: {
+            count:
+              journeySnapshot.overdueCount
+          }
+        },
+        {
+          key: journeySnapshot.countsComplete
+            ? 'ask.facts.journey_due_soon'
+            : 'ask.facts.journey_due_soon_lower_bound',
+          params: {
+            count:
+              journeySnapshot.dueSoonCount
+          }
+        }
+      );
 
       return answered({
         intent,
         titleKey:
           'ask.answers.journey_follow_up.title',
         summaryKey:
-          journeySnapshot.totalOpenCount === 0
-            ? 'ask.answers.journey_follow_up.summary_clear'
-            : 'ask.answers.journey_follow_up.summary',
+          journeySnapshot.countsComplete
+            ? journeySnapshot.totalOpenCount === 0
+              ? 'ask.answers.journey_follow_up.summary_clear'
+              : 'ask.answers.journey_follow_up.summary'
+            : 'ask.answers.journey_follow_up.summary_lower_bound',
         translationParams: {
           total:
             journeySnapshot.totalOpenCount,
@@ -519,15 +551,8 @@ export function answerAskMillionsNest(
             journeySnapshot.dueSoonCount
         },
         facts,
-        evidence: sanitizeEvidence(
-          organizationId,
-          journeySnapshot.evidence
-        ),
-        destination: {
-          kind: 'app',
-          appId: 'nestjourney',
-          path: '/care-integrity'
-        }
+        evidence: journeyEvidence,
+        destination
       });
     }
 
