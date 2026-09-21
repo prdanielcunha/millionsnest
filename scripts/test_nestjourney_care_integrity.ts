@@ -4,6 +4,9 @@ import {
   deriveNestJourneyCareIntegritySnapshot
 } from '../src/lib/nestJourneyCareIntegrity.js';
 import {
+  fingerprintNestJourneyQueue
+} from '../src/lib/actionSignals.js';
+import {
   answerAskMillionsNest
 } from '../src/lib/askMillionsNest.js';
 import type {
@@ -221,6 +224,38 @@ assert.equal(bounded?.countsComplete, false);
 assert.equal(bounded?.assignedComplete, false);
 assert.equal(bounded?.totalOpenCount, 100);
 
+const boundedFingerprint =
+  fingerprintNestJourneyQueue({
+    signalType:
+      'nestjourney_assigned_first_contacts',
+    queue: queue({
+      entityId:
+        'assigned:first_contact',
+      count: 100,
+      overdue: 3,
+      dueSoon: 4,
+      complete: false
+    })
+  });
+const completeFingerprint =
+  fingerprintNestJourneyQueue({
+    signalType:
+      'nestjourney_assigned_first_contacts',
+    queue: queue({
+      entityId:
+        'assigned:first_contact',
+      count: 100,
+      overdue: 3,
+      dueSoon: 4,
+      complete: true
+    })
+  });
+assert.notEqual(
+  boundedFingerprint,
+  completeFingerprint,
+  'projection completeness must change the Journey signal fingerprint'
+);
+
 for (const unsafe of [
   projection({ global: true }),
   projection({ ready: false }),
@@ -351,6 +386,11 @@ const ambiguousZero = deriveNestJourneyCareIntegritySnapshot({
 });
 
 assert.ok(ambiguousZero);
+assert.equal(
+  ambiguousZero?.state,
+  'limited',
+  'an incomplete zero must be visibly represented as a partial read'
+);
 const ambiguousZeroAsk = answerAskMillionsNest({
   organizationId: ORG_ID,
   question:
@@ -404,6 +444,10 @@ assert.match(
 assert.match(
   component,
   /snapshot\.countsComplete/
+);
+assert.match(
+  component,
+  /bounded_scope/
 );
 assert.match(
   component,
