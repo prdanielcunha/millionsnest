@@ -991,7 +991,8 @@ export default {
           overdue: "Há itens acima do prazo",
           needs_assignment: "Há itens sem responsável",
           due_soon: "Há prazos nas próximas 24h",
-          open: "Acompanhamento em andamento"
+          open: "Acompanhamento em andamento",
+          limited: "Leitura parcial"
         },
         metrics: {
           open: "Abertos no recorte",
