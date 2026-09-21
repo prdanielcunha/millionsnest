@@ -220,21 +220,6 @@ function emptyProjection(input: {
   access?: Partial<ResolvedAppAccess> | null;
   ready?: boolean;
 }): NestJourneyWorkspaceProjection {
-  const assignedComplete =
-    capabilities.canManageCare &&
-    assignedSnapshot !== null &&
-    (
-      dependencies.completeQueues === true ||
-      assignedSnapshot.size < 100
-    );
-  const unassignedComplete =
-    canSuperviseCare &&
-    unassignedSnapshot !== null &&
-    (
-      dependencies.completeQueues === true ||
-      unassignedSnapshot.size < 200
-    );
-
   return {
     appId: 'nestjourney',
     organizationId: input.organizationId,
@@ -442,6 +427,21 @@ export async function resolveNestJourneyWorkspaceProjectionForActor(
         )
         .map(data => data.dueAt)
     : [];
+
+  const assignedComplete =
+    capabilities.canManageCare &&
+    assignedSnapshot !== null &&
+    (
+      dependencies.completeQueues === true ||
+      assignedSnapshot.size < 100
+    );
+  const unassignedComplete =
+    canSuperviseCare &&
+    unassignedSnapshot !== null &&
+    (
+      dependencies.completeQueues === true ||
+      unassignedSnapshot.size < 200
+    );
 
   return {
     appId: 'nestjourney',
