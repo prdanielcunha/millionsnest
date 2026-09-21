@@ -169,7 +169,25 @@ export function summarizeJourneyQueue(input: {
     .filter((value): value is number => value !== null)
     .sort((a, b) => a - b);
 
-  if (input.dueAtValues.length === 0) return emptyNestJourneyQueue();
+  const evidence = [queueEvidence({
+    organizationId: input.organizationId,
+    sourceRef: input.sourceRef,
+    entityId: input.entityId,
+    observedAtMs: input.observedAtMs,
+    fieldPaths: [
+      'count',
+      'overdueCount',
+      'dueSoonCount',
+      'earliestDueAtMs'
+    ]
+  })];
+
+  if (input.dueAtValues.length === 0) {
+    return {
+      ...emptyNestJourneyQueue(),
+      evidence
+    };
+  }
 
   const dueSoonBoundary = input.observedAtMs + 24 * 60 * 60 * 1000;
 
@@ -180,18 +198,7 @@ export function summarizeJourneyQueue(input: {
       value => value >= input.observedAtMs && value <= dueSoonBoundary
     ).length,
     earliestDueAtMs: dueAtMs[0] ?? null,
-    evidence: [queueEvidence({
-      organizationId: input.organizationId,
-      sourceRef: input.sourceRef,
-      entityId: input.entityId,
-      observedAtMs: input.observedAtMs,
-      fieldPaths: [
-        'count',
-        'overdueCount',
-        'dueSoonCount',
-        'earliestDueAtMs'
-      ]
-    })]
+    evidence
   };
 }
 
@@ -431,25 +438,29 @@ export async function resolveNestJourneyWorkspaceProjectionForActor(
     ready: true,
     observedAtMs,
     assignedFirstContacts:
-      summarizeJourneyQueue({
-        organizationId,
-        sourceRef:
-          'hub.api.nestjourney.workspace.assigned_first_contacts',
-        entityId:
-          'assigned:first_contact',
-        observedAtMs,
-        dueAtValues: assignedDueAt
-      }),
+      capabilities.canManageCare
+        ? summarizeJourneyQueue({
+            organizationId,
+            sourceRef:
+              'hub.api.nestjourney.workspace.assigned_first_contacts',
+            entityId:
+              'assigned:first_contact',
+            observedAtMs,
+            dueAtValues: assignedDueAt
+          })
+        : emptyNestJourneyQueue(),
     unassignedFirstContacts:
-      summarizeJourneyQueue({
-        organizationId,
-        sourceRef:
-          'hub.api.nestjourney.workspace.unassigned_first_contacts',
-        entityId:
-          'unassigned:first_contact',
-        observedAtMs,
-        dueAtValues: unassignedDueAt
-      })
+      canSuperviseCare
+        ? summarizeJourneyQueue({
+            organizationId,
+            sourceRef:
+              'hub.api.nestjourney.workspace.unassigned_first_contacts',
+            entityId:
+              'unassigned:first_contact',
+            observedAtMs,
+            dueAtValues: unassignedDueAt
+          })
+        : emptyNestJourneyQueue()
   };
 }
 
