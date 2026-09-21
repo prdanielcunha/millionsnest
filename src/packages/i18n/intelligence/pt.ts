@@ -90,6 +90,8 @@ const intelligence = {
       journey_assigned: '{{count}} primeiro(s) contato(s) atribuído(s) a você aguardando conclusão.',
       journey_unassigned: '{{count}} primeiro(s) contato(s) sem responsável no seu escopo autorizado.',
       journey_overdue: '{{count}} compromisso(s) de primeiro contato acima do prazo combinado.',
+      journey_total_open: '{{count}} acompanhamento(s) de primeiro contato aberto(s) no seu recorte autorizado.',
+      journey_due_soon: '{{count}} compromisso(s) de primeiro contato com prazo nas próximas 24 horas.',
       action_item: 'Ação autorizada'
     },
     answers: {
@@ -127,8 +129,9 @@ const intelligence = {
       },
       journey_follow_up: {
         title: 'Acompanhamentos do Journey',
-        summary: 'No seu escopo autorizado há {{assigned}} primeiro(s) contato(s) atribuídos a você, {{unassigned}} sem responsável e {{overdue}} acima do prazo combinado.',
-        insufficient: 'A Journey Lens está disponível, mas não há uma fila de acompanhamento aberta com evidência suficiente para responder essa pergunta agora.'
+        summary: 'No seu recorte autorizado há {{total}} acompanhamento(s) aberto(s), {{overdue}} acima do prazo e {{dueSoon}} com prazo nas próximas 24 horas.',
+        summary_clear: 'No recorte autorizado e observado agora, não há acompanhamentos de primeiro contato abertos.',
+        insufficient: 'A Journey Lens está disponível, mas a projeção autorizada de acompanhamento ainda não está pronta para sustentar essa resposta.'
       },
       finance: {
         insufficient: 'O Hub ainda não possui uma fonte financeira autorizada e estruturada neste contexto que sustente responder essa pergunta.'
