@@ -978,6 +978,7 @@ export default {
         open_action: "Abrir Care Integrity",
         partial_scope: "Este resumen muestra solo las colas que tu responsabilidad actual puede consultar.",
         full_scope: "Resumen calculado únicamente a partir de colas autorizadas y observadas ahora.",
+        bounded_scope: "La fuente alcanzó el límite seguro de lectura. Los valores con + son mínimos observados, no totales exactos.",
         state: {
           clear: "Al día",
           overdue: "Hay elementos fuera de plazo",
