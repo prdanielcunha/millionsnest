@@ -163,6 +163,7 @@ export function summarizeJourneyQueue(input: {
   entityId: string;
   observedAtMs: number;
   dueAtValues: readonly unknown[];
+  complete?: boolean;
 }): NestJourneyQueueSummary {
   const dueAtMs = input.dueAtValues
     .map(timestampToMs)
@@ -178,13 +179,15 @@ export function summarizeJourneyQueue(input: {
       'count',
       'overdueCount',
       'dueSoonCount',
-      'earliestDueAtMs'
+      'earliestDueAtMs',
+      'complete'
     ]
   })];
 
   if (input.dueAtValues.length === 0) {
     return {
       ...emptyNestJourneyQueue(),
+      complete: input.complete === true,
       evidence
     };
   }
@@ -198,6 +201,7 @@ export function summarizeJourneyQueue(input: {
       value => value >= input.observedAtMs && value <= dueSoonBoundary
     ).length,
     earliestDueAtMs: dueAtMs[0] ?? null,
+    complete: input.complete === true,
     evidence
   };
 }
@@ -216,6 +220,21 @@ function emptyProjection(input: {
   access?: Partial<ResolvedAppAccess> | null;
   ready?: boolean;
 }): NestJourneyWorkspaceProjection {
+  const assignedComplete =
+    capabilities.canManageCare &&
+    assignedSnapshot !== null &&
+    (
+      dependencies.completeQueues === true ||
+      assignedSnapshot.size < 100
+    );
+  const unassignedComplete =
+    canSuperviseCare &&
+    unassignedSnapshot !== null &&
+    (
+      dependencies.completeQueues === true ||
+      unassignedSnapshot.size < 200
+    );
+
   return {
     appId: 'nestjourney',
     organizationId: input.organizationId,
@@ -446,7 +465,8 @@ export async function resolveNestJourneyWorkspaceProjectionForActor(
             entityId:
               'assigned:first_contact',
             observedAtMs,
-            dueAtValues: assignedDueAt
+            dueAtValues: assignedDueAt,
+            complete: assignedComplete
           })
         : emptyNestJourneyQueue(),
     unassignedFirstContacts:
@@ -458,7 +478,8 @@ export async function resolveNestJourneyWorkspaceProjectionForActor(
             entityId:
               'unassigned:first_contact',
             observedAtMs,
-            dueAtValues: unassignedDueAt
+            dueAtValues: unassignedDueAt,
+            complete: unassignedComplete
           })
         : emptyNestJourneyQueue()
   };
