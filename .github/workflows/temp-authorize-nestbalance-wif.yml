@@ -22,6 +22,8 @@ env:
   PROVIDER_ID: github
   NESTBALANCE_REPOSITORY: prdanielcunha/nestbalance
   WEB_DEPLOYER: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+  NESTBALANCE_RUNTIME: nestbalance-runtime@millionsnest.iam.gserviceaccount.com
+  FIREBASE_STORAGE_BUCKET: millionsnest.firebasestorage.app
 
 jobs:
   authorize:
@@ -51,7 +53,6 @@ jobs:
             --format='value(attributeCondition)')"
 
           test -n "$CURRENT"
-          echo "CURRENT_CONDITION_PRESENT=true"
 
           if grep -Fq "$NESTBALANCE_REPOSITORY" <<<"$CURRENT"; then
             echo "NESTBALANCE_ALREADY_ALLOWED=true"
@@ -80,11 +81,44 @@ jobs:
             --project="$PROJECT_ID" \
             --role="roles/iam.workloadIdentityUser" \
             --member="$MEMBER" \
-            --quiet >/tmp/nestbalance-wif-binding.json
+            --quiet >/dev/null
 
           echo "NESTBALANCE_WEB_DEPLOYER_BINDING_READY=true"
 
-      - name: Verify constrained NestBalance authorization
+      - name: Bootstrap NestBalance runtime identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RUNTIME_NAME="${NESTBALANCE_RUNTIME%@*}"
+
+          if ! gcloud iam service-accounts describe "$NESTBALANCE_RUNTIME" \
+            --project "$PROJECT_ID" >/dev/null 2>&1; then
+            gcloud iam service-accounts create "$RUNTIME_NAME" \
+              --project "$PROJECT_ID" \
+              --display-name "NestBalance Runtime"
+          fi
+
+          gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member "serviceAccount:$NESTBALANCE_RUNTIME" \
+            --role "roles/datastore.user" \
+            --condition=None \
+            --quiet >/dev/null
+
+          gcloud storage buckets add-iam-policy-binding "gs://$FIREBASE_STORAGE_BUCKET" \
+            --member "serviceAccount:$NESTBALANCE_RUNTIME" \
+            --role "roles/storage.objectAdmin" \
+            --quiet >/dev/null
+
+          gcloud iam service-accounts add-iam-policy-binding "$NESTBALANCE_RUNTIME" \
+            --project "$PROJECT_ID" \
+            --member "serviceAccount:$WEB_DEPLOYER" \
+            --role "roles/iam.serviceAccountUser" \
+            --quiet >/dev/null
+
+          echo "NESTBALANCE_RUNTIME_IDENTITY_READY=true"
+
+      - name: Verify NestBalance infrastructure bootstrap
         shell: bash
         run: |
           set -euo pipefail
@@ -98,13 +132,7 @@ jobs:
           grep -F "$NESTBALANCE_REPOSITORY" <<<"$CONDITION" >/dev/null
           grep -F "refs/heads/main" <<<"$CONDITION" >/dev/null
 
-          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$NESTBALANCE_REPOSITORY"
-          gcloud iam service-accounts get-iam-policy "$WEB_DEPLOYER" \
-            --project="$PROJECT_ID" \
-            --format=json >/tmp/web-deployer-policy.json
+          gcloud iam service-accounts describe "$NESTBALANCE_RUNTIME" \
+            --project "$PROJECT_ID" >/dev/null
 
-          jq -e --arg member "$MEMBER" \
-            '.bindings[] | select(.role == "roles/iam.workloadIdentityUser") | .members[] | select(. == $member)' \
-            /tmp/web-deployer-policy.json >/dev/null
-
-          echo "NESTBALANCE_MAIN_WIF_READY=true"
+          echo "NESTBALANCE_INFRA_BOOTSTRAP_READY=true"
