@@ -12,7 +12,8 @@ export type NestJourneyCareIntegrityState =
   | 'overdue'
   | 'needs_assignment'
   | 'due_soon'
-  | 'open';
+  | 'open'
+  | 'limited';
 
 export interface NestJourneyCareIntegritySnapshot {
   organizationId: string;
@@ -205,7 +206,9 @@ export function deriveNestJourneyCareIntegritySnapshot(
           ? 'due_soon'
           : totalOpenCount > 0
             ? 'open'
-            : 'clear';
+            : countsComplete
+              ? 'clear'
+              : 'limited';
 
   const evidence = dedupeEvidence([
     ...(assignedAvailable
