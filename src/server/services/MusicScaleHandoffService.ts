@@ -1,9 +1,13 @@
 import { resolveEcosystemAppAccess, type EcosystemAppId } from './EcosystemAccessResolver.js';
 import { handleConnectHandoffRequest } from './ConnectHandoffService.js';
 import { readCanonicalEcosystemSessionVersion } from './EcosystemSessionVersionService.js';
+import { enforceHandoffRateLimit, validateHandoffOrigin, writeHandoffAuditEvent } from './HandoffSecurityService.js';
 
 export type HandoffRequestLike = {
-  headers: { authorization?: string | string[] };
+  headers: {
+    authorization?: string | string[];
+    origin?: string | string[];
+  };
   body?: unknown;
 };
 
@@ -150,6 +154,74 @@ export async function handleMusicScaleHandoffRequest(
     });
   }
 
+  res.setHeader('Vary', 'Origin');
+  const originHeader = Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin;
+  const originDecision = validateHandoffOrigin(originHeader);
+  if (!originDecision.allowed) {
+    await writeHandoffAuditEvent({
+      db,
+      eventType: 'handoff.origin_rejected',
+      appId,
+      organizationId: cleanOrgId,
+      uid,
+      protocol: 'ecosystem_ctx',
+      reason: 'ORIGIN_NOT_ALLOWED',
+    }).catch(() => undefined);
+
+    return res.status(403).json({
+      error: 'Forbidden: Request origin is not allowed.',
+      code: 'ORIGIN_NOT_ALLOWED',
+      retryable: false,
+    });
+  }
+  if (originDecision.origin) {
+    res.setHeader('Access-Control-Allow-Origin', originDecision.origin);
+  }
+
+  let rateLimit;
+  try {
+    rateLimit = await enforceHandoffRateLimit({
+      db,
+      scope: 'ecosystem_handoff_issue',
+      uid,
+      appId,
+      organizationId: cleanOrgId,
+      nowMs: dependencies.now(),
+    });
+  } catch {
+    dependencies.logger?.error?.('[HANDOFF_RATE_LIMIT_ERROR]', {
+      appId,
+      organizationId: cleanOrgId,
+      maskedUid: maskUid(uid),
+      timestamp: dependencies.now(),
+    });
+    return res.status(503).json({
+      error: 'Service Unavailable: Handoff protection unavailable.',
+      code: 'HANDOFF_PROTECTION_UNAVAILABLE',
+      retryable: true,
+    });
+  }
+
+  if (!rateLimit.allowed) {
+    res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds));
+    await writeHandoffAuditEvent({
+      db,
+      eventType: 'handoff.rate_limited',
+      appId,
+      organizationId: cleanOrgId,
+      uid,
+      protocol: 'ecosystem_ctx',
+      reason: 'RATE_LIMITED',
+    }).catch(() => undefined);
+
+    return res.status(429).json({
+      error: 'Too many handoff requests.',
+      code: 'RATE_LIMITED',
+      retryable: true,
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+    });
+  }
+
   let access;
   try {
     access = await resolveEcosystemAppAccess({
@@ -203,6 +275,17 @@ export async function handleMusicScaleHandoffRequest(
       selfHealingExecuted: false,
     });
 
+    await writeHandoffAuditEvent({
+      db,
+      eventType: 'handoff.denied',
+      appId,
+      organizationId: cleanOrgId,
+      uid,
+      accessSource: access?.accessSource || 'denied',
+      protocol: 'ecosystem_ctx',
+      reason,
+    }).catch(() => undefined);
+
     return res.status(403).json({
       error,
       code: 'ECOSYSTEM_ACCESS_DENIED',
@@ -212,6 +295,17 @@ export async function handleMusicScaleHandoffRequest(
   }
 
   if (supportModeRequested && !access.isGlobalAccess) {
+    await writeHandoffAuditEvent({
+      db,
+      eventType: 'handoff.denied',
+      appId,
+      organizationId: cleanOrgId,
+      uid,
+      accessSource: access.accessSource,
+      protocol: 'ecosystem_ctx',
+      reason: 'SUPPORT_MODE_FORBIDDEN',
+    }).catch(() => undefined);
+
     return res.status(403).json({
       error: 'Forbidden: Access denied to this organization.',
       code: 'SUPPORT_MODE_FORBIDDEN',
@@ -289,6 +383,34 @@ export async function handleMusicScaleHandoffRequest(
     stripeLookupPerformed: false,
     selfHealingExecuted: false,
   });
+
+  try {
+    await writeHandoffAuditEvent({
+      db,
+      eventType: 'handoff.issued',
+      appId,
+      organizationId: cleanOrgId,
+      uid,
+      accessSource: access.accessSource,
+      protocol: 'ecosystem_ctx',
+      metadata: {
+        supportMode: verifiedSupportMode,
+        handoffVersion: appId === 'nestfinance' ? 1 : null,
+      },
+    });
+  } catch {
+    dependencies.logger?.error?.('[HANDOFF_AUDIT_ERROR]', {
+      appId,
+      organizationId: cleanOrgId,
+      maskedUid: maskUid(uid),
+      timestamp: dependencies.now(),
+    });
+    return res.status(503).json({
+      error: 'Service Unavailable: Handoff audit unavailable.',
+      code: 'HANDOFF_AUDIT_UNAVAILABLE',
+      retryable: true,
+    });
+  }
 
   return res.status(200).json({
     appId,
