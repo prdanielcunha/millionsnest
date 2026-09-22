@@ -96,9 +96,10 @@ export function AskMillionsNest({
     () =>
       getAskMillionsNestSuggestionKeys(
         lenses,
-        activeLens
+        activeLens,
+        Boolean(outcomePulse)
       ),
-    [lenses, activeLens]
+    [lenses, activeLens, outcomePulse]
   );
 
   const answer = React.useMemo(() => {
