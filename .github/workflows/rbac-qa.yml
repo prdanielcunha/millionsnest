@@ -25,6 +25,7 @@ on:
       - 'server.ts'
       - 'firestore.rules'
       - 'tests/firestore/organization_members.rules.test.ts'
+      - 'tests/firestore/musicscale_live.rules.test.ts'
       - 'scripts/test_global_role_canonicalization.ts'
       - 'scripts/test_global_tenant_governance.ts'
       - 'scripts/test_ceo_people_governance_contract.ts'
@@ -92,6 +93,14 @@ jobs:
           --only firestore
           --project demo-millionsnest-rbac-ci
           "npx tsx --test --test-concurrency=1 tests/firestore/organization_members.rules.test.ts"
+
+      - name: MusicScale Live Firestore boundary
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-millionsnest-live-rbac-ci
+          "npx tsx --test --test-concurrency=1 tests/firestore/musicscale_live.rules.test.ts"
 
       - name: Build
         run: npm run build
