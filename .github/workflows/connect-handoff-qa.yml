@@ -6,6 +6,9 @@ on:
     paths:
       - "src/server/services/ConnectHandoffService.ts"
       - "src/server/services/MusicScaleHandoffService.ts"
+      - "src/server/services/EcosystemSessionVersionService.ts"
+      - "src/server/services/TenantContextMutationService.ts"
+      - "src/contexts/AuthContext.tsx"
       - "src/lib/ecosystemLauncher.ts"
       - "src/lib/connectLaunchPolicy.ts"
       - "src/lib/appExperienceRegistry.ts"
@@ -17,6 +20,7 @@ on:
       - "scripts/test_connect_nestjourney_followup.ts"
       - "scripts/test_mn_access_02_musicscale_handoff.ts"
       - "scripts/test_nestfinance_handoff_contract.ts"
+      - "scripts/test_ecosystem_session_version.ts"
       - ".github/workflows/connect-handoff-qa.yml"
   workflow_dispatch:
 
@@ -42,6 +46,8 @@ jobs:
         run: npx tsx scripts/test_mn_access_02_musicscale_handoff.ts
       - name: Validate NestFinance handoff claim contract
         run: npx tsx scripts/test_nestfinance_handoff_contract.ts
+      - name: Validate ecosystem session revocation contract
+        run: npx tsx scripts/test_ecosystem_session_version.ts
       - name: Validate Connect handoff contract
         run: npx tsx scripts/test_connect_handoff.ts
       - name: Validate Connect official launch policy

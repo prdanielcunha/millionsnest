@@ -61,6 +61,7 @@ const db = new MockDb({
   ['users/' + uid]: {
     status: 'active',
     systemRole: 'ceo',
+    ecosystemSessionVersion: 7,
   },
   ['organizations/' + orgId]: {
     status: 'active',
@@ -107,6 +108,7 @@ assert.equal(capturedClaims!.mn_app_id, 'nestfinance');
 assert.equal(capturedClaims!.mn_organization_id, orgId);
 assert.equal(capturedClaims!.mn_handoff_version, 1);
 assert.equal(capturedClaims!.mn_access_source, 'global_system_role');
+assert.equal(capturedClaims!.mn_session_version, 7);
 
 for (const forbidden of ['role', 'permissions', 'scopes']) {
   assert.equal(
