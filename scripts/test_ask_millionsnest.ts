@@ -542,7 +542,8 @@ assert.equal(
 assert.ok(
   getAskMillionsNestSuggestionKeys(
     [myTodayLens, journeyLens],
-    'journey'
+    'journey',
+    true
   ).includes(
     'ask.suggestions.recent_outcomes'
   )
@@ -550,12 +551,24 @@ assert.ok(
 assert.equal(
   getAskMillionsNestSuggestionKeys(
     [myTodayLens, administrationLens],
-    'administration'
+    'administration',
+    true
   ).includes(
     'ask.suggestions.recent_outcomes'
   ),
   false,
   'outcome suggestion must not appear in a lens that has no outcome pulse'
+);
+assert.equal(
+  getAskMillionsNestSuggestionKeys(
+    [myTodayLens, journeyLens],
+    'journey',
+    false
+  ).includes(
+    'ask.suggestions.recent_outcomes'
+  ),
+  false,
+  'outcome suggestion must stay hidden when there is no evidence-backed pulse'
 );
 
 const journeyDenied = answerAskMillionsNest({
