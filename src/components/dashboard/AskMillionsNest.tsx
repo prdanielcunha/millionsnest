@@ -93,8 +93,12 @@ export function AskMillionsNest({
   }, [organizationId]);
 
   const suggestionKeys = React.useMemo(
-    () => getAskMillionsNestSuggestionKeys(lenses),
-    [lenses]
+    () =>
+      getAskMillionsNestSuggestionKeys(
+        lenses,
+        activeLens
+      ),
+    [lenses, activeLens]
   );
 
   const answer = React.useMemo(() => {
