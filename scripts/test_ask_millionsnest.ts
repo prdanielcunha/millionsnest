@@ -425,6 +425,39 @@ assert.equal(
   'ask.facts.outcomes_total_lower_bound'
 );
 
+const partialWithZeroCategories =
+  answerAskMillionsNest({
+    organizationId: ORG_ID,
+    question: 'O que mudou esta semana?',
+    activeLens: 'my_today',
+    lenses: [myTodayLens, worshipLens],
+    actions: [],
+    musicScale: baseMusicScale,
+    outcomePulse: {
+      ...partialOutcomePulse,
+      totalObservedCount: 2,
+      resolvedCount: 2,
+      supersededCount: 0,
+      noLongerActionableCount: 0
+    },
+    nowMs: SUNDAY_MS
+  });
+
+assert.equal(
+  partialWithZeroCategories.status,
+  'answered'
+);
+assert.deepEqual(
+  partialWithZeroCategories.facts.map(
+    fact => fact.key
+  ),
+  [
+    'ask.facts.outcomes_total_lower_bound',
+    'ask.facts.outcomes_resolved_lower_bound'
+  ],
+  'partial reads must omit zero-valued category facts instead of presenting them as exact zeros'
+);
+
 const wrongLensPulse =
   answerAskMillionsNest({
     organizationId: ORG_ID,
