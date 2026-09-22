@@ -64,16 +64,22 @@ export async function enforceHandoffRateLimit(params: {
     windowMs = DEFAULT_WINDOW_MS,
   } = params;
 
-  const bucket = Math.floor(nowMs / windowMs);
-  const docId = hashKey([scope, uid, appId, organizationId, String(bucket)]);
+  const docId = hashKey([scope, uid, appId, organizationId]);
   const ref = db.collection('ecosystemHandoffRateLimits').doc(docId);
 
   return db.runTransaction(async tx => {
     const snap = await tx.get(ref);
-    const current = snap.exists ? Number(snap.data()?.count || 0) : 0;
+    const previous = snap.exists ? (snap.data() || {}) : {};
+    const previousWindowStartMs =
+      typeof previous.windowStartMs === 'number' && Number.isFinite(previous.windowStartMs)
+        ? previous.windowStartMs
+        : nowMs;
+    const sameWindow = nowMs >= previousWindowStartMs && nowMs < previousWindowStartMs + windowMs;
+    const windowStartMs = sameWindow ? previousWindowStartMs : nowMs;
+    const current = sameWindow ? Number(previous.count || 0) : 0;
 
     if (current >= limit) {
-      const windowEnd = (bucket + 1) * windowMs;
+      const windowEnd = windowStartMs + windowMs;
       return {
         allowed: false as const,
         retryAfterSeconds: Math.max(1, Math.ceil((windowEnd - nowMs) / 1000)),
@@ -85,10 +91,9 @@ export async function enforceHandoffRateLimit(params: {
       appId,
       organizationId,
       uidHash: hashKey([uid]),
-      windowBucket: bucket,
+      windowStartMs,
       count: current + 1,
       updatedAt: FieldValue.serverTimestamp(),
-      expiresAt: new Date((bucket + 2) * windowMs),
     }, { merge: true });
 
     return {
