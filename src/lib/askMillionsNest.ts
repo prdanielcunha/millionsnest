@@ -530,10 +530,82 @@ export function answerAskMillionsNest(
       ]
     );
 
-    const keySuffix =
+    const facts: AskMillionsNestFactLine[] =
       pulse.complete
-        ? ''
-        : '_lower_bound';
+        ? [
+            {
+              key:
+                'ask.facts.outcomes_total',
+              params: {
+                count:
+                  pulse.totalObservedCount
+              }
+            },
+            {
+              key:
+                'ask.facts.outcomes_resolved',
+              params: {
+                count:
+                  pulse.resolvedCount
+              }
+            },
+            {
+              key:
+                'ask.facts.outcomes_updated',
+              params: {
+                count:
+                  pulse.supersededCount
+              }
+            },
+            {
+              key:
+                'ask.facts.outcomes_left_window',
+              params: {
+                count:
+                  pulse.noLongerActionableCount
+              }
+            }
+          ]
+        : [
+            {
+              key:
+                'ask.facts.outcomes_total_lower_bound',
+              params: {
+                count:
+                  pulse.totalObservedCount
+              }
+            },
+            ...(pulse.resolvedCount > 0
+              ? [{
+                  key:
+                    'ask.facts.outcomes_resolved_lower_bound',
+                  params: {
+                    count:
+                      pulse.resolvedCount
+                  }
+                }]
+              : []),
+            ...(pulse.supersededCount > 0
+              ? [{
+                  key:
+                    'ask.facts.outcomes_updated_lower_bound',
+                  params: {
+                    count:
+                      pulse.supersededCount
+                  }
+                }]
+              : []),
+            ...(pulse.noLongerActionableCount > 0
+              ? [{
+                  key:
+                    'ask.facts.outcomes_left_window_lower_bound',
+                  params: {
+                    count:
+                      pulse.noLongerActionableCount
+                  }
+                }]
+              : [])
+          ];
 
     return answered({
       intent,
@@ -551,44 +623,7 @@ export function answerAskMillionsNest(
         left:
           pulse.noLongerActionableCount
       },
-      facts: [
-        {
-          key:
-            'ask.facts.outcomes_total' +
-            keySuffix,
-          params: {
-            count:
-              pulse.totalObservedCount
-          }
-        },
-        {
-          key:
-            'ask.facts.outcomes_resolved' +
-            keySuffix,
-          params: {
-            count:
-              pulse.resolvedCount
-          }
-        },
-        {
-          key:
-            'ask.facts.outcomes_updated' +
-            keySuffix,
-          params: {
-            count:
-              pulse.supersededCount
-          }
-        },
-        {
-          key:
-            'ask.facts.outcomes_left_window' +
-            keySuffix,
-          params: {
-            count:
-              pulse.noLongerActionableCount
-          }
-        }
-      ],
+      facts,
       evidence,
       destination: null
     });
