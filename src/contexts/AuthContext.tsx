@@ -374,10 +374,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = async () => {
-    localStorage.removeItem('mn_user_profile');
-    localStorage.removeItem('mn_org_context');
-    localStorage.removeItem('mn_support_session');
-    await signOut(auth);
+    try {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const idToken = await currentUser.getIdToken();
+        await fetch('/api/v1/auth/ecosystem-session/revoke', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            'Content-Type': 'application/json',
+          },
+          cache: 'no-store',
+        });
+      }
+    } catch (error) {
+      console.warn('[AuthContext] Ecosystem session revocation failed during logout:', error);
+    } finally {
+      localStorage.removeItem('mn_user_profile');
+      localStorage.removeItem('mn_org_context');
+      localStorage.removeItem('mn_support_session');
+      await signOut(auth);
+    }
   };
 
   const contextValue = useMemo(() => ({
