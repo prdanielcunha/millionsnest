@@ -26,6 +26,12 @@ export type ResolvableActionSignal =
   | ResolvableMusicScaleSignal
   | ResolvableNestJourneySignal;
 
+export interface ActionResolutionReadWindow {
+  complete: boolean;
+  limit: number;
+  observedAtMs: number;
+}
+
 export interface ActionResolutionRecord {
   organizationId: string;
   dedupeKey: string;

@@ -1,5 +1,6 @@
 import type { ActionPreference, ActionPreferenceMode } from '../lib/actionCenter.js';
 import type {
+  ActionResolutionReadWindow,
   ActionResolutionRecord
 } from '../lib/actionResolution.js';
 import type {
@@ -13,6 +14,7 @@ type PreferenceResponse = {
   preference?: ActionPreference;
   resolutions?: ActionResolutionRecord[];
   resolution?: ActionResolutionRecord;
+  readWindow?: ActionResolutionReadWindow;
   reasonCode?: string;
 };
 
@@ -75,11 +77,14 @@ export async function saveActionPreference(
 }
 
 
-export async function fetchActionResolutions(
+export async function fetchActionResolutionSnapshot(
   idToken: string,
   organizationId: string,
   signal?: AbortSignal
-): Promise<ActionResolutionRecord[]> {
+): Promise<{
+  resolutions: ActionResolutionRecord[];
+  readWindow: ActionResolutionReadWindow;
+}> {
   const response = await fetch(
     `/api/v1/organizations/${encodeURIComponent(organizationId)}/action-resolutions`,
     {
@@ -94,9 +99,43 @@ export async function fetchActionResolutions(
   );
 
   const payload = await parseResponse(response);
-  return Array.isArray(payload.resolutions)
+  const resolutions = Array.isArray(payload.resolutions)
     ? payload.resolutions
     : [];
+  const window = payload.readWindow;
+
+  return {
+    resolutions,
+    readWindow: {
+      complete:
+        window?.complete === true,
+      limit:
+        typeof window?.limit === 'number' &&
+        Number.isFinite(window.limit) &&
+        window.limit > 0
+          ? window.limit
+          : Math.max(resolutions.length, 1),
+      observedAtMs:
+        typeof window?.observedAtMs === 'number' &&
+        Number.isFinite(window.observedAtMs)
+          ? window.observedAtMs
+          : Date.now()
+    }
+  };
+}
+
+export async function fetchActionResolutions(
+  idToken: string,
+  organizationId: string,
+  signal?: AbortSignal
+): Promise<ActionResolutionRecord[]> {
+  return (
+    await fetchActionResolutionSnapshot(
+      idToken,
+      organizationId,
+      signal
+    )
+  ).resolutions;
 }
 
 export async function startActionResolution(

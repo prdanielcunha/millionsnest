@@ -1001,6 +1001,24 @@ export default {
           unassigned: "Sem responsável"
         }
       },
+      outcome_pulse: {
+        eyebrow: "Action Loop · últimos {{days}} dias",
+        title: "Resultados operacionais recentes",
+        subtitle: "Mudanças observadas depois de ações que você abriu no seu escopo autorizado. Isto não avalia pessoas, desempenho ministerial ou vida espiritual.",
+        complete: "Janela completa",
+        partial: "Leitura parcial",
+        evidence_note: "Baseado somente nos seus registros autorizados do Action Loop dentro desta janela.",
+        partial_note: "A leitura atingiu o limite seguro de {{limit}} registros. Valores com + são mínimos observados, não totais exatos.",
+        latest: "Resultado mais recente observado em {{date}}.",
+        source_journey: "NestJourney · {{count}}",
+        source_musicscale: "MusicScale · {{count}}",
+        metrics: {
+          observed: "Resultados observados",
+          resolved: "Condição encerrada",
+          updated: "Sinal atualizado",
+          left_window: "Fora da janela ativa"
+        }
+      },
       public_page_label: "Página pública:",
       next_step: {
         eyebrow: "Próximo passo",

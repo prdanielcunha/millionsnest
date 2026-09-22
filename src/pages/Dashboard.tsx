@@ -51,12 +51,13 @@ import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
 import {
   fetchActionPreferences,
   saveActionPreference,
-  fetchActionResolutions,
+  fetchActionResolutionSnapshot,
   startActionResolution,
   observeActionResolutionOutcome
 } from "../services/actionCenterClient.js";
 import {
   isActionResolutionEligible,
+  type ActionResolutionReadWindow,
   type ActionResolutionRecord
 } from "../lib/actionResolution.js";
 import type {
@@ -271,6 +272,7 @@ export function Dashboard() {
   const [actionPreferences, setActionPreferences] = useState<ActionPreference[]>([]);
   const [actionPreferenceBusyKey, setActionPreferenceBusyKey] = useState<string | null>(null);
   const [actionResolutions, setActionResolutions] = useState<ActionResolutionRecord[]>([]);
+  const [actionResolutionReadWindow, setActionResolutionReadWindow] = useState<ActionResolutionReadWindow | null>(null);
   const [actionResolutionBusyKey, setActionResolutionBusyKey] = useState<string | null>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -743,6 +745,7 @@ export function Dashboard() {
 
     if (!canLoadResolutions || !user || !activeContextOrgId) {
       setActionResolutions([]);
+      setActionResolutionReadWindow(null);
       return;
     }
 
@@ -753,13 +756,14 @@ export function Dashboard() {
     void (async () => {
       try {
         const token = await user.getIdToken();
-        const resolutions = await fetchActionResolutions(
+        const snapshot = await fetchActionResolutionSnapshot(
           token,
           orgId,
           controller.signal
         );
         if (active && activeContextOrgId === orgId) {
-          setActionResolutions(resolutions);
+          setActionResolutions(snapshot.resolutions);
+          setActionResolutionReadWindow(snapshot.readWindow);
         }
       } catch (error: any) {
         if (error?.name !== 'AbortError') {
@@ -768,7 +772,10 @@ export function Dashboard() {
             error
           );
         }
-        if (active) setActionResolutions([]);
+        if (active) {
+          setActionResolutions([]);
+          setActionResolutionReadWindow(null);
+        }
       }
     })();
 
@@ -3202,6 +3209,7 @@ export function Dashboard() {
                 actionPreferenceBusyKey={actionPreferenceBusyKey}
                 onSetActionPreference={handleSetActionPreference}
                 actionResolutions={actionResolutions}
+                actionResolutionReadWindow={actionResolutionReadWindow}
                 actionResolutionBusyKey={actionResolutionBusyKey}
                 onStartActionResolution={handleStartActionResolution}
                 onExecuteActionTool={handleExecuteActionTool}
