@@ -478,6 +478,8 @@ export async function getActionResolutions(
       .orderBy('updatedAt', 'desc')
       .limit(MAX_RESOLUTIONS)
       .get();
+    const observedAtMs =
+      (dependencies.now ?? Date.now)();
 
     const resolutions = snapshot.docs
       .map(document => {
@@ -536,7 +538,13 @@ export async function getActionResolutions(
     return res.status(200).json({
       success: true,
       organizationId,
-      resolutions
+      resolutions,
+      readWindow: {
+        complete:
+          snapshot.size < MAX_RESOLUTIONS,
+        limit: MAX_RESOLUTIONS,
+        observedAtMs
+      }
     });
   } catch (error) {
     console.error(
