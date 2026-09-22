@@ -54,6 +54,7 @@ const intelligence = {
     },
     suggestions: {
       attention: '¿Qué necesita mi atención?',
+      recent_outcomes: '¿Qué cambió esta semana?',
       sunday: '¿Cómo está el domingo?',
       confirmations: '¿Quién todavía no respondió a la escala?',
       workload: '¿Quién está por encima de la carga de servicio?',
@@ -98,6 +99,14 @@ const intelligence = {
       journey_unassigned_lower_bound: 'Se observaron al menos {{count}} seguimiento(s) de primer contacto sin responsable en tu alcance autorizado.',
       journey_overdue_lower_bound: 'Se observaron al menos {{count}} compromiso(s) de primer contacto fuera de plazo.',
       journey_due_soon_lower_bound: 'Se observaron al menos {{count}} compromiso(s) de primer contacto con vencimiento en las próximas 24 horas.',
+      outcomes_total: '{{count}} resultado(s) factual(es) de Action Loop observado(s) en esta ventana.',
+      outcomes_resolved: '{{count}} condición(es) dejó/dejaron de estar activa(s) en la fuente.',
+      outcomes_updated: '{{count}} señal(es) cambió/cambiaron mientras estaba(n) en seguimiento.',
+      outcomes_left_window: '{{count}} acción(es) salió/salieron de la ventana activa sin clasificación de resolución.',
+      outcomes_total_lower_bound: 'Se observaron al menos {{count}} resultado(s) factual(es) de Action Loop en esta ventana.',
+      outcomes_resolved_lower_bound: 'Al menos {{count}} condición(es) dejó/dejaron de estar activa(s) en la fuente.',
+      outcomes_updated_lower_bound: 'Al menos {{count}} señal(es) cambió/cambiaron mientras estaba(n) en seguimiento.',
+      outcomes_left_window_lower_bound: 'Al menos {{count}} acción(es) salió/salieron de la ventana activa sin clasificación de resolución.',
       action_item: 'Acción autorizada'
     },
     answers: {
@@ -139,6 +148,12 @@ const intelligence = {
         summary_lower_bound: 'La lectura alcanzó el límite seguro. Se observaron al menos {{total}} seguimiento(s) abierto(s), {{overdue}} fuera de plazo y {{dueSoon}} con vencimiento en las próximas 24 horas.',
         summary_clear: 'En el alcance autorizado observado ahora, no hay seguimientos de primer contacto abiertos.',
         insufficient: 'La Journey Lens está disponible, pero la proyección autorizada de seguimiento todavía no está lista para sustentar esa respuesta.'
+      },
+      recent_outcomes: {
+        title: 'Cambios observados esta semana',
+        summary: 'En los últimos {{days}} días, Action Loop observó {{total}} resultado(s): {{resolved}} condición(es) cerrada(s), {{updated}} señal(es) actualizada(s) y {{left}} que salió/salieron de la ventana activa.',
+        summary_lower_bound: 'La lectura alcanzó el límite seguro. Se observaron al menos {{total}} resultado(s) en los últimos {{days}} días: {{resolved}} condición(es) cerrada(s), {{updated}} señal(es) actualizada(s) y {{left}} que salió/salieron de la ventana activa.',
+        insufficient: 'Todavía no hay suficiente evidencia autorizada de resultados recientes para sustentar esa respuesta.'
       },
       finance: {
         insufficient: 'El Hub todavía no tiene una fuente financiera autorizada y estructurada en este contexto que sustente responder esa pregunta.'
