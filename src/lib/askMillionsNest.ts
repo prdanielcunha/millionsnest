@@ -1191,14 +1191,18 @@ export function answerAskMillionsNest(
 
 export function getAskMillionsNestSuggestionKeys(
   lenses: readonly ResolvedHubLens[],
-  activeLens?: HubLensId
+  activeLens?: HubLensId,
+  hasOutcomePulse = false
 ): string[] {
   const suggestions = ['ask.suggestions.attention'];
 
   if (
-    activeLens === 'my_today' ||
-    activeLens === 'worship' ||
-    activeLens === 'journey'
+    hasOutcomePulse &&
+    (
+      activeLens === 'my_today' ||
+      activeLens === 'worship' ||
+      activeLens === 'journey'
+    )
   ) {
     suggestions.push(
       'ask.suggestions.recent_outcomes'
