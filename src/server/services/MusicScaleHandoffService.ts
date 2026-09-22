@@ -220,13 +220,27 @@ export async function handleMusicScaleHandoffRequest(
   }
   const verifiedSupportMode = supportModeRequested && access.isGlobalAccess;
 
+  const tokenClaims: Record<string, unknown> = {
+    orgId: cleanOrgId,
+    appId,
+    supportMode: verifiedSupportMode,
+  };
+
+  // NestFinance keeps a stricter app-specific claim namespace so its server-side
+  // session resolver can bind the Firebase session to the exact organization and
+  // handoff protocol without trusting browser-provided organization context.
+  if (appId === 'nestfinance') {
+    Object.assign(tokenClaims, {
+      mn_app_id: 'nestfinance',
+      mn_organization_id: cleanOrgId,
+      mn_handoff_version: 1,
+      mn_access_source: access.accessSource,
+    });
+  }
+
   let customToken: string;
   try {
-    customToken = await dependencies.createCustomToken(uid, {
-      orgId: cleanOrgId,
-      appId,
-      supportMode: verifiedSupportMode,
-    });
+    customToken = await dependencies.createCustomToken(uid, tokenClaims);
   } catch {
     dependencies.logger?.error?.('[HANDOFF_TOKEN_ERROR]', {
       appId,
