@@ -16,6 +16,7 @@ on:
       - "scripts/test_connect_official_launch.ts"
       - "scripts/test_connect_nestjourney_followup.ts"
       - "scripts/test_mn_access_02_musicscale_handoff.ts"
+      - "scripts/test_nestfinance_handoff_contract.ts"
       - ".github/workflows/connect-handoff-qa.yml"
   workflow_dispatch:
 
@@ -39,6 +40,8 @@ jobs:
       - run: npm run lint
       - name: Preserve MusicScale handoff contract
         run: npx tsx scripts/test_mn_access_02_musicscale_handoff.ts
+      - name: Validate NestFinance handoff claim contract
+        run: npx tsx scripts/test_nestfinance_handoff_contract.ts
       - name: Validate Connect handoff contract
         run: npx tsx scripts/test_connect_handoff.ts
       - name: Validate Connect official launch policy
