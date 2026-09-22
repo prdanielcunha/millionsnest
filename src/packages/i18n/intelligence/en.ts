@@ -54,6 +54,7 @@ const intelligence = {
     },
     suggestions: {
       attention: 'What needs my attention?',
+      recent_outcomes: 'What changed this week?',
       sunday: 'How is Sunday looking?',
       confirmations: 'Who has not responded to the schedule yet?',
       workload: 'Who is above the service load?',
@@ -98,6 +99,14 @@ const intelligence = {
       journey_unassigned_lower_bound: 'At least {{count}} first-contact follow-up(s) without an owner were observed in your authorized scope.',
       journey_overdue_lower_bound: 'At least {{count}} first-contact commitment(s) past deadline were observed.',
       journey_due_soon_lower_bound: 'At least {{count}} first-contact commitment(s) due within the next 24 hours were observed.',
+      outcomes_total: '{{count}} factual Action Loop outcome(s) observed in this window.',
+      outcomes_resolved: '{{count}} source condition(s) stopped being active.',
+      outcomes_updated: '{{count}} signal(s) changed while being followed up.',
+      outcomes_left_window: '{{count}} action(s) left the active window without a resolved classification.',
+      outcomes_total_lower_bound: 'At least {{count}} factual Action Loop outcome(s) were observed in this window.',
+      outcomes_resolved_lower_bound: 'At least {{count}} source condition(s) stopped being active.',
+      outcomes_updated_lower_bound: 'At least {{count}} signal(s) changed while being followed up.',
+      outcomes_left_window_lower_bound: 'At least {{count}} action(s) left the active window without a resolved classification.',
       action_item: 'Authorized action'
     },
     answers: {
@@ -139,6 +148,12 @@ const intelligence = {
         summary_lower_bound: 'The safe read limit was reached. At least {{total}} open follow-up(s), {{overdue}} past deadline, and {{dueSoon}} due within the next 24 hours were observed.',
         summary_clear: 'In the authorized scope observed now, there are no open first-contact follow-ups.',
         insufficient: 'The Journey Lens is available, but the authorized follow-up projection is not ready enough to support that answer yet.'
+      },
+      recent_outcomes: {
+        title: 'Changes observed this week',
+        summary: 'Over the last {{days}} days, Action Loop observed {{total}} outcome(s): {{resolved}} condition(s) cleared, {{updated}} signal(s) updated, and {{left}} that left the active window.',
+        summary_lower_bound: 'The safe read limit was reached. At least {{total}} outcome(s) were observed over the last {{days}} days: {{resolved}} condition(s) cleared, {{updated}} signal(s) updated, and {{left}} that left the active window.',
+        insufficient: 'There is not yet enough authorized recent-outcome evidence to support that answer.'
       },
       finance: {
         insufficient: 'The Hub does not yet have an authorized, structured financial source in this context that supports answering that question.'
