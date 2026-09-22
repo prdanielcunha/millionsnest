@@ -151,8 +151,8 @@ const intelligence = {
       },
       recent_outcomes: {
         title: 'Changes observed this week',
-        summary: 'Over the last {{days}} days, Action Loop observed {{total}} outcome(s): {{resolved}} condition(s) cleared, {{updated}} signal(s) updated, and {{left}} that left the active window.',
-        summary_lower_bound: 'The safe read limit was reached. At least {{total}} outcome(s) were observed over the last {{days}} days: {{resolved}} condition(s) cleared, {{updated}} signal(s) updated, and {{left}} that left the active window.',
+        summary: 'Over the last {{days}} days, Action Loop observed {{total}} outcome(s): {{resolved}} source condition(s) stopped being active, {{updated}} signal(s) changed, and {{left}} left the active window.',
+        summary_lower_bound: 'The safe read limit was reached. At least {{total}} outcome(s) were observed over the last {{days}} days. The details below are observed minimums, not exact totals.',
         insufficient: 'There is not yet enough authorized recent-outcome evidence to support that answer.'
       },
       finance: {
