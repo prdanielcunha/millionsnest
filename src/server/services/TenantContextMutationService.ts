@@ -2,6 +2,7 @@ import { isCanonicalGlobalRole } from '../../lib/permissionService.js';
 import { planBootstrap, BootstrapDecisionCode, resolveLegacyMembershipCandidates } from './TenantBootstrapPlanner.js';
 import { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
+import { nextEcosystemSessionVersion } from './EcosystemSessionVersionService.js';
 import { getFirestore, FieldValue, Firestore } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import { planInvitationAcceptance, normalizeInvitationEmail, InvitationAcceptanceInput } from './InvitationAcceptancePlanner.js';
@@ -761,7 +762,10 @@ export async function setActiveOrganization(req: Request, res: Response) {
     }
 
     const updates: any = {
-      activeOrganizationId: organizationId
+      activeOrganizationId: organizationId,
+      ecosystemSessionVersion: nextEcosystemSessionVersion(userData?.ecosystemSessionVersion),
+      ecosystemSessionVersionUpdatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
     };
 
     if (userData?.organizationId) {
@@ -774,6 +778,7 @@ export async function setActiveOrganization(req: Request, res: Response) {
       action: 'organization.active_context_changed',
       actorUid: uid,
       previousOrganizationId: userData?.activeOrganizationId || null,
+      sessionVersion: updates.ecosystemSessionVersion,
       timestamp: FieldValue.serverTimestamp()
     });
 
