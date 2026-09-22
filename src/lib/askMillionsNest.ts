@@ -128,6 +128,10 @@ function resolveIntent(
       'resolvido nessa semana',
       'resultados desta semana',
       'resultados da semana',
+      'o que mudou',
+      'mudou esta semana',
+      'mudancas desta semana',
+      'mudancas da semana',
       'acoes concluidas',
       'acoes resolvidas',
       'what did i resolve',
@@ -135,11 +139,16 @@ function resolveIntent(
       'resolved this week',
       'recent outcomes',
       'outcomes this week',
+      'what changed',
+      'what changed this week',
       'que resolvi',
       'que se resolvio',
       'resuelto esta semana',
       'resultados de esta semana',
       'resultados de la semana',
+      'que cambio',
+      'que cambio esta semana',
+      'cambios esta semana',
       'acciones resueltas'
     ])
   ) {
@@ -472,9 +481,19 @@ export function answerAskMillionsNest(
   }
 
   if (intent === 'recent_outcomes') {
+    if (
+      input.activeLens !== 'my_today' &&
+      input.activeLens !== 'journey' &&
+      input.activeLens !== 'worship'
+    ) {
+      return notAvailable(intent);
+    }
+
     const pulse =
       input.outcomePulse?.organizationId ===
-      organizationId
+        organizationId &&
+      input.outcomePulse.lensId ===
+        input.activeLens
         ? input.outcomePulse
         : null;
 
@@ -494,6 +513,7 @@ export function answerAskMillionsNest(
             'adaptive_workspace',
           entityId: organizationId,
           fieldPaths: [
+            'lensId',
             'windowDays',
             'totalObservedCount',
             'resolvedCount',
@@ -1135,13 +1155,15 @@ export function answerAskMillionsNest(
 }
 
 export function getAskMillionsNestSuggestionKeys(
-  lenses: readonly ResolvedHubLens[]
+  lenses: readonly ResolvedHubLens[],
+  activeLens?: HubLensId
 ): string[] {
   const suggestions = ['ask.suggestions.attention'];
 
   if (
-    hasLens(lenses, 'worship') ||
-    hasLens(lenses, 'journey')
+    activeLens === 'my_today' ||
+    activeLens === 'worship' ||
+    activeLens === 'journey'
   ) {
     suggestions.push(
       'ask.suggestions.recent_outcomes'
