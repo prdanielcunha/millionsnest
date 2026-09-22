@@ -26,6 +26,9 @@ import type {
 import type {
   NestJourneyCareIntegritySnapshot
 } from '../../lib/nestJourneyCareIntegrity.js';
+import type {
+  ActionOutcomePulseSnapshot
+} from '../../lib/actionOutcomePulse.js';
 
 interface AskMillionsNestProps {
   organizationId: string;
@@ -53,6 +56,7 @@ interface AskMillionsNestProps {
   };
   worshipDistribution?: EvidenceBackedMusicScaleDistributionSnapshot | null;
   journey?: NestJourneyCareIntegritySnapshot | null;
+  outcomePulse?: ActionOutcomePulseSnapshot | null;
   onOpenDestination: (destination: ActionDestination) => void;
 }
 
@@ -74,6 +78,7 @@ export function AskMillionsNest({
   musicScale,
   worshipDistribution,
   journey,
+  outcomePulse,
   onOpenDestination
 }: AskMillionsNestProps) {
   const { t, i18n } = useTranslation(['intelligence', 'dashboard']);
@@ -88,8 +93,13 @@ export function AskMillionsNest({
   }, [organizationId]);
 
   const suggestionKeys = React.useMemo(
-    () => getAskMillionsNestSuggestionKeys(lenses),
-    [lenses]
+    () =>
+      getAskMillionsNestSuggestionKeys(
+        lenses,
+        activeLens,
+        Boolean(outcomePulse)
+      ),
+    [lenses, activeLens, outcomePulse]
   );
 
   const answer = React.useMemo(() => {
@@ -103,7 +113,8 @@ export function AskMillionsNest({
       actions: sourceActions,
       musicScale,
       worshipDistribution,
-      journey
+      journey,
+      outcomePulse
     });
   }, [
     organizationId,
@@ -113,7 +124,8 @@ export function AskMillionsNest({
     sourceActions,
     musicScale,
     worshipDistribution,
-    journey
+    journey,
+    outcomePulse
   ]);
 
   const locale =
