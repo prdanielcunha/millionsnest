@@ -151,8 +151,8 @@ const intelligence = {
       },
       recent_outcomes: {
         title: 'Cambios observados esta semana',
-        summary: 'En los últimos {{days}} días, Action Loop observó {{total}} resultado(s): {{resolved}} condición(es) cerrada(s), {{updated}} señal(es) actualizada(s) y {{left}} que salió/salieron de la ventana activa.',
-        summary_lower_bound: 'La lectura alcanzó el límite seguro. Se observaron al menos {{total}} resultado(s) en los últimos {{days}} días: {{resolved}} condición(es) cerrada(s), {{updated}} señal(es) actualizada(s) y {{left}} que salió/salieron de la ventana activa.',
+        summary: 'En los últimos {{days}} días, Action Loop observó {{total}} resultado(s): {{resolved}} condición(es) dejó/dejaron de estar activa(s) en la fuente, {{updated}} señal(es) cambió/cambiaron y {{left}} salió/salieron de la ventana activa.',
+        summary_lower_bound: 'La lectura alcanzó el límite seguro. Se observaron al menos {{total}} resultado(s) en los últimos {{days}} días. Los detalles siguientes son mínimos observados, no totales exactos.',
         insufficient: 'Todavía no hay suficiente evidencia autorizada de resultados recientes para sustentar esa respuesta.'
       },
       finance: {
