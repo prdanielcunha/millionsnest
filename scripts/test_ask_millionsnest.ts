@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import {
   answerAskMillionsNest,
@@ -558,5 +559,28 @@ const unsupported = answerAskMillionsNest({
 
 assert.equal(unsupported.status, 'unsupported');
 assert.equal(unsupported.evidence.length, 0);
+
+for (const language of ['pt', 'en', 'es']) {
+  const intelligence = readFileSync(
+    `src/packages/i18n/intelligence/${language}.ts`,
+    'utf8'
+  );
+
+  for (const key of [
+    'recent_outcomes',
+    'outcomes_total',
+    'outcomes_resolved',
+    'outcomes_updated',
+    'outcomes_left_window',
+    'outcomes_total_lower_bound',
+    'summary_lower_bound'
+  ]) {
+    assert.equal(
+      intelligence.includes(key),
+      true,
+      `${language} Ask intelligence must include ${key}`
+    );
+  }
+}
 
 console.log('Ask MillionsNest evidence-first query checks passed.');
