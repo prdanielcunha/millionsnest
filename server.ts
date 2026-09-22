@@ -53,6 +53,7 @@ import { resolveSubscriptionPurchaseEligibility } from './src/server/services/Su
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } from './src/server/services/EcosystemSessionVersionService.js';
+import { enforceHandoffRateLimit, validateHandoffOrigin, writeHandoffAuditEvent } from './src/server/services/HandoffSecurityService.js';
 import { handleEcosystemAccessProjectionRequest } from './src/server/services/EcosystemAccessProjectionService.js';
 import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
 import { handleNestJourneyFollowupContextRequest } from './src/server/services/NestJourneyFollowupContextService.js';
@@ -5383,6 +5384,55 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         return res.status(500).json({ error: 'Internal Server Error' });
       }
 
+      res.setHeader('Vary', 'Origin');
+      const originDecision = validateHandoffOrigin(req.headers.origin);
+      if (!originDecision.allowed) {
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.origin_rejected',
+          appId: 'nestfinance',
+          organizationId: cleanOrgId,
+          uid,
+          protocol: 'one_time_code',
+          reason: 'ORIGIN_NOT_ALLOWED',
+        }).catch(() => undefined);
+        return res.status(403).json({ error: 'Forbidden: Request origin is not allowed.' });
+      }
+      if (originDecision.origin) {
+        res.setHeader('Access-Control-Allow-Origin', originDecision.origin);
+      }
+
+      let rateLimit;
+      try {
+        rateLimit = await enforceHandoffRateLimit({
+          db: databaseInst,
+          scope: 'ecosystem_handoff_issue',
+          uid,
+          appId: 'nestfinance',
+          organizationId: cleanOrgId,
+          nowMs: Date.now(),
+        });
+      } catch {
+        return res.status(503).json({ error: 'Service Unavailable: Handoff protection unavailable.' });
+      }
+
+      if (!rateLimit.allowed) {
+        res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds));
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.rate_limited',
+          appId: 'nestfinance',
+          organizationId: cleanOrgId,
+          uid,
+          protocol: 'one_time_code',
+          reason: 'RATE_LIMITED',
+        }).catch(() => undefined);
+        return res.status(429).json({
+          error: 'Too many handoff requests.',
+          retryAfterSeconds: rateLimit.retryAfterSeconds,
+        });
+      }
+
       // 4. Authorization check through EcosystemAccessResolver (403 Forbidden)
       const access = await resolveEcosystemAppAccess({
         uid,
@@ -5394,6 +5444,16 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       if (access.accessible !== true) {
         const maskedUid = uid ? `${uid.substring(0, 4)}...${uid.substring(uid.length - 4)}` : 'null';
         console.warn(`[NESTFINANCE_HANDOFF] Access denied for user ${maskedUid} to organization ${cleanOrgId}. Reason: ${access.denialReason || 'denied'}`);
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.denied',
+          appId: 'nestfinance',
+          organizationId: cleanOrgId,
+          uid,
+          accessSource: access.accessSource,
+          protocol: 'one_time_code',
+          reason: access.denialReason || 'denied',
+        }).catch(() => undefined);
         return res.status(403).json({ error: 'Forbidden: Access denied to NestFinance of this organization.' });
       }
 
@@ -5447,6 +5507,26 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const maskedUid = uid ? `${uid.substring(0, 4)}...${uid.substring(uid.length - 4)}` : 'null';
       console.log(`[NESTFINANCE_HANDOFF_ISSUED] Handoff code issued successfully. appId=nestfinance, organizationId=${cleanOrgId}, source=${access.accessSource}, user=${maskedUid}`);
+
+      try {
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.issued',
+          appId: 'nestfinance',
+          organizationId: cleanOrgId,
+          uid,
+          accessSource: access.accessSource,
+          protocol: 'one_time_code',
+          metadata: { handoffVersion: 1, ttlSeconds: 90 },
+        });
+      } catch {
+        await databaseInst.collection('ecosystemHandoffs').doc(codeHash).set({
+          status: 'revoked',
+          revokedReason: 'AUDIT_UNAVAILABLE',
+          revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true }).catch(() => undefined);
+        return res.status(503).json({ error: 'Service Unavailable: Handoff audit unavailable.' });
+      }
 
       return res.status(200).json({
         redirectUrl,
