@@ -985,6 +985,24 @@ export default {
           unassigned: "Without owner"
         }
       },
+      outcome_pulse: {
+        eyebrow: "Action Loop · last {{days}} days",
+        title: "Recent operational outcomes",
+        subtitle: "Changes observed after actions you opened within your authorized scope. This does not evaluate people, ministry performance, or spiritual life.",
+        complete: "Complete window",
+        partial: "Partial read",
+        evidence_note: "Based only on your authorized Action Loop records within this window.",
+        partial_note: "The safe read limit of {{limit}} records was reached. Values with + are observed minimums, not exact totals.",
+        latest: "Most recent outcome observed on {{date}}.",
+        source_journey: "NestJourney · {{count}}",
+        source_musicscale: "MusicScale · {{count}}",
+        metrics: {
+          observed: "Observed outcomes",
+          resolved: "Condition cleared",
+          updated: "Signal updated",
+          left_window: "Left active window"
+        }
+      },
       public_page_label: "Public page:",
       next_step: {
         eyebrow: "Next step",
