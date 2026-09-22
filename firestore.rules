@@ -157,6 +157,128 @@ service cloud.firestore {
       );
     }
 
+    // ==========================================
+    // MUSICSCALE LIVE — TENANT / ROLE BOUNDARY
+    // ==========================================
+
+    function liveOrganizationOwner(orgId) {
+      let orgDoc = isAuthenticated()
+        ? get(/databases/$(database)/documents/organizations/$(orgId))
+        : null;
+      return isAuthenticated() && orgDoc != null && (
+        orgDoc.data.get('ownerUid', '') == request.auth.uid ||
+        orgDoc.data.get('ownerId', '') == request.auth.uid ||
+        orgDoc.data.get('owner_user_id', '') == request.auth.uid ||
+        orgDoc.data.get('ownerUserId', '') == request.auth.uid
+      );
+    }
+
+    function liveMemberData(orgId) {
+      return isAuthenticated() ? getMemberPermissions(orgId) : null;
+    }
+
+    function liveMemberActive(orgId) {
+      let memberData = liveMemberData(orgId);
+      return memberData != null &&
+        memberData.get('status', 'active') in ['active', 'ativo', 'enabled'];
+    }
+
+    function liveRole(orgId) {
+      let memberData = liveMemberData(orgId);
+      return memberData != null
+        ? memberData.get('organizationRole', memberData.get('role', ''))
+        : '';
+    }
+
+    function liveExplicitPermission(orgId, permission) {
+      let memberData = liveMemberData(orgId);
+      let permissions = memberData != null
+        ? memberData.get('permissions', {})
+        : {};
+      let appAccess = memberData != null
+        ? memberData.get('appAccess', {})
+        : {};
+      let musicScaleAccess = appAccess is map
+        ? appAccess.get('musicscale', {})
+        : {};
+      let appPermissions = musicScaleAccess is map
+        ? musicScaleAccess.get('permissions', [])
+        : [];
+
+      return liveMemberActive(orgId) && (
+        (
+          permissions is map &&
+          permissions.get(permission, false) == true
+        ) ||
+        (
+          appPermissions is list &&
+          (
+            permission in appPermissions ||
+            '*' in appPermissions
+          )
+        )
+      );
+    }
+
+    function liveHasAccess(orgId) {
+      return isSystemAdmin() || (
+        isOrganizationLifecycleActive(orgId) &&
+        (
+          liveOrganizationOwner(orgId) ||
+          liveMemberActive(orgId)
+        )
+      );
+    }
+
+    function liveCanConfigure(orgId) {
+      let role = liveRole(orgId);
+      return isSystemAdmin() ||
+        liveOrganizationOwner(orgId) ||
+        (
+          liveMemberActive(orgId) &&
+          (
+            role in ['owner', 'admin'] ||
+            liveExplicitPermission(orgId, 'musicscale.live.configure')
+          )
+        );
+    }
+
+    function liveCanConduct(orgId) {
+      let role = liveRole(orgId);
+      return isSystemAdmin() ||
+        liveOrganizationOwner(orgId) ||
+        (
+          liveMemberActive(orgId) &&
+          (
+            role in [
+              'owner',
+              'admin',
+              'leader',
+              'lider',
+              'líder',
+              'lider / ministro',
+              'líder / ministro',
+              'minister',
+              'ministro',
+              'pastor',
+              'worship_leader',
+              'music_leader'
+            ] ||
+            liveExplicitPermission(orgId, 'musicscale.live.conduct')
+          )
+        );
+    }
+
+    function liveCanManageAutomation(orgId) {
+      return liveCanConfigure(orgId) ||
+        liveExplicitPermission(orgId, 'musicscale.live.automation.manage');
+    }
+
+    function liveTenantImmutable() {
+      return request.resource.data.organizationId ==
+        resource.data.organizationId;
+    }
+
     function isEcosystemSupport() {
       let userDoc = isAuthenticated() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
       return userDoc != null &&
@@ -2293,6 +2415,154 @@ service cloud.firestore {
     match /system_settings/{settingId} {
       allow read: if isAuthenticated();
       allow write: if isSystemAdmin();
+    }
+
+    // ==========================================
+    // MUSICSCALE LIVE — CLOUD CONTROL PLANE
+    // Local live execution remains LAN-first on Live Node. These rules
+    // protect cloud configuration, preparation, collaboration and audit data.
+    // ==========================================
+
+    match /musicScaleLiveVenues/{venueId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if request.resource.data.organizationId is string &&
+        liveCanConfigure(request.resource.data.organizationId);
+      allow update: if liveCanConfigure(resource.data.organizationId) &&
+        liveTenantImmutable();
+      allow delete: if liveCanConfigure(resource.data.organizationId);
+    }
+
+    match /musicScaleLiveSystems/{systemId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if request.resource.data.organizationId is string &&
+        liveCanConfigure(request.resource.data.organizationId);
+      allow update: if liveCanConfigure(resource.data.organizationId) &&
+        liveTenantImmutable();
+      allow delete: if liveCanConfigure(resource.data.organizationId);
+    }
+
+    match /musicScaleLiveNodes/{nodeId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if request.resource.data.organizationId is string &&
+        liveCanConfigure(request.resource.data.organizationId);
+      allow update: if liveCanConfigure(resource.data.organizationId) &&
+        liveTenantImmutable();
+      allow delete: if liveCanConfigure(resource.data.organizationId);
+    }
+
+    match /musicScaleLiveProfiles/{profileId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if request.resource.data.organizationId is string &&
+        liveCanConfigure(request.resource.data.organizationId);
+      allow update: if liveCanConfigure(resource.data.organizationId) &&
+        liveTenantImmutable();
+      allow delete: if liveCanConfigure(resource.data.organizationId);
+    }
+
+    match /musicScaleLiveScenes/{sceneId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if request.resource.data.organizationId is string &&
+        liveCanConduct(request.resource.data.organizationId);
+      allow update: if liveCanConduct(resource.data.organizationId) &&
+        liveTenantImmutable();
+      allow delete: if liveCanConduct(resource.data.organizationId);
+    }
+
+    match /musicScaleLiveAutomations/{automationId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if request.resource.data.organizationId is string &&
+        liveCanManageAutomation(request.resource.data.organizationId);
+      allow update: if liveCanManageAutomation(resource.data.organizationId) &&
+        liveTenantImmutable();
+      allow delete: if liveCanManageAutomation(resource.data.organizationId);
+    }
+
+    match /musicScaleLiveProviderLinks/{linkId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if request.resource.data.organizationId is string &&
+        liveCanConduct(request.resource.data.organizationId);
+      allow update: if liveCanConduct(resource.data.organizationId) &&
+        liveTenantImmutable();
+      allow delete: if liveCanConduct(resource.data.organizationId);
+    }
+
+    match /musicScaleLiveServicePlans/{planId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if request.resource.data.organizationId is string &&
+        liveCanConduct(request.resource.data.organizationId);
+      allow update: if liveCanConduct(resource.data.organizationId) &&
+        liveTenantImmutable();
+      allow delete: if liveCanConduct(resource.data.organizationId);
+    }
+
+    match /musicScaleLiveSessions/{sessionId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if request.resource.data.organizationId is string &&
+        liveCanConduct(request.resource.data.organizationId);
+      allow update: if liveCanConduct(resource.data.organizationId) &&
+        liveTenantImmutable();
+      allow delete: if liveCanConfigure(resource.data.organizationId);
+    }
+
+    match /musicScaleLiveRequests/{requestId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.keys().hasAll([
+          'id',
+          'organizationId',
+          'venueId',
+          'liveSessionId',
+          'actorId',
+          'kind',
+          'payload',
+          'status',
+          'createdAt'
+        ]) &&
+        request.resource.data.organizationId is string &&
+        liveHasAccess(request.resource.data.organizationId) &&
+        request.resource.data.actorId == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.kind in ['bible', 'section', 'media', 'message'] &&
+        request.resource.data.payload is map;
+
+      allow update: if liveCanConduct(resource.data.organizationId) &&
+        liveTenantImmutable() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'updatedAt',
+          'resolvedAt',
+          'resolvedBy'
+        ]) &&
+        request.resource.data.status in [
+          'accepted',
+          'rejected',
+          'completed'
+        ] &&
+        request.resource.data.resolvedBy == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    match /musicScaleLiveEvents/{eventId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if isAuthenticated() &&
+        request.resource.data.organizationId is string &&
+        liveCanConduct(request.resource.data.organizationId) &&
+        (
+          !('actorId' in request.resource.data) ||
+          request.resource.data.actorId == request.auth.uid
+        );
+      allow update, delete: if false;
+    }
+
+    match /musicScaleLiveMediaAssets/{assetId} {
+      allow read: if liveHasAccess(resource.data.organizationId);
+      allow create: if request.resource.data.organizationId is string &&
+        liveCanConduct(request.resource.data.organizationId);
+      allow update: if liveCanConduct(resource.data.organizationId) &&
+        liveTenantImmutable();
+      allow delete: if liveCanConfigure(resource.data.organizationId);
     }
 
     match /ecosystemHandoffs/{handoffId} {
