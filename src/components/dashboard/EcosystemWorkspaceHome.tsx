@@ -1009,6 +1009,7 @@ export function EcosystemWorkspaceHome({
           }}
           worshipDistribution={worshipDistribution}
           journey={journeyCareIntegrity}
+          outcomePulse={outcomePulse}
           onOpenDestination={handleAskDestination}
         />
 

@@ -64,6 +64,9 @@ jobs:
       - name: Action Loop recent outcome pulse
         run: npx tsx scripts/test_action_outcome_pulse.ts
 
+      - name: Ask MillionsNest evidence and recent outcomes
+        run: npx tsx scripts/test_ask_millionsnest.ts
+
       - name: Journey server-side outcome attestation
         run: npx tsx scripts/test_journey_outcome_attestation.ts
 

@@ -134,6 +134,7 @@ const myToday = deriveActionOutcomePulse({
 
 assert.ok(myToday);
 assert.equal(myToday?.complete, true);
+assert.equal(myToday?.lensId, 'my_today');
 assert.equal(myToday?.windowDays, 7);
 assert.equal(
   myToday?.totalObservedCount,
@@ -170,6 +171,7 @@ const journey = deriveActionOutcomePulse({
 });
 
 assert.ok(journey);
+assert.equal(journey?.lensId, 'journey');
 assert.equal(
   journey?.totalObservedCount,
   2
@@ -197,6 +199,7 @@ const worship = deriveActionOutcomePulse({
 });
 
 assert.ok(worship);
+assert.equal(worship?.lensId, 'worship');
 assert.equal(
   worship?.totalObservedCount,
   2
