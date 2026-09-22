@@ -10,6 +10,10 @@ const WINDOW_MS =
 
 export interface ActionOutcomePulseSnapshot {
   organizationId: string;
+  lensId: Extract<
+    HubLensId,
+    'my_today' | 'journey' | 'worship'
+  >;
   windowDays: number;
   observedAtMs: number;
   complete: boolean;
@@ -165,6 +169,10 @@ export function deriveActionOutcomePulse(
 
   return {
     organizationId,
+    lensId: input.activeLens as Extract<
+      HubLensId,
+      'my_today' | 'journey' | 'worship'
+    >,
     windowDays: WINDOW_DAYS,
     observedAtMs: nowMs,
     complete:

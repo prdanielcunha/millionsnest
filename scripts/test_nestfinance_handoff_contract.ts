@@ -3,8 +3,8 @@ import { handleMusicScaleHandoffRequest } from '../src/server/services/MusicScal
 
 class MockDoc {
   constructor(
-    private readonly path: string,
-    private readonly data: Record<string, unknown>,
+    readonly path: string,
+    private readonly data: Record<string, any>,
   ) {}
 
   async get() {
@@ -14,24 +14,41 @@ class MockDoc {
       data: () => value ?? undefined,
     };
   }
+
+  async set(value: Record<string, unknown>, options?: { merge?: boolean }) {
+    const previous = this.data[this.path] || {};
+    this.data[this.path] = options?.merge ? { ...previous, ...value } : value;
+  }
 }
 
 class MockCollection {
+  private static sequence = 0;
+
   constructor(
     private readonly path: string,
-    private readonly data: Record<string, unknown>,
+    private readonly data: Record<string, any>,
   ) {}
 
-  doc(id: string) {
-    return new MockDoc(this.path + '/' + id, this.data);
+  doc(id?: string) {
+    const resolvedId = id || 'generated-' + (++MockCollection.sequence);
+    return new MockDoc(this.path + '/' + resolvedId, this.data);
   }
 }
 
 class MockDb {
-  constructor(private readonly data: Record<string, unknown>) {}
+  constructor(readonly data: Record<string, any>) {}
 
   collection(path: string) {
     return new MockCollection(path, this.data);
+  }
+
+  async runTransaction<T>(callback: (tx: any) => Promise<T>): Promise<T> {
+    const tx = {
+      get: (ref: MockDoc) => ref.get(),
+      set: (ref: MockDoc, value: Record<string, unknown>, options?: { merge?: boolean }) =>
+        ref.set(value, options),
+    };
+    return callback(tx);
   }
 }
 
@@ -74,7 +91,10 @@ let capturedClaims: Record<string, unknown> | null = null;
 
 await handleMusicScaleHandoffRequest(
   {
-    headers: { authorization: 'Bearer valid-hub-id-token' },
+    headers: {
+      authorization: 'Bearer valid-hub-id-token',
+      origin: 'https://www.millionsnest.com',
+    },
     body: { appId: 'nestfinance', orgId },
   },
   response,
@@ -93,6 +113,8 @@ await handleMusicScaleHandoffRequest(
 
 assert.equal(response.statusCode, 200);
 assert.equal(response.headers['cache-control'], 'no-store');
+assert.equal(response.headers['access-control-allow-origin'], 'https://www.millionsnest.com');
+assert.equal(response.headers['vary'], 'Origin');
 assert.equal(response.body.appId, 'nestfinance');
 assert.equal(response.body.orgId, orgId);
 assert.equal(response.body.uid, uid);
@@ -118,4 +140,41 @@ for (const forbidden of ['role', 'permissions', 'scopes']) {
   );
 }
 
-console.log('✅ NestFinance Hub handoff claim contract is aligned with the strict NestFinance resolver.');
+
+const auditEntries = Object.entries(db.data)
+  .filter(([path]) => path.startsWith('ecosystemHandoffAudit/'))
+  .map(([, value]) => value as any);
+assert.ok(
+  auditEntries.some(event =>
+    event.eventType === 'handoff.issued' &&
+    event.appId === 'nestfinance' &&
+    event.organizationId === orgId &&
+    event.protocol === 'ecosystem_ctx'
+  ),
+  'successful handoff issuance must write a durable sanitized audit event',
+);
+
+const wrongOriginResponse = new MockResponse();
+await handleMusicScaleHandoffRequest(
+  {
+    headers: {
+      authorization: 'Bearer valid-hub-id-token',
+      origin: 'https://evil.example',
+    },
+    body: { appId: 'nestfinance', orgId },
+  },
+  wrongOriginResponse,
+  {
+    verifyIdToken: async () => ({ uid }),
+    getDb: () => db as any,
+    createCustomToken: async () => {
+      throw new Error('token must not be minted for rejected origin');
+    },
+    now: () => 1_800_000_000_100,
+    logger: { info() {}, warn() {}, error() {} },
+  },
+);
+assert.equal(wrongOriginResponse.statusCode, 403);
+assert.equal(wrongOriginResponse.body.code, 'ORIGIN_NOT_ALLOWED');
+
+console.log('✅ NestFinance Hub handoff claims, origin policy, durable rate-limit path and audit contract are aligned.');

@@ -64,10 +64,19 @@ class MockDocumentReference {
       id: this.path.split('/').pop()
     };
   }
-  set() { this.db.writeAttempts++; throw new Error('Write operation set() not allowed'); }
-  update() { this.db.writeAttempts++; throw new Error('Write operation update() not allowed'); }
-  delete() { this.db.writeAttempts++; throw new Error('Write operation delete() not allowed'); }
-  create() { this.db.writeAttempts++; throw new Error('Write operation create() not allowed'); }
+  set(data: any, options?: { merge?: boolean }) {
+    if (this.path.startsWith('ecosystemHandoffRateLimits/') || this.path.startsWith('ecosystemHandoffAudit/')) {
+      this.db.securityWriteAttempts++;
+      const previous = this.db.getData(this.path) || {};
+      this.db.setMockData(this.path, options?.merge ? { ...previous, ...data } : data);
+      return;
+    }
+    this.db.writeAttempts++;
+    throw new Error('Business write operation set() not allowed');
+  }
+  update() { this.db.writeAttempts++; throw new Error('Business write operation update() not allowed'); }
+  delete() { this.db.writeAttempts++; throw new Error('Business write operation delete() not allowed'); }
+  create() { this.db.writeAttempts++; throw new Error('Business write operation create() not allowed'); }
 }
 
 class MockCollectionReference {
@@ -75,8 +84,8 @@ class MockCollectionReference {
     this.db.collectionCalls.push(path);
   }
   doc(id?: string) {
-    if (!id) throw new Error('doc() must be called with id');
-    return new MockDocumentReference(`${this.path}/${id}`, this.db);
+    const resolvedId = id || 'generated-security-event-' + (this.db.generatedDocumentSequence++);
+    return new MockDocumentReference(`${this.path}/${resolvedId}`, this.db);
   }
   where(field: string, op: string, value: any) {
     this.db.queryAttempts++;
@@ -91,8 +100,10 @@ class MockFirestore {
   public documentReads = 0;
   public queryAttempts = 0;
   public writeAttempts = 0;
+  public securityWriteAttempts = 0;
   public batchAttempts = 0;
   public transactionAttempts = 0;
+  public generatedDocumentSequence = 1;
   public simulateErrorOnReadPath: string | null = null;
   
   constructor() {
@@ -110,7 +121,14 @@ class MockFirestore {
     return new MockCollectionReference(path, this);
   }
   batch() { this.batchAttempts++; throw new Error('Write operation batch() not allowed'); }
-  runTransaction() { this.transactionAttempts++; throw new Error('Write operation runTransaction() not allowed'); }
+  async runTransaction<T>(callback: (transaction: any) => Promise<T>): Promise<T> {
+    this.transactionAttempts++;
+    const transaction = {
+      get: (ref: MockDocumentReference) => ref.get(),
+      set: (ref: MockDocumentReference, data: any, options?: { merge?: boolean }) => ref.set(data, options),
+    };
+    return callback(transaction);
+  }
 }
 
 class FakeRequest {
@@ -431,19 +449,22 @@ async function testHarness() {
 
     // Calculate global stats
     const totalWriteAttempts = allMockDatabases.reduce((sum, db) => sum + db.writeAttempts, 0);
+    const totalSecurityWriteAttempts = allMockDatabases.reduce((sum, db) => sum + db.securityWriteAttempts, 0);
     const totalQueryAttempts = allMockDatabases.reduce((sum, db) => sum + db.queryAttempts, 0);
     const totalBatchAttempts = allMockDatabases.reduce((sum, db) => sum + db.batchAttempts, 0);
     const totalTransactionAttempts = allMockDatabases.reduce((sum, db) => sum + db.transactionAttempts, 0);
     const maximumResponseCount = Math.max(0, ...allResponses.map(response => response.respondedCount));
 
     assert(networkAttempts === 0, 'networkAttempts === 0');
-    assert(totalWriteAttempts === 0, 'totalWriteAttempts === 0');
+    assert(totalWriteAttempts === 0, 'no business writes are introduced by handoff');
+    assert(totalSecurityWriteAttempts > 0, 'security-only rate-limit/audit writes are present');
     assert(totalQueryAttempts === 0, 'totalQueryAttempts === 0');
     assert(totalBatchAttempts === 0, 'totalBatchAttempts === 0');
-    assert(totalTransactionAttempts === 0, 'totalTransactionAttempts === 0');
+    assert(totalTransactionAttempts > 0, 'durable rate limiting uses transactions');
     assert(maximumResponseCount === 1, 'maximumResponseCount === 1');
 
     console.log(`totalWriteAttempts: ${totalWriteAttempts}`);
+    console.log(`totalSecurityWriteAttempts: ${totalSecurityWriteAttempts}`);
     console.log(`totalQueryAttempts: ${totalQueryAttempts}`);
     console.log(`totalBatchAttempts: ${totalBatchAttempts}`);
     console.log(`totalTransactionAttempts: ${totalTransactionAttempts}`);
