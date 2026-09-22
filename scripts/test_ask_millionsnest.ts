@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
-  answerAskMillionsNest
+  answerAskMillionsNest,
+  getAskMillionsNestSuggestionKeys
 } from '../src/lib/askMillionsNest.js';
 import type {
   EvidenceBackedReadOnlyHubAction
@@ -11,6 +12,9 @@ import type {
 import type {
   EvidenceBackedMusicScaleDistributionSnapshot
 } from '../src/lib/musicScaleDistributionFactProjection.js';
+import type {
+  ActionOutcomePulseSnapshot
+} from '../src/lib/actionOutcomePulse.js';
 
 const ORG_ID = 'org-ask-test';
 const SUNDAY_MS = Date.UTC(2026, 8, 20, 12, 0, 0);
@@ -138,6 +142,27 @@ const distribution: EvidenceBackedMusicScaleDistributionSnapshot = {
     entityId: ORG_ID,
     observedAtMs: SUNDAY_MS
   }]
+};
+
+const outcomePulse: ActionOutcomePulseSnapshot = {
+  organizationId: ORG_ID,
+  lensId: 'my_today',
+  windowDays: 7,
+  observedAtMs: SUNDAY_MS,
+  complete: true,
+  readLimit: 100,
+  totalObservedCount: 4,
+  resolvedCount: 2,
+  supersededCount: 1,
+  noLongerActionableCount: 1,
+  musicScaleCount: 2,
+  nestJourneyCount: 2,
+  latestOutcomeAtMs: SUNDAY_MS - 60_000
+};
+
+const partialOutcomePulse: ActionOutcomePulseSnapshot = {
+  ...outcomePulse,
+  complete: false
 };
 
 const baseMusicScale = {
@@ -303,6 +328,201 @@ assert.equal(personal.status, 'answered');
 assert.equal(personal.intent, 'personal_schedule');
 assert.ok(personal.evidence.length > 0);
 assert.equal(personal.destination?.kind, 'app');
+
+const recentOutcomes = answerAskMillionsNest({
+  organizationId: ORG_ID,
+  question: 'O que mudou esta semana?',
+  activeLens: 'my_today',
+  lenses: [myTodayLens, worshipLens, journeyLens],
+  actions: [],
+  musicScale: baseMusicScale,
+  outcomePulse,
+  nowMs: SUNDAY_MS
+});
+
+assert.equal(recentOutcomes.status, 'answered');
+assert.equal(recentOutcomes.intent, 'recent_outcomes');
+assert.equal(
+  recentOutcomes.summaryKey,
+  'ask.answers.recent_outcomes.summary'
+);
+assert.equal(
+  recentOutcomes.translationParams?.total,
+  4
+);
+assert.equal(
+  recentOutcomes.facts[0]?.key,
+  'ask.facts.outcomes_total'
+);
+assert.equal(
+  recentOutcomes.facts[1]?.key,
+  'ask.facts.outcomes_resolved'
+);
+assert.ok(
+  recentOutcomes.evidence.some(
+    item =>
+      item.sourceRef ===
+      'hub.action_loop.outcome_pulse_7d'
+  ),
+  'recent outcomes must expose the authorized aggregate projection as evidence'
+);
+
+const recentOutcomesEnglish =
+  answerAskMillionsNest({
+    organizationId: ORG_ID,
+    question: 'What changed this week?',
+    activeLens: 'my_today',
+    lenses: [myTodayLens, worshipLens],
+    actions: [],
+    musicScale: baseMusicScale,
+    outcomePulse,
+    nowMs: SUNDAY_MS
+  });
+assert.equal(
+  recentOutcomesEnglish.intent,
+  'recent_outcomes'
+);
+
+const recentOutcomesSpanish =
+  answerAskMillionsNest({
+    organizationId: ORG_ID,
+    question: '¿Qué cambió esta semana?',
+    activeLens: 'my_today',
+    lenses: [myTodayLens, journeyLens],
+    actions: [],
+    musicScale: baseMusicScale,
+    outcomePulse,
+    nowMs: SUNDAY_MS
+  });
+assert.equal(
+  recentOutcomesSpanish.intent,
+  'recent_outcomes'
+);
+
+const partialRecentOutcomes =
+  answerAskMillionsNest({
+    organizationId: ORG_ID,
+    question: 'O que resolvi esta semana?',
+    activeLens: 'my_today',
+    lenses: [myTodayLens, worshipLens],
+    actions: [],
+    musicScale: baseMusicScale,
+    outcomePulse: partialOutcomePulse,
+    nowMs: SUNDAY_MS
+  });
+
+assert.equal(
+  partialRecentOutcomes.status,
+  'answered'
+);
+assert.equal(
+  partialRecentOutcomes.summaryKey,
+  'ask.answers.recent_outcomes.summary_lower_bound'
+);
+assert.equal(
+  partialRecentOutcomes.facts[0]?.key,
+  'ask.facts.outcomes_total_lower_bound'
+);
+
+const wrongLensPulse =
+  answerAskMillionsNest({
+    organizationId: ORG_ID,
+    question: 'O que mudou esta semana?',
+    activeLens: 'journey',
+    lenses: [myTodayLens, journeyLens],
+    actions: [],
+    musicScale: baseMusicScale,
+    outcomePulse,
+    nowMs: SUNDAY_MS
+  });
+
+assert.equal(
+  wrongLensPulse.status,
+  'insufficient_data',
+  'Ask must fail closed when the pulse was derived for another lens'
+);
+assert.equal(
+  wrongLensPulse.evidence.length,
+  0
+);
+
+const crossTenantPulse =
+  answerAskMillionsNest({
+    organizationId: ORG_ID,
+    question: 'O que mudou esta semana?',
+    activeLens: 'my_today',
+    lenses: [myTodayLens],
+    actions: [],
+    musicScale: baseMusicScale,
+    outcomePulse: {
+      ...outcomePulse,
+      organizationId: 'other-org'
+    },
+    nowMs: SUNDAY_MS
+  });
+assert.equal(
+  crossTenantPulse.status,
+  'insufficient_data'
+);
+assert.equal(
+  crossTenantPulse.evidence.length,
+  0
+);
+
+const noOutcomeSource =
+  answerAskMillionsNest({
+    organizationId: ORG_ID,
+    question: 'O que foi resolvido esta semana?',
+    activeLens: 'my_today',
+    lenses: [myTodayLens],
+    actions: [],
+    musicScale: baseMusicScale,
+    nowMs: SUNDAY_MS
+  });
+assert.equal(
+  noOutcomeSource.status,
+  'insufficient_data',
+  'absence of an outcome projection must not become a synthetic zero claim'
+);
+
+const adminOutcomeDenied =
+  answerAskMillionsNest({
+    organizationId: ORG_ID,
+    question: 'O que mudou esta semana?',
+    activeLens: 'administration',
+    lenses: [myTodayLens, administrationLens],
+    actions: [],
+    musicScale: baseMusicScale,
+    outcomePulse,
+    nowMs: SUNDAY_MS
+  });
+assert.equal(
+  adminOutcomeDenied.status,
+  'not_available'
+);
+assert.equal(
+  adminOutcomeDenied.evidence.length,
+  0
+);
+
+assert.ok(
+  getAskMillionsNestSuggestionKeys(
+    [myTodayLens, journeyLens],
+    'journey'
+  ).includes(
+    'ask.suggestions.recent_outcomes'
+  )
+);
+assert.equal(
+  getAskMillionsNestSuggestionKeys(
+    [myTodayLens, administrationLens],
+    'administration'
+  ).includes(
+    'ask.suggestions.recent_outcomes'
+  ),
+  false,
+  'outcome suggestion must not appear in a lens that has no outcome pulse'
+);
 
 const journeyDenied = answerAskMillionsNest({
   organizationId: ORG_ID,
