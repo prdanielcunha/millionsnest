@@ -1,0 +1,186 @@
+name: Activate NestBalance Official Domain
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - ".github/workflows/nestbalance-domain-activate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: nestbalance-official-domain
+  cancel-in-progress: false
+
+env:
+  FIREBASE_PROJECT: millionsnest
+  FIREBASE_SITE: mn-nestbalance-555464791734
+  OFFICIAL_DOMAIN: nestbalance.millionsnest.com
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate as MillionsNest infrastructure admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Authorize Firebase Auth and ensure custom domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          CONFIG_URL="https://identitytoolkit.googleapis.com/admin/v2/projects/$FIREBASE_PROJECT/config"
+
+          curl --fail --silent --show-error -H "Authorization: Bearer $ACCESS_TOKEN" "$CONFIG_URL" >/tmp/auth.json
+          jq --arg domain "$OFFICIAL_DOMAIN" --arg fallback "$FIREBASE_SITE.web.app"             '{authorizedDomains: (((.authorizedDomains // []) + [$domain,$fallback]) | unique)}'             /tmp/auth.json >/tmp/auth-patch.json
+          curl --fail --silent --show-error -X PATCH             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/auth-patch.json             "$CONFIG_URL?updateMask=authorizedDomains" >/tmp/auth-updated.json
+          jq -e --arg domain "$OFFICIAL_DOMAIN" '.authorizedDomains | index($domain) != null' /tmp/auth-updated.json >/dev/null
+
+          BASE="https://firebasehosting.googleapis.com/v1beta1/projects/$FIREBASE_PROJECT/sites/$FIREBASE_SITE/customDomains"
+          STATUS="$(curl --silent --output /tmp/domain.json --write-out '%{http_code}'             -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/$OFFICIAL_DOMAIN")"
+
+          if [ "$STATUS" = "404" ]; then
+            curl --fail --silent --show-error -X POST               -H "Authorization: Bearer $ACCESS_TOKEN"               -H "Content-Type: application/json"               --data '{"certPreference":"DEDICATED","annotations":{"managed-by":"millionsnest-ci","product":"nestbalance"}}'               "$BASE?customDomainId=$OFFICIAL_DOMAIN" >/tmp/domain-create.json
+            echo "CUSTOM_DOMAIN_CREATED=$OFFICIAL_DOMAIN"
+          elif [ "$STATUS" = "200" ]; then
+            echo "CUSTOM_DOMAIN_EXISTS=$OFFICIAL_DOMAIN"
+          else
+            cat /tmp/domain.json
+            exit 1
+          fi
+
+      - name: Read Firebase-required DNS records
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 15
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          URL="https://firebasehosting.googleapis.com/v1beta1/projects/$FIREBASE_PROJECT/sites/$FIREBASE_SITE/customDomains/$OFFICIAL_DOMAIN"
+          curl --fail --silent --show-error -H "Authorization: Bearer $ACCESS_TOKEN" "$URL" >/tmp/domain.json
+
+          python3 - "$OFFICIAL_DOMAIN" "$FIREBASE_SITE" <<'PY'
+          import json, sys
+          from pathlib import Path
+          domain, site = sys.argv[1], sys.argv[2]
+          data = json.loads(Path('/tmp/domain.json').read_text())
+          desired = list((data.get('requiredDnsUpdates') or {}).get('desired') or [])
+          desired += list((((data.get('cert') or {}).get('verification') or {}).get('dns') or {}).get('desired') or [])
+          seen, lines = set(), []
+          for record in desired:
+              name = str(record.get('domainName') or '').rstrip('.')
+              typ = str(record.get('type') or '').upper()
+              value = str(record.get('rdata') or '').strip().strip('"').rstrip('.')
+              key = (name, typ, value)
+              if not name or typ not in {'A','AAAA','CNAME','TXT'} or not value or key in seen:
+                  continue
+              if not (name == domain or name.endswith('.' + domain)):
+                  raise SystemExit(f'Firebase returned out-of-scope DNS name: {name}')
+              seen.add(key)
+              lines.append('\t'.join(key))
+          if not lines and data.get('hostState') == 'HOST_UNHOSTED':
+              lines.append('\t'.join((domain, 'CNAME', f'{site}.web.app')))
+          Path('/tmp/dns.tsv').write_text('\n'.join(lines) + ('\n' if lines else ''))
+          print(json.dumps({
+              'ownershipState': data.get('ownershipState'),
+              'hostState': data.get('hostState'),
+              'certState': (data.get('cert') or {}).get('state'),
+              'dnsRecordCount': len(lines),
+              'issues': data.get('issues', [])
+          }, sort_keys=True))
+          PY
+
+      - name: Apply only NestBalance DNS records in Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -s /tmp/dns.tsv ]; then
+            echo "Firebase requested no DNS changes."
+            exit 0
+          fi
+
+          CF_TOKEN="$(gcloud secrets versions access latest --secret=mn-cloudflare-dns-token --project="$FIREBASE_PROJECT")"
+          echo "::add-mask::$CF_TOKEN"
+          ZONES="$(curl --fail --silent --show-error             -H "Authorization: Bearer $CF_TOKEN"             'https://api.cloudflare.com/client/v4/zones?name=millionsnest.com&status=active')"
+          ZONE_ID="$(jq -r '.result[0].id // empty' <<<"$ZONES")"
+          test -n "$ZONE_ID"
+
+          while IFS=$'\t' read -r NAME TYPE VALUE; do
+            test -n "$NAME" || continue
+            case "$NAME" in
+              "$OFFICIAL_DOMAIN"|*."$OFFICIAL_DOMAIN") ;;
+              *) echo "Refusing out-of-scope DNS mutation: $NAME"; exit 1 ;;
+            esac
+
+            EXISTING="$(curl --fail --silent --show-error -G               -H "Authorization: Bearer $CF_TOKEN"               --data-urlencode "name=$NAME"               --data-urlencode "type=$TYPE"               "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records")"
+            MATCH_ID="$(jq -r --arg value "$VALUE" '.result[] | select(.content == $value) | .id' <<<"$EXISTING" | head -n1)"
+            if [ -n "$MATCH_ID" ]; then
+              echo "DNS_ALREADY_CORRECT name=$NAME type=$TYPE"
+              continue
+            fi
+
+            PAYLOAD="$(jq -nc --arg type "$TYPE" --arg name "$NAME" --arg content "$VALUE"               '{type:$type,name:$name,content:$content,ttl:300,proxied:false}')"
+            RECORD_ID="$(jq -r '.result[0].id // empty' <<<"$EXISTING")"
+            if [ -n "$RECORD_ID" ] && [ "$TYPE" != "TXT" ]; then
+              curl --fail --silent --show-error -X PUT                 -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json"                 --data "$PAYLOAD"                 "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" >/dev/null
+            else
+              curl --fail --silent --show-error -X POST                 -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json"                 --data "$PAYLOAD"                 "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" >/dev/null
+            fi
+            echo "DNS_APPLIED name=$NAME type=$TYPE"
+          done </tmp/dns.tsv
+
+      - name: Wait for Firebase domain readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          URL="https://firebasehosting.googleapis.com/v1beta1/projects/$FIREBASE_PROJECT/sites/$FIREBASE_SITE/customDomains/$OFFICIAL_DOMAIN"
+          READY=false
+
+          for i in $(seq 1 36); do
+            curl --fail --silent --show-error -H "Authorization: Bearer $ACCESS_TOKEN" "$URL" >/tmp/domain-status.json
+            STATE="$(python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/domain-status.json'))
+          print('|'.join([
+              str(x.get('ownershipState') or ''),
+              str(x.get('hostState') or ''),
+              str((x.get('cert') or {}).get('state') or ''),
+              str(bool(x.get('reconciling',False))).lower()
+          ]))
+          PY
+            )"
+            echo "DOMAIN_STATE attempt=$i state=$STATE"
+            if [ "$STATE" = "OWNERSHIP_ACTIVE|HOST_ACTIVE|CERT_ACTIVE|false" ]; then
+              READY=true
+              break
+            fi
+            sleep 10
+          done
+
+          echo "DOMAIN_READY=$READY" >> "$GITHUB_ENV"
+
+      - name: Verify fallback and official HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location             --retry 12 --retry-delay 3 --retry-all-errors             "https://$FIREBASE_SITE.web.app/" >/tmp/fallback.html
+          grep -Fq 'NestBalance' /tmp/fallback.html
+          echo "NESTBALANCE_FALLBACK_OK"
+
+          if [ "$DOMAIN_READY" = "true" ]; then
+            curl --fail --silent --show-error --location               --retry 12 --retry-delay 3 --retry-all-errors               "https://$OFFICIAL_DOMAIN/" >/tmp/official.html
+            grep -Fq 'NestBalance' /tmp/official.html
+            curl --fail --silent --show-error --location               --retry 12 --retry-delay 3 --retry-all-errors               "https://$OFFICIAL_DOMAIN/api/healthz" | grep -q '"ok":true'
+            echo "NESTBALANCE_OFFICIAL_DOMAIN_READY=https://$OFFICIAL_DOMAIN"
+          else
+            echo "NESTBALANCE_OFFICIAL_DOMAIN_DNS_APPLIED_CERT_PENDING=true"
+          fi
