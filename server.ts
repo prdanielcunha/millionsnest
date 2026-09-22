@@ -52,6 +52,7 @@ import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
+import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } from './src/server/services/EcosystemSessionVersionService.js';
 import { handleEcosystemAccessProjectionRequest } from './src/server/services/EcosystemAccessProjectionService.js';
 import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
 import { handleNestJourneyFollowupContextRequest } from './src/server/services/NestJourneyFollowupContextService.js';
@@ -5396,6 +5397,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         return res.status(403).json({ error: 'Forbidden: Access denied to NestFinance of this organization.' });
       }
 
+      const sessionVersion = await readCanonicalEcosystemSessionVersion(databaseInst, uid);
+
       // 5. Code generation (cryptographically secure base64url)
       let code = '';
       let codeHash = '';
@@ -5416,6 +5419,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             organizationId: cleanOrgId,
             status: 'issued',
             accessSource: access.accessSource,
+            sessionVersion,
             issuedAt: admin.firestore.Timestamp.now(),
             expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 90000), // 90 seconds
             consumedAt: null
@@ -5453,6 +5457,17 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       console.error('[NESTFINANCE_HANDOFF_ERROR] Error issuing handoff code:', err.message);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
+  });
+
+  app.post('/api/v1/auth/ecosystem-session/revoke', express.json(), async (req, res) => {
+    return revokeCurrentEcosystemSession(req, res, {
+      verifyIdToken: (token) => admin.auth().verifyIdToken(token),
+      getFirestore: () => {
+        const database = getDb();
+        if (!database) throw new Error('FIRESTORE_UNAVAILABLE');
+        return database;
+      },
+    });
   });
 
   app.post('/api/ecosystem/create-handoff', express.json(), async (req, res) => {
