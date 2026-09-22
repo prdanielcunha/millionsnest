@@ -6,6 +6,7 @@ import { EcosystemChanges } from './EcosystemChanges.js';
 import { HubLensSwitcher } from './HubLensSwitcher.js';
 import { HubAppLaunchpad } from './HubAppLaunchpad.js';
 import { ActionResolutionObserver } from './ActionResolutionObserver.js';
+import { ActionOutcomePulse } from './ActionOutcomePulse.js';
 import { MusicScaleDistributionSnapshot } from './MusicScaleDistributionSnapshot.js';
 import { NestJourneyCareIntegritySnapshot } from './NestJourneyCareIntegritySnapshot.js';
 import { AskMillionsNest } from './AskMillionsNest.js';
@@ -17,6 +18,7 @@ import type {
 } from '../../lib/hubLensAuthorization.js';
 import type { NestJourneyWorkspaceProjection } from '../../lib/nestJourneyWorkspaceProjection.js';
 import { deriveNestJourneyCareIntegritySnapshot } from '../../lib/nestJourneyCareIntegrity.js';
+import { deriveActionOutcomePulse } from '../../lib/actionOutcomePulse.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
 import type { ActionDestination, ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from '../../lib/actionCenter.js';
@@ -43,6 +45,7 @@ import type {
 import {
   isActionResolutionEligible,
   resolutionMatchesAction,
+  type ActionResolutionReadWindow,
   type ActionResolutionRecord
 } from '../../lib/actionResolution.js';
 import type {
@@ -158,6 +161,7 @@ interface EcosystemWorkspaceHomeProps {
     dismissCode?: ActionOsDismissCode
   ) => void | Promise<void>;
   actionResolutions: ActionResolutionRecord[];
+  actionResolutionReadWindow: ActionResolutionReadWindow | null;
   actionResolutionBusyKey?: string | null;
   onStartActionResolution: (
     action: ReadOnlyHubAction
@@ -213,6 +217,7 @@ export function EcosystemWorkspaceHome({
   actionPreferenceBusyKey,
   onSetActionPreference,
   actionResolutions,
+  actionResolutionReadWindow,
   actionResolutionBusyKey,
   onStartActionResolution,
   onExecuteActionTool,
@@ -434,6 +439,17 @@ export function EcosystemWorkspaceHome({
         experience =>
           experience.app.id === 'nestjourney'
       ) ?? null;
+
+    const outcomePulse =
+      deriveActionOutcomePulse({
+        organizationId,
+        activeLens:
+          adaptiveWorkspace.activeLens,
+        resolutions: actionResolutions,
+        readWindow:
+          actionResolutionReadWindow,
+        nowMs: Date.now()
+      });
 
     const todayActions = adaptiveWorkspace.actionsForActiveLens;
     const hasSuppressedTodayActions = adaptiveWorkspace.hasSuppressedActionsForActiveLens;
@@ -1017,6 +1033,12 @@ export function EcosystemWorkspaceHome({
               }
             />
           )}
+
+        {outcomePulse && (
+          <ActionOutcomePulse
+            snapshot={outcomePulse}
+          />
+        )}
 
         <section
           aria-labelledby="hub-today-title"
