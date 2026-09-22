@@ -1,5 +1,6 @@
 import { resolveEcosystemAppAccess, type EcosystemAppId } from './EcosystemAccessResolver.js';
 import { handleConnectHandoffRequest } from './ConnectHandoffService.js';
+import { readCanonicalEcosystemSessionVersion } from './EcosystemSessionVersionService.js';
 
 export type HandoffRequestLike = {
   headers: { authorization?: string | string[] };
@@ -230,11 +231,30 @@ export async function handleMusicScaleHandoffRequest(
   // session resolver can bind the Firebase session to the exact organization and
   // handoff protocol without trusting browser-provided organization context.
   if (appId === 'nestfinance') {
+    let sessionVersion: number;
+    try {
+      sessionVersion = await readCanonicalEcosystemSessionVersion(db, uid);
+    } catch {
+      dependencies.logger?.error?.('[HANDOFF_SESSION_VERSION_ERROR]', {
+        appId,
+        organizationId: cleanOrgId,
+        maskedUid: maskUid(uid),
+        code: 'HANDOFF_SESSION_VERSION_UNAVAILABLE',
+        timestamp: dependencies.now(),
+      });
+      return res.status(500).json({
+        error: 'Internal server error.',
+        code: 'HANDOFF_ISSUE_FAILED',
+        retryable: true,
+      });
+    }
+
     Object.assign(tokenClaims, {
       mn_app_id: 'nestfinance',
       mn_organization_id: cleanOrgId,
       mn_handoff_version: 1,
       mn_access_source: access.accessSource,
+      mn_session_version: sessionVersion,
     });
   }
 
