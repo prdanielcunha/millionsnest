@@ -58,6 +58,7 @@ const intelligence = {
       confirmations: 'Who has not responded to the schedule yet?',
       workload: 'Who is above the service load?',
       personal_schedule: 'What is my next schedule?',
+      follow_up: 'What is pending in follow-up?',
       administration: 'Is anything pending with the team?'
     },
     why: {
@@ -90,6 +91,13 @@ const intelligence = {
       journey_assigned: '{{count}} first-contact follow-up(s) assigned to you and awaiting completion.',
       journey_unassigned: '{{count}} first-contact follow-up(s) without an owner in your authorized scope.',
       journey_overdue: '{{count}} first-contact commitment(s) past the agreed deadline.',
+      journey_total_open: '{{count}} open first-contact follow-up(s) in your authorized scope.',
+      journey_due_soon: '{{count}} first-contact commitment(s) due within the next 24 hours.',
+      journey_total_open_lower_bound: 'At least {{count}} open first-contact follow-up(s) were observed in your authorized scope.',
+      journey_assigned_lower_bound: 'At least {{count}} first-contact follow-up(s) assigned to you were observed awaiting completion.',
+      journey_unassigned_lower_bound: 'At least {{count}} first-contact follow-up(s) without an owner were observed in your authorized scope.',
+      journey_overdue_lower_bound: 'At least {{count}} first-contact commitment(s) past deadline were observed.',
+      journey_due_soon_lower_bound: 'At least {{count}} first-contact commitment(s) due within the next 24 hours were observed.',
       action_item: 'Authorized action'
     },
     answers: {
@@ -127,8 +135,10 @@ const intelligence = {
       },
       journey_follow_up: {
         title: 'Journey follow-ups',
-        summary: 'In your authorized scope, {{assigned}} first-contact follow-up(s) are assigned to you, {{unassigned}} have no owner, and {{overdue}} are past the agreed deadline.',
-        insufficient: 'The Journey Lens is available, but there is no open evidence-backed follow-up queue that supports answering this question right now.'
+        summary: 'In your authorized scope there are {{total}} open follow-up(s), {{overdue}} past deadline, and {{dueSoon}} due within the next 24 hours.',
+        summary_lower_bound: 'The safe read limit was reached. At least {{total}} open follow-up(s), {{overdue}} past deadline, and {{dueSoon}} due within the next 24 hours were observed.',
+        summary_clear: 'In the authorized scope observed now, there are no open first-contact follow-ups.',
+        insufficient: 'The Journey Lens is available, but the authorized follow-up projection is not ready enough to support that answer yet.'
       },
       finance: {
         insufficient: 'The Hub does not yet have an authorized, structured financial source in this context that supports answering that question.'

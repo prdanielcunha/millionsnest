@@ -43,6 +43,7 @@ on:
       - 'src/lib/currentAdaptiveWorkspace.ts'
       - 'src/lib/currentContextGraph.ts'
       - 'src/lib/nestJourneyWorkspaceProjection.ts'
+      - 'src/lib/nestJourneyCareIntegrity.ts'
       - 'src/lib/hubAppExperience.ts'
       - 'src/lib/appExperienceRegistry.ts'
       - 'src/services/nestJourneyWorkspaceClient.ts'
@@ -51,6 +52,7 @@ on:
       - 'src/components/dashboard/AskMillionsNest.tsx'
       - 'src/components/dashboard/HubAppLaunchpad.tsx'
       - 'src/components/dashboard/ActionResolutionObserver.tsx'
+      - 'src/components/dashboard/NestJourneyCareIntegritySnapshot.tsx'
       - 'src/components/dashboard/MusicScaleDistributionSnapshot.tsx'
       - 'src/pages/Dashboard.tsx'
       - 'server.ts'
@@ -82,6 +84,7 @@ on:
       - 'scripts/test_ask_millionsnest.ts'
       - 'scripts/test_nestjourney_adaptive_hub.ts'
       - 'scripts/test_nestjourney_workspace_projection.ts'
+      - 'scripts/test_nestjourney_care_integrity.ts'
       - '.github/workflows/church-intelligence-foundation-qa.yml'
   workflow_dispatch:
 
@@ -184,6 +187,9 @@ jobs:
 
       - name: NestJourney Adaptive Hub evidence and authorization
         run: npx tsx scripts/test_nestjourney_adaptive_hub.ts
+
+      - name: NestJourney Care Integrity aggregate
+        run: npx tsx scripts/test_nestjourney_care_integrity.ts
 
       - name: Church Intelligence PT/EN/ES coverage
         run: npx tsx scripts/test_intelligence_i18n.ts

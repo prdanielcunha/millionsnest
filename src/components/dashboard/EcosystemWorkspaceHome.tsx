@@ -7,6 +7,7 @@ import { HubLensSwitcher } from './HubLensSwitcher.js';
 import { HubAppLaunchpad } from './HubAppLaunchpad.js';
 import { ActionResolutionObserver } from './ActionResolutionObserver.js';
 import { MusicScaleDistributionSnapshot } from './MusicScaleDistributionSnapshot.js';
+import { NestJourneyCareIntegritySnapshot } from './NestJourneyCareIntegritySnapshot.js';
 import { AskMillionsNest } from './AskMillionsNest.js';
 import { buildCurrentAdaptiveWorkspace } from '../../lib/currentAdaptiveWorkspace.js';
 import type { HubLensId } from '../../lib/lensResolver.js';
@@ -15,6 +16,7 @@ import type {
   CurrentNestJourneyLensAuthority
 } from '../../lib/hubLensAuthorization.js';
 import type { NestJourneyWorkspaceProjection } from '../../lib/nestJourneyWorkspaceProjection.js';
+import { deriveNestJourneyCareIntegritySnapshot } from '../../lib/nestJourneyCareIntegrity.js';
 import { EcosystemApp } from '../../lib/apps.js';
 import type { HubAppExperience } from '../../lib/hubAppExperience.js';
 import type { ActionDestination, ActionPreference, ActionPreferenceMode, ReadOnlyHubAction } from '../../lib/actionCenter.js';
@@ -422,6 +424,17 @@ export function EcosystemWorkspaceHome({
       },
       actionPreferences
     });
+    const journeyCareIntegrity =
+      deriveNestJourneyCareIntegritySnapshot({
+        organizationId,
+        projection: nestJourneyWorkspace
+      });
+    const nestJourneyExperience =
+      appExperiences.find(
+        experience =>
+          experience.app.id === 'nestjourney'
+      ) ?? null;
+
     const todayActions = adaptiveWorkspace.actionsForActiveLens;
     const hasSuppressedTodayActions = adaptiveWorkspace.hasSuppressedActionsForActiveLens;
     const nextBestAction = selectNextBestMinistryAction({
@@ -754,6 +767,21 @@ export function EcosystemWorkspaceHome({
       }
     };
 
+    const handleOpenCareIntegrity = () => {
+      if (
+        nestJourneyExperience?.app &&
+        nestJourneyExperience.canOpen
+      ) {
+        onLaunchApp(
+          nestJourneyExperience.app,
+          '/care-integrity'
+        );
+        return;
+      }
+
+      onSelectWorkspace('nestjourney');
+    };
+
     const handleNextStep = () => {
       if (nextStep.action === 'billing') onNavigateToBilling();
       if (nextStep.action === 'invite') onOpenInviteModal();
@@ -964,8 +992,17 @@ export function EcosystemWorkspaceHome({
               : null
           }}
           worshipDistribution={worshipDistribution}
+          journey={journeyCareIntegrity}
           onOpenDestination={handleAskDestination}
         />
+
+        {adaptiveWorkspace.activeLens === 'journey' &&
+          journeyCareIntegrity && (
+            <NestJourneyCareIntegritySnapshot
+              snapshot={journeyCareIntegrity}
+              onOpen={handleOpenCareIntegrity}
+            />
+          )}
 
         {adaptiveWorkspace.activeLens === 'worship' &&
           worshipDistribution &&

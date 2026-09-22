@@ -163,13 +163,34 @@ export function summarizeJourneyQueue(input: {
   entityId: string;
   observedAtMs: number;
   dueAtValues: readonly unknown[];
+  complete?: boolean;
 }): NestJourneyQueueSummary {
   const dueAtMs = input.dueAtValues
     .map(timestampToMs)
     .filter((value): value is number => value !== null)
     .sort((a, b) => a - b);
 
-  if (input.dueAtValues.length === 0) return emptyNestJourneyQueue();
+  const evidence = [queueEvidence({
+    organizationId: input.organizationId,
+    sourceRef: input.sourceRef,
+    entityId: input.entityId,
+    observedAtMs: input.observedAtMs,
+    fieldPaths: [
+      'count',
+      'overdueCount',
+      'dueSoonCount',
+      'earliestDueAtMs',
+      'complete'
+    ]
+  })];
+
+  if (input.dueAtValues.length === 0) {
+    return {
+      ...emptyNestJourneyQueue(),
+      complete: input.complete === true,
+      evidence
+    };
+  }
 
   const dueSoonBoundary = input.observedAtMs + 24 * 60 * 60 * 1000;
 
@@ -180,18 +201,8 @@ export function summarizeJourneyQueue(input: {
       value => value >= input.observedAtMs && value <= dueSoonBoundary
     ).length,
     earliestDueAtMs: dueAtMs[0] ?? null,
-    evidence: [queueEvidence({
-      organizationId: input.organizationId,
-      sourceRef: input.sourceRef,
-      entityId: input.entityId,
-      observedAtMs: input.observedAtMs,
-      fieldPaths: [
-        'count',
-        'overdueCount',
-        'dueSoonCount',
-        'earliestDueAtMs'
-      ]
-    })]
+    complete: input.complete === true,
+    evidence
   };
 }
 
@@ -417,6 +428,21 @@ export async function resolveNestJourneyWorkspaceProjectionForActor(
         .map(data => data.dueAt)
     : [];
 
+  const assignedComplete =
+    capabilities.canManageCare &&
+    assignedSnapshot !== null &&
+    (
+      dependencies.completeQueues === true ||
+      assignedSnapshot.size < 100
+    );
+  const unassignedComplete =
+    canSuperviseCare &&
+    unassignedSnapshot !== null &&
+    (
+      dependencies.completeQueues === true ||
+      unassignedSnapshot.size < 200
+    );
+
   return {
     appId: 'nestjourney',
     organizationId,
@@ -431,25 +457,31 @@ export async function resolveNestJourneyWorkspaceProjectionForActor(
     ready: true,
     observedAtMs,
     assignedFirstContacts:
-      summarizeJourneyQueue({
-        organizationId,
-        sourceRef:
-          'hub.api.nestjourney.workspace.assigned_first_contacts',
-        entityId:
-          'assigned:first_contact',
-        observedAtMs,
-        dueAtValues: assignedDueAt
-      }),
+      capabilities.canManageCare
+        ? summarizeJourneyQueue({
+            organizationId,
+            sourceRef:
+              'hub.api.nestjourney.workspace.assigned_first_contacts',
+            entityId:
+              'assigned:first_contact',
+            observedAtMs,
+            dueAtValues: assignedDueAt,
+            complete: assignedComplete
+          })
+        : emptyNestJourneyQueue(),
     unassignedFirstContacts:
-      summarizeJourneyQueue({
-        organizationId,
-        sourceRef:
-          'hub.api.nestjourney.workspace.unassigned_first_contacts',
-        entityId:
-          'unassigned:first_contact',
-        observedAtMs,
-        dueAtValues: unassignedDueAt
-      })
+      canSuperviseCare
+        ? summarizeJourneyQueue({
+            organizationId,
+            sourceRef:
+              'hub.api.nestjourney.workspace.unassigned_first_contacts',
+            entityId:
+              'unassigned:first_contact',
+            observedAtMs,
+            dueAtValues: unassignedDueAt,
+            complete: unassignedComplete
+          })
+        : emptyNestJourneyQueue()
   };
 }
 

@@ -23,6 +23,9 @@ import type {
 import type {
   EvidenceBackedMusicScaleDistributionSnapshot
 } from '../../lib/musicScaleDistributionFactProjection.js';
+import type {
+  NestJourneyCareIntegritySnapshot
+} from '../../lib/nestJourneyCareIntegrity.js';
 
 interface AskMillionsNestProps {
   organizationId: string;
@@ -49,6 +52,7 @@ interface AskMillionsNestProps {
     };
   };
   worshipDistribution?: EvidenceBackedMusicScaleDistributionSnapshot | null;
+  journey?: NestJourneyCareIntegritySnapshot | null;
   onOpenDestination: (destination: ActionDestination) => void;
 }
 
@@ -69,6 +73,7 @@ export function AskMillionsNest({
   sourceActions,
   musicScale,
   worshipDistribution,
+  journey,
   onOpenDestination
 }: AskMillionsNestProps) {
   const { t, i18n } = useTranslation(['intelligence', 'dashboard']);
@@ -97,7 +102,8 @@ export function AskMillionsNest({
       lenses,
       actions: sourceActions,
       musicScale,
-      worshipDistribution
+      worshipDistribution,
+      journey
     });
   }, [
     organizationId,
@@ -106,7 +112,8 @@ export function AskMillionsNest({
     lenses,
     sourceActions,
     musicScale,
-    worshipDistribution
+    worshipDistribution,
+    journey
   ]);
 
   const locale =
