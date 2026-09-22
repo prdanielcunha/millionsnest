@@ -15,6 +15,9 @@ import type {
 import type {
   NestJourneyCareIntegritySnapshot
 } from './nestJourneyCareIntegrity.js';
+import type {
+  ActionOutcomePulseSnapshot
+} from './actionOutcomePulse.js';
 
 export type AskMillionsNestIntent =
   | 'attention'
@@ -24,6 +27,7 @@ export type AskMillionsNestIntent =
   | 'worship_repertoire'
   | 'worship_distribution'
   | 'journey_follow_up'
+  | 'recent_outcomes'
   | 'finance'
   | 'administration'
   | 'unknown';
@@ -79,6 +83,7 @@ export interface AskMillionsNestInput {
   };
   worshipDistribution?: EvidenceBackedMusicScaleDistributionSnapshot | null;
   journey?: NestJourneyCareIntegritySnapshot | null;
+  outcomePulse?: ActionOutcomePulseSnapshot | null;
   nowMs?: number;
 }
 
@@ -113,6 +118,33 @@ function resolveIntent(
 ): AskMillionsNestIntent {
   const normalized = normalizeQuestion(question);
   if (!normalized) return 'unknown';
+
+  if (
+    includesAny(normalized, [
+      'o que resolvi',
+      'o que foi resolvido',
+      'o que resolveu',
+      'resolvido esta semana',
+      'resolvido nessa semana',
+      'resultados desta semana',
+      'resultados da semana',
+      'acoes concluidas',
+      'acoes resolvidas',
+      'what did i resolve',
+      'what was resolved',
+      'resolved this week',
+      'recent outcomes',
+      'outcomes this week',
+      'que resolvi',
+      'que se resolvio',
+      'resuelto esta semana',
+      'resultados de esta semana',
+      'resultados de la semana',
+      'acciones resueltas'
+    ])
+  ) {
+    return 'recent_outcomes';
+  }
 
   if (
     includesAny(normalized, [
@@ -437,6 +469,109 @@ export function answerAskMillionsNest(
       whyKey: 'ask.why.unsupported',
       destination: null
     };
+  }
+
+  if (intent === 'recent_outcomes') {
+    const pulse =
+      input.outcomePulse?.organizationId ===
+      organizationId
+        ? input.outcomePulse
+        : null;
+
+    if (!pulse) {
+      return insufficient(intent);
+    }
+
+    const evidence = sanitizeEvidence(
+      organizationId,
+      [
+        projectionEvidence({
+          organizationId,
+          sourceApp: 'hub',
+          sourceRef:
+            'hub.action_loop.outcome_pulse_7d',
+          entityType:
+            'adaptive_workspace',
+          entityId: organizationId,
+          fieldPaths: [
+            'windowDays',
+            'totalObservedCount',
+            'resolvedCount',
+            'supersededCount',
+            'noLongerActionableCount',
+            'musicScaleCount',
+            'nestJourneyCount',
+            'complete',
+            'readLimit'
+          ],
+          observedAtMs:
+            pulse.observedAtMs
+        })
+      ]
+    );
+
+    const keySuffix =
+      pulse.complete
+        ? ''
+        : '_lower_bound';
+
+    return answered({
+      intent,
+      titleKey:
+        'ask.answers.recent_outcomes.title',
+      summaryKey:
+        pulse.complete
+          ? 'ask.answers.recent_outcomes.summary'
+          : 'ask.answers.recent_outcomes.summary_lower_bound',
+      translationParams: {
+        days: pulse.windowDays,
+        total: pulse.totalObservedCount,
+        resolved: pulse.resolvedCount,
+        updated: pulse.supersededCount,
+        left:
+          pulse.noLongerActionableCount
+      },
+      facts: [
+        {
+          key:
+            'ask.facts.outcomes_total' +
+            keySuffix,
+          params: {
+            count:
+              pulse.totalObservedCount
+          }
+        },
+        {
+          key:
+            'ask.facts.outcomes_resolved' +
+            keySuffix,
+          params: {
+            count:
+              pulse.resolvedCount
+          }
+        },
+        {
+          key:
+            'ask.facts.outcomes_updated' +
+            keySuffix,
+          params: {
+            count:
+              pulse.supersededCount
+          }
+        },
+        {
+          key:
+            'ask.facts.outcomes_left_window' +
+            keySuffix,
+          params: {
+            count:
+              pulse.noLongerActionableCount
+          }
+        }
+      ],
+      evidence,
+      destination: null
+    });
   }
 
   if (intent === 'journey_follow_up') {
@@ -1003,6 +1138,15 @@ export function getAskMillionsNestSuggestionKeys(
   lenses: readonly ResolvedHubLens[]
 ): string[] {
   const suggestions = ['ask.suggestions.attention'];
+
+  if (
+    hasLens(lenses, 'worship') ||
+    hasLens(lenses, 'journey')
+  ) {
+    suggestions.push(
+      'ask.suggestions.recent_outcomes'
+    );
+  }
 
   if (hasLens(lenses, 'worship')) {
     suggestions.push(
