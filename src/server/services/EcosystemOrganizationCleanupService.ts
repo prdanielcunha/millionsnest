@@ -255,6 +255,36 @@ function hasActiveBilling(subscription: Record<string, any> | null): boolean {
   );
 }
 
+function hasActiveOrganizationEntitlement(organization: Record<string, any>): boolean {
+  const explicitSubscriptionStatus = getStatus(
+    organization.subscriptionStatus || organization.billingStatus,
+  );
+  if (explicitSubscriptionStatus && ACTIVE_BILLING_STATUSES.has(explicitSubscriptionStatus)) {
+    return true;
+  }
+
+  const apps = organization.apps;
+  if (apps && typeof apps === 'object') {
+    for (const app of Object.values(apps) as any[]) {
+      const status = getStatus(app?.status);
+      if (status && ACTIVE_BILLING_STATUSES.has(status)) return true;
+
+      const stripeId =
+        app?.stripeSubscriptionId ||
+        app?.subscriptionId ||
+        app?.stripe_subscription_id;
+      if (
+        stripeId &&
+        !['canceled', 'cancelled', 'incomplete_expired', 'expired', 'ended'].includes(status)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function isTechnicalName(normalizedName: string): boolean {
   return TECHNICAL_NAME_PATTERNS.some(pattern => pattern.test(normalizedName));
 }
@@ -272,6 +302,46 @@ async function queryHasAny(db: Firestore, collectionName: string, orgId: string)
   return !snap.empty;
 }
 
+async function hasNestedOrganizationActivity(db: Firestore, orgId: string): Promise<boolean> {
+  const orgRef = db.collection('organizations').doc(orgId);
+
+  try {
+    const nestedCollections = await orgRef.listCollections();
+
+    for (const nested of nestedCollections) {
+      // These collections are structural or independently checked below.
+      if (['members', 'invites', 'audit_logs', 'monthly_usage', 'notifications'].includes(nested.id)) {
+        continue;
+      }
+
+      if (nested.id === 'musicscale') {
+        const docs = await nested.limit(10).get();
+        for (const document of docs.docs) {
+          // A bare settings document is created during bootstrap and is not proof of real use.
+          if (document.id !== 'settings' && document.id !== 'usage') return true;
+
+          const childCollections = await document.ref.listCollections();
+          for (const child of childCollections) {
+            const childDoc = await child.limit(1).get();
+            if (!childDoc.empty) return true;
+          }
+        }
+        continue;
+      }
+
+      // Product workspaces (NestJourney etc.) and any other non-structural
+      // organization subcollection are considered meaningful tenant data.
+      const doc = await nested.limit(1).get();
+      if (!doc.empty) return true;
+    }
+  } catch {
+    // Fail closed: uncertainty preserves the organization.
+    return true;
+  }
+
+  return false;
+}
+
 async function hasMeaningfulActivity(db: Firestore, orgId: string): Promise<boolean> {
   for (const collectionName of ACTIVITY_COLLECTIONS) {
     try {
@@ -281,7 +351,8 @@ async function hasMeaningfulActivity(db: Firestore, orgId: string): Promise<bool
       return true;
     }
   }
-  return false;
+
+  return hasNestedOrganizationActivity(db, orgId);
 }
 
 async function loadLegacyMembers(db: Firestore, orgId: string) {
@@ -323,7 +394,9 @@ async function analyzeOrganization(params: {
   ]);
 
   const subscription = subscriptionDoc.exists ? (subscriptionDoc.data() || {}) : null;
-  const billingProtected = hasActiveBilling(subscription);
+  const billingProtected =
+    hasActiveBilling(subscription) ||
+    hasActiveOrganizationEntitlement(data);
 
   const linkedUserIds = new Set<string>();
   for (const memberDoc of membersSnap.docs) linkedUserIds.add(memberDoc.id);
@@ -808,7 +881,13 @@ export async function applyEcosystemOrganizationCleanup(params: {
     const subDoc = await params.db.collection('subscriptions').doc(analysis.id).get();
     const latestSubscription = subDoc.exists ? (subDoc.data() || {}) : null;
 
-    if (hasActiveBilling(latestSubscription)) {
+    const latestOrgDoc = await params.db.collection('organizations').doc(analysis.id).get();
+    const latestOrgData = latestOrgDoc.exists ? (latestOrgDoc.data() || {}) : {};
+
+    if (
+      hasActiveBilling(latestSubscription) ||
+      hasActiveOrganizationEntitlement(latestOrgData)
+    ) {
       skippedBecauseBillingChanged += 1;
       continue;
     }
