@@ -4,7 +4,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   applyEcosystemOrganizationCleanup,
   previewEcosystemOrganizationCleanup,
-} from '../src/server/services/EcosystemOrganizationCleanupService';
+} from '../src/server/services/EcosystemOrganizationCleanupService.js';
 
 const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || 'millionsnest';
 
