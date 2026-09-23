@@ -42,6 +42,11 @@ import {
 } from './src/server/services/PublicHomeAnalyticsService.js';
 import { summarizeGrowthEvents, type GrowthAnalyticsEvent } from './src/server/services/GrowthFunnelService.js';
 import { resolveLegacyMembershipCandidates } from './src/server/services/TenantBootstrapPlanner.js';
+import {
+  applyEcosystemOrganizationCleanup,
+  listRemarketingProspects,
+  previewEcosystemOrganizationCleanup,
+} from './src/server/services/EcosystemOrganizationCleanupService.js';
 
 import Stripe from 'stripe';
 import cors from 'cors';
@@ -2358,6 +2363,98 @@ async function startServer() {
       return res.json({ organizations });
     } catch (err) {
       console.error('[API Admin Orgs]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.get('/api/admin/organizations/cleanup-preview', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      const actorSnap = await db!.collection('users').doc(decoded.uid).get();
+      if (!actorSnap.exists) return res.status(403).json({ error: 'Forbidden' });
+
+      const actorData = actorSnap.data() || {};
+      if (!isGlobalPrivilegedRole(actorData.systemRole)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const { preview } = await previewEcosystemOrganizationCleanup({ db: db! });
+      return res.json({ success: true, preview });
+    } catch (err) {
+      console.error('[API Admin Organization Cleanup Preview]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.post('/api/admin/organizations/cleanup', express.json({ limit: '8kb' }), async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      const actorSnap = await db!.collection('users').doc(decoded.uid).get();
+      if (!actorSnap.exists) return res.status(403).json({ error: 'Forbidden' });
+
+      const actorData = actorSnap.data() || {};
+      if (!isGlobalPrivilegedRole(actorData.systemRole)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const result = await applyEcosystemOrganizationCleanup({
+        db: db!,
+        auth: admin.auth(),
+        actorUid: decoded.uid,
+        actorSystemRole: actorData.systemRole || 'user',
+        confirmation: String(req.body?.confirmation || ''),
+      });
+
+      return res.json({ success: true, result });
+    } catch (err: any) {
+      if (err?.message === 'CONFIRMATION_REQUIRED') {
+        return res.status(400).json({ error: 'Confirmation required' });
+      }
+      if (err?.message === 'FORBIDDEN_CLEANUP_ROLE') {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      console.error('[API Admin Organization Cleanup Apply]', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.get('/api/admin/remarketing-prospects', async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(token);
+      const actorSnap = await db!.collection('users').doc(decoded.uid).get();
+      if (!actorSnap.exists) return res.status(403).json({ error: 'Forbidden' });
+
+      const actorData = actorSnap.data() || {};
+      if (!isGlobalPrivilegedRole(actorData.systemRole)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const requestedLimit = Number(req.query.limit || 500);
+      const prospects = await listRemarketingProspects({
+        db: db!,
+        limit: Number.isFinite(requestedLimit) ? requestedLimit : 500,
+      });
+      return res.json({ success: true, prospects });
+    } catch (err) {
+      console.error('[API Admin Remarketing Prospects]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
   });

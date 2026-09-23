@@ -160,6 +160,140 @@ export function EcosystemAdmin() {
   const [selectedMainOrgId, setSelectedMainOrgId] = useState<string>("");
   const [movingFromOrgId, setMovingFromOrgId] = useState<string>("");
   const [movingToOrgId, setMovingToOrgId] = useState<string>("");
+  const [cleanupPreview, setCleanupPreview] = useState<any | null>(null);
+  const [loadingCleanupPreview, setLoadingCleanupPreview] = useState(false);
+  const [isRunningCleanup, setIsRunningCleanup] = useState(false);
+  const [isExportingRemarketing, setIsExportingRemarketing] = useState(false);
+
+  const loadOrganizationCleanupPreview = async () => {
+    setLoadingCleanupPreview(true);
+    try {
+      const token = await user?.getIdToken();
+      if (!token) throw new Error('Sessão de administrador indisponível.');
+
+      const res = await fetch('/api/admin/organizations/cleanup-preview', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Falha ao analisar organizações.');
+
+      setCleanupPreview(data.preview);
+      return data.preview;
+    } catch (e: any) {
+      customAlert('Erro', 'Não foi possível gerar a prévia da limpeza: ' + e.message, 'error');
+      return null;
+    } finally {
+      setLoadingCleanupPreview(false);
+    }
+  };
+
+  const runOrganizationCleanup = async () => {
+    const preview = cleanupPreview || await loadOrganizationCleanupPreview();
+    if (!preview) return;
+
+    const protectedNames = (preview.protected || [])
+      .map((item: any) => item.name)
+      .filter(Boolean)
+      .join(', ');
+
+    const warning =
+      `A limpeza encontrou ${preview.deleteCandidates || 0} organização(ões) candidatas à exclusão.\n\n` +
+      `Protegidas explicitamente: ${protectedNames || 'nenhuma encontrada nesta leitura'}.\n` +
+      `Organizações com faturamento ativo: ${preview.activeBillingOrganizations || 0}.\n` +
+      `Contatos potenciais para remarketing: ${preview.potentialRemarketingLeads || 0}.\n\n` +
+      'Antes de excluir, o sistema salva os contatos disponíveis em uma lista privada de remarketing, preserva organizações protegidas, com assinatura ativa ou com sinais de uso, e revalida o faturamento imediatamente antes de cada exclusão. Deseja executar agora?';
+
+    customConfirm(warning, async () => {
+      setIsRunningCleanup(true);
+      try {
+        const token = await user?.getIdToken();
+        if (!token) throw new Error('Sessão de administrador indisponível.');
+
+        const res = await fetch('/api/admin/organizations/cleanup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ confirmation: 'LIMPAR_ORGANIZACOES' })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || 'Falha ao executar limpeza.');
+
+        const result = data.result || {};
+        customAlert(
+          'Limpeza concluída',
+          `${result.organizationsDeleted || 0} organização(ões) excluída(s). ${result.leadsCaptured || 0} contato(s) preservado(s) para remarketing. ${result.skippedBecauseBillingChanged || 0} organização(ões) foram preservadas porque o faturamento mudou durante a execução.`,
+          'success'
+        );
+
+        await loadEcosystemData();
+        await loadOrganizationCleanupPreview();
+      } catch (e: any) {
+        customAlert('Erro', 'A limpeza não foi concluída: ' + e.message, 'error');
+      } finally {
+        setIsRunningCleanup(false);
+      }
+    });
+  };
+
+  const exportRemarketingProspects = async () => {
+    setIsExportingRemarketing(true);
+    try {
+      const token = await user?.getIdToken();
+      if (!token) throw new Error('Sessão de administrador indisponível.');
+
+      const res = await fetch('/api/admin/remarketing-prospects?limit=1000', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Falha ao carregar contatos.');
+
+      const prospects = Array.isArray(data.prospects) ? data.prospects : [];
+      const quote = (value: unknown) => {
+        const text = value == null ? '' : String(value);
+        return `"${text.replace(/"/g, '""')}"`;
+      };
+      const headers = [
+        'Nome',
+        'Email',
+        'Telefone',
+        'Organizacao',
+        'Pode receber marketing',
+        'Consentimento conhecido',
+        'Destino da organizacao',
+        'Motivo da limpeza',
+        'Status assinatura'
+      ];
+      const rows = prospects.map((item: any) => [
+        item.displayName,
+        item.email,
+        item.phone,
+        item.organizationName,
+        item.marketingEligible ? 'sim' : 'nao',
+        item.marketingConsentKnown ? 'sim' : 'nao',
+        item.cleanupDisposition,
+        item.cleanupReason,
+        item.subscriptionStatus
+      ]);
+      const csv = '\uFEFF' + [headers, ...rows].map(row => row.map(quote).join(';')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `millionsnest-remarketing-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+
+      customAlert('Exportação pronta', `${prospects.length} contato(s) foram exportados. Linhas sem consentimento conhecido continuam marcadas como "não" para evitar uso indevido.`, 'success');
+    } catch (e: any) {
+      customAlert('Erro', 'Não foi possível exportar os contatos: ' + e.message, 'error');
+    } finally {
+      setIsExportingRemarketing(false);
+    }
+  };
 
   const fetchDiagnostics = async (targetUser: any) => {
     setLoadingDiagnostics(true);
@@ -849,6 +983,86 @@ export function EcosystemAdmin() {
 
             {activeTab === 'organizations' && (
               <>
+                <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="max-w-2xl">
+                      <div className="flex items-center gap-2">
+                        <Database className="h-4 w-4 text-amber-300" />
+                        <h3 className="text-sm font-semibold text-[#F5F7FA]">Limpeza segura do banco</h3>
+                      </div>
+                      <p className="mt-2 text-xs leading-relaxed text-[#A0A7B5]">
+                        Analisa organizações sem uso e sem assinatura antes de qualquer exclusão. Família OBPC,
+                        MillionsNest Demo e Organização de Valdinei A Pereira são protegidas por regra fixa. Organizações
+                        de teste em uso recente e qualquer tenant com faturamento ativo também são preservados.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={loadOrganizationCleanupPreview}
+                        disabled={loadingCleanupPreview || isRunningCleanup}
+                        className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-[#F5F7FA] transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {loadingCleanupPreview ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />}
+                        Analisar agora
+                      </button>
+                      <button
+                        onClick={exportRemarketingProspects}
+                        disabled={isExportingRemarketing}
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#2B85EB]/25 bg-[#2B85EB]/10 px-3 py-2 text-xs font-medium text-[#65AFFF] transition hover:bg-[#2B85EB]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isExportingRemarketing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TrendingUp className="h-3.5 w-3.5" />}
+                        Exportar remarketing
+                      </button>
+                      <button
+                        onClick={runOrganizationCleanup}
+                        disabled={isRunningCleanup || loadingCleanupPreview}
+                        className="inline-flex items-center gap-2 rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isRunningCleanup ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <AlertCircle className="h-3.5 w-3.5" />}
+                        Executar limpeza
+                      </button>
+                    </div>
+                  </div>
+
+                  {cleanupPreview && (
+                    <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                      <div className="rounded-xl border border-white/5 bg-black/20 p-3">
+                        <p className="text-[10px] uppercase tracking-wider text-[#788392]">Total analisado</p>
+                        <p className="mt-1 text-xl font-semibold text-[#F5F7FA]">{cleanupPreview.totalOrganizationsScanned || 0}</p>
+                      </div>
+                      <div className="rounded-xl border border-red-400/10 bg-black/20 p-3">
+                        <p className="text-[10px] uppercase tracking-wider text-[#788392]">Candidatas à exclusão</p>
+                        <p className="mt-1 text-xl font-semibold text-red-300">{cleanupPreview.deleteCandidates || 0}</p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-400/10 bg-black/20 p-3">
+                        <p className="text-[10px] uppercase tracking-wider text-[#788392]">Protegidas</p>
+                        <p className="mt-1 text-xl font-semibold text-emerald-300">{cleanupPreview.protectedOrganizations || 0}</p>
+                      </div>
+                      <div className="rounded-xl border border-[#2B85EB]/10 bg-black/20 p-3">
+                        <p className="text-[10px] uppercase tracking-wider text-[#788392]">Leads possíveis</p>
+                        <p className="mt-1 text-xl font-semibold text-[#65AFFF]">{cleanupPreview.potentialRemarketingLeads || 0}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {cleanupPreview?.candidates?.length > 0 && (
+                    <div className="mt-4 rounded-xl border border-white/5 bg-black/20 p-3">
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#788392]">
+                        Prévia das organizações que seriam excluídas
+                      </p>
+                      <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                        {cleanupPreview.candidates.map((candidate: any) => (
+                          <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-xs hover:bg-white/[0.03]">
+                            <span className="truncate text-[#F5F7FA]">{candidate.name}</span>
+                            <span className="shrink-0 text-[10px] text-[#788392]">{candidate.reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+
                 {/* Search */}
                 <div className="relative">
                   <Search className="w-5 h-5 text-[#A0A7B5] absolute left-4 top-1/2 -translate-y-1/2" />
