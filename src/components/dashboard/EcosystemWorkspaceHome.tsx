@@ -28,6 +28,7 @@ import {
 } from '../../lib/commitmentCenter.js';
 import {
   deriveEvidenceBackedHubChanges,
+  type HubChangeSourceEntity,
   type MusicScaleChangeNotificationInput,
   type ReadOnlyHubChange
 } from '../../lib/changeCenter.js';
@@ -96,6 +97,7 @@ interface EcosystemWorkspaceHomeProps {
     configuredMembersCount: number;
     scalesCount: number;
     bandScalesCount: number;
+    changeSourceEntities: HubChangeSourceEntity[];
     nextScale: null | {
       id: string;
       date: string;
@@ -482,9 +484,14 @@ export function EcosystemWorkspaceHome({
 
     const changes = deriveEvidenceBackedHubChanges(
       organizationId,
-      isMusicScaleReady && appSummaryReady
+      isMusicScaleReady &&
+      appSummaryReady &&
+      musicScaleSummary.readiness.scalesReady
         ? musicScaleChanges
-        : []
+        : [],
+      {
+        currentSourceEntities: musicScaleSummary.changeSourceEntities,
+      }
     );
 
     const worshipDistribution =
