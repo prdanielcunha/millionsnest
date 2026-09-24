@@ -108,6 +108,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
   {
     id: 'nestjourney',
     name: 'NestJourney',
+    iconAsset: '/brand/nestjourney/v1/nestjourney-icon.svg',
     description: 'Jornadas de visitantes, cuidado, grupos e discipulado com visão pastoral e arquitetura multi-igreja.',
     shortDescription: 'Jornadas de pessoas e cuidado',
     icon: 'Route',
