@@ -46,6 +46,150 @@ export interface MusicScaleChangeNotificationInput {
   metadata?: unknown;
 }
 
+export interface HubChangeSourceEntity {
+  sourceApp: string;
+  sourceEntityType: string;
+  sourceEntityId: string;
+  validUntilMs?: number | null;
+}
+
+export interface MusicScaleChangeSourceInput {
+  id: string;
+  status?: unknown;
+  startsAtMs: number;
+  active?: unknown;
+  isArchived?: unknown;
+  isDeleted?: unknown;
+  deleted?: unknown;
+  deletedAt?: unknown;
+}
+
+export interface HubChangeProjectionOptions {
+  nowMs?: number;
+  horizonDays?: number;
+  limit?: number;
+  currentSourceEntities?: readonly HubChangeSourceEntity[];
+}
+
+const NON_CURRENT_MUSICSCALE_STATUSES = new Set([
+  'cancelled',
+  'canceled',
+  'completed',
+  'deleted',
+  'archived',
+  'inactive',
+  'draft',
+]);
+
+function changeSourceEntityKey(
+  sourceApp: string,
+  sourceEntityType: string,
+  sourceEntityId: string
+): string {
+  return `${sourceApp.trim()}:${sourceEntityType.trim()}:${sourceEntityId.trim()}`;
+}
+
+function hasDeletionMarker(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== false && value !== '';
+}
+
+/**
+ * Builds the current MusicScale entities that are still meaningful to review.
+ *
+ * Historical notifications remain valid facts, but the Hub must not present a
+ * "review change" CTA after the source scale was deleted, archived, cancelled,
+ * completed, soft-deleted, deactivated or has already started.
+ */
+export function deriveCurrentMusicScaleChangeSources(
+  scales: readonly MusicScaleChangeSourceInput[],
+  nowMs: number = Date.now()
+): HubChangeSourceEntity[] {
+  if (!Number.isFinite(nowMs)) return [];
+
+  const byId = new Map<string, HubChangeSourceEntity>();
+
+  for (const scale of scales) {
+    const sourceEntityId =
+      typeof scale?.id === 'string'
+        ? scale.id.trim()
+        : '';
+
+    const status = String(scale?.status ?? '')
+      .trim()
+      .toLowerCase();
+
+    const startsAtMs = scale?.startsAtMs;
+
+    if (
+      !sourceEntityId ||
+      typeof startsAtMs !== 'number' ||
+      !Number.isFinite(startsAtMs) ||
+      startsAtMs <= nowMs ||
+      scale?.active === false ||
+      scale?.isArchived === true ||
+      scale?.isDeleted === true ||
+      scale?.deleted === true ||
+      hasDeletionMarker(scale?.deletedAt) ||
+      NON_CURRENT_MUSICSCALE_STATUSES.has(status)
+    ) {
+      continue;
+    }
+
+    byId.set(sourceEntityId, {
+      sourceApp: 'musicscale',
+      sourceEntityType: 'scale',
+      sourceEntityId,
+      validUntilMs: startsAtMs,
+    });
+  }
+
+  return Array.from(byId.values());
+}
+
+function buildCurrentSourceEntityKeys(
+  currentSourceEntities: readonly HubChangeSourceEntity[] | undefined,
+  nowMs: number
+): Set<string> | null {
+  if (currentSourceEntities === undefined) return null;
+
+  const keys = new Set<string>();
+
+  for (const entity of currentSourceEntities) {
+    const sourceApp =
+      typeof entity?.sourceApp === 'string'
+        ? entity.sourceApp.trim()
+        : '';
+    const sourceEntityType =
+      typeof entity?.sourceEntityType === 'string'
+        ? entity.sourceEntityType.trim()
+        : '';
+    const sourceEntityId =
+      typeof entity?.sourceEntityId === 'string'
+        ? entity.sourceEntityId.trim()
+        : '';
+
+    if (!sourceApp || !sourceEntityType || !sourceEntityId) continue;
+
+    if (
+      typeof entity.validUntilMs === 'number' &&
+      Number.isFinite(entity.validUntilMs) &&
+      entity.validUntilMs <= nowMs
+    ) {
+      continue;
+    }
+
+    keys.add(
+      changeSourceEntityKey(
+        sourceApp,
+        sourceEntityType,
+        sourceEntityId
+      )
+    );
+  }
+
+  return keys;
+}
+
 export interface ReadOnlyHubChange {
   id: string;
   sourceApp: 'musicscale';
@@ -195,15 +339,41 @@ export function deriveReadOnlyHubChanges(
 export function deriveEvidenceBackedHubChanges(
   organizationIdInput: string,
   notifications: MusicScaleChangeNotificationInput[],
-  nowMs: number = Date.now(),
-  horizonDays: number = CHANGE_HORIZON_DAYS,
-  limit: number = CHANGE_LIMIT
+  nowMsOrOptions: number | HubChangeProjectionOptions = Date.now(),
+  horizonDaysInput: number = CHANGE_HORIZON_DAYS,
+  limitInput: number = CHANGE_LIMIT
 ): EvidenceBackedReadOnlyHubChange[] {
   const organizationId = organizationIdInput.trim();
   if (!organizationId) return [];
 
+  const options: HubChangeProjectionOptions =
+    typeof nowMsOrOptions === 'number'
+      ? {
+          nowMs: nowMsOrOptions,
+          horizonDays: horizonDaysInput,
+          limit: limitInput,
+        }
+      : nowMsOrOptions;
+
+  const nowMs =
+    typeof options.nowMs === 'number' && Number.isFinite(options.nowMs)
+      ? options.nowMs
+      : Date.now();
+  const horizonDays =
+    typeof options.horizonDays === 'number' && Number.isFinite(options.horizonDays)
+      ? options.horizonDays
+      : CHANGE_HORIZON_DAYS;
+  const limit =
+    typeof options.limit === 'number' && Number.isFinite(options.limit)
+      ? options.limit
+      : CHANGE_LIMIT;
+
   const horizonStart = nowMs - Math.max(1, horizonDays) * 86_400_000;
   const futureTolerance = nowMs + 5 * 60_000;
+  const currentSourceEntityKeys = buildCurrentSourceEntityKeys(
+    options.currentSourceEntities,
+    nowMs
+  );
   const bySourceRevision = new Map<string, EvidenceBackedReadOnlyHubChange>();
 
   const facts = projectMusicScaleChangeFacts({
@@ -220,6 +390,19 @@ export function deriveEvidenceBackedHubChanges(
     }
 
     const metadata = fact.metadata as MusicScaleChangeFactMetadata;
+    const sourceEntityKey = changeSourceEntityKey(
+      'musicscale',
+      'scale',
+      fact.entity.id
+    );
+
+    if (
+      currentSourceEntityKeys !== null &&
+      !currentSourceEntityKeys.has(sourceEntityKey)
+    ) {
+      continue;
+    }
+
     const change: EvidenceBackedReadOnlyHubChange = {
       id: `musicscale:change:${metadata.sourceNotificationId}`,
       sourceApp: 'musicscale',
