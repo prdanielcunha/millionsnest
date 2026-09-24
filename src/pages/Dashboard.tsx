@@ -47,7 +47,11 @@ import {
   parseToolNavigationResult,
   type ToolNavigationResult
 } from "../lib/actionToolGatewayBridge.js";
-import type { MusicScaleChangeNotificationInput } from "../lib/changeCenter.js";
+import {
+  deriveCurrentMusicScaleChangeSources,
+  type HubChangeSourceEntity,
+  type MusicScaleChangeNotificationInput
+} from "../lib/changeCenter.js";
 import {
   fetchActionPreferences,
   saveActionPreference,
@@ -131,6 +135,7 @@ type MusicScaleHubSummary = {
   configuredMembersCount: number;
   scalesCount: number;
   bandScalesCount: number;
+  changeSourceEntities: HubChangeSourceEntity[];
   nextScale: null | {
     id: string;
     date: string;
@@ -182,6 +187,7 @@ const EMPTY_MUSICSCALE_SUMMARY: MusicScaleHubSummary = {
   configuredMembersCount: 0,
   scalesCount: 0,
   bandScalesCount: 0,
+  changeSourceEntities: [],
   nextScale: null,
   recentAssignmentDistribution: null,
   readiness: {
@@ -2430,6 +2436,7 @@ export function Dashboard() {
     let responseScaleId: string | null = null;
     let personalResponsesUnsubscribe: (() => void) | null = null;
     let personalResponseScaleId: string | null = null;
+    let changeFreshnessTimer: ReturnType<typeof setTimeout> | null = null;
     const canReadResponseSummary =
       musicScaleProjection?.canReadManagedScaleResponses === true;
     const canReadWorshipDistribution =
@@ -2440,6 +2447,44 @@ export function Dashboard() {
       if (currentActiveOrgIdRef.current !== orgId) return;
 
       const now = Date.now();
+      const changeSourceEntities = deriveCurrentMusicScaleChangeSources(
+        live.scales.map(scale => ({
+          id: String(scale?.id || ''),
+          status: scale?.status,
+          startsAtMs: toEventEpoch(scale),
+          active: scale?.active,
+          isArchived: scale?.isArchived,
+          isDeleted: scale?.isDeleted,
+          deleted: scale?.deleted,
+          deletedAt: scale?.deletedAt,
+        })),
+        now
+      );
+
+      if (changeFreshnessTimer) {
+        clearTimeout(changeFreshnessTimer);
+        changeFreshnessTimer = null;
+      }
+
+      const nextChangeBoundary = changeSourceEntities
+        .map(entity => entity.validUntilMs)
+        .filter((value): value is number =>
+          typeof value === 'number' &&
+          Number.isFinite(value) &&
+          value > now
+        )
+        .sort((a, b) => a - b)[0];
+
+      if (nextChangeBoundary !== undefined) {
+        changeFreshnessTimer = setTimeout(
+          () => publishSummary(),
+          Math.min(
+            Math.max(nextChangeBoundary - now + 250, 250),
+            2_147_000_000
+          )
+        );
+      }
+
       const candidateScales = live.scales
         .filter(scale => !['cancelled', 'completed'].includes(String(scale.status || '').toLowerCase()))
         .filter(scale => toEventEpoch(scale) >= now - 6 * 60 * 60 * 1000)
@@ -2602,6 +2647,7 @@ export function Dashboard() {
         configuredMembersCount: live.configuredMembersCount,
         scalesCount: live.scales.length,
         bandScalesCount: live.bandScales.length,
+        changeSourceEntities,
         nextScale: nextScale ? {
           id: nextScale.id,
           date: nextScale.date,
@@ -2721,6 +2767,7 @@ export function Dashboard() {
     ));
 
     return () => {
+      if (changeFreshnessTimer) clearTimeout(changeFreshnessTimer);
       unsubscribers.forEach(unsubscribe => unsubscribe());
       responsesUnsubscribe?.();
       personalResponsesUnsubscribe?.();
