@@ -27,6 +27,7 @@ import {
   getToolGatewayCatalog,
   executeToolAction
 } from './src/server/services/ToolGatewayService.js';
+import { handleMusicScaleLiveAiRequest } from './src/server/services/MusicScaleLiveAiGatewayService.js';
 import {
   getToolApproval,
   requestToolApproval,
@@ -697,6 +698,11 @@ async function startServer() {
   
   // P0-A Security and Governance Routes
   app.post('/api/v1/support/tickets', express.json({ limit: '32kb' }), createSupportTicket);
+  app.post(
+    '/api/v1/organizations/:organizationId/musicscale-live/ai',
+    express.json({ limit: '64kb' }),
+    (req, res) => handleMusicScaleLiveAiRequest(req, res)
+  );
   app.get('/api/v1/support/capabilities', getSupportCapabilities);
   app.post('/api/v1/support/whatsapp-link', express.json({ limit: '8kb' }), createSupportWhatsAppLink);
   app.post('/api/v1/public/sales/whatsapp-link', express.json({ limit: '8kb' }), createPublicSalesWhatsAppLink);
