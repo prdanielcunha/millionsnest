@@ -701,7 +701,7 @@ async function startServer() {
   app.post(
     '/api/v1/organizations/:organizationId/musicscale-live/ai',
     express.json({ limit: '64kb' }),
-    handleMusicScaleLiveAiRequest
+    (req, res) => handleMusicScaleLiveAiRequest(req, res)
   );
   app.get('/api/v1/support/capabilities', getSupportCapabilities);
   app.post('/api/v1/support/whatsapp-link', express.json({ limit: '8kb' }), createSupportWhatsAppLink);
