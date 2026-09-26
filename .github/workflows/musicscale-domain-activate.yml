@@ -155,4 +155,26 @@ jobs:
             https://mn-musicscale-555464791734.web.app/ -o /tmp/ms.html
           grep -Eiq '<!doctype html|<html' /tmp/ms.html
           echo 'MUSICSCALE_FIREBASE_FALLBACK_OK'
-          dig +short CNAME musicscale.millionsnest.com || true
+          echo 'Public parent nameservers:'
+          dig +short NS millionsnest.com | sort
+          echo 'Cloudflare zone nameservers:'
+          CF_TOKEN="$(gcloud secrets versions access latest --secret=mn-cloudflare-dns-token --project=millionsnest)"
+          ZONES="$(curl --fail --silent --show-error -H "Authorization: Bearer $CF_TOKEN" \
+            'https://api.cloudflare.com/client/v4/zones?name=millionsnest.com&status=active')"
+          jq -r '.result[0].name_servers[]?' <<<"$ZONES" | sort
+          echo 'Public MusicScale CNAME:'
+          dig +short CNAME musicscale.millionsnest.com
+          echo 'Public MusicScale A:'
+          dig +short A musicscale.millionsnest.com
+          echo 'Firebase site through public resolver:'
+          dig +short A mn-musicscale-555464791734.web.app
+          PUBLIC_NS="$(dig +short NS millionsnest.com | sed 's/\.$//' | sort)"
+          CLOUDFLARE_NS="$(jq -r '.result[0].name_servers[]?' <<<"$ZONES" | sed 's/\.$//' | sort)"
+          if [ "$PUBLIC_NS" != "$CLOUDFLARE_NS" ]; then
+            echo 'DNS_DELEGATION_MISMATCH: Cloudflare zone is not the public DNS authority'
+            exit 1
+          fi
+          if [ "$(dig +short A musicscale.millionsnest.com | tail -n1)" = '127.0.0.1' ]; then
+            echo 'DNS_LOOPBACK_STILL_PUBLIC'
+            exit 1
+          fi
