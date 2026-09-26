@@ -35,6 +35,8 @@ Nunca implementar SSO compartilhando refresh token, service-account JSON, senha 
 
 O repositório do Hub possui `.github/workflows/firebase-custom-domain-prepare.yml`, que conhece todos os sites, incluindo NestLocal. Ele cria/consulta recursos CustomDomain no Firebase **sem inventar registros DNS** e imprime os valores exigidos pelo Firebase. O workflow dedicado `nestlocal-domain-activate.yml` aplica somente os registros retornados pelo Firebase para `nestlocal.millionsnest.com` no Cloudflare, sempre sem proxy durante a emissão do certificado.
 
+Para recuperar o domínio já provisionado do MusicScale, `.github/workflows/musicscale-domain-activate.yml` consulta o recurso Firebase e aplica somente os registros de `musicscale.millionsnest.com` e seus desafios de certificado. Quando o Firebase não lista mudanças pendentes, restaura o CNAME canônico do site MusicScale. Remove apenas registros A/AAAA de loopback no hostname exato; qualquer outro endereço inesperado interrompe a execução para inspeção. Após a propagação, execute novamente a verificação de prontidão e o smoke HTTPS do domínio oficial.
+
 Para um domínio novo ou ainda pendente:
 
 1. **Confirmar o site Firebase Hosting.** No projeto `millionsnest`, cada produto deve ter seu próprio site e target em `.firebaserc`/`firebase.json`. Não reutilizar o Hosting de outro app.
