@@ -247,7 +247,12 @@ async function main() {
         token: 'token',
         organizationId: 'org-advanced-model',
         task: 'post_service_summary',
-        body: { timeline: ['x'.repeat(5_000), 'y'.repeat(5_000)] }
+        body: {
+          timeline: Array.from(
+            { length: 180 },
+            (_, index) => `event ${index} observed provider state changed safely during rehearsal`
+          )
+        }
       }),
       recorder.res,
       dependencies({
