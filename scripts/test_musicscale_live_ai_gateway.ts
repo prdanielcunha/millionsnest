@@ -247,7 +247,7 @@ async function main() {
         token: 'token',
         organizationId: 'org-advanced-model',
         task: 'post_service_summary',
-        body: { timeline: 'x'.repeat(13_000) }
+        body: { timeline: ['x'.repeat(5_000), 'y'.repeat(5_000)] }
       }),
       recorder.res,
       dependencies({
