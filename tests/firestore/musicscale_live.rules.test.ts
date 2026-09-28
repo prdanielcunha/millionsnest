@@ -6,8 +6,10 @@ import {
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
+  collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
@@ -65,6 +67,8 @@ beforeEach(async () => {
       setDoc(doc(db, 'users/admin-a'), { systemRole: 'user' }),
       setDoc(doc(db, 'users/other-b'), { systemRole: 'user' }),
       setDoc(doc(db, 'users/ceo-user'), { systemRole: 'ceo' }),
+      setDoc(doc(db, 'users/ceo-global-role'), { systemRole: 'user', globalRole: 'ceo' }),
+      setDoc(doc(db, 'users/ceo-uppercase'), { systemRole: 'CEO' }),
       setDoc(doc(db, 'organizations/org-a/members/operator-a'), {
         uid: 'operator-a',
         organizationId: 'org-a',
@@ -100,6 +104,11 @@ beforeEach(async () => {
         permissions: {
           'musicscale.live.conduct': true,
         },
+      }),
+      setDoc(doc(db, 'songs/song-a'), {
+        organizationId: 'org-a',
+        title: 'Song A',
+        artist: 'Artist A',
       }),
       setDoc(doc(db, 'musicScaleLiveVenues/venue-a'), {
         organizationId: 'org-a',
@@ -347,4 +356,12 @@ test('global CEO keeps tenant-independent Live access without local membership',
     venueId: 'venue-a',
     name: 'CEO managed',
   }));
+});
+
+test('canonical global role compatibility keeps organization catalog and MusicScale data accessible', async () => {
+  for (const uid of ['ceo-global-role', 'ceo-uppercase']) {
+    const db = env.authenticatedContext(uid).firestore();
+    await assertSucceeds(getDocs(collection(db, 'organizations')));
+    await assertSucceeds(getDoc(doc(db, 'songs/song-a')));
+  }
 });
