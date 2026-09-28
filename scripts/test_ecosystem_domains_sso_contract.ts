@@ -13,7 +13,7 @@ for (const id of ['musicscale', 'connect', 'nestfinance', 'nestjourney', 'nestlo
   assert.ok(byId.has(id), `missing canonical app registry entry: ${id}`);
 }
 
-for (const id of ['musicscale', 'connect', 'nestfinance', 'nestjourney']) {
+for (const id of ['musicscale', 'connect', 'nestfinance', 'nestjourney', 'nestlocal']) {
   const app = byId.get(id)!;
   assert.match(app.canonicalOrigin || '', /^https:\/\/[a-z0-9-]+\.millionsnest\.com$/);
   assert.equal(app.authMode, 'hub_handoff');
@@ -22,9 +22,10 @@ for (const id of ['musicscale', 'connect', 'nestfinance', 'nestjourney']) {
   assert.equal(app.domainStatus, 'configured', `${id} must use a certified official domain`);
 }
 
-assert.equal(byId.get('nestlocal')?.directEntrySso, true, 'NestLocal must use the Hub handoff on its live Firebase fallback');
-assert.equal(byId.get('nestlocal')?.domainStatus, 'setup_required');
-assert.equal(byId.get('nestlocal')?.url, 'https://nestlocal.web.app/');
+assert.equal(byId.get('nestlocal')?.directEntrySso, true, 'NestLocal must use the Hub handoff on its canonical domain');
+assert.equal(byId.get('nestlocal')?.domainStatus, 'configured');
+assert.equal(byId.get('nestlocal')?.url, 'https://nestlocal.millionsnest.com/');
+assert.equal(byId.get('nestlocal')?.operationalUrl, 'https://nestlocal.millionsnest.com/');
 assert.equal(byId.get('nestlocal')?.canonicalOrigin, 'https://nestlocal.millionsnest.com');
 assert.equal(byId.get('nestfinance')?.url, 'https://nestfinance.millionsnest.com/auth/handoff');
 assert.equal(byId.get('nestjourney')?.url, 'https://nestjourney.millionsnest.com/');
@@ -61,7 +62,7 @@ const user = { uid: 'user-123' };
 const organization = { id: 'org-123' };
 
 async function captureLaunch(
-  appId: 'nestfinance' | 'musicscale',
+  appId: 'nestfinance' | 'musicscale' | 'nestlocal',
   destinationPath: string,
   returnOrigin?: string,
 ) {
@@ -104,6 +105,12 @@ assert.equal(nestFinanceLaunch.origin, 'https://nestfinance.millionsnest.com');
 assert.equal(nestFinanceLaunch.pathname, '/auth/handoff');
 assert.equal(nestFinanceLaunch.searchParams.get('returnTo'), '/finance/reports');
 assert.ok(nestFinanceLaunch.searchParams.get('ecosystem_ctx'));
+
+const nestLocalLaunch = await captureLaunch('nestlocal', '/?view=requests');
+assert.equal(nestLocalLaunch.origin, 'https://nestlocal.millionsnest.com');
+assert.equal(nestLocalLaunch.pathname, '/');
+assert.equal(nestLocalLaunch.searchParams.get('view'), 'requests');
+assert.ok(nestLocalLaunch.searchParams.get('ecosystem_ctx'));
 
 const musicScaleLaunch = await captureLaunch('musicscale', '/songs');
 assert.equal(musicScaleLaunch.origin, 'https://musicscale.millionsnest.com');
