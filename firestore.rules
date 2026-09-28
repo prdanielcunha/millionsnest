@@ -146,14 +146,21 @@ service cloud.firestore {
         hasAppCapability;
     }
 
+    function isCanonicalGlobalSystemRole(role) {
+      return role in [
+        'ceo', 'CEO',
+        'admin', 'ADMIN',
+        'global_admin', 'GLOBAL_ADMIN',
+        'ecosystem_owner', 'ECOSYSTEM_OWNER',
+        'founder', 'FOUNDER'
+      ];
+    }
+
     function isSystemAdmin() {
       let userDoc = isAuthenticated() ? get(/databases/$(database)/documents/users/$(request.auth.uid)) : null;
-      return userDoc != null && 'systemRole' in userDoc.data && (
-        userDoc.data.systemRole == 'ceo' ||
-        userDoc.data.systemRole == 'admin' ||
-        userDoc.data.systemRole == 'global_admin' ||
-        userDoc.data.systemRole == 'ecosystem_owner' ||
-        userDoc.data.systemRole == 'founder'
+      return userDoc != null && (
+        isCanonicalGlobalSystemRole(userDoc.data.get('systemRole', '')) ||
+        isCanonicalGlobalSystemRole(userDoc.data.get('globalRole', ''))
       );
     }
 
