@@ -193,7 +193,9 @@ export async function openEcosystemModule(
       targetUrl.pathname = app.handoffEntryPath;
       targetUrl.searchParams.set('returnTo', cleanDestinationPath);
     } else {
-      targetUrl.pathname = cleanDestinationPath;
+      const destinationUrl = new URL(cleanDestinationPath, targetUrl.origin);
+      targetUrl.pathname = destinationUrl.pathname;
+      targetUrl.search = destinationUrl.search;
     }
   } else if (app.handoffEntryPath && app.handoffConsumesGlobally === false) {
     targetUrl.pathname = app.handoffEntryPath;
