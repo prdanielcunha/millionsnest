@@ -98,6 +98,100 @@ export async function openEcosystemModule(
   const idToken = await deps.getIdToken();
   deps.markPerformance('handoff_started');
 
+  if (moduleKey === 'nestlocal') {
+    let issuePayload: any = null;
+    const maxIssueRequests = 2;
+
+    for (let attempt = 1; attempt <= maxIssueRequests; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      let response;
+      try {
+        response = await deps.fetchFn('/api/ecosystem/nestlocal/handoff/issue', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            organizationId: expectedOrganizationId,
+            supportMode: isSupportMode,
+          }),
+          signal: controller.signal
+        });
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+          throw new Error('Tempo limite esgotado. Verifique sua conexão e tente novamente.');
+        }
+        throw new Error('Não foi possível preparar o acesso ao NestLocal.');
+      }
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let errorData: any = {};
+        try { errorData = await response.json(); } catch {}
+
+        if (errorData.retryable === true && attempt < maxIssueRequests && [403, 429, 500, 503].includes(response.status)) {
+          await deps.sleep(800);
+          continue;
+        }
+
+        if (response.status === 401) {
+          throw new Error('Sua sessão expirou. Entre novamente e tente abrir o NestLocal.');
+        }
+        if (response.status === 403) {
+          throw new Error('Não encontramos um acesso ativo ao NestLocal para esta organização.');
+        }
+        if (response.status === 429) {
+          throw new Error('Muitas tentativas de acesso ao NestLocal. Aguarde alguns instantes e tente novamente.');
+        }
+        if (response.status === 500 || response.status === 503) {
+          throw new Error('O NestLocal está temporariamente indisponível. Tente novamente em instantes.');
+        }
+        throw new Error('Não foi possível preparar o acesso ao NestLocal.');
+      }
+
+      try {
+        issuePayload = await response.json();
+      } catch {
+        throw new Error('A resposta de acesso ao NestLocal é inválida. Tente novamente.');
+      }
+      break;
+    }
+
+    if (
+      !issuePayload ||
+      typeof issuePayload.code !== 'string' ||
+      !/^[A-Za-z0-9_-]{43}$/.test(issuePayload.code) ||
+      typeof issuePayload.expiresInSeconds !== 'number' ||
+      !Number.isFinite(issuePayload.expiresInSeconds) ||
+      issuePayload.expiresInSeconds <= 0 ||
+      issuePayload.expiresInSeconds > 120
+    ) {
+      throw new Error('A resposta de acesso ao NestLocal é inválida. Tente novamente.');
+    }
+
+    const targetUrl = new URL(app.url);
+    targetUrl.pathname = app.handoffEntryPath || '/auth/handoff';
+    targetUrl.search = '';
+
+    if (destinationPath) {
+      const cleanDestinationPath = destinationPath.trim();
+      if (!isAllowedAppDestinationPath(moduleKey, cleanDestinationPath)) {
+        throw new Error('Destino do aplicativo inválido.');
+      }
+      targetUrl.searchParams.set('returnTo', cleanDestinationPath);
+    }
+
+    targetUrl.searchParams.set('code', issuePayload.code);
+    deps.markPerformance('handoff_completed');
+    deps.assign(targetUrl.toString());
+    return;
+  }
+
   let handoff: any = null;
   const maxRequests = 2;
   for (let attempt = 1; attempt <= maxRequests; attempt++) {
