@@ -5636,6 +5636,267 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
+  app.post('/api/ecosystem/nestlocal/handoff/issue', express.json(), async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Vary', 'Origin');
+
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || Array.isArray(authHeader) || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({
+          error: 'Unauthorized: Missing or invalid authorization header.',
+          code: 'UNAUTHORIZED',
+          retryable: false,
+        });
+      }
+
+      let decoded: any;
+      try {
+        decoded = await admin.auth().verifyIdToken(authHeader.slice(7));
+      } catch {
+        return res.status(401).json({
+          error: 'Unauthorized: Invalid ID token.',
+          code: 'UNAUTHORIZED',
+          retryable: false,
+        });
+      }
+
+      const uid = typeof decoded?.uid === 'string' ? decoded.uid.trim() : '';
+      if (!uid) {
+        return res.status(401).json({
+          error: 'Unauthorized: Invalid ID token payload.',
+          code: 'UNAUTHORIZED',
+          retryable: false,
+        });
+      }
+
+      const body = req.body && typeof req.body === 'object' ? req.body as any : {};
+      const organizationId = typeof body.organizationId === 'string' ? body.organizationId.trim() : '';
+      const supportModeRequested = body.supportMode === true;
+
+      if (
+        !organizationId ||
+        organizationId.length > 256 ||
+        organizationId === '.' ||
+        organizationId === '..' ||
+        organizationId.includes('/') ||
+        organizationId.includes('\\') ||
+        /[\x00-\x1F\x7F]/.test(organizationId)
+      ) {
+        return res.status(400).json({
+          error: 'Invalid request: invalid organizationId.',
+          code: 'INVALID_REQUEST',
+          retryable: false,
+        });
+      }
+
+      if (body.supportMode !== undefined && body.supportMode !== null && typeof body.supportMode !== 'boolean') {
+        return res.status(400).json({
+          error: 'Invalid request: supportMode must be a boolean.',
+          code: 'INVALID_REQUEST',
+          retryable: false,
+        });
+      }
+
+      const databaseInst = getDb();
+      if (!databaseInst) {
+        return res.status(503).json({
+          error: 'Service Unavailable: Database not initialized.',
+          code: 'SERVICE_UNAVAILABLE',
+          retryable: true,
+        });
+      }
+
+      const originDecision = validateHandoffOrigin(req.headers.origin);
+      if (!originDecision.allowed) {
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.origin_rejected',
+          appId: 'nestlocal',
+          organizationId,
+          uid,
+          protocol: 'one_time_code',
+          reason: 'ORIGIN_NOT_ALLOWED',
+        }).catch(() => undefined);
+
+        return res.status(403).json({
+          error: 'Forbidden: Request origin is not allowed.',
+          code: 'ORIGIN_NOT_ALLOWED',
+          retryable: false,
+        });
+      }
+
+      if (originDecision.origin) {
+        res.setHeader('Access-Control-Allow-Origin', originDecision.origin);
+      }
+
+      let rateLimit;
+      try {
+        rateLimit = await enforceHandoffRateLimit({
+          db: databaseInst,
+          scope: 'ecosystem_handoff_issue',
+          uid,
+          appId: 'nestlocal',
+          organizationId,
+          nowMs: Date.now(),
+        });
+      } catch {
+        return res.status(503).json({
+          error: 'Service Unavailable: Handoff protection unavailable.',
+          code: 'HANDOFF_PROTECTION_UNAVAILABLE',
+          retryable: true,
+        });
+      }
+
+      if (!rateLimit.allowed) {
+        res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds));
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.rate_limited',
+          appId: 'nestlocal',
+          organizationId,
+          uid,
+          protocol: 'one_time_code',
+          reason: 'RATE_LIMITED',
+        }).catch(() => undefined);
+
+        return res.status(429).json({
+          error: 'Too many handoff requests.',
+          code: 'RATE_LIMITED',
+          retryable: true,
+          retryAfterSeconds: rateLimit.retryAfterSeconds,
+        });
+      }
+
+      const access = await resolveEcosystemAppAccess({
+        uid,
+        organizationId,
+        appId: 'nestlocal',
+        db: databaseInst,
+      });
+
+      if (!access || access.accessible !== true) {
+        const reason = access?.denialReason || 'UNKNOWN_REASON';
+        const retryable = reason === 'SUBSCRIPTION_NOT_FOUND' || reason === 'ENTITLEMENT_NOT_CONFIGURED';
+
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.denied',
+          appId: 'nestlocal',
+          organizationId,
+          uid,
+          accessSource: access?.accessSource || 'denied',
+          protocol: 'one_time_code',
+          reason,
+        }).catch(() => undefined);
+
+        return res.status(403).json({
+          error: 'Forbidden: Access denied to NestLocal.',
+          code: 'ECOSYSTEM_ACCESS_DENIED',
+          reason,
+          retryable,
+        });
+      }
+
+      if (supportModeRequested && !access.isGlobalAccess) {
+        return res.status(403).json({
+          error: 'Forbidden: Support mode is not allowed.',
+          code: 'SUPPORT_MODE_FORBIDDEN',
+          reason: 'SUPPORT_MODE_FORBIDDEN',
+          retryable: false,
+        });
+      }
+
+      const verifiedSupportMode = supportModeRequested && access.isGlobalAccess;
+      const sessionVersion = await readCanonicalEcosystemSessionVersion(databaseInst, uid);
+      const ttlMs = 90_000;
+
+      let code = '';
+      let codeHash = '';
+      let issued = false;
+
+      for (let attempt = 0; attempt < 3 && !issued; attempt++) {
+        code = crypto.randomBytes(32).toString('base64url');
+        codeHash = crypto.createHash('sha256').update(code).digest('hex');
+
+        try {
+          await databaseInst.collection('ecosystemHandoffs').doc(codeHash).create({
+            version: 1,
+            appId: 'nestlocal',
+            uid,
+            organizationId,
+            status: 'issued',
+            accessSource: access.accessSource,
+            supportMode: verifiedSupportMode,
+            sessionVersion,
+            issuedAt: admin.firestore.Timestamp.now(),
+            expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + ttlMs),
+            consumedAt: null,
+          });
+          issued = true;
+        } catch (error: any) {
+          if (error?.code === 6) continue;
+          throw error;
+        }
+      }
+
+      if (!issued) {
+        return res.status(500).json({
+          error: 'Internal Server Error: Failed to issue handoff code.',
+          code: 'HANDOFF_ISSUE_FAILED',
+          retryable: true,
+        });
+      }
+
+      try {
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.issued',
+          appId: 'nestlocal',
+          organizationId,
+          uid,
+          accessSource: access.accessSource,
+          protocol: 'one_time_code',
+          metadata: {
+            handoffVersion: 1,
+            ttlSeconds: 90,
+            supportMode: verifiedSupportMode,
+          },
+        });
+      } catch {
+        await databaseInst.collection('ecosystemHandoffs').doc(codeHash).set({
+          status: 'revoked',
+          revokedReason: 'AUDIT_UNAVAILABLE',
+          revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true }).catch(() => undefined);
+
+        return res.status(503).json({
+          error: 'Service Unavailable: Handoff audit unavailable.',
+          code: 'HANDOFF_AUDIT_UNAVAILABLE',
+          retryable: true,
+        });
+      }
+
+      return res.status(200).json({
+        code,
+        expiresInSeconds: Math.floor(ttlMs / 1000),
+      });
+    } catch (error: any) {
+      console.error('[NESTLOCAL_HANDOFF_ISSUE_ERROR]', {
+        code: error?.code || 'UNKNOWN',
+        message: error?.message || 'unknown',
+      });
+
+      return res.status(500).json({
+        error: 'Internal Server Error',
+        code: 'HANDOFF_ISSUE_FAILED',
+        retryable: true,
+      });
+    }
+  });
+
   app.post('/api/v1/auth/ecosystem-session/revoke', express.json(), async (req, res) => {
     return revokeCurrentEcosystemSession(req, res, {
       verifyIdToken: (token) => admin.auth().verifyIdToken(token),

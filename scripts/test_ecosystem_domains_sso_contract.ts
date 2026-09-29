@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { ECOSYSTEM_APPS } from '../src/lib/apps.ts';
 import {
   buildEcosystemLoginPath,
@@ -27,6 +28,8 @@ assert.equal(byId.get('nestlocal')?.domainStatus, 'configured');
 assert.equal(byId.get('nestlocal')?.url, 'https://nestlocal.millionsnest.com/');
 assert.equal(byId.get('nestlocal')?.operationalUrl, 'https://nestlocal.millionsnest.com/');
 assert.equal(byId.get('nestlocal')?.canonicalOrigin, 'https://nestlocal.millionsnest.com');
+assert.equal(byId.get('nestlocal')?.handoffEntryPath, '/auth/handoff');
+assert.equal(byId.get('nestlocal')?.handoffConsumesGlobally, false);
 assert.equal(byId.get('nestfinance')?.url, 'https://nestfinance.millionsnest.com/auth/handoff');
 assert.equal(byId.get('nestjourney')?.url, 'https://nestjourney.millionsnest.com/');
 
@@ -78,15 +81,32 @@ async function captureLaunch(
     {
       loadApps: async () => [app],
       getIdToken: async () => 'hub-id-token',
-      fetchFn: async () => new Response(JSON.stringify({
-        appId,
-        protocolVersion: '1.0.0',
-        orgId: organization.id,
-        uid: user.uid,
-        customToken: 'custom-token',
-        expiresAt: now + 300_000,
-        supportMode: false,
-      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      fetchFn: async (input, init) => {
+        const url = String(input);
+        if (appId === 'nestlocal') {
+          assert.equal(url, '/api/ecosystem/nestlocal/handoff/issue');
+          assert.equal(init?.method, 'POST');
+          assert.equal(
+            JSON.parse(String(init?.body || '{}')).organizationId,
+            organization.id,
+          );
+          return new Response(JSON.stringify({
+            code: 'A'.repeat(43),
+            expiresInSeconds: 90,
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+
+        assert.equal(url, '/api/ecosystem/create-handoff');
+        return new Response(JSON.stringify({
+          appId,
+          protocolVersion: '1.0.0',
+          orgId: organization.id,
+          uid: user.uid,
+          customToken: 'custom-token',
+          expiresAt: now + 300_000,
+          supportMode: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      },
       sleep: async () => {},
       assign: (url) => { assigned = url; },
       now: () => now,
@@ -109,9 +129,10 @@ assert.ok(nestFinanceLaunch.searchParams.get('ecosystem_ctx'));
 
 const nestLocalLaunch = await captureLaunch('nestlocal', '/?view=requests');
 assert.equal(nestLocalLaunch.origin, 'https://nestlocal.millionsnest.com');
-assert.equal(nestLocalLaunch.pathname, '/');
-assert.equal(nestLocalLaunch.searchParams.get('view'), 'requests');
-assert.ok(nestLocalLaunch.searchParams.get('ecosystem_ctx'));
+assert.equal(nestLocalLaunch.pathname, '/auth/handoff');
+assert.equal(nestLocalLaunch.searchParams.get('returnTo'), '/?view=requests');
+assert.equal(nestLocalLaunch.searchParams.get('code'), 'A'.repeat(43));
+assert.equal(nestLocalLaunch.searchParams.get('ecosystem_ctx'), null);
 
 const musicScaleLaunch = await captureLaunch('musicscale', '/songs');
 assert.equal(musicScaleLaunch.origin, 'https://musicscale.millionsnest.com');
@@ -129,5 +150,17 @@ assert.equal(musicScaleEvilLaunch.origin, 'https://musicscale.millionsnest.com')
 
 const nestFinancePreviewAttempt = await captureLaunch('nestfinance', '/finance/reports', previewOrigin);
 assert.equal(nestFinancePreviewAttempt.origin, 'https://nestfinance.millionsnest.com');
+
+const serverSource = readFileSync(new URL('../server.ts', import.meta.url), 'utf8');
+for (const token of [
+  "app.post('/api/ecosystem/nestlocal/handoff/issue'",
+  "appId: 'nestlocal'",
+  "protocol: 'one_time_code'",
+  "crypto.randomBytes(32).toString('base64url')",
+  "collection('ecosystemHandoffs').doc(codeHash).create",
+  "sessionVersion = await readCanonicalEcosystemSessionVersion",
+]) {
+  assert.ok(serverSource.includes(token), 'missing NestLocal backend handoff contract: ' + token);
+}
 
 console.log('ecosystem domains + SSO contract: ok');
