@@ -9,6 +9,7 @@ on:
       - "firebase.rules-test.json"
       - "tests/firestore/nestjourney.rules.test.ts"
       - "tests/firestore/musicscale_live.rules.test.ts"
+      - "tests/firestore/nestaffiliate.rules.test.ts"
       - ".github/workflows/firebase-firestore-rules-deploy.yml"
   workflow_dispatch:
 
@@ -64,6 +65,14 @@ jobs:
           --only firestore
           --project demo-millionsnest-musicscale-live-release
           "npx tsx --test --test-concurrency=1 tests/firestore/musicscale_live.rules.test.ts"
+
+      - name: Certify NestAffiliate Firestore boundary
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-millionsnest-nestaffiliate-release
+          "npx tsx --test --test-concurrency=1 tests/firestore/nestaffiliate.rules.test.ts"
 
       - name: Deploy canonical Firestore rules
         run: >-
