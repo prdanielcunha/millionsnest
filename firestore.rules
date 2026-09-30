@@ -185,9 +185,24 @@ service cloud.firestore {
           : 'viewer');
     }
 
+    function nestAffiliateProductEnabled(orgId) {
+      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
+      let apps = orgDoc != null ? orgDoc.data.get('apps', {}) : {};
+      let app = apps is map ? apps.get('nestaffiliate', {}) : {};
+      return isSystemAdmin() || (
+        orgDoc != null &&
+        app is map &&
+        (
+          app.get('status', '') in ['active', 'trialing'] ||
+          app.get('enabled', false) == true
+        )
+      );
+    }
+
     function nestAffiliateCanRead(orgId) {
       return isAuthenticated() &&
         isOrganizationLifecycleActive(orgId) &&
+        nestAffiliateProductEnabled(orgId) &&
         checkOrgReadAccess(orgId);
     }
 
@@ -195,6 +210,7 @@ service cloud.firestore {
       let role = nestAffiliateRole(orgId);
       return isAuthenticated() &&
         isOrganizationLifecycleActive(orgId) &&
+        nestAffiliateProductEnabled(orgId) &&
         checkOrgAccess(orgId) &&
         (isSystemAdmin() || role in ['owner', 'admin', 'editor']);
     }
@@ -203,6 +219,7 @@ service cloud.firestore {
       let role = nestAffiliateRole(orgId);
       return isAuthenticated() &&
         isOrganizationLifecycleActive(orgId) &&
+        nestAffiliateProductEnabled(orgId) &&
         checkOrgAccess(orgId) &&
         (isSystemAdmin() || role in ['owner', 'admin']);
     }
