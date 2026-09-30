@@ -96,6 +96,11 @@ assertCondition("9. member é papel organizacional válido", isInvitationCreator
 }
 {
   const input = createValidInput();
+  input.organization.status = 'trialing';
+  assertCondition("17b. organização em período de avaliação continua operacional", planInvitationCreation(input as any, nowMs).success === true);
+}
+{
+  const input = createValidInput();
   input.organization.name = undefined as any;
   assertCondition("18. nome ausente falha", isFailureWithReason(planInvitationCreation(input as any, nowMs), 'ORGANIZATION_STATE_INCONSISTENT'));
 }
