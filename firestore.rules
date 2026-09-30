@@ -2021,7 +2021,8 @@ service cloud.firestore {
         }
 
         match /{collectionName}/{documentId} {
-          allow read: if nestAffiliateCanRead(orgId);
+          allow read: if !(collectionName in ['providerConnections', 'auditEvents']) &&
+            nestAffiliateCanRead(orgId);
           allow create: if collectionName in [
               'boards',
               'products',
