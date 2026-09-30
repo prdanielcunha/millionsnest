@@ -1,0 +1,87 @@
+name: Authorize NestLume Production WIF
+
+on:
+  push:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/authorize-nestlume-wif.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: authorize-nestlume-wif
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: millionsnest
+  PROJECT_NUMBER: "555464791734"
+  POOL_ID: mn-prod-github
+  PROVIDER_ID: github
+  NESTLUME_REPOSITORY: prdanielcunha/nestlume
+  WEB_DEPLOYER: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact production state
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate as MillionsNest infrastructure admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Extend provider condition only for NestLume production
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CURRENT="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID"             --workload-identity-pool="$POOL_ID"             --location=global             --project="$PROJECT_ID"             --format='value(attributeCondition)')"
+
+          test -n "$CURRENT"
+          echo "CURRENT_CONDITION_PRESENT=true"
+
+          if grep -Fq "$NESTLUME_REPOSITORY" <<<"$CURRENT"; then
+            echo "NESTLUME_REPOSITORY_ALREADY_ALLOWED=true"
+          else
+            NESTLUME_CLAUSE="(assertion.repository == '$NESTLUME_REPOSITORY' && assertion.ref == 'refs/heads/production')"
+            UPDATED="($CURRENT) || $NESTLUME_CLAUSE"
+
+            gcloud iam workload-identity-pools providers update-oidc "$PROVIDER_ID"               --workload-identity-pool="$POOL_ID"               --location=global               --project="$PROJECT_ID"               --attribute-condition="$UPDATED"               --quiet
+
+            echo "NESTLUME_REPOSITORY_ADDED_TO_PROVIDER=true"
+          fi
+
+      - name: Allow NestLume production to impersonate web deployer
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$NESTLUME_REPOSITORY"
+
+          gcloud iam service-accounts add-iam-policy-binding "$WEB_DEPLOYER"             --project="$PROJECT_ID"             --role="roles/iam.workloadIdentityUser"             --member="$MEMBER"             --quiet >/tmp/nestlume-wif-binding.json
+
+          echo "NESTLUME_WEB_DEPLOYER_BINDING_READY=true"
+
+      - name: Verify constrained NestLume authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CONDITION="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID"             --workload-identity-pool="$POOL_ID"             --location=global             --project="$PROJECT_ID"             --format='value(attributeCondition)')"
+
+          grep -F "$NESTLUME_REPOSITORY" <<<"$CONDITION" >/dev/null
+          grep -F "assertion.ref == 'refs/heads/production'" <<<"$CONDITION" >/dev/null
+
+          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$NESTLUME_REPOSITORY"
+
+          gcloud iam service-accounts get-iam-policy "$WEB_DEPLOYER"             --project="$PROJECT_ID"             --format=json >/tmp/web-deployer-policy.json
+
+          jq -e --arg member "$MEMBER"             '.bindings[] | select(.role == "roles/iam.workloadIdentityUser") | .members[] | select(. == $member)'             /tmp/web-deployer-policy.json >/dev/null
+
+          echo "NESTLUME_PRODUCTION_WIF_READY=true"
