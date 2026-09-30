@@ -630,7 +630,13 @@ export default {
     login_button: "Entrar",
     create_button: "Crear cuenta",
     no_account: "¿No tienes cuenta? Regístrate",
-    has_account: "¿Ya tienes cuenta? Inicia sesión"
+    has_account: "¿Ya tienes cuenta? Inicia sesión",
+    purchase_flow_title: "Continúa para activar tu prueba",
+    purchase_flow_subtitle: "Usa Google o tu correo. Si es tu primer acceso, crearemos tu cuenta y mantendremos seleccionado el plan que elegiste.",
+    setup_pending_title: "Tu inicio de sesión fue confirmado",
+    setup_pending_body: "Estamos terminando la configuración de tu acceso. No se perdió ninguna compra y puedes continuar con seguridad.",
+    continue_setup: "Continuar",
+    use_another_account: "Usar otra cuenta"
   },
   commandPalette: {
     placeholder: "¿Qué necesitas hacer?",

@@ -103,17 +103,22 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         memberActive: lockMemberActive
       };
 
-      // Get Canonical Memberships
-      const membersQuery = await t.get(
-        db.collectionGroup('members').where('uid', '==', uid)
-      );
-      const allCanonical = membersQuery.docs
-        .filter(d => 
-           d.id === uid && 
-           d.ref.parent.id === 'members' && 
-           d.ref.parent.parent?.parent?.id === 'organizations'
-        )
-        .map(d => ({ ...d.data(), organizationId: d.ref.parent.parent!.id } as any));
+      // A truly first-time Firebase identity has no users/{uid} profile yet.
+      // Do not make that happy path depend on a collection-group index just to
+      // discover memberships that cannot normally exist before onboarding.
+      let allCanonical: any[] = [];
+      if (userSnap.exists) {
+        const membersQuery = await t.get(
+          db.collectionGroup('members').where('uid', '==', uid)
+        );
+        allCanonical = membersQuery.docs
+          .filter(d => 
+             d.id === uid && 
+             d.ref.parent.id === 'members' && 
+             d.ref.parent.parent?.parent?.id === 'organizations'
+          )
+          .map(d => ({ ...d.data(), organizationId: d.ref.parent.parent!.id } as any));
+      }
 
       const candidateCanonical = allCanonical.filter(m => !m.status || m.status === 'active');
       const validCanonical = [];
@@ -162,27 +167,15 @@ export async function bootstrapUserContext(req: Request, res: Response) {
           validLegacy.push(m);
       }
 
-      // Get Invites
-      let pendingInvites: any[] = [];
-      const normalizedEmail = userEmail?.toLowerCase().trim();
-      if (normalizedEmail) {
-        const iQ1 = await t.get(db.collectionGroup('invites').where('emailNormalized', '==', normalizedEmail).where('status', '==', 'pending'));
-        const originalEmail = userEmail!.trim();
-        const iQ2 = await t.get(db.collectionGroup('invites').where('email', '==', originalEmail).where('status', '==', 'pending'));
-        const iQ3 = await t.get(db.collectionGroup('invites').where('email', '==', normalizedEmail).where('status', '==', 'pending'));
-        
-        const inviteMap = new Map();
-        [...iQ1.docs, ...iQ2.docs, ...iQ3.docs].forEach(d => {
-           inviteMap.set(d.ref.path, d.data());
-        });
-        
-        pendingInvites = Array.from(inviteMap.values()).map((d: any) => ({
-           email: d.email,
-           emailNormalized: d.emailNormalized,
-           status: d.status,
-           expiresAtMs: parseTimeMs(d.expiresAt)
-        }));
-      }
+      // Generic sign-in/bootstrap must never be blocked by an invitation that the
+      // user did not explicitly open. Invitation acceptance is a separate,
+      // token-bound flow handled by /join/:orgId, and AuthContext deliberately
+      // skips bootstrap when that explicit redirect is present.
+      //
+      // Keeping generic onboarding independent from collectionGroup('invites')
+      // also avoids making first-time Google sign-in depend on a collection-group
+      // index before the customer can even reach checkout.
+      const pendingInvites: any[] = [];
 
       const userContext = {
         activeOrganizationId: userData?.activeOrganizationId,

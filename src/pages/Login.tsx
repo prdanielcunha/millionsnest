@@ -16,11 +16,13 @@ export function Login() {
   const location = useLocation();
   const { t } = useTranslation(['auth']);
   
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(() => !Boolean(sessionStorage.getItem('purchase_intent')));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const purchaseIntent = sessionStorage.getItem('purchase_intent');
+  const isPurchaseFlow = Boolean(purchaseIntent);
 
   useEffect(() => {
     if (!auth) return;
@@ -138,9 +140,9 @@ export function Login() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#050505] p-6">
         <div className="w-full max-w-md bg-[#0B0F19]/70 border border-white/10 rounded-3xl p-7 text-center shadow-2xl">
-          <h2 className="text-xl font-semibold text-white">Não conseguimos terminar a configuração da conta</h2>
+          <h2 className="text-xl font-semibold text-white">{t("setup_pending_title", "Seu login foi confirmado")}</h2>
           <p className="text-sm text-[#A0A7B5] mt-3 leading-relaxed">
-            Sua autenticação funcionou, mas o perfil do MillionsNest não foi carregado.
+            {t("setup_pending_body", "Estamos finalizando seu acesso. Nenhuma compra foi perdida e você pode continuar com segurança.")}
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
             <button
@@ -148,14 +150,14 @@ export function Login() {
               onClick={() => window.location.reload()}
               className="min-h-[44px] rounded-xl bg-white text-black text-sm font-semibold hover:bg-gray-100"
             >
-              Tentar novamente
+              {t("continue_setup", "Continuar")}
             </button>
             <button
               type="button"
               onClick={() => void logout()}
               className="min-h-[44px] rounded-xl border border-white/10 bg-white/5 text-white text-sm font-semibold hover:bg-white/10"
             >
-              Sair da conta
+              {t("use_another_account", "Usar outra conta")}
             </button>
           </div>
         </div>
@@ -179,10 +181,14 @@ export function Login() {
         </div>
         
         <h2 className="text-2xl font-semibold text-[#F5F7FA] text-center tracking-tight mb-2">
-          {isLogin ? t("welcome_back") : t("create_account")}
+          {isPurchaseFlow
+            ? t("purchase_flow_title", "Continue para ativar seu teste")
+            : (isLogin ? t("welcome_back") : t("create_account"))}
         </h2>
         <p className="text-center text-[#A0A7B5] text-sm font-normal mb-8">
-          {t("access_central")}
+          {isPurchaseFlow
+            ? t("purchase_flow_subtitle", "Use o Google ou seu e-mail. Se for seu primeiro acesso, sua conta será criada e o plano escolhido continuará selecionado.")
+            : t("access_central")}
         </p>
 
         {error && (

@@ -244,11 +244,15 @@ function runTests() {
   assert(afterIdTokenTrue.includes('if (!isCurrentAuthEvent()) return'), "69. bootstrap valida o evento depois de getIdToken(true)");
 
   // 70
-  const afterBootFetch = content.substring(content.indexOf('fetch(\'/api/v1/onboarding/bootstrap\''), content.indexOf('if (bootRes.ok)'));
+  const afterBootFetch = content.substring(
+    content.indexOf('const bootstrapAttempt = await runBootstrap();'),
+    content.indexOf('if (!bootstrapAttempt.response.ok')
+  );
   assert(afterBootFetch.includes('if (!isCurrentAuthEvent()) return'), "70. bootstrap valida o evento depois do fetch");
 
   // 71
-  const afterNewUserDoc = content.substring(content.indexOf('const newUserSnap = await getDoc(userRef);', content.indexOf('bootRes.ok')), content.indexOf('if (newUserSnap.exists())'));
+  const newUserReloadStart = content.indexOf('const newUserSnap = await withTimeout(getDoc(userRef)');
+  const afterNewUserDoc = content.substring(newUserReloadStart, content.indexOf('if (newUserSnap.exists())', newUserReloadStart));
   assert(afterNewUserDoc.includes('if (!isCurrentAuthEvent()) return'), "71. novo perfil valida o evento depois de getDoc");
 
   // 72

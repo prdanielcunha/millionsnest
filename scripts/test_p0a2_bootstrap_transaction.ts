@@ -158,6 +158,22 @@ const r40b = resolveLegacyMembershipCandidates([
 ]);
 assertCondition('40. a ordem do resultado de resolveLegacyMembershipCandidates é idêntica independentemente da ordem de entrada', r40a.ok && r40b.ok && JSON.stringify(r40a.memberships) === JSON.stringify(r40b.memberships) && r40a.memberships[0].organizationId === 'orgA' && r40a.memberships[1].organizationId === 'orgB');
 
+assertCondition(
+  '41. login genérico não consulta collectionGroup de convites antes do checkout',
+  !bootstrapStr.includes("db.collectionGroup('invites')")
+);
+
+assertCondition(
+  '42. primeiro acesso sem users/{uid} não depende da collectionGroup de membros',
+  bootstrapStr.includes('if (userSnap.exists)') &&
+  bootstrapStr.includes("db.collectionGroup('members').where('uid', '==', uid)")
+);
+
+assertCondition(
+  '43. bootstrap genérico entrega lista vazia de convites ao planner; convites ficam no fluxo /join',
+  bootstrapStr.includes('const pendingInvites: any[] = []')
+);
+
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
 

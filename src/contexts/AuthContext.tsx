@@ -310,30 +310,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 try {
                    const idToken = await withTimeout(currentUser.getIdToken(true), 8000, "Firebase ID token refresh timeout during onboarding");
                    if (!isCurrentAuthEvent()) return;
-                   const bootRes = await withTimeout(fetch('/api/v1/onboarding/bootstrap', {
-                      method: 'POST',
-                      headers: { 'Authorization': `Bearer ${idToken}` }
-                   }), 8000, "Onboarding bootstrap timeout");
+
+                   const runBootstrap = async () => {
+                     const response = await withTimeout(fetch('/api/v1/onboarding/bootstrap', {
+                        method: 'POST',
+                        headers: {
+                          'Authorization': `Bearer ${idToken}`,
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          source: sessionStorage.getItem('purchase_intent') ? 'purchase_flow' : 'direct_login',
+                          app: sessionStorage.getItem('purchase_app') || 'musicscale'
+                        })
+                     }), 8000, "Onboarding bootstrap timeout");
+
+                     let payload: any = null;
+                     try {
+                       payload = await response.json();
+                     } catch {
+                       payload = null;
+                     }
+                     return { response, payload };
+                   };
+
+                   const bootstrapAttempt = await runBootstrap();
                    if (!isCurrentAuthEvent()) return;
-                   if (bootRes.ok) {
-                      // Re-fetch user profile
-                      const newUserSnap = await withTimeout(getDoc(userRef), 8000, "Firestore timeout reloading bootstrapped user");
-                      if (!isCurrentAuthEvent()) return;
-                      if (newUserSnap.exists()) {
-                         const newProfileData = newUserSnap.data() as UserProfile;
-                         setProfile(newProfileData);
-                         localStorage.setItem('mn_user_profile', JSON.stringify(newProfileData));
-                         
-                         Promise.resolve().then(() => {
-                           if (isCurrentAuthEvent()) {
-                             analytics.track('signup', {
-                               userId: currentUser.uid,
-                               organizationId: newProfileData.activeOrganizationId
-                             });
-                           }
-                         });
-                      }
+
+                   if (!bootstrapAttempt.response.ok || bootstrapAttempt.payload?.success === false) {
+                     throw new Error(
+                       `Onboarding bootstrap failed: ${bootstrapAttempt.payload?.reasonCode || bootstrapAttempt.response.status}`
+                     );
                    }
+
+                   let newProfileData: UserProfile | null = null;
+
+                   try {
+                     const newUserSnap = await withTimeout(getDoc(userRef), 8000, "Firestore timeout reloading bootstrapped user");
+                     if (!isCurrentAuthEvent()) return;
+                     if (newUserSnap.exists()) {
+                       newProfileData = newUserSnap.data() as UserProfile;
+                     }
+                   } catch (profileReloadError) {
+                     console.warn("Perfil criado no servidor, mas a releitura do Firestore falhou; usando contexto seguro do bootstrap.", profileReloadError);
+                   }
+
+                   // The backend already committed the user + organization atomically. If the
+                   // immediate client read is delayed or blocked by a transient network issue,
+                   // keep the purchase journey moving with the authoritative bootstrap payload.
+                   if (!newProfileData) {
+                     const bootstrapOrgId =
+                       bootstrapAttempt.payload?.activeOrganizationId ||
+                       bootstrapAttempt.payload?.organizationId ||
+                       bootstrapAttempt.payload?.primaryOrganizationId;
+
+                     if (typeof bootstrapOrgId === 'string' && bootstrapOrgId.trim()) {
+                       newProfileData = {
+                         uid: currentUser.uid,
+                         email: currentUser.email,
+                         displayName: currentUser.displayName,
+                         photoURL: currentUser.photoURL,
+                         products: [],
+                         organizationId: bootstrapOrgId,
+                         activeOrganizationId: bootstrapAttempt.payload?.activeOrganizationId || bootstrapOrgId,
+                         primaryOrganizationId: bootstrapAttempt.payload?.primaryOrganizationId || bootstrapOrgId,
+                         organizations: [bootstrapOrgId],
+                         subscriptionStatus: 'none',
+                         lastLoginAt: new Date(),
+                         createdAt: new Date()
+                       };
+                     }
+                   }
+
+                   if (!newProfileData) {
+                     throw new Error('Onboarding bootstrap completed without a usable profile context');
+                   }
+
+                   setProfile(newProfileData);
+                   localStorage.setItem('mn_user_profile', JSON.stringify(newProfileData));
+
+
+                   Promise.resolve().then(() => {
+                     if (isCurrentAuthEvent()) {
+                       analytics.track('signup', {
+                         userId: currentUser.uid,
+                         organizationId: newProfileData?.activeOrganizationId || newProfileData?.organizationId
+                       });
+                     }
+                   });
                 } catch (bootErr) {
                    if (!isCurrentAuthEvent()) return;
                    console.warn("Erro no bootstrap do usuário:", bootErr);
