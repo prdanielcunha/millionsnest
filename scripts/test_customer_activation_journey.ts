@@ -37,11 +37,34 @@ const tenantBootstrapService = readFileSync(
   'src/server/services/TenantContextMutationService.ts',
   'utf8'
 );
+const server = readFileSync(
+  'server.ts',
+  'utf8'
+);
+const accessProjectionService = readFileSync(
+  'src/server/services/EcosystemAccessProjectionService.ts',
+  'utf8'
+);
 
 assert.match(
   login,
   /purchase_flow_title/,
   'plan-selected sign-in must explain that the customer can continue instead of showing only a returning-user message'
+);
+assert.match(
+  login,
+  /createUserWithEmailAndPassword/,
+  'new customers must be able to create a MillionsNest account with email and password'
+);
+assert.match(
+  login,
+  /signInWithEmailAndPassword/,
+  'returning customers must be able to sign in with email and password'
+);
+assert.match(
+  login,
+  /signInWithPopup\(auth, googleProvider\)/,
+  'Google must remain a first-class sign-in/sign-up path'
 );
 assert.match(
   login,
@@ -192,6 +215,21 @@ assert.match(
 );
 assert.match(
   success,
+  /appId:\s*purchasedApp/,
+  'post-purchase access verification must target the app that was actually purchased'
+);
+assert.match(
+  success,
+  /app:\s*purchasedApp/,
+  'post-purchase Stripe reconciliation must target the purchased app instead of assuming MusicScale'
+);
+assert.match(
+  success,
+  /accessPayload\?\.apps\?\.\[purchasedApp\]/,
+  'activation success must read the canonical access projection for the purchased app'
+);
+assert.match(
+  success,
   /const accessReady =[\s\S]*verifyPurchasedAccess[\s\S]*if \(!accessReady\)[\s\S]*setStatus\('success'\)/,
   'activation success must only render after purchased access is actually usable'
 );
@@ -234,6 +272,32 @@ assert.equal(
   /setTimeout\([^)]*launchPurchasedApp|launchPurchasedApp\([^)]*\)[\s\S]{0,200}1200/.test(success),
   false,
   'post-checkout success must not auto-launch before the customer can understand the next steps'
+);
+
+assert.match(
+  server,
+  /requestedAppRaw[\s\S]*'nestlocal'[\s\S]*'musicscale'/,
+  'billing reconciliation must explicitly whitelist the sellable app being repaired'
+);
+assert.match(
+  server,
+  /sessionApp !== requestedApp/,
+  'checkout-session recovery must bind Stripe metadata to the requested app'
+);
+assert.match(
+  server,
+  /s\.metadata\?\.app === requestedApp/,
+  'Stripe recovery must never cross-wire subscriptions between ecosystem apps'
+);
+assert.match(
+  server,
+  /appId:\s*confirmedApp/,
+  'checkout confirmation must resolve canonical access for the app that was purchased'
+);
+assert.match(
+  accessProjectionService,
+  /rawAppId === 'nestlocal' \? 'nestlocal' : 'musicscale'/,
+  'canonical access projection must support each sellable app without trusting arbitrary app ids'
 );
 
 assert.match(

@@ -150,8 +150,6 @@ export default function BillingSuccess() {
           organizationId: string,
           purchasedApp: 'musicscale' | 'nestlocal'
         ) => {
-          if (purchasedApp !== 'musicscale') return true;
-
           const readProjection = async () => {
             const accessResponse = await fetch(
               '/api/ecosystem/access-projection',
@@ -163,7 +161,8 @@ export default function BillingSuccess() {
                   'Cache-Control': 'no-store'
                 },
                 body: JSON.stringify({
-                  organizationId
+                  organizationId,
+                  appId: purchasedApp
                 })
               }
             );
@@ -174,7 +173,7 @@ export default function BillingSuccess() {
               accessPayload?.success === true &&
               accessPayload?.organizationId ===
                 organizationId &&
-              accessPayload?.apps?.musicscale
+              accessPayload?.apps?.[purchasedApp]
                 ?.accessible === true
             );
           };
@@ -195,6 +194,7 @@ export default function BillingSuccess() {
               body: JSON.stringify({
                 organizationId,
                 sessionId,
+                app: purchasedApp,
                 recoverOnly: true
               })
             }

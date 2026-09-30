@@ -5981,7 +5981,9 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       const uid = decodedToken.uid;
       
-      const { organizationId, sessionId, recoverOnly = false } = req.body || {};
+      const { organizationId, sessionId, recoverOnly = false, app: requestedAppRaw } = req.body || {};
+      const requestedApp: 'musicscale' | 'nestlocal' =
+        requestedAppRaw === 'nestlocal' ? 'nestlocal' : 'musicscale';
       if (typeof recoverOnly !== 'boolean') {
           return res.status(400).json({ error: 'Invalid recoverOnly flag' });
       }
@@ -6042,8 +6044,12 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       // Check current subscription in Firestore
       const subDocBase = await db.collection('subscriptions').doc(organizationId).get();
       const subData = subDocBase.data();
-      let customerId = subData?.stripeCustomerId;
-      let knownSubId = subData?.stripeSubscriptionId;
+      let customerId =
+        subData?.apps?.[requestedApp]?.stripeCustomerId ||
+        subData?.stripeCustomerId;
+      let knownSubId =
+        subData?.apps?.[requestedApp]?.stripeSubscriptionId ||
+        (requestedApp === 'musicscale' ? subData?.stripeSubscriptionId : null);
 
       let allStripeSubs: Stripe.Subscription[] = [];
 
@@ -6058,10 +6064,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             const sessionApp = session.metadata?.app;
             const sessionUserId = session.metadata?.userId || session.metadata?.uid || session.client_reference_id;
             
-            if (sessionOrgId !== organizationId || sessionApp !== 'musicscale' || sessionUserId !== uid) {
+            if (sessionOrgId !== organizationId || sessionApp !== requestedApp || sessionUserId !== uid) {
                  console.error('[SYNC_SESSION_VALIDATION_FAILED]', {
                      expectedOrg: organizationId,
-                     expectedApp: 'musicscale'
+                     expectedApp: requestedApp
                  });
                  return res.status(403).json({ error: 'Sessão de checkout inválida ou não pertence a esta organização/usuário.' });
             }
@@ -6138,7 +6144,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         
         // Filter by canonical strong link
         allStripeSubs = potentialSubs.filter(s => {
-          const hasOrgIdAndApp = s.metadata?.organizationId === organizationId && s.metadata?.app === 'musicscale';
+          const hasOrgIdAndApp = s.metadata?.organizationId === organizationId && s.metadata?.app === requestedApp;
           const isHistorical = s.id === knownSubId;
           const isValidSession = validatedSessionSubId !== null && s.id === validatedSessionSubId;
           
@@ -6163,7 +6169,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       // Final Filter to only matching subscriptions
       const matchingSubs = allStripeSubs.filter(s => {
-          const hasOrgIdAndApp = s.metadata?.organizationId === organizationId && s.metadata?.app === 'musicscale';
+          const hasOrgIdAndApp = s.metadata?.organizationId === organizationId && s.metadata?.app === requestedApp;
           const isHistorical = s.id === knownSubId;
           const isValidSession = validatedSessionSubId !== null && s.id === validatedSessionSubId;
           
@@ -6176,11 +6182,27 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             ok: true,
             organizationId,
             accessAllowed: false,
-            subscriptionStatus: subData?.status || 'unknown',
+            subscriptionStatus:
+              subData?.apps?.[requestedApp]?.status ||
+              (requestedApp === 'musicscale' ? subData?.status : null) ||
+              'unknown',
             reason: 'no_subscription_found',
             currentPeriodEnd: null,
             repaired: false,
             retryable: true
+          });
+        }
+
+        if (requestedApp !== 'musicscale') {
+          return res.json({
+            ok: true,
+            organizationId,
+            app: requestedApp,
+            accessAllowed: false,
+            subscriptionStatus: 'none',
+            reason: 'no_subscription_found',
+            currentPeriodEnd: null,
+            repaired: false
           });
         }
 
@@ -6280,6 +6302,32 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             ? (sub as any).current_period_end * 1000
             : ((sub as any).trial_end ? (sub as any).trial_end * 1000 : null),
           repaired: canonicalRepair.skipped !== true,
+          canonical: true,
+          app: requestedApp
+        });
+      }
+
+      if (requestedApp === 'nestlocal') {
+        const canonicalRepair = await upsertEcosystemSubscription({
+          userId: uid,
+          orgId: organizationId,
+          subscription: sub,
+          eventCreatedTs: Math.floor(Date.now() / 1000),
+          event_type: recoverOnly ? 'dashboard_recover_only' : 'billing_sync',
+          userEmail: syncBillingEmail || null
+        });
+
+        return res.json({
+          ok: true,
+          organizationId,
+          app: requestedApp,
+          accessAllowed: hasAccess,
+          subscriptionStatus: sub.status,
+          reason: hasAccess ? 'access_granted' : 'subscription_inactive',
+          currentPeriodEnd: (sub as any).current_period_end
+            ? (sub as any).current_period_end * 1000
+            : null,
+          repaired: canonicalRepair.skipped !== true,
           canonical: true
         });
       }
@@ -6364,6 +6412,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       return res.json({ 
          ok: true, 
          organizationId,
+         app: requestedApp,
          accessAllowed: hasAccess,
          subscriptionStatus: sub.status,
          reason: hasAccess ? 'access_granted' : 'subscription_inactive',
@@ -8187,30 +8236,28 @@ async function autoRepairSingleOrganizationUser(uid: string) {
               ? 'nestlocal'
               : 'musicscale';
 
-          if (confirmedApp === 'musicscale') {
-            const accessDecision = await resolveEcosystemAppAccess({
-              uid: userId,
-              organizationId: orgId,
-              appId: 'musicscale',
-              db
-            });
+          const accessDecision = await resolveEcosystemAppAccess({
+            uid: userId,
+            organizationId: orgId,
+            appId: confirmedApp,
+            db
+          });
 
-            if (!accessDecision.accessible) {
-              console.warn('[Checkout Confirm] Subscription exists but MusicScale access is not ready yet.', {
-                organizationId: orgId,
-                app: confirmedApp,
-                denialReason: accessDecision.denialReason || 'UNKNOWN'
-              });
-              return res.json({
-                ok: true,
-                action: 'provisioning',
-                subscriptionStatus: sub.status,
-                retryAfterMs: 900,
-                organizationId: orgId,
-                app: confirmedApp,
-                reason: accessDecision.denialReason || 'ACCESS_NOT_READY'
-              });
-            }
+          if (!accessDecision.accessible) {
+            console.warn('[Checkout Confirm] Subscription exists but purchased app access is not ready yet.', {
+              organizationId: orgId,
+              app: confirmedApp,
+              denialReason: accessDecision.denialReason || 'UNKNOWN'
+            });
+            return res.json({
+              ok: true,
+              action: 'provisioning',
+              subscriptionStatus: sub.status,
+              retryAfterMs: 900,
+              organizationId: orgId,
+              app: confirmedApp,
+              reason: accessDecision.denialReason || 'ACCESS_NOT_READY'
+            });
           }
 
           return res.json({

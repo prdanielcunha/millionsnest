@@ -12,7 +12,7 @@ const required = [
   "CHECKOUT_ORG_FORBIDDEN",
   "Session/user binding rejected",
   "Organization billing authorization rejected",
-  "confirmedApp === 'musicscale'",
+  "appId: confirmedApp",
   "resolveEcosystemAppAccess({",
   "action: 'provisioning'",
   "subscriptionPeriodEndSeconds",

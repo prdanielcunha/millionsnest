@@ -293,6 +293,7 @@ export function Dashboard() {
   const musicScaleProjectionSeqRef = useRef<number>(0);
   const musicScaleExpectedOrgRef = useRef<string | null>(null);
   const musicScaleRecoveryAttemptRef = useRef<string | null>(null);
+  const nestLocalRecoveryAttemptRef = useRef<string | null>(null);
   const [musicScaleRecoveryInProgress, setMusicScaleRecoveryInProgress] = useState(false);
 
   const acknowledgeMusicScaleChange = async (
@@ -2220,6 +2221,7 @@ export function Dashboard() {
     setMusicScaleProjection(null);
     setMusicScaleProjectionError(null);
     musicScaleRecoveryAttemptRef.current = null;
+    nestLocalRecoveryAttemptRef.current = null;
     setMusicScaleRecoveryInProgress(false);
     
     const requestId = ++requestSequenceRef.current;
@@ -2437,6 +2439,84 @@ export function Dashboard() {
     subscription?.status,
     organization?.apps?.musicscale?.status,
     organization?.apps?.musicscale?.plan
+  ]);
+
+  useEffect(() => {
+    if (!user || !activeContextOrgId || !subscription || !organization) {
+      return;
+    }
+
+    const nestLocalSubscription = subscription?.apps?.nestlocal || null;
+    const subscriptionStatus = String(nestLocalSubscription?.status || '').toLowerCase();
+    if (!['active', 'trialing'].includes(subscriptionStatus)) {
+      return;
+    }
+
+    const organizationStatus = String(organization?.apps?.nestlocal?.status || '').toLowerCase();
+    const enabledApps = Array.isArray(organization?.enabledApps) ? organization.enabledApps : [];
+    if (['active', 'trialing'].includes(organizationStatus) && enabledApps.includes('nestlocal')) {
+      return;
+    }
+
+    const recoveryKey = [
+      user.uid,
+      activeContextOrgId,
+      subscriptionStatus,
+      nestLocalSubscription?.stripeSubscriptionId || '',
+      organizationStatus,
+      enabledApps.includes('nestlocal') ? 'enabled' : 'disabled'
+    ].join(':');
+
+    if (nestLocalRecoveryAttemptRef.current === recoveryKey) {
+      return;
+    }
+    nestLocalRecoveryAttemptRef.current = recoveryKey;
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const token = await user.getIdToken();
+          const response = await fetch('/api/v1/billing/sync', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              organizationId: activeContextOrgId,
+              app: 'nestlocal',
+              recoverOnly: true
+            })
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (
+            !cancelled &&
+            response.ok &&
+            payload?.organizationId === activeContextOrgId &&
+            payload?.app === 'nestlocal' &&
+            payload?.accessAllowed === true
+          ) {
+            // Organization and subscription listeners above receive the canonical
+            // repair in real time; no page reload is required.
+          }
+        } catch (error) {
+          console.warn('[Dashboard] Silent NestLocal entitlement recovery failed.', error);
+        }
+      })();
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    user,
+    activeContextOrgId,
+    subscription?.apps?.nestlocal?.status,
+    subscription?.apps?.nestlocal?.stripeSubscriptionId,
+    organization?.apps?.nestlocal?.status,
+    organization?.enabledApps
   ]);
 
   useEffect(() => {
