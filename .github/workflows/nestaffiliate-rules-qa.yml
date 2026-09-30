@@ -1,0 +1,48 @@
+name: NestAffiliate Firestore Rules QA
+
+on:
+  push:
+    branches: [main, production]
+    paths:
+      - "firestore.rules"
+      - "firebase.rules-test.json"
+      - "tests/firestore/nestaffiliate.rules.test.ts"
+      - ".github/workflows/nestaffiliate-rules-qa.yml"
+  pull_request:
+    branches: [main, production]
+    paths:
+      - "firestore.rules"
+      - "firebase.rules-test.json"
+      - "tests/firestore/nestaffiliate.rules.test.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nestaffiliate-rules-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Test NestAffiliate Firestore boundary
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-millionsnest-nestaffiliate-release
+          "npx tsx --test --test-concurrency=1 tests/firestore/nestaffiliate.rules.test.ts"
