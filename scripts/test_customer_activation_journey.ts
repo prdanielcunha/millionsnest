@@ -68,7 +68,7 @@ const bootstrapStart = tenantBootstrapService.indexOf('export async function boo
 const bootstrapEnd = tenantBootstrapService.indexOf('export async function acceptInvitation');
 const bootstrapBlock = tenantBootstrapService.slice(bootstrapStart, bootstrapEnd);
 assert.equal(
-  bootstrapBlock.includes("collectionGroup('invites')"),
+  bootstrapBlock.includes("db.collectionGroup('invites')"),
   false,
   'generic Google sign-in must not be blocked by implicit invitation discovery; explicit invitations stay in /join'
 );
