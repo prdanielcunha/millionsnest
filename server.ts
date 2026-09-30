@@ -8236,30 +8236,28 @@ async function autoRepairSingleOrganizationUser(uid: string) {
               ? 'nestlocal'
               : 'musicscale';
 
-          if (confirmedApp === 'musicscale') {
-            const accessDecision = await resolveEcosystemAppAccess({
-              uid: userId,
-              organizationId: orgId,
-              appId: 'musicscale',
-              db
-            });
+          const accessDecision = await resolveEcosystemAppAccess({
+            uid: userId,
+            organizationId: orgId,
+            appId: confirmedApp,
+            db
+          });
 
-            if (!accessDecision.accessible) {
-              console.warn('[Checkout Confirm] Subscription exists but MusicScale access is not ready yet.', {
-                organizationId: orgId,
-                app: confirmedApp,
-                denialReason: accessDecision.denialReason || 'UNKNOWN'
-              });
-              return res.json({
-                ok: true,
-                action: 'provisioning',
-                subscriptionStatus: sub.status,
-                retryAfterMs: 900,
-                organizationId: orgId,
-                app: confirmedApp,
-                reason: accessDecision.denialReason || 'ACCESS_NOT_READY'
-              });
-            }
+          if (!accessDecision.accessible) {
+            console.warn('[Checkout Confirm] Subscription exists but purchased app access is not ready yet.', {
+              organizationId: orgId,
+              app: confirmedApp,
+              denialReason: accessDecision.denialReason || 'UNKNOWN'
+            });
+            return res.json({
+              ok: true,
+              action: 'provisioning',
+              subscriptionStatus: sub.status,
+              retryAfterMs: 900,
+              organizationId: orgId,
+              app: confirmedApp,
+              reason: accessDecision.denialReason || 'ACCESS_NOT_READY'
+            });
           }
 
           return res.json({
