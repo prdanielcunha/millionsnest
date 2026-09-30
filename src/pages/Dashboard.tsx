@@ -292,6 +292,8 @@ export function Dashboard() {
   const musicScaleProjectionAbortControllerRef = useRef<AbortController | null>(null);
   const musicScaleProjectionSeqRef = useRef<number>(0);
   const musicScaleExpectedOrgRef = useRef<string | null>(null);
+  const musicScaleRecoveryAttemptRef = useRef<string | null>(null);
+  const [musicScaleRecoveryInProgress, setMusicScaleRecoveryInProgress] = useState(false);
 
   const acknowledgeMusicScaleChange = async (
     notificationId: string
@@ -2217,6 +2219,8 @@ export function Dashboard() {
     setLoadingSub(true);
     setMusicScaleProjection(null);
     setMusicScaleProjectionError(null);
+    musicScaleRecoveryAttemptRef.current = null;
+    setMusicScaleRecoveryInProgress(false);
     
     const requestId = ++requestSequenceRef.current;
     currentActiveOrgIdRef.current = activeContextOrgId;
@@ -2345,6 +2349,95 @@ export function Dashboard() {
       }
     };
   }, [user, activeContextOrgId, isGlobalAdmin, isEcosystemSupport]);
+
+  useEffect(() => {
+    if (
+      !user ||
+      !activeContextOrgId ||
+      musicScaleProjectionLoading ||
+      !musicScaleProjection ||
+      musicScaleProjection.accessible === true
+    ) {
+      return;
+    }
+
+    const recoverableReasons = new Set([
+      'SUBSCRIPTION_NOT_FOUND',
+      'ENTITLEMENT_NOT_CONFIGURED',
+      'ENTITLEMENT_INACTIVE',
+      'SUBSCRIPTION_INACTIVE'
+    ]);
+    const denialReason = String(musicScaleProjection.denialReason || '');
+    if (!recoverableReasons.has(denialReason)) {
+      return;
+    }
+
+    const subscriptionFingerprint = [
+      subscription?.stripeSubscriptionId || '',
+      subscription?.status || '',
+      organization?.apps?.musicscale?.status || '',
+      organization?.apps?.musicscale?.plan || ''
+    ].join(':');
+    const recoveryKey = `${user.uid}:${activeContextOrgId}:${denialReason}:${subscriptionFingerprint}`;
+    if (musicScaleRecoveryAttemptRef.current === recoveryKey) {
+      return;
+    }
+    musicScaleRecoveryAttemptRef.current = recoveryKey;
+
+    let cancelled = false;
+    const recover = async () => {
+      setMusicScaleRecoveryInProgress(true);
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch('/api/v1/billing/sync', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            organizationId: activeContextOrgId,
+            recoverOnly: true
+          })
+        });
+        const payload = await response.json().catch(() => ({}));
+
+        if (
+          !cancelled &&
+          response.ok &&
+          payload?.organizationId === activeContextOrgId &&
+          payload?.accessAllowed === true
+        ) {
+          await refreshMusicScaleAccessProjection(activeContextOrgId);
+        }
+      } catch (error) {
+        console.warn('[Dashboard] Silent MusicScale entitlement recovery failed.', error);
+      } finally {
+        if (!cancelled) {
+          setMusicScaleRecoveryInProgress(false);
+        }
+      }
+    };
+
+    const timer = window.setTimeout(() => {
+      void recover();
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    user,
+    activeContextOrgId,
+    musicScaleProjectionLoading,
+    musicScaleProjection?.accessible,
+    musicScaleProjection?.denialReason,
+    subscription?.stripeSubscriptionId,
+    subscription?.status,
+    organization?.apps?.musicscale?.status,
+    organization?.apps?.musicscale?.plan
+  ]);
 
   useEffect(() => {
     setMusicScaleChangeNotifications([]);
@@ -2902,7 +2995,7 @@ export function Dashboard() {
       accessible: musicScaleProjection?.accessible === true,
       catalogState: musicScaleProjectionError
         ? 'error'
-        : musicScaleProjectionLoading
+        : (musicScaleProjectionLoading || musicScaleRecoveryInProgress)
           ? 'loading'
           : musicScaleProjection?.catalogState || 'unavailable'
     },
@@ -3218,7 +3311,7 @@ export function Dashboard() {
                 isGlobalAdmin={isGlobalAdmin}
                 musicScaleAccess={{
                   accessible: musicScaleProjection?.accessible === true,
-                  catalogState: musicScaleProjectionError ? 'error' : musicScaleProjectionLoading ? 'loading' : musicScaleProjection?.catalogState || 'available'
+                  catalogState: musicScaleProjectionError ? 'error' : (musicScaleProjectionLoading || musicScaleRecoveryInProgress) ? 'loading' : musicScaleProjection?.catalogState || 'available'
                 }}
                 musicScaleAuthority={musicScaleProjection ? {
                   accessible: musicScaleProjection.accessible,

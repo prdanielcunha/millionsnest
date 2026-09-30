@@ -151,6 +151,16 @@ assert.match(
 );
 assert.match(
   dashboard,
+  /recoverOnly:\s*true/,
+  'Hub must self-heal a paid MusicScale entitlement without destructive downgrade'
+);
+assert.match(
+  dashboard,
+  /SUBSCRIPTION_NOT_FOUND[\s\S]*ENTITLEMENT_NOT_CONFIGURED[\s\S]*ENTITLEMENT_INACTIVE[\s\S]*SUBSCRIPTION_INACTIVE/,
+  'Hub entitlement recovery must cover the recoverable stale-projection states'
+);
+assert.match(
+  dashboard,
   /navigate\(\`\/checkout\?plan=\$\{lookupKey\}\`\)/,
   'plan purchase must move directly from billing to checkout'
 );
@@ -164,6 +174,26 @@ assert.match(
   success,
   /\/api\/v1\/billing\/checkout\/confirm/,
   'post-purchase experience must confirm the checkout server-side'
+);
+assert.match(
+  success,
+  /\/api\/ecosystem\/access-projection/,
+  'post-purchase success must verify canonical app access before declaring activation complete'
+);
+assert.match(
+  success,
+  /\/api\/v1\/billing\/sync/,
+  'post-purchase activation must have a bounded canonical reconciliation path'
+);
+assert.match(
+  success,
+  /recoverOnly:\s*true/,
+  'post-purchase reconciliation must be non-destructive while recovering a paid entitlement'
+);
+assert.match(
+  success,
+  /const accessReady =[\s\S]*verifyPurchasedAccess[\s\S]*if \(!accessReady\)[\s\S]*setStatus\('success'\)/,
+  'activation success must only render after purchased access is actually usable'
 );
 assert.match(
   success,

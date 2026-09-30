@@ -145,6 +145,81 @@ export default function BillingSuccess() {
     const confirmCheckout = async () => {
       try {
         const token = await user.getIdToken();
+
+        const verifyPurchasedAccess = async (
+          organizationId: string,
+          purchasedApp: 'musicscale' | 'nestlocal'
+        ) => {
+          if (purchasedApp !== 'musicscale') return true;
+
+          const readProjection = async () => {
+            const accessResponse = await fetch(
+              '/api/ecosystem/access-projection',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                  'Cache-Control': 'no-store'
+                },
+                body: JSON.stringify({
+                  organizationId
+                })
+              }
+            );
+            if (!accessResponse.ok) return false;
+            const accessPayload =
+              await accessResponse.json();
+            return (
+              accessPayload?.success === true &&
+              accessPayload?.organizationId ===
+                organizationId &&
+              accessPayload?.apps?.musicscale
+                ?.accessible === true
+            );
+          };
+
+          if (await readProjection()) {
+            return true;
+          }
+
+          const recoveryResponse = await fetch(
+            '/api/v1/billing/sync',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                organizationId,
+                sessionId,
+                recoverOnly: true
+              })
+            }
+          );
+
+          if (!recoveryResponse.ok) {
+            return false;
+          }
+
+          const recoveryPayload =
+            await recoveryResponse
+              .json()
+              .catch(() => ({}));
+
+          if (
+            recoveryPayload?.organizationId !==
+              organizationId ||
+            recoveryPayload?.accessAllowed !== true
+          ) {
+            return false;
+          }
+
+          return readProjection();
+        };
+
         const res = await fetch(
           '/api/v1/billing/checkout/confirm',
           {
@@ -171,6 +246,52 @@ export default function BillingSuccess() {
               ? 'nestlocal'
               : 'musicscale';
 
+          const organizationId =
+            data.organizationId || null;
+
+          if (!organizationId) {
+            setStatus('error');
+            setMessage(
+              t('activation.confirmation_failed')
+            );
+            return;
+          }
+
+          const accessReady =
+            await verifyPurchasedAccess(
+              organizationId,
+              purchasedApp
+            );
+
+          if (!isMounted) return;
+
+          if (!accessReady) {
+            if (retryCount < 8) {
+              setMessage(
+                t('activation.loading_message', {
+                  app:
+                    purchasedApp === 'nestlocal'
+                      ? 'NestLocal'
+                      : 'MusicScale'
+                })
+              );
+              window.setTimeout(() => {
+                if (isMounted) {
+                  setRetryCount(
+                    current => current + 1
+                  );
+                }
+              }, 1200);
+              return;
+            }
+
+            setStatus('error');
+            setMessage(
+              t('activation.provisioning_delayed')
+            );
+            return;
+          }
+
           setStatus('success');
           setConfirmedApp(purchasedApp);
           setMessage(
@@ -182,8 +303,6 @@ export default function BillingSuccess() {
             })
           );
 
-          const organizationId =
-            data.organizationId || null;
           setConfirmedOrganizationId(
             organizationId
           );

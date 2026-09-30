@@ -12,6 +12,11 @@ const required = [
   "CHECKOUT_ORG_FORBIDDEN",
   "Session/user binding rejected",
   "Organization billing authorization rejected",
+  "confirmedApp === 'musicscale'",
+  "resolveEcosystemAppAccess({",
+  "action: 'provisioning'",
+  "subscriptionPeriodEndSeconds",
+  "(subscription as any).items?.data?.[0]?.current_period_end",
 ];
 
 for (const token of required) {

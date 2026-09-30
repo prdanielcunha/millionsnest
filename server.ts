@@ -481,8 +481,18 @@ export async function upsertEcosystemSubscription(params: {
      }
   }
 
-  const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000);
-  const trialEnd = (subscription as any).trial_end ? admin.firestore.Timestamp.fromMillis((subscription as any).trial_end * 1000) : null;
+  const subscriptionPeriodEndSeconds = Number(
+    (subscription as any).current_period_end ||
+    (subscription as any).items?.data?.[0]?.current_period_end ||
+    (subscription as any).trial_end ||
+    0
+  );
+  const currentPeriodEnd = subscriptionPeriodEndSeconds > 0
+    ? admin.firestore.Timestamp.fromMillis(subscriptionPeriodEndSeconds * 1000)
+    : null;
+  const trialEnd = (subscription as any).trial_end
+    ? admin.firestore.Timestamp.fromMillis((subscription as any).trial_end * 1000)
+    : null;
   const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(subscription.status);
 
   const priceId = (subscription as any).items?.data?.[0]?.price?.id || null;
@@ -5971,7 +5981,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       const uid = decodedToken.uid;
       
-      const { organizationId, sessionId } = req.body;
+      const { organizationId, sessionId, recoverOnly = false } = req.body || {};
+      if (typeof recoverOnly !== 'boolean') {
+          return res.status(400).json({ error: 'Invalid recoverOnly flag' });
+      }
       if (!organizationId) {
           return res.status(400).json({ error: 'Missing organizationId' });
       }
@@ -5985,18 +5998,20 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const syncUserDoc = await db.collection('users').doc(uid).get();
       const syncUserEmail = syncUserDoc.data()?.email;
       const syncSystemRole = syncUserDoc.data()?.systemRole || 'user';
-      let isMember = false;
-      let isSystemAdmin = canManageTenantBilling(syncSystemRole);
-      
-      if (orgContext.organizations) {
-         const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
-         if (orgItem) {
-             isMember = true;
-         }
-      }
-      
-      if (!isMember && !isSystemAdmin) {
-         return res.status(403).json({ error: 'Você não tem permissão nesta organização.' });
+      const isSystemAdmin = canManageTenantBilling(syncSystemRole);
+      const syncOrganization = orgContext.organizations?.find((o: any) => o.id === organizationId) || null;
+      const syncMembership = orgContext.memberships?.find((m: any) => m.organizationId === organizationId) || syncOrganization?.membership || null;
+      const syncRole = String(syncMembership?.role || syncMembership?.organizationRole || syncOrganization?.userRole || '').toLowerCase();
+      const isOwner = orgContext.ownedOrganizations?.some((o: any) => o.id === organizationId) === true;
+      const canSyncBilling =
+        isSystemAdmin ||
+        isOwner ||
+        syncRole === 'owner' ||
+        syncRole === 'admin' ||
+        syncMembership?.permissions?.['organization.billing.manage'] === true;
+
+      if (!canSyncBilling) {
+         return res.status(403).json({ error: 'Você não tem permissão para sincronizar o faturamento desta organização.' });
       }
 
       let syncBillingEmail = syncUserEmail;
@@ -6156,6 +6171,19 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       });
 
       if (matchingSubs.length === 0) {
+        if (recoverOnly) {
+          return res.json({
+            ok: true,
+            organizationId,
+            accessAllowed: false,
+            subscriptionStatus: subData?.status || 'unknown',
+            reason: 'no_subscription_found',
+            currentPeriodEnd: null,
+            repaired: false,
+            retryable: true
+          });
+        }
+
         const batch = db.batch();
         batch.set(db.collection('subscriptions').doc(organizationId), {
           status: 'none',
@@ -6232,7 +6260,33 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const endMs = (sub as any).current_period_end ? (sub as any).current_period_end * 1000 : 0;
       const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(sub.status) || (sub.status === 'canceled' && Date.now() < endMs);
 
-      const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000);
+      if (sub.status === 'active' || sub.status === 'trialing') {
+        const canonicalRepair = await upsertEcosystemSubscription({
+          userId: uid,
+          orgId: organizationId,
+          subscription: sub,
+          eventCreatedTs: Math.floor(Date.now() / 1000),
+          event_type: recoverOnly ? 'dashboard_recover_only' : 'billing_sync',
+          userEmail: syncBillingEmail || null
+        });
+
+        return res.json({
+          ok: true,
+          organizationId,
+          accessAllowed: true,
+          subscriptionStatus: sub.status,
+          reason: 'access_granted',
+          currentPeriodEnd: (sub as any).current_period_end
+            ? (sub as any).current_period_end * 1000
+            : ((sub as any).trial_end ? (sub as any).trial_end * 1000 : null),
+          repaired: canonicalRepair.skipped !== true,
+          canonical: true
+        });
+      }
+
+      const currentPeriodEnd = (sub as any).current_period_end
+        ? admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000)
+        : null;
       const trialEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
       
       const priceId = sub.items?.data?.[0]?.price?.id || null;
@@ -8128,13 +8182,44 @@ async function autoRepairSingleOrganizationUser(uid: string) {
              event_type: 'checkout_session_confirm'
           });
 
+          const confirmedApp =
+            session.metadata?.app === 'nestlocal' || session.metadata?.appId === 'nestlocal'
+              ? 'nestlocal'
+              : 'musicscale';
+
+          if (confirmedApp === 'musicscale') {
+            const accessDecision = await resolveEcosystemAppAccess({
+              uid: userId,
+              organizationId: orgId,
+              appId: 'musicscale',
+              db
+            });
+
+            if (!accessDecision.accessible) {
+              console.warn('[Checkout Confirm] Subscription exists but MusicScale access is not ready yet.', {
+                organizationId: orgId,
+                app: confirmedApp,
+                denialReason: accessDecision.denialReason || 'UNKNOWN'
+              });
+              return res.json({
+                ok: true,
+                action: 'provisioning',
+                subscriptionStatus: sub.status,
+                retryAfterMs: 900,
+                organizationId: orgId,
+                app: confirmedApp,
+                reason: accessDecision.denialReason || 'ACCESS_NOT_READY'
+              });
+            }
+          }
+
           return res.json({
             ok: true,
             action: 'subscription_ready',
             subscriptionStatus: sub.status,
             hasAccess: true,
             organizationId: orgId,
-            app: session.metadata?.app || session.metadata?.appId || 'musicscale'
+            app: confirmedApp
           });
         } else {
           return res.json({
