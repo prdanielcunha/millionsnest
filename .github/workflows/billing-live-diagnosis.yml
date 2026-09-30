@@ -1,0 +1,83 @@
+name: Billing Live Diagnosis
+
+on:
+  pull_request:
+    branches: [ production ]
+    paths:
+      - ".github/workflows/billing-live-diagnosis.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate as MillionsNest Infra Admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Read recent billing runtime signals
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud config set project millionsnest >/dev/null
+
+          FILTER='resource.type="cloud_run_revision" AND resource.labels.service_name="millionsnest-api" AND timestamp>="-PT3H"'
+          gcloud logging read "$FILTER" \
+            --project=millionsnest \
+            --limit=400 \
+            --order=desc \
+            --format=json > /tmp/mn-billing-logs.json
+
+          python3 - <<'PY'
+          import json, re
+          from pathlib import Path
+
+          rows = json.loads(Path('/tmp/mn-billing-logs.json').read_text() or '[]')
+          markers = (
+              '[STRIPE_WEBHOOK]',
+              '[STRIPE_WEBHOOK_DEBUG]',
+              '[UPSERT_ECOSYSTEM_SUBSCRIPTION]',
+              '[Checkout Confirm]',
+              '[Checkout]',
+              '[Unified Checkout]',
+              '[SYNC_',
+              '[REPAIR_',
+              'billing',
+              'subscription',
+          )
+
+          selected = []
+          counts = {}
+          for row in rows:
+              text = row.get('textPayload')
+              if not text:
+                  payload = row.get('jsonPayload') or {}
+                  text = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+              if not any(marker.lower() in text.lower() for marker in markers):
+                  continue
+              severity = row.get('severity') or 'DEFAULT'
+              counts[severity] = counts.get(severity, 0) + 1
+
+              # Redact emails and long opaque identifiers while preserving diagnostic tags/reasons.
+              safe = re.sub(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', '<email>', text)
+              safe = re.sub(r'\b(?:sub|cus|cs)_[A-Za-z0-9_]+\b', '<stripe-id>', safe)
+              safe = re.sub(r'\b[A-Za-z0-9_-]{24,}\b', '<opaque-id>', safe)
+              selected.append({
+                  'timestamp': row.get('timestamp'),
+                  'severity': severity,
+                  'message': safe[:1200],
+              })
+
+          print('BILLING_SIGNAL_COUNTS', json.dumps(counts, sort_keys=True))
+          print('BILLING_RECENT_SIGNALS')
+          for item in selected[:120]:
+              print(json.dumps(item, ensure_ascii=False, sort_keys=True))
+          PY
