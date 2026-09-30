@@ -8182,13 +8182,42 @@ async function autoRepairSingleOrganizationUser(uid: string) {
              event_type: 'checkout_session_confirm'
           });
 
+          const confirmedApp =
+            session.metadata?.app === 'nestlocal' || session.metadata?.appId === 'nestlocal'
+              ? 'nestlocal'
+              : 'musicscale';
+
+          const accessDecision = await resolveEcosystemAppAccess({
+            uid: userId,
+            organizationId: orgId,
+            appId: confirmedApp,
+            db
+          });
+
+          if (!accessDecision.accessible) {
+            console.warn('[Checkout Confirm] Subscription exists but app access is not ready yet.', {
+              organizationId: orgId,
+              app: confirmedApp,
+              denialReason: accessDecision.denialReason || 'UNKNOWN'
+            });
+            return res.json({
+              ok: true,
+              action: 'provisioning',
+              subscriptionStatus: sub.status,
+              retryAfterMs: 900,
+              organizationId: orgId,
+              app: confirmedApp,
+              reason: accessDecision.denialReason || 'ACCESS_NOT_READY'
+            });
+          }
+
           return res.json({
             ok: true,
             action: 'subscription_ready',
             subscriptionStatus: sub.status,
             hasAccess: true,
             organizationId: orgId,
-            app: session.metadata?.app || session.metadata?.appId || 'musicscale'
+            app: confirmedApp
           });
         } else {
           return res.json({
