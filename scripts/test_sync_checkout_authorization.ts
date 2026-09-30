@@ -11,6 +11,10 @@ const required = [
   "SYNC_CHECKOUT_ORG_FORBIDDEN",
   "organization.billing.manage",
   "event_type: 'checkout_session_reconciliation'",
+  "recoverOnly = false",
+  "if (recoverOnly)",
+  "event_type: recoverOnly ? 'dashboard_recover_only' : 'billing_sync'",
+  "canSyncBilling",
 ];
 
 for (const token of required) {
