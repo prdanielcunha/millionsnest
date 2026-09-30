@@ -216,6 +216,16 @@ assert.match(
 );
 assert.match(
   dashboard,
+  /organizationLifecycleRepairAttemptRef/,
+  'Hub must automatically repair organizations whose lifecycle status was historically overwritten by billing'
+);
+assert.match(
+  dashboard,
+  /shouldRepairOrganizationLifecycleStatus\(organization\.status\)/,
+  'Hub must detect legacy billing-derived organization lifecycle states'
+);
+assert.match(
+  dashboard,
   /SUBSCRIPTION_NOT_FOUND[\s\S]*ENTITLEMENT_NOT_CONFIGURED[\s\S]*ENTITLEMENT_INACTIVE[\s\S]*SUBSCRIPTION_INACTIVE/,
   'Hub entitlement recovery must cover the recoverable stale-projection states'
 );
