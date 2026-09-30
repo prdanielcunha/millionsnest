@@ -78,15 +78,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          set +e
-          OUTPUT="$(npx firebase-tools@15.26.0 deploy             --only firestore:rules             --config firebase.rules-test.json             --project millionsnest             --non-interactive 2>&1)"
-          STATUS=$?
-          set -e
-          printf '%s\n' "$OUTPUT"
+          STATUS=1
+          OUTPUT=""
+          for attempt in 1 2 3 4 5; do
+            set +e
+            OUTPUT="$(npx firebase-tools@15.26.0 deploy --only firestore:rules --config firebase.rules-test.json --project millionsnest --non-interactive 2>&1)"
+            STATUS=$?
+            set -e
+            printf '%s\n' "$OUTPUT"
 
-          if [ "$STATUS" -ne 0 ] && ! grep -Fq '409, Requested entity already exists' <<<"$OUTPUT"; then
+            if [ "$STATUS" -eq 0 ] || grep -Fq '409, Requested entity already exists' <<<"$OUTPUT"; then
+              STATUS=0
+              break
+            fi
+
+            if grep -Eq 'HTTP Error: (429|500|502|503|504)|service is currently unavailable|UNAVAILABLE' <<<"$OUTPUT"; then
+              echo "TRANSIENT_FIREBASE_RULES_ERROR attempt=$attempt"
+              sleep $((attempt * 8))
+              continue
+            fi
+
             exit "$STATUS"
-          fi
+          done
+
+          test "$STATUS" -eq 0
 
           ACCESS_TOKEN="$(gcloud auth print-access-token)"
           RELEASE="$(curl --fail --silent --show-error             -H "Authorization: Bearer $ACCESS_TOKEN"             "https://firebaserules.googleapis.com/v1/projects/millionsnest/releases/cloud.firestore")"
