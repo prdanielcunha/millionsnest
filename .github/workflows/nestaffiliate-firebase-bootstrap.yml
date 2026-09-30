@@ -1,0 +1,94 @@
+name: Bootstrap NestAffiliate Firebase Access
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - ".github/workflows/nestaffiliate-firebase-bootstrap.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: nestaffiliate-firebase-bootstrap-production
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: millionsnest
+  PROJECT_NUMBER: "555464791734"
+  POOL_ID: mn-prod-github
+  PROVIDER_ID: github
+  NESTAFFILIATE_REPOSITORY: prdanielcunha/NestAffiliate
+  WEB_DEPLOYER: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+  FIREBASE_SITE: mn-nestaffiliate-555464791734
+  LIVE_DOMAIN: nestaffiliate.millionsnest.com
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate as MillionsNest infrastructure admin
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Authorize NestAffiliate main and production in WIF
+        shell: bash
+        run: |
+          set -euo pipefail
+          CURRENT="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID"             --workload-identity-pool="$POOL_ID"             --location=global             --project="$PROJECT_ID"             --format='value(attributeCondition)')"
+          test -n "$CURRENT"
+          if grep -Fq "$NESTAFFILIATE_REPOSITORY" <<<"$CURRENT"; then
+            echo "NESTAFFILIATE_REPOSITORY_ALREADY_ALLOWED=true"
+          else
+            CLAUSE="(assertion.repository == '$NESTAFFILIATE_REPOSITORY' && (assertion.ref == 'refs/heads/main' || assertion.ref == 'refs/heads/production'))"
+            UPDATED="($CURRENT) || $CLAUSE"
+            gcloud iam workload-identity-pools providers update-oidc "$PROVIDER_ID"               --workload-identity-pool="$POOL_ID"               --location=global               --project="$PROJECT_ID"               --attribute-condition="$UPDATED"               --quiet
+            echo "NESTAFFILIATE_REPOSITORY_ADDED=true"
+          fi
+
+      - name: Grant web deployer impersonation only
+        shell: bash
+        run: |
+          set -euo pipefail
+          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$NESTAFFILIATE_REPOSITORY"
+          gcloud iam service-accounts add-iam-policy-binding "$WEB_DEPLOYER"             --project="$PROJECT_ID"             --role="roles/iam.workloadIdentityUser"             --member="$MEMBER"             --quiet >/tmp/nestaffiliate-binding.json
+          echo "NESTAFFILIATE_WEB_DEPLOYER_BINDING_READY=true"
+
+      - name: Ensure dedicated Hosting site
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install -g firebase-tools@15.26.0
+          if firebase hosting:sites:list --project "$PROJECT_ID" | grep -q "$FIREBASE_SITE"; then
+            echo "HOSTING_SITE_EXISTS=$FIREBASE_SITE"
+          else
+            firebase hosting:sites:create "$FIREBASE_SITE" --project "$PROJECT_ID"
+            echo "HOSTING_SITE_CREATED=$FIREBASE_SITE"
+          fi
+
+      - name: Authorize Firebase Authentication domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          CONFIG="$(curl --fail --silent --show-error             -H "Authorization: Bearer $ACCESS_TOKEN"             "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/config")"
+          FALLBACK_DOMAIN="$FIREBASE_SITE.web.app"
+          DOMAINS="$(jq -c --arg live "$LIVE_DOMAIN" --arg fallback "$FALLBACK_DOMAIN"             '.authorizedDomains + [$live, $fallback] | unique' <<<"$CONFIG")"
+          jq -n --argjson domains "$DOMAINS" '{authorizedDomains:$domains}' >/tmp/nestaffiliate-auth.json
+          curl --fail --silent --show-error -X PATCH             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/nestaffiliate-auth.json             "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/config?updateMask=authorizedDomains"             >/dev/null
+          echo "NESTAFFILIATE_AUTH_DOMAINS_READY=true"
+
+      - name: Verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONDITION="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID"             --workload-identity-pool="$POOL_ID"             --location=global             --project="$PROJECT_ID"             --format='value(attributeCondition)')"
+          grep -F "$NESTAFFILIATE_REPOSITORY" <<<"$CONDITION" >/dev/null
+          firebase hosting:sites:list --project "$PROJECT_ID" | grep -F "$FIREBASE_SITE" >/dev/null
+          echo "NESTAFFILIATE_FIREBASE_BOOTSTRAP_OK=true"
