@@ -1,3 +1,5 @@
+import { isOrganizationLifecycleActive } from '../../lib/organizationLifecycle.js';
+
 export function normalizeInvitationEmail(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toLowerCase();
@@ -107,7 +109,7 @@ export function planInvitationAcceptance(input: InvitationAcceptanceInput, nowMs
   if (!input.organization.exists) {
     return { success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' };
   }
-  if (input.organization.status !== 'active') {
+  if (!isOrganizationLifecycleActive(input.organization.status)) {
     return { success: false, reasonCode: 'ORGANIZATION_INACTIVE' };
   }
 
