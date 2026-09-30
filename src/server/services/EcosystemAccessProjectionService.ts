@@ -1,6 +1,6 @@
 import * as express from 'express';
 import { mapCanonicalDecisionToCatalogState, MusicScaleAccessProjection } from '../../lib/ecosystemAccessProjection.js';
-import { resolveEcosystemAppAccess } from './EcosystemAccessResolver.js';
+import { resolveEcosystemAppAccess, type EcosystemAppId } from './EcosystemAccessResolver.js';
 import * as admin from 'firebase-admin';
 
 function normalizeOrganizationRole(value: unknown): string {
@@ -53,7 +53,7 @@ export async function handleEcosystemAccessProjectionRequest(
 
   let logUid: string | null = null;
   let logOrgId: string | null = null;
-  let accessProjection: Partial<MusicScaleAccessProjection> = {};
+  let accessProjection: any = {};
 
   try {
     const authHeader = req.headers.authorization;
@@ -83,7 +83,7 @@ export async function handleEcosystemAccessProjectionRequest(
       return res.status(400).json({ success: false, code: 'INVALID_REQUEST', error: 'Invalid request.' });
     }
 
-    const { organizationId: rawOrgId } = req.body;
+    const { organizationId: rawOrgId, appId: rawAppId } = req.body;
     
     if (!rawOrgId || typeof rawOrgId !== 'string') {
       return res.status(400).json({ success: false, code: 'INVALID_REQUEST', error: 'Invalid request.' });
@@ -108,6 +108,9 @@ export async function handleEcosystemAccessProjectionRequest(
 
     logOrgId = organizationId;
 
+    const requestedAppId: EcosystemAppId =
+      rawAppId === 'nestlocal' ? 'nestlocal' : 'musicscale';
+
     const db = deps.getDb();
     if (!db) {
       return res.status(503).json({ success: false, code: 'SERVICE_UNAVAILABLE', error: 'Access projection service unavailable.' });
@@ -116,43 +119,72 @@ export async function handleEcosystemAccessProjectionRequest(
     const accessDecision = await deps.resolveAccess({
       uid: decoded.uid,
       organizationId,
-      appId: 'musicscale',
+      appId: requestedAppId,
       db
     });
 
-    const catalogState = mapCanonicalDecisionToCatalogState(
-      accessDecision.accessible,
-      accessDecision.isGlobalAccess,
-      accessDecision.denialReason,
-      accessDecision.entitlement?.canonicalStatus,
-      accessDecision.entitlement?.cancellationScheduled
-    );
-
     const generatedAtMs = deps.now();
 
-    const projection: MusicScaleAccessProjection = {
-      appId: 'musicscale',
-      organizationId,
-      accessible: accessDecision.accessible,
-      isGlobalAccess: accessDecision.isGlobalAccess,
-      accessSource: accessDecision.accessSource,
-      decisionState: accessDecision.accessible ? 'granted' : 'denied',
-      denialReason: accessDecision.denialReason || null,
-      catalogState,
-      canReadManagedScaleResponses: canReadManagedScaleResponses(accessDecision),
-      entitlement: accessDecision.entitlement ? {
-        canonicalStatus: accessDecision.entitlement.canonicalStatus,
-        cancellationScheduled: accessDecision.entitlement.cancellationScheduled,
-        currentPeriodEndMs: accessDecision.entitlement.currentPeriodEndMs,
-        individualAccessSource: accessDecision.entitlement.individualAccessSource
-      } : null
-    };
+    let projection: any;
+    if (requestedAppId === 'musicscale') {
+      const catalogState = mapCanonicalDecisionToCatalogState(
+        accessDecision.accessible,
+        accessDecision.isGlobalAccess,
+        accessDecision.denialReason,
+        accessDecision.entitlement?.canonicalStatus,
+        accessDecision.entitlement?.cancellationScheduled
+      );
+
+      projection = {
+        appId: (accessProjection?.appId || 'musicscale'),
+        organizationId,
+        accessible: accessDecision.accessible,
+        isGlobalAccess: accessDecision.isGlobalAccess,
+        accessSource: accessDecision.accessSource,
+        decisionState: accessDecision.accessible ? 'granted' : 'denied',
+        denialReason: accessDecision.denialReason || null,
+        catalogState,
+        canReadManagedScaleResponses: canReadManagedScaleResponses(accessDecision),
+        entitlement: accessDecision.entitlement ? {
+          canonicalStatus: accessDecision.entitlement.canonicalStatus,
+          cancellationScheduled: accessDecision.entitlement.cancellationScheduled,
+          currentPeriodEndMs: accessDecision.entitlement.currentPeriodEndMs,
+          individualAccessSource: accessDecision.entitlement.individualAccessSource
+        } : null
+      } satisfies MusicScaleAccessProjection;
+    } else {
+      const denialReason = accessDecision.denialReason || null;
+      const catalogState =
+        accessDecision.accessible
+          ? (accessDecision.isGlobalAccess ? 'administrative' : 'active')
+          : denialReason === 'SUBSCRIPTION_PAYMENT_REQUIRED'
+            ? 'payment_issue'
+            : [
+                'SUBSCRIPTION_NOT_FOUND',
+                'SUBSCRIPTION_INACTIVE',
+                'ENTITLEMENT_NOT_CONFIGURED',
+                'ENTITLEMENT_INACTIVE'
+              ].includes(String(denialReason || ''))
+              ? 'available'
+              : 'unavailable';
+
+      projection = {
+        appId: requestedAppId,
+        organizationId,
+        accessible: accessDecision.accessible,
+        isGlobalAccess: accessDecision.isGlobalAccess,
+        accessSource: accessDecision.accessSource,
+        decisionState: accessDecision.accessible ? 'granted' : 'denied',
+        denialReason,
+        catalogState
+      };
+    }
 
     accessProjection = projection;
 
     const maskedUid = decoded.uid ? `${decoded.uid.substring(0, 3)}...` : '...';
     deps.logger.log('[ACCESS_PROJECTION]', {
-      appId: 'musicscale',
+      appId: requestedAppId,
       organizationId,
       maskedUid,
       accessible: projection.accessible,
@@ -168,7 +200,7 @@ export async function handleEcosystemAccessProjectionRequest(
       organizationId,
       generatedAtMs,
       apps: {
-        musicscale: projection
+        [requestedAppId]: projection
       }
     });
   } catch (e: any) {
