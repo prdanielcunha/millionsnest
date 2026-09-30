@@ -25,6 +25,58 @@ const workspaceHome = readFileSync(
   'src/components/dashboard/EcosystemWorkspaceHome.tsx',
   'utf8'
 );
+const login = readFileSync(
+  'src/pages/Login.tsx',
+  'utf8'
+);
+const authContext = readFileSync(
+  'src/contexts/AuthContext.tsx',
+  'utf8'
+);
+const tenantBootstrapService = readFileSync(
+  'src/server/services/TenantContextMutationService.ts',
+  'utf8'
+);
+
+assert.match(
+  login,
+  /purchase_flow_title/,
+  'plan-selected sign-in must explain that the customer can continue instead of showing only a returning-user message'
+);
+assert.match(
+  login,
+  /sessionStorage\.getItem\('purchase_intent'\)/,
+  'login must preserve and detect the selected purchase intent'
+);
+assert.match(
+  login,
+  /!Boolean\(sessionStorage\.getItem\('purchase_intent'\)\)/,
+  'first-time purchase flow must default the email form to account creation while Google remains seamless for both new and existing users'
+);
+assert.match(
+  authContext,
+  /\/api\/v1\/onboarding\/bootstrap/,
+  'first-time authenticated users must be completed through the canonical onboarding bootstrap'
+);
+assert.match(
+  authContext,
+  /bootstrapAttempt\.payload\?\.activeOrganizationId/,
+  'first-time signup must be able to continue from the authoritative bootstrap payload if the immediate Firestore reread is delayed'
+);
+
+const bootstrapStart = tenantBootstrapService.indexOf('export async function bootstrapUserContext');
+const bootstrapEnd = tenantBootstrapService.indexOf('export async function acceptInvitation');
+const bootstrapBlock = tenantBootstrapService.slice(bootstrapStart, bootstrapEnd);
+assert.equal(
+  bootstrapBlock.includes("collectionGroup('invites')"),
+  false,
+  'generic Google sign-in must not be blocked by implicit invitation discovery; explicit invitations stay in /join'
+);
+assert.match(
+  bootstrapBlock,
+  /if \(userSnap\.exists\)[\s\S]*collectionGroup\('members'\)/,
+  'a truly first-time identity must not depend on a members collection-group query before checkout'
+);
 
 for (const key of [
   'purchase_journey.choose_title',
