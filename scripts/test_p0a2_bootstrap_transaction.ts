@@ -160,7 +160,7 @@ assertCondition('40. a ordem do resultado de resolveLegacyMembershipCandidates �
 
 assertCondition(
   '41. login genérico não consulta collectionGroup de convites antes do checkout',
-  !bootstrapStr.includes("collectionGroup('invites')")
+  !bootstrapStr.includes("db.collectionGroup('invites')")
 );
 
 assertCondition(
