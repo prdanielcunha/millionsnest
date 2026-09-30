@@ -28,6 +28,7 @@ before(async () => {
       await setDoc(doc(db, `organizations/${orgId}`), {
         status: 'active',
         ownerUid: `owner-${orgId}`,
+        apps: { nestaffiliate: { status: 'active' } },
       });
     }
 
@@ -53,6 +54,18 @@ before(async () => {
       role: 'editor',
       organizationRole: 'editor',
     });
+    await setDoc(doc(db, 'organizations/org-c'), {
+      status: 'active',
+      ownerUid: 'owner-org-c',
+      apps: {},
+    });
+    await setDoc(doc(db, 'organizations/org-c/members/editor-c'), {
+      uid: 'editor-c',
+      status: 'active',
+      role: 'editor',
+      organizationRole: 'editor',
+    });
+
 
     await setDoc(doc(db, 'organizations/org-a/products/nestaffiliate/campaigns/existing'), {
       id: 'existing',
@@ -114,6 +127,16 @@ test('editor cannot forge organizationId', async () => {
     updateDoc(
       doc(db, 'organizations/org-a/products/nestaffiliate/campaigns/existing'),
       { organizationId: 'org-b' },
+    ),
+  );
+});
+
+test('member without NestAffiliate entitlement cannot access product data', async () => {
+  const db = env.authenticatedContext('editor-c').firestore();
+  await assertFails(
+    setDoc(
+      doc(db, 'organizations/org-c/products/nestaffiliate/campaigns/no-entitlement'),
+      campaign('org-c'),
     ),
   );
 });
