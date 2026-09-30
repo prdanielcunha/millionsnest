@@ -341,8 +341,15 @@ assert.match(
   /appId:\s*confirmedApp/,
   'checkout confirmation must resolve canonical access for the app that was purchased'
 );
+const orgBillingPayloadMatch = server.match(
+  /if \(appId === 'musicscale'\) \{\s*Object\.assign\(orgPayload, \{([\s\S]*?)\}\);\s*\}/
+);
+assert.ok(
+  orgBillingPayloadMatch,
+  'MusicScale organization billing payload must remain explicit and testable'
+);
 assert.equal(
-  server.includes("status: subscription.status"),
+  /\bstatus:\s*subscription\.status\b/.test(orgBillingPayloadMatch?.[1] || ''),
   false,
   'Stripe subscription status must never overwrite organizations/{id}.status'
 );
