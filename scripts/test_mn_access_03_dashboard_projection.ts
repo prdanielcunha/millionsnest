@@ -199,6 +199,30 @@ async function runTests() {
     check(resolverArgs[0].uid, "user123");
     check(resolverArgs[0].organizationId, "orgX");
     check(resolverArgs[0].appId, "musicscale");
+
+    // Sellable app selection must be server-whitelisted. NestLocal can request
+    // its own canonical access projection, while unknown values fall back to
+    // MusicScale instead of being trusted as arbitrary resolver input.
+    const nestLocalReq = new FakeRequest("Bearer token1", {
+      organizationId: "orgX",
+      appId: "nestlocal"
+    });
+    const nestLocalRes = new FakeResponse();
+    await handleEcosystemAccessProjectionRequest(nestLocalReq as any, nestLocalRes as any, deps as any);
+    check(nestLocalRes._status, 200);
+    check(resolverArgs[0].appId, "nestlocal");
+    check(nestLocalRes._body.apps.nestlocal.appId, "nestlocal");
+    check(nestLocalRes._body.apps.nestlocal.accessible, true);
+    verifyNoSensitiveData(nestLocalRes._body);
+
+    const unknownAppReq = new FakeRequest("Bearer token1", {
+      organizationId: "orgX",
+      appId: "malicious-app"
+    });
+    const unknownAppRes = new FakeResponse();
+    await handleEcosystemAccessProjectionRequest(unknownAppReq as any, unknownAppRes as any, deps as any);
+    check(unknownAppRes._status, 200);
+    check(resolverArgs[0].appId, "musicscale");
     
 
 
