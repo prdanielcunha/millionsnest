@@ -1,4 +1,3 @@
-import { isSubscriptionValid } from '../lib/subscriptionHelpers.js';
 import React, { useState, useEffect, ReactNode, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, LayoutGrid, LayoutDashboard, Building2, ChevronDown, Check, LogOut, ArrowRight, Loader2, User, AlertTriangle, Music, Calendar, Users, QrCode, Database, Shield } from 'lucide-react';
@@ -127,19 +126,30 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
   const fallbackInstalledAppIds = ECOSYSTEM_APPS
     .filter(app => {
       if (app.status !== 'active') return false;
-      if (app.id === 'musicscale') {
-        return (
-          isGlobalPrivilegedUser(profile) ||
-          profile?.products?.includes('musicscale') ||
-          isSubscriptionValid(subscription) ||
-          organization?.enabledApps?.includes('musicscale')
-        );
-      }
-      return organization?.enabledApps?.includes(app.id) || organization?.apps?.[app.id]?.enabled === true;
+      if (isGlobalPrivilegedUser(profile)) return true;
+
+      const organizationAppStatus = String(
+        organization?.apps?.[app.id]?.status || ''
+      ).toLowerCase();
+      const appSubscriptionStatus = String(
+        subscription?.apps?.[app.id]?.status ||
+        (app.id === 'musicscale' ? subscription?.status : '') ||
+        ''
+      ).toLowerCase();
+
+      // During the short canonical access-projection handshake, a customer who
+      // already has an active/trialing purchase must not see an empty app
+      // launcher. This is display recovery only: openEcosystemModule still
+      // revalidates the server-side entitlement before entering the app.
+      return ['active', 'trialing'].includes(appSubscriptionStatus) &&
+        ['active', 'trialing'].includes(organizationAppStatus);
     })
     .map(app => app.id);
 
-  const effectiveInstalledAppIds = installedAppIds ?? fallbackInstalledAppIds;
+  const effectiveInstalledAppIds = Array.from(new Set([
+    ...(installedAppIds || []),
+    ...fallbackInstalledAppIds
+  ]));
   const launcherApps = ECOSYSTEM_APPS.filter(app => effectiveInstalledAppIds.includes(app.id));
 
   let supportModeObj: any = null;
