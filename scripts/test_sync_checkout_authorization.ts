@@ -15,6 +15,10 @@ const required = [
   "if (recoverOnly)",
   "event_type: recoverOnly ? 'dashboard_recover_only' : 'billing_sync'",
   "canSyncBilling",
+  "requestedAppRaw",
+  "sessionApp !== requestedApp",
+  "s.metadata?.app === requestedApp",
+  "subData?.apps?.[requestedApp]?.stripeSubscriptionId",
 ];
 
 for (const token of required) {
