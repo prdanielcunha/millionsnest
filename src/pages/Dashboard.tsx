@@ -25,6 +25,7 @@ import { resolveUserRoleDisplay } from "../lib/roleResolver.js";
 import { createAuditLog } from "../lib/audit.js";
 import { getInviteableOrganizationRolesForActor, getOrganizationRoleLabel, normalizeExistingOrganizationRole } from "../lib/organizationRoles.js";
 import { getMemberRoleUiPolicy } from "../lib/organizationMemberRoleUiPolicy.js";
+import { shouldRepairOrganizationLifecycleStatus } from "../lib/organizationLifecycle.js";
 
 import { PremiumEmptyState } from "../packages/ui/empty-state.js";
 import { EcosystemShell } from "../components/EcosystemShell.js";
@@ -294,6 +295,7 @@ export function Dashboard() {
   const musicScaleExpectedOrgRef = useRef<string | null>(null);
   const musicScaleRecoveryAttemptRef = useRef<string | null>(null);
   const nestLocalRecoveryAttemptRef = useRef<string | null>(null);
+  const organizationLifecycleRepairAttemptRef = useRef<string | null>(null);
   const [musicScaleRecoveryInProgress, setMusicScaleRecoveryInProgress] = useState(false);
 
   const acknowledgeMusicScaleChange = async (
@@ -2222,6 +2224,7 @@ export function Dashboard() {
     setMusicScaleProjectionError(null);
     musicScaleRecoveryAttemptRef.current = null;
     nestLocalRecoveryAttemptRef.current = null;
+    organizationLifecycleRepairAttemptRef.current = null;
     setMusicScaleRecoveryInProgress(false);
     
     const requestId = ++requestSequenceRef.current;
@@ -2351,6 +2354,85 @@ export function Dashboard() {
       }
     };
   }, [user, activeContextOrgId, isGlobalAdmin, isEcosystemSupport]);
+
+  useEffect(() => {
+    if (
+      !user ||
+      !activeContextOrgId ||
+      !organization ||
+      !subscription ||
+      !shouldRepairOrganizationLifecycleStatus(organization.status)
+    ) {
+      return;
+    }
+
+    const musicScaleStatus = String(
+      subscription?.apps?.musicscale?.status || subscription?.status || ''
+    ).toLowerCase();
+    const nestLocalStatus = String(
+      subscription?.apps?.nestlocal?.status || ''
+    ).toLowerCase();
+
+    const repairApp =
+      ['active', 'trialing'].includes(musicScaleStatus)
+        ? 'musicscale'
+        : ['active', 'trialing'].includes(nestLocalStatus)
+          ? 'nestlocal'
+          : null;
+
+    if (!repairApp) return;
+
+    const repairKey = [
+      user.uid,
+      activeContextOrgId,
+      String(organization.status || ''),
+      repairApp,
+      repairApp === 'musicscale' ? musicScaleStatus : nestLocalStatus
+    ].join(':');
+
+    if (organizationLifecycleRepairAttemptRef.current === repairKey) {
+      return;
+    }
+    organizationLifecycleRepairAttemptRef.current = repairKey;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch('/api/v1/billing/sync', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            organizationId: activeContextOrgId,
+            app: repairApp,
+            recoverOnly: true
+          })
+        });
+
+        if (!response.ok && !cancelled) {
+          console.warn('[Dashboard] Organization lifecycle repair request was not accepted.');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[Dashboard] Organization lifecycle repair failed.', error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user,
+    activeContextOrgId,
+    organization?.status,
+    subscription?.status,
+    subscription?.apps?.musicscale?.status,
+    subscription?.apps?.nestlocal?.status
+  ]);
 
   useEffect(() => {
     if (

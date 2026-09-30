@@ -58,6 +58,10 @@ const i4 = createBaseInput();
 i4.organization.status = 'suspended';
 assertCondition('4. organização inativa', (planInvitationAcceptance(i4, nowMs) as InvitationAcceptanceFailure).reasonCode === 'ORGANIZATION_INACTIVE');
 
+const i4b = createBaseInput();
+i4b.organization.status = 'trialing';
+assertCondition('4b. organização em avaliação continua operacional', planInvitationAcceptance(i4b, nowMs).success === true);
+
 // 5. convite inexistente;
 const i5 = createBaseInput();
 i5.invitation.exists = false;

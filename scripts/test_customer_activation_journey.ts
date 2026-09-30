@@ -46,6 +46,23 @@ const accessProjectionService = readFileSync(
   'utf8'
 );
 
+const ecosystemShell = readFileSync(
+  'src/components/EcosystemShell.tsx',
+  'utf8'
+);
+const invitationCreationPlanner = readFileSync(
+  'src/server/services/InvitationCreationPlanner.ts',
+  'utf8'
+);
+const invitationAcceptancePlanner = readFileSync(
+  'src/server/services/InvitationAcceptancePlanner.ts',
+  'utf8'
+);
+const organizationLifecycle = readFileSync(
+  'src/lib/organizationLifecycle.ts',
+  'utf8'
+);
+
 assert.match(
   login,
   /purchase_flow_title/,
@@ -99,6 +116,26 @@ assert.match(
   bootstrapBlock,
   /if \(userSnap\.exists\)[\s\S]*collectionGroup\('members'\)/,
   'a truly first-time identity must not depend on a members collection-group query before checkout'
+);
+assert.match(
+  tenantBootstrapService,
+  /isOrganizationLifecycleActive/,
+  'tenant bootstrap must not treat a trialing Stripe subscription status as an inactive organization'
+);
+assert.match(
+  invitationCreationPlanner,
+  /isOrganizationLifecycleActive\(input\.organization\.status\)/,
+  'creating invitations must use tenant lifecycle semantics instead of requiring organization.status === active'
+);
+assert.match(
+  invitationAcceptancePlanner,
+  /isOrganizationLifecycleActive\(input\.organization\.status\)/,
+  'accepting invitations must use tenant lifecycle semantics instead of billing status'
+);
+assert.match(
+  organizationLifecycle,
+  /'trialing'/,
+  'legacy billing-derived trialing state must be recognized as an operational tenant lifecycle'
 );
 
 for (const key of [
@@ -176,6 +213,16 @@ assert.match(
   dashboard,
   /recoverOnly:\s*true/,
   'Hub must self-heal a paid MusicScale entitlement without destructive downgrade'
+);
+assert.match(
+  dashboard,
+  /organizationLifecycleRepairAttemptRef/,
+  'Hub must automatically repair organizations whose lifecycle status was historically overwritten by billing'
+);
+assert.match(
+  dashboard,
+  /shouldRepairOrganizationLifecycleStatus\(organization\.status\)/,
+  'Hub must detect legacy billing-derived organization lifecycle states'
 );
 assert.match(
   dashboard,
@@ -294,10 +341,38 @@ assert.match(
   /appId:\s*confirmedApp/,
   'checkout confirmation must resolve canonical access for the app that was purchased'
 );
+const orgBillingPayloadMatch = server.match(
+  /if \(appId === 'musicscale'\) \{\s*Object\.assign\(orgPayload, \{([\s\S]*?)\}\);\s*\}/
+);
+assert.ok(
+  orgBillingPayloadMatch,
+  'MusicScale organization billing payload must remain explicit and testable'
+);
+assert.equal(
+  /\bstatus:\s*subscription\.status\b/.test(orgBillingPayloadMatch?.[1] || ''),
+  false,
+  'Stripe subscription status must never overwrite organizations/{id}.status'
+);
+assert.match(
+  server,
+  /shouldRepairOrganizationLifecycleStatus\(existingOrganizationStatus\)/,
+  'billing reconciliation must repair historical organization lifecycle values that were overwritten by billing'
+);
 assert.match(
   accessProjectionService,
   /rawAppId === 'nestlocal' \? 'nestlocal' : 'musicscale'/,
   'canonical access projection must support each sellable app without trusting arbitrary app ids'
+);
+
+assert.match(
+  ecosystemShell,
+  /appSubscriptionStatus[\s\S]*\['active', 'trialing'\]/,
+  'app switcher must recognize active and trialing purchases while canonical access projection is completing'
+);
+assert.match(
+  ecosystemShell,
+  /effectiveInstalledAppIds = Array\.from\(new Set\(/,
+  'app switcher must merge canonical installed apps with safe billing fallback instead of showing a false empty state'
 );
 
 assert.match(

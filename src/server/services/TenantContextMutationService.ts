@@ -7,6 +7,7 @@ import { getFirestore, FieldValue, Firestore } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import { planInvitationAcceptance, normalizeInvitationEmail, InvitationAcceptanceInput } from './InvitationAcceptancePlanner.js';
 import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './InvitationAcceptanceServerPolicy.js';
+import { isOrganizationLifecycleActive } from '../../lib/organizationLifecycle.js';
 
 
 
@@ -83,7 +84,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         const checkOrg = await t.get(db.collection('organizations').doc(lockOrgId));
         if (checkOrg.exists) {
            lockOrgExists = true;
-           lockOrgActive = checkOrg.data()?.status === 'active';
+           lockOrgActive = isOrganizationLifecycleActive(checkOrg.data() || {});
         }
         const checkMem = await t.get(db.collection(`organizations/${lockOrgId}/members`).doc(uid));
         if (checkMem.exists) {
@@ -124,7 +125,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
       const validCanonical = [];
       for (const m of candidateCanonical) {
          const orgSnap = await t.get(db.collection('organizations').doc(m.organizationId));
-         if (orgSnap.exists && orgSnap.data()?.status === 'active') {
+         if (orgSnap.exists && isOrganizationLifecycleActive(orgSnap.data() || {})) {
             validCanonical.push(m);
          }
       }
@@ -160,7 +161,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
       const validLegacy = [];
       for (const m of resolveResult.memberships) {
           const orgSnap = await t.get(db.collection('organizations').doc(m.organizationId));
-          const orgValid = orgSnap.exists && orgSnap.data()?.status === 'active';
+          const orgValid = orgSnap.exists && isOrganizationLifecycleActive(orgSnap.data() || {});
           if (!orgValid) {
               throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
           }

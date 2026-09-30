@@ -5,6 +5,7 @@ import {
 } from './InvitationAcceptancePlanner.js';
 import { isValidInvitationOrganizationId } from '../../lib/InvitationRedirectPolicy.js';
 import { canInviteOrganizationRole } from '../../lib/organizationRoles.js';
+import { isOrganizationLifecycleActive } from '../../lib/organizationLifecycle.js';
 
 export const INVITATION_TTL_MS = 604800000;
 
@@ -174,7 +175,7 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
     return { success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' };
   }
 
-  if (input.organization.status !== 'active') {
+  if (!isOrganizationLifecycleActive(input.organization.status)) {
     return { success: false, reasonCode: 'ORGANIZATION_INACTIVE' };
   }
   if (typeof input.organization.name !== 'string' || input.organization.name.trim() === '') {
