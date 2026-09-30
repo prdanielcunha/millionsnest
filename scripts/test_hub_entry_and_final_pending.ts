@@ -45,7 +45,7 @@ assert.match(dashboard, /Configurar equipe no MusicScale/, 'ministry-role editin
 assert.equal(dashboard.includes('alert('), false, 'Dashboard must not use native browser alerts');
 assert.equal(organization.includes('alert('), false, 'Organization management must not use native browser alerts');
 
-assert.match(login, /Não conseguimos terminar a configuração da conta/, 'login must provide profile bootstrap recovery');
+assert.match(login, /setup_pending_title|Seu login foi confirmado/, 'login must provide reassuring profile bootstrap recovery without a conversion-scaring failure message');
 assert.match(dashboard, /Não conseguimos preparar sua conta/, 'Hub must provide profile recovery');
 assert.match(dashboard, /Sua organização ainda não apareceu/, 'Hub must provide organization-context recovery');
 
