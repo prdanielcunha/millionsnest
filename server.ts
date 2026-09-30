@@ -75,6 +75,7 @@ import {
   calculateOccupiedSlots
 } from './src/lib/musicScalePlans.js';
 import { NESTLOCAL_PLANS, normalizeNestLocalPlan } from './src/lib/nestLocalPlans.js';
+import { shouldRepairOrganizationLifecycleStatus } from './src/lib/organizationLifecycle.js';
 
 dotenv.config();
 
@@ -581,10 +582,19 @@ export async function upsertEcosystemSubscription(params: {
       plan: resolvedPlan,
       subscriptionPlan: resolvedPlan,
       subscriptionStatus: subscription.status,
-      status: subscription.status,
       'apps.musicscale.supportTier': (planDetails.features as any)?.supportTier || 'basic',
       lastStripeEventTs: eventCreatedTs,
     });
+  }
+
+  // Tenant lifecycle is independent from billing lifecycle. Older versions
+  // accidentally wrote Stripe values such as "trialing" into organization.status,
+  // which disabled invitations/bootstrap even though the customer had paid.
+  // Heal only missing/known billing-derived values; never reactivate an
+  // administratively archived/inactive/suspended/disabled organization.
+  const existingOrganizationStatus = orgDoc.exists ? orgDoc.data()?.status : null;
+  if (!orgDoc.exists || shouldRepairOrganizationLifecycleStatus(existingOrganizationStatus)) {
+    orgPayload.status = 'active';
   }
   
   if (!orgDoc.exists) {
