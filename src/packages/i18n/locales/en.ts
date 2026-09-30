@@ -621,7 +621,13 @@ export default {
     login_button: "Log in",
     create_button: "Create account",
     no_account: "Don't have an account? Sign up",
-    has_account: "Already have an account? Log in"
+    has_account: "Already have an account? Log in",
+    purchase_flow_title: "Continue to activate your trial",
+    purchase_flow_subtitle: "Use Google or your email. If this is your first access, your account will be created and your selected plan will stay selected.",
+    setup_pending_title: "Your sign-in was confirmed",
+    setup_pending_body: "We're finishing your access setup. No purchase was lost and you can continue safely.",
+    continue_setup: "Continue",
+    use_another_account: "Use another account"
   },
   commandPalette: {
     placeholder: "What do you need to do?",
