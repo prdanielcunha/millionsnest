@@ -333,15 +333,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                      return { response, payload };
                    };
 
-                   let bootstrapAttempt = await runBootstrap();
+                   const bootstrapAttempt = await runBootstrap();
                    if (!isCurrentAuthEvent()) return;
-
-                   if (!bootstrapAttempt.response.ok && [500, 502, 503, 504].includes(bootstrapAttempt.response.status)) {
-                     await new Promise(resolve => window.setTimeout(resolve, 350));
-                     if (!isCurrentAuthEvent()) return;
-                     bootstrapAttempt = await runBootstrap();
-                     if (!isCurrentAuthEvent()) return;
-                   }
 
                    if (!bootstrapAttempt.response.ok || bootstrapAttempt.payload?.success === false) {
                      throw new Error(
@@ -395,17 +388,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                    setProfile(newProfileData);
                    localStorage.setItem('mn_user_profile', JSON.stringify(newProfileData));
 
-                   try {
-                     const ctxRes = await withTimeout(fetch('/api/user/organization-context', {
-                       headers: { 'Authorization': `Bearer ${idToken}` }
-                     }), 6000, "Canonical context timeout after onboarding");
-                     if (isCurrentAuthEvent() && ctxRes.ok) {
-                       setCanonicalContext(await ctxRes.json());
-                     }
-                   } catch (ctxErr) {
-                     console.warn("Contexto canônico será carregado posteriormente.", ctxErr);
-                   }
-                         
+
                    Promise.resolve().then(() => {
                      if (isCurrentAuthEvent()) {
                        analytics.track('signup', {
