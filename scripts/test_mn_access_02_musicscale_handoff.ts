@@ -312,15 +312,16 @@ async function testHarness() {
       assert(res14.body.retryable === true, 'SUBSCRIPTION_NOT_FOUND retryable true');
     }
 
-    // ENTITLEMENT_NOT_CONFIGURED
+    // STALE/MISSING ORGANIZATION APP PROJECTION MUST NOT BLOCK A VALID PURCHASE
     {
       const db15 = new MockFirestore();
       setupStandardUserAndOrg(db15, 'u1', 'org1', 'user', 'active', 'active');
       db15.setMockData('organizations/org1', { status: 'active', apps: {} });
       const deps15 = new MockDependencies(); deps15.db = db15; deps15.tokenVerifyResult = { uid: 'u1' };
       const res15 = await runReq({ headers: { authorization: 'Bearer t1' }, body: { appId: 'musicscale', orgId: 'org1' }}, deps15);
-      assert(res15.body.reason === 'ENTITLEMENT_NOT_CONFIGURED', 'reason is ENTITLEMENT_NOT_CONFIGURED');
-      assert(res15.body.retryable === true, 'ENTITLEMENT_NOT_CONFIGURED retryable true');
+      assert(res15.statusCode === 200, 'missing organization app projection does not block canonical subscription');
+      assert(typeof res15.body.customToken === 'string', 'handoff token is issued while the projection heals');
+      assert(deps15.createCustomTokenCalls === 1, 'custom token is created exactly once');
     }
 
     // SUBSCRIPTION_INACTIVE
@@ -343,14 +344,15 @@ async function testHarness() {
       assert(res17.body.retryable === false, 'SUBSCRIPTION_PAYMENT_REQUIRED retryable false');
     }
 
-    // ENTITLEMENT_INACTIVE
+    // STALE INACTIVE ORGANIZATION APP PROJECTION MUST NOT OVERRIDE CANONICAL PURCHASE
     {
       const db18 = new MockFirestore();
       setupStandardUserAndOrg(db18, 'u1', 'org1', 'user', 'active', 'canceled');
       const deps18 = new MockDependencies(); deps18.db = db18; deps18.tokenVerifyResult = { uid: 'u1' };
       const res18 = await runReq({ headers: { authorization: 'Bearer t1' }, body: { appId: 'musicscale', orgId: 'org1' }}, deps18);
-      assert(res18.body.reason === 'ENTITLEMENT_INACTIVE', 'reason is ENTITLEMENT_INACTIVE');
-      assert(res18.body.retryable === false, 'ENTITLEMENT_INACTIVE retryable false');
+      assert(res18.statusCode === 200, 'stale inactive app projection does not override an active canonical subscription');
+      assert(typeof res18.body.customToken === 'string', 'handoff token is issued for the valid purchase');
+      assert(deps18.createCustomTokenCalls === 1, 'custom token is created exactly once');
     }
     
     // MEMBER_APP_ACCESS_DISABLED
