@@ -2058,6 +2058,8 @@ service cloud.firestore {
               'publicationPackages',
               'publications',
               'learningSignals',
+              'performanceDaily',
+              'affiliateResults',
               'userPreferences',
               'complianceChecks'
             ] &&
@@ -2081,6 +2083,8 @@ service cloud.firestore {
               'publicationPackages',
               'publications',
               'learningSignals',
+              'performanceDaily',
+              'affiliateResults',
               'userPreferences',
               'complianceChecks'
             ] &&
@@ -2104,6 +2108,8 @@ service cloud.firestore {
               'publicationPackages',
               'publications',
               'learningSignals',
+              'performanceDaily',
+              'affiliateResults',
               'userPreferences',
               'complianceChecks'
             ] &&
