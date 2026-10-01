@@ -2029,6 +2029,38 @@ service cloud.firestore {
           allow create, update, delete: if false;
         }
 
+        match /affiliateAccounts/{accountId} {
+          // Provider account/token material is server-managed.
+          allow read: if nestAffiliateCanAdmin(orgId);
+          allow create, update, delete: if false;
+        }
+
+        match /pinterestAccounts/{accountId} {
+          // OAuth tokens and refresh state never become client-writable.
+          allow read: if nestAffiliateCanAdmin(orgId);
+          allow create, update, delete: if false;
+        }
+
+        match /quotaUsage/{usageId} {
+          allow read: if nestAffiliateCanAdmin(orgId);
+          allow create, update, delete: if false;
+        }
+
+        match /featureFlags/{flagId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create, update, delete: if false;
+        }
+
+        match /systemJobs/{jobId} {
+          allow read: if nestAffiliateCanAdmin(orgId);
+          allow create, update, delete: if false;
+        }
+
+        match /policySnapshots/{snapshotId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create, update, delete: if false;
+        }
+
         match /auditEvents/{eventId} {
           allow read: if nestAffiliateCanAdmin(orgId);
           allow create: if nestAffiliateCanEdit(orgId) &&
@@ -2038,7 +2070,7 @@ service cloud.firestore {
         }
 
         match /{collectionName}/{documentId} {
-          allow read: if !(collectionName in ['providerConnections', 'auditEvents']) &&
+          allow read: if !(collectionName in ['providerConnections', 'affiliateAccounts', 'pinterestAccounts', 'quotaUsage', 'systemJobs', 'auditEvents']) &&
             nestAffiliateCanRead(orgId);
           allow create: if collectionName in [
               'boards',
