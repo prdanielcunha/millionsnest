@@ -52,14 +52,14 @@ const r4 = resolveCanonicalInvitationCapacity({
 });
 assertCondition('4. assinatura ausente falha unavailable', !r4.success && (r4.success === false ? r4.reasonCode : '') === 'MEMBER_LIMIT_UNAVAILABLE');
 
-// 5. projeção do app ausente falha unavailable;
+// 5. cache do app ausente durante reconciliação ainda usa assinatura canônica;
 const r5 = resolveCanonicalInvitationCapacity({
   organizationId: 'org1',
   subscription: { exists: true, organizationId: 'org1', app: 'musicscale', status: 'active', plan: 'starter', limitsUsers: 10 },
   organizationApp: { exists: false },
   memberStatuses: []
 });
-assertCondition('5. projeção do app ausente falha unavailable', !r5.success && (r5.success === false ? r5.reasonCode : '') === 'MEMBER_LIMIT_UNAVAILABLE');
+assertCondition('5. cache do app ausente não bloqueia assinatura canônica', r5.success && r5.capacity.maxMembers === 10);
 
 // 6. subscription.organizationId divergente falha unavailable;
 const r6 = resolveCanonicalInvitationCapacity({
@@ -115,50 +115,50 @@ const r11 = resolveCanonicalInvitationCapacity({
 });
 assertCondition('11. plano desconhecido falha invalid', !r11.success && (r11.success === false ? r11.reasonCode : '') === 'MEMBER_LIMIT_INVALID');
 
-// 12. limite da assinatura ausente falha invalid;
+// 12. limite duplicado ausente usa catálogo canônico;
 const r12 = resolveCanonicalInvitationCapacity({
   organizationId: 'org1',
   subscription: { exists: true, organizationId: 'org1', app: 'musicscale', status: 'active', plan: 'starter', limitsUsers: undefined },
   organizationApp: { exists: true, status: 'active', plan: 'starter', limitsUsers: 10 },
   memberStatuses: []
 });
-assertCondition('12. limite da assinatura ausente falha invalid', !r12.success && (r12.success === false ? r12.reasonCode : '') === 'MEMBER_LIMIT_INVALID');
+assertCondition('12. limite duplicado ausente usa catálogo canônico', r12.success && r12.capacity.maxMembers === 10);
 
-// 13. limite do app ausente falha invalid;
+// 13. limite do cache do app ausente usa catálogo canônico;
 const r13 = resolveCanonicalInvitationCapacity({
   organizationId: 'org1',
   subscription: { exists: true, organizationId: 'org1', app: 'musicscale', status: 'active', plan: 'starter', limitsUsers: 10 },
   organizationApp: { exists: true, status: 'active', plan: 'starter', limitsUsers: undefined },
   memberStatuses: []
 });
-assertCondition('13. limite do app ausente falha invalid', !r13.success && (r13.success === false ? r13.reasonCode : '') === 'MEMBER_LIMIT_INVALID');
+assertCondition('13. limite do cache do app ausente usa catálogo canônico', r13.success && r13.capacity.maxMembers === 10);
 
-// 14. limite starter diferente de 10 falha invalid;
+// 14. limite duplicado divergente não altera o limite do catálogo;
 const r14 = resolveCanonicalInvitationCapacity({
   organizationId: 'org1',
   subscription: { exists: true, organizationId: 'org1', app: 'musicscale', status: 'active', plan: 'starter', limitsUsers: 11 },
   organizationApp: { exists: true, status: 'active', plan: 'starter', limitsUsers: 11 },
   memberStatuses: []
 });
-assertCondition('14. limite starter diferente de 10 falha invalid', !r14.success && (r14.success === false ? r14.reasonCode : '') === 'MEMBER_LIMIT_INVALID');
+assertCondition('14. starter usa limite 10 do catálogo', r14.success && r14.capacity.maxMembers === 10);
 
-// 15. limite advanced diferente de 20 falha invalid;
+// 15. advanced usa limite do catálogo;
 const r15 = resolveCanonicalInvitationCapacity({
   organizationId: 'org1',
   subscription: { exists: true, organizationId: 'org1', app: 'musicscale', status: 'active', plan: 'advanced', limitsUsers: 25 },
   organizationApp: { exists: true, status: 'active', plan: 'advanced', limitsUsers: 25 },
   memberStatuses: []
 });
-assertCondition('15. limite advanced diferente de 20 falha invalid', !r15.success && (r15.success === false ? r15.reasonCode : '') === 'MEMBER_LIMIT_INVALID');
+assertCondition('15. advanced usa limite 20 do catálogo', r15.success && r15.capacity.maxMembers === 20);
 
-// 16. limite pro diferente de -1 falha invalid;
+// 16. Pro é ilimitado pelo catálogo, independente de campo duplicado;
 const r16 = resolveCanonicalInvitationCapacity({
   organizationId: 'org1',
   subscription: { exists: true, organizationId: 'org1', app: 'musicscale', status: 'active', plan: 'pro', limitsUsers: 100 },
   organizationApp: { exists: true, status: 'active', plan: 'pro', limitsUsers: 100 },
   memberStatuses: []
 });
-assertCondition('16. limite pro diferente de -1 falha invalid', !r16.success && (r16.success === false ? r16.reasonCode : '') === 'MEMBER_LIMIT_INVALID');
+assertCondition('16. Pro continua ilimitado pelo catálogo', r16.success && r16.capacity.mode === 'unlimited');
 
 // 17. memberships active são contadas;
 const r17 = resolveCanonicalInvitationCapacity({
@@ -210,6 +210,24 @@ const r21b = resolveCanonicalInvitationCapacity({
   memberStatuses: ['suspended', undefined, 'active']
 });
 assertCondition('21. ordem das memberships não altera o resultado', r21a.success && r21b.success && r21a.capacity.currentActiveMembers === r21b.capacity.currentActiveMembers);
+
+// 21b. trialing Pro com esquema legado sem campos duplicados de app/org continua ilimitado.
+const r21c = resolveCanonicalInvitationCapacity({
+  organizationId: 'org1',
+  subscription: { exists: true, status: 'trialing', plan: 'pro' },
+  organizationApp: { exists: true, status: 'trialing', plan: 'pro' },
+  memberStatuses: ['active']
+});
+assertCondition('21b. trialing Pro legado continua ilimitado', r21c.success && r21c.capacity.mode === 'unlimited');
+
+// 21c. app cache ainda não materializado não deve gerar falso 503 durante reconciliação.
+const r21d = resolveCanonicalInvitationCapacity({
+  organizationId: 'org1',
+  subscription: { exists: true, status: 'trialing', plan: 'pro' },
+  organizationApp: { exists: false },
+  memberStatuses: ['active']
+});
+assertCondition('21c. reconciliação do cache não bloqueia convite Pro', r21d.success && r21d.capacity.mode === 'unlimited');
 
 // Structural tests for endpoint
 const serviceContent = fs.readFileSync('src/server/services/TenantContextMutationService.ts', 'utf8');
