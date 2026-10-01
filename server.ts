@@ -907,6 +907,8 @@ async function startServer() {
             id: document.id,
             organizationId,
             organizationName: data.organizationName || orgData.name || '',
+            inviteMode: data.inviteMode === 'link' ? 'link' : 'email',
+            identityBound: data.identityBound !== false,
             email: data.emailNormalized || data.email || '',
             role: data.role || 'member',
             status: 'pending',
