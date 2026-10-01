@@ -241,8 +241,10 @@ assertCondition('23. usa resolveCanonicalInvitationCapacity', endpointContent.in
 assertCondition('24. consulta somente hash SHA-256', endpointContent.includes('crypto.createHash') && endpointContent.includes('tokenHash'));
 assertCondition('25. não consulta token bruto', !endpointContent.includes("where('token',") && !endpointContent.includes("legacyQuery"));
 assertCondition('26. não contém legacyMigrated true', !endpointContent.includes("legacyMigrated = true") && !endpointContent.includes("legacyMigrated: true"));
-assertCondition('27. não usa limit(1)', !endpointContent.includes(".limit(1)"));
-assertCondition('28. exige caminho organizations/{orgId}/invites', endpointContent.includes("parts.length === 4 && parts[0] === 'organizations' && parts[2] === 'invites'"));
+assertCondition('27. lookup aceita no máximo dois resultados para detectar inconsistência', endpointContent.includes(".limit(2)"));
+assertCondition('28. lookup é escopado em organizations/{orgId}/invites', endpointContent.includes("doc(requestedOrganizationId)") && endpointContent.includes("collection('invites')"));
+assertCondition('28b. aceitação não depende de collectionGroup invites', !endpointContent.includes("collectionGroup('invites')"));
+assertCondition('28c. organizationId do request é validado', endpointContent.includes('isValidInvitationOrganizationId(requestedOrganizationId)'));
 assertCondition('29. getAuth().getUser ocorre antes de runTransaction', endpointContent.indexOf('getAuth().getUser') < endpointContent.indexOf('runTransaction'));
 assertCondition('30. acceptanceNowMs ocorre antes de runTransaction', endpointContent.indexOf('acceptanceNowMs =') < endpointContent.indexOf('runTransaction'));
 

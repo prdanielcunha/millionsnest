@@ -208,7 +208,7 @@ jobs:
           --config firebase.rules-test.json
           --only firestore
           --project demo-millionsnest-ci
-          "npx tsx --test --test-concurrency=1 tests/firestore/*.test.ts && npx tsx scripts/test_musicscale_live_conductor_rbac.ts && npx tsx scripts/test_nestjourney_member_responsibility.ts && npx tsx scripts/test_nestjourney_relationship_host_command.ts && npx tsx scripts/test_nestjourney_workspace_projection.ts && npx tsx scripts/test_p0_organization_role_commands_certification.ts && npx tsx scripts/test_organization_ownership_repair.ts"
+          "npx tsx --test --test-concurrency=1 tests/firestore/*.test.ts && npx tsx scripts/test_p0_invitation_commands_certification.ts && npx tsx scripts/test_p0_invitation_final_certification.ts && npx tsx scripts/test_p0a3_invitation_creation_planner.ts && npx tsx scripts/test_p0a3_invitation_acceptance_planner.ts && npx tsx scripts/test_p0a3_invitation_acceptance_transaction.ts && npx tsx scripts/test_p0a3_join_client_policy.ts && npx tsx scripts/test_ux_integrity_1_invitation_creation_integration.ts && npx tsx scripts/test_musicscale_live_conductor_rbac.ts && npx tsx scripts/test_nestjourney_member_responsibility.ts && npx tsx scripts/test_nestjourney_relationship_host_command.ts && npx tsx scripts/test_nestjourney_workspace_projection.ts && npx tsx scripts/test_p0_organization_role_commands_certification.ts && npx tsx scripts/test_organization_ownership_repair.ts"
 
       - name: Build
         run: npm run build

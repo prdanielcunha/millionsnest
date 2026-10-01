@@ -8,6 +8,7 @@ import * as crypto from 'crypto';
 import { planInvitationAcceptance, normalizeInvitationEmail, InvitationAcceptanceInput } from './InvitationAcceptancePlanner.js';
 import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './InvitationAcceptanceServerPolicy.js';
 import { isOrganizationLifecycleActive } from '../../lib/organizationLifecycle.js';
+import { isValidInvitationOrganizationId } from '../../lib/InvitationRedirectPolicy.js';
 
 
 
@@ -466,30 +467,39 @@ export async function acceptInvitation(
       return res.status(400).json({ success: false, reasonCode: 'INVALID_TOKEN' });
     }
 
+    const requestedOrganizationId = req.body?.organizationId;
+    if (!isValidInvitationOrganizationId(requestedOrganizationId)) {
+      return res.status(400).json({ success: false, reasonCode: 'INVALID_ORGANIZATION_ID' });
+    }
+
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const acceptanceNowMs = now();
     const db = resolveFirestore();
 
     const result = await db.runTransaction(async (t) => {
+      const orgInvitesRef = db
+        .collection('organizations')
+        .doc(requestedOrganizationId)
+        .collection('invites');
+
+      // Resolve the token inside the organization encoded in the /join URL.
+      // This deliberately avoids a collectionGroup query: production had no
+      // collection-group index for invites.tokenHash, so valid invitations
+      // failed at runtime even though unit/build QA was green.
       const invitesQuery = await t.get(
-        db.collectionGroup('invites').where('tokenHash', '==', tokenHash)
+        orgInvitesRef.where('tokenHash', '==', tokenHash).limit(2)
       );
 
-      const validInvites = invitesQuery.docs.filter(d => {
-        const parts = d.ref.path.split('/');
-        return parts.length === 4 && parts[0] === 'organizations' && parts[2] === 'invites';
-      });
-
-      if (validInvites.length === 0) {
+      if (invitesQuery.empty) {
          return { status: 404, data: { success: false, reasonCode: 'INVITE_NOT_FOUND' } };
       }
-      if (validInvites.length > 1) {
+      if (invitesQuery.size > 1) {
          return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
       }
 
-      const inviteDoc = validInvites[0];
+      const inviteDoc = invitesQuery.docs[0];
       const inviteData = inviteDoc.data();
-      const orgId = inviteDoc.ref.parent.parent!.id;
+      const orgId = requestedOrganizationId;
 
       if (Object.prototype.hasOwnProperty.call(inviteData, 'organizationId')) {
         if (typeof inviteData.organizationId !== 'string' || inviteData.organizationId !== orgId) {

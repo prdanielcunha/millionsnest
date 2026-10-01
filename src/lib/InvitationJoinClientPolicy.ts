@@ -3,6 +3,7 @@ export type InvitationJoinLanguage = 'pt' | 'en' | 'es';
 export type InvitationJoinFailureReason =
   | 'UNAUTHENTICATED'
   | 'INVALID_TOKEN'
+  | 'INVALID_ORGANIZATION_ID'
   | 'AUTHENTICATED_EMAIL_REQUIRED'
   | 'INVALID_INVITE_ROLE'
   | 'INVITE_IDENTITY_MISMATCH'
@@ -51,7 +52,7 @@ export type InvitationJoinFailurePayload = {
 export function isInvitationJoinFailureReason(value: unknown): value is InvitationJoinFailureReason {
   if (typeof value !== 'string') return false;
   const reasonsMap: Record<string, boolean> = {
-    UNAUTHENTICATED: true, INVALID_TOKEN: true, AUTHENTICATED_EMAIL_REQUIRED: true, INVALID_INVITE_ROLE: true,
+    UNAUTHENTICATED: true, INVALID_TOKEN: true, INVALID_ORGANIZATION_ID: true, AUTHENTICATED_EMAIL_REQUIRED: true, INVALID_INVITE_ROLE: true,
     INVITE_IDENTITY_MISMATCH: true, INVITE_NOT_FOUND: true, ORGANIZATION_NOT_FOUND: true, ORGANIZATION_INACTIVE: true,
     INVITE_STATE_INCONSISTENT: true, INVITE_REVOKED: true, INVITE_EXPIRED: true, INVITE_MAX_USES_REACHED: true,
     MEMBERSHIP_INACTIVE: true, MEMBERSHIP_STATE_INCONSISTENT: true, INVITE_ALREADY_CONSUMED: true,
@@ -132,6 +133,7 @@ export function getInvitationJoinMessage(
     pt: {
       UNAUTHENTICATED: { title: 'Não autenticado', description: 'Você precisa estar logado para aceitar este convite.' },
       INVALID_TOKEN: { title: 'Token inválido', description: 'O link do convite está incompleto ou inválido.' },
+      INVALID_ORGANIZATION_ID: { title: 'Organização inválida', description: 'O link do convite não identifica uma organização válida.' },
       AUTHENTICATED_EMAIL_REQUIRED: { title: 'Email não verificado', description: 'Você precisa ter um email autenticado para aceitar o convite.' },
       INVALID_INVITE_ROLE: { title: 'Permissão inválida', description: 'O convite possui uma permissão inválida e não pode ser aceito.' },
       INVITE_IDENTITY_MISMATCH: { title: 'Convite não autorizado', description: 'Este convite não foi enviado para o seu endereço de email.' },
@@ -155,6 +157,7 @@ export function getInvitationJoinMessage(
     en: {
       UNAUTHENTICATED: { title: 'Unauthenticated', description: 'You must be logged in to accept this invitation.' },
       INVALID_TOKEN: { title: 'Invalid token', description: 'The invitation link is incomplete or invalid.' },
+      INVALID_ORGANIZATION_ID: { title: 'Invalid organization', description: 'The invitation link does not identify a valid organization.' },
       AUTHENTICATED_EMAIL_REQUIRED: { title: 'Unverified email', description: 'You must have an authenticated email to accept the invitation.' },
       INVALID_INVITE_ROLE: { title: 'Invalid role', description: 'The invitation has an invalid role and cannot be accepted.' },
       INVITE_IDENTITY_MISMATCH: { title: 'Unauthorized invitation', description: 'This invitation was not sent to your email address.' },
@@ -178,6 +181,7 @@ export function getInvitationJoinMessage(
     es: {
       UNAUTHENTICATED: { title: 'No autenticado', description: 'Debes iniciar sesión para aceptar esta invitación.' },
       INVALID_TOKEN: { title: 'Token inválido', description: 'El enlace de la invitación está incompleto o es inválido.' },
+      INVALID_ORGANIZATION_ID: { title: 'Organización inválida', description: 'El enlace de la invitación no identifica una organización válida.' },
       AUTHENTICATED_EMAIL_REQUIRED: { title: 'Correo no verificado', description: 'Debes tener un correo autenticado para aceptar la invitación.' },
       INVALID_INVITE_ROLE: { title: 'Rol inválido', description: 'La invitación tiene un rol inválido y no puede ser aceptada.' },
       INVITE_IDENTITY_MISMATCH: { title: 'Invitación no autorizada', description: 'Esta invitación no fue enviada a tu dirección de correo.' },

@@ -1340,7 +1340,7 @@ async function startServer() {
         }
 
         const collisionQuery = await transaction.get(
-          dbInstance.collectionGroup('invites').where('tokenHash', '==', tokenResult.material.tokenHash)
+          orgRef.collection('invites').where('tokenHash', '==', tokenResult.material.tokenHash).limit(1)
         );
         if (!collisionQuery.empty) {
           return { status: 500, payload: { success: false, reasonCode: 'TOKEN_STATE_INCONSISTENT' } };

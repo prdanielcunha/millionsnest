@@ -43,8 +43,8 @@ async function seedInvite(orgId: string, id: string, rawToken: string, email: st
   });
 }
 
-async function accept(token: string, rawToken: string) {
-  return invokeHandler(handler, { bearer: token, body: { token: rawToken } });
+async function accept(token: string, rawToken: string, organizationId: string) {
+  return invokeHandler(handler, { bearer: token, body: { token: rawToken, organizationId } });
 }
 
 async function run() {
@@ -62,11 +62,11 @@ async function run() {
       primaryOrganizationId: 'primary-org', marker: 'preserve-me'
     })
   ]);
-  const firstReplay = await accept('already-token', 'already-raw-token');
+  const firstReplay = await accept('already-token', 'already-raw-token', 'already-org');
   const firstUser = (await db.doc('users/already-user').get()).data()!;
   assert('first ALREADY_MEMBER replay converges active context', firstReplay.statusCode === 200 && firstUser.activeOrganizationId === 'already-org' && firstUser.organizationId === 'already-org');
   assert('ALREADY_MEMBER preserves primary organization and unrelated identity fields', firstUser.primaryOrganizationId === 'primary-org' && firstUser.marker === 'preserve-me');
-  const secondReplay = await accept('already-token', 'already-raw-token');
+  const secondReplay = await accept('already-token', 'already-raw-token', 'already-org');
   const replayInvite = (await db.doc('organizations/already-org/invites/already-invite').get()).data()!;
   const replayMembership = (await db.doc('organizations/already-org/members/already-user').get()).data()!;
   const replayAudits = await db.collection('organizations/already-org/audit_logs').where('action', '==', 'invitation.accepted').get();
@@ -77,7 +77,7 @@ async function run() {
   assert('ALREADY_MEMBER does not consume or accept invite', replayInvite.status === 'pending' && replayInvite.acceptedBy === undefined && replayInvite.acceptedAt === undefined);
 
   auth('mismatch-token', 'mismatch-user', 'wrong@example.com');
-  const mismatch = await accept('mismatch-token', 'already-raw-token');
+  const mismatch = await accept('mismatch-token', 'already-raw-token', 'already-org');
   assert('recipient identity mismatch is denied server-side', mismatch.statusCode === 403);
   auth('inactive-token', 'inactive-user', 'inactive@example.com');
   await Promise.all([
@@ -85,7 +85,7 @@ async function run() {
     db.doc('organizations/inactive-org/members/inactive-user').set({ uid: 'inactive-user', organizationId: 'inactive-org', role: 'member', status: 'active' }),
     db.doc('users/inactive-user').set({ activeOrganizationId: 'safe-org', organizationId: 'safe-org', primaryOrganizationId: 'safe-org' })
   ]);
-  const inactive = await accept('inactive-token', 'inactive-raw-token');
+  const inactive = await accept('inactive-token', 'inactive-raw-token', 'inactive-org');
   const inactiveUser = (await db.doc('users/inactive-user').get()).data()!;
   assert('inactive organization cannot switch ALREADY_MEMBER context', inactive.statusCode === 409 && inactiveUser.activeOrganizationId === 'safe-org');
 
@@ -93,8 +93,8 @@ async function run() {
   auth('winner-b-token', 'winner-b', 'race@example.com');
   await seedInvite('race-org', 'race-invite', 'race-raw-token', 'race@example.com');
   const raceResults = await Promise.all([
-    accept('winner-a-token', 'race-raw-token'),
-    accept('winner-b-token', 'race-raw-token')
+    accept('winner-a-token', 'race-raw-token', 'race-org'),
+    accept('winner-b-token', 'race-raw-token', 'race-org')
   ]);
   assert('final-use concurrency yields exactly 200 + 409', raceResults.map(result => result.statusCode).sort().join(',') === '200,409');
   const finalInvite = (await db.doc('organizations/race-org/invites/race-invite').get()).data()!;
