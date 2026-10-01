@@ -23,7 +23,7 @@ env:
 jobs:
   activate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -159,7 +159,7 @@ jobs:
           URL="https://firebasehosting.googleapis.com/v1beta1/projects/$FIREBASE_PROJECT/sites/$FIREBASE_SITE/customDomains/$LIVE_DOMAIN"
 
           live=false
-          for attempt in $(seq 1 40); do
+          for attempt in $(seq 1 75); do
             curl --fail --silent --show-error -H "Authorization: Bearer $ACCESS_TOKEN" "$URL" >/tmp/na-domain-final.json
             HOST_STATE="$(jq -r '.hostState // empty' /tmp/na-domain-final.json)"
             CERT_STATE="$(jq -r '.cert.state // empty' /tmp/na-domain-final.json)"
