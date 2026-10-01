@@ -178,7 +178,7 @@ async function runTests() {
   assertCondition('55. Join possui aria-busy', joinContent.includes('aria-busy={'));
   assertCondition('56. retry somente aparece para erro retryable', joinContent.includes('errorMessage.retryable ?') || joinContent.includes('errorMessage?.retryable'));
   assertCondition('57. sucesso remove mn_invite_redirect', joinContent.includes("removeItem('mn_invite_redirect')"));
-  assertCondition('58. sucesso redireciona para /dashboard', joinContent.includes("window.location.href = '/dashboard'"));
+  assertCondition('58. sucesso redireciona para o dashboard', joinContent.includes("window.location.href = '/dashboard/overview'"));
   assertCondition('59. requestLoading foi removido', !joinContent.includes("setRequestLoading"));
   assertCondition('60. profile e switchOrganization não são desestruturados', !joinContent.includes("switchOrganization") && !joinContent.includes(" profile"));
 
