@@ -2904,7 +2904,8 @@ export function Dashboard() {
         ? 'error'
         : musicScaleProjectionLoading
           ? 'loading'
-          : musicScaleProjection?.catalogState || 'unavailable'
+          : musicScaleProjection?.catalogState || 'unavailable',
+      denialReason: musicScaleProjection?.denialReason || null
     },
     nestJourneyAccess: currentNestJourneyProjection
       ? {

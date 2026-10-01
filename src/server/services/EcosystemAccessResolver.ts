@@ -363,64 +363,56 @@ export async function resolveEcosystemAppAccess(params: {
     }
 
     const subData = subDoc.data() || {};
-    const subscriptionStatus = subData.status;
+    const appSubscription = subData.apps?.musicscale || null;
+    const subscriptionStatus = String(
+      appSubscription?.status || subData.status || ''
+    ).trim().toLowerCase();
 
-    const orgAppAccess = orgData.apps?.musicscale;
-    if (!orgAppAccess) {
-      return {
-        ...defaultDenied,
-        systemRole,
-        organizationRole,
-        denialReason: DENIAL_REASONS.ENTITLEMENT_NOT_CONFIGURED,
-        decisionState: 'denied',
-        entitlement: {
-          subscriptionStatus,
-          organizationAppStatus: null,
-          canonicalStatus: 'missing',
-          cancellationScheduled: false,
-          currentPeriodEndMs: subData.currentPeriodEnd ? (subData.currentPeriodEnd.toMillis ? subData.currentPeriodEnd.toMillis() : (subData.currentPeriodEnd.seconds ? subData.currentPeriodEnd.seconds * 1000 : null)) : null,
-          individualAccessSource
-        }
-      };
-    }
+    // subscriptions/{orgId}.apps.musicscale is the canonical product purchase.
+    // organizations/{orgId}.apps.musicscale is a projection/cache and may lag.
+    const orgAppAccess = orgData.apps?.musicscale || null;
+    const normalizedOrganizationAppStatus = String(
+      orgAppAccess?.status || ''
+    ).trim().toLowerCase();
+    const organizationAppStatus = normalizedOrganizationAppStatus || null;
 
-    const organizationAppStatus = orgAppAccess.status;
     let canonicalStatus: CanonicalMusicScaleSubscriptionStatus = 'unknown';
     let denialReason: string | undefined = undefined;
 
     const validStatuses = ['active', 'trialing'];
     const subIsValid = validStatuses.includes(subscriptionStatus);
-    const appIsValid = validStatuses.includes(organizationAppStatus);
 
-    let cancellationScheduled = false;
+    const cancellationScheduled =
+      appSubscription?.cancelAtPeriodEnd === true ||
+      appSubscription?.cancel_at_period_end === true ||
+      subData.cancelAtPeriodEnd === true ||
+      subData.cancel_at_period_end === true;
 
-    if (subIsValid && appIsValid) {
-      if (subscriptionStatus === 'active') {
-        canonicalStatus = 'active';
-      } else if (subscriptionStatus === 'trialing') {
-        canonicalStatus = 'trialing';
-      }
-      if (subData.cancelAtPeriodEnd === true || subData.cancel_at_period_end === true) {
-        cancellationScheduled = true;
-      }
+    if (subIsValid) {
+      canonicalStatus = subscriptionStatus === 'trialing' ? 'trialing' : 'active';
     } else {
       if (['past_due', 'unpaid', 'incomplete', 'paused'].includes(subscriptionStatus)) {
         denialReason = DENIAL_REASONS.SUBSCRIPTION_PAYMENT_REQUIRED;
-      } else if (['canceled', 'none', 'expired', 'incomplete_expired'].includes(subscriptionStatus)) {
+      } else {
         denialReason = DENIAL_REASONS.SUBSCRIPTION_INACTIVE;
-      } else if (!subIsValid) {
-        denialReason = DENIAL_REASONS.SUBSCRIPTION_INACTIVE;
-      } else if (!appIsValid) {
-        denialReason = DENIAL_REASONS.ENTITLEMENT_INACTIVE;
       }
       canonicalStatus = 'inactive';
     }
 
-    const currentPeriodEndMs = (subData.currentPeriodEnd && typeof subData.currentPeriodEnd.toMillis === 'function')
-      ? subData.currentPeriodEnd.toMillis()
-      : (subData.currentPeriodEnd && typeof subData.currentPeriodEnd.seconds === 'number'
-        ? subData.currentPeriodEnd.seconds * 1000
-        : null);
+    const currentPeriodValue =
+      appSubscription?.currentPeriodEnd ||
+      subData.currentPeriodEnd ||
+      appSubscription?.trialEndsAt ||
+      subData.trialEndsAt ||
+      null;
+    const currentPeriodEndMs =
+      currentPeriodValue && typeof currentPeriodValue.toMillis === 'function'
+        ? currentPeriodValue.toMillis()
+        : currentPeriodValue && typeof currentPeriodValue.seconds === 'number'
+          ? currentPeriodValue.seconds * 1000
+          : typeof currentPeriodValue === 'number'
+            ? currentPeriodValue
+            : null;
 
     const entitlement: MusicScaleEntitlementDecision = {
       subscriptionStatus,
