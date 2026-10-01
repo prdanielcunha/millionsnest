@@ -118,7 +118,7 @@ async function run() {
   assert('duplicate loser leaves no partial audit', duplicateAudits.size === 1);
 
   auth('accept-token', 'accept-user', 'target@example.com');
-  const accepted = await invokeHandler(acceptHandler, { bearer: 'accept-token', body: { token: rawToken } });
+  const accepted = await invokeHandler(acceptHandler, { bearer: 'accept-token', body: { token: rawToken, organizationId: 'tenant-a' } });
   assert('accept binds authenticated identity and succeeds', accepted.statusCode === 200);
   const [canonical, legacy, user, consumed] = await Promise.all([
     db.doc('organizations/tenant-a/members/accept-user').get(),
