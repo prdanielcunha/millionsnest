@@ -1086,10 +1086,18 @@ async function startServer() {
       if (
         inviteData.organizationId !== organizationId ||
         inviteData.status !== 'pending' ||
+        inviteData.inviteMode === 'link' ||
+        inviteData.identityBound === false ||
         typeof inviteData.emailNormalized !== 'string' ||
         typeof inviteData.tokenHash !== 'string'
       ) {
-        return res.status(409).json({ success: false, reasonCode: 'INVITATION_STATE_INVALID' });
+        return res.status(409).json({
+          success: false,
+          reasonCode:
+            inviteData.inviteMode === 'link' || inviteData.identityBound === false
+              ? 'INVITATION_EMAIL_NOT_BOUND'
+              : 'INVITATION_STATE_INVALID'
+        });
       }
 
       const expiresAtMs = normalizeInvitationTemporalMs(inviteData.expiresAt);
@@ -1251,17 +1259,23 @@ async function startServer() {
           orgData.ownerUserId === decoded.uid ||
           orgData.owner_user_id === decoded.uid;
 
+        const isShareableLinkInvite =
+          inviteData.inviteMode === 'link' || inviteData.identityBound === false;
+
         if (
           inviteData.organizationId !== organizationId ||
           inviteData.status !== 'pending' ||
-          typeof inviteData.emailNormalized !== 'string' ||
-          !canInviteOrganizationRole(
-            {
-              systemRole: actorData.systemRole,
-              organizationRole: actorIsOwner ? 'owner' : membershipRole
-            },
-            inviteData.role
-          ) && !isGlobalPrivilegedRole(actorData.systemRole)
+          (!isShareableLinkInvite && typeof inviteData.emailNormalized !== 'string') ||
+          (
+            !canInviteOrganizationRole(
+              {
+                systemRole: actorData.systemRole,
+                organizationRole: actorIsOwner ? 'owner' : membershipRole
+              },
+              inviteData.role
+            ) &&
+            !isGlobalPrivilegedRole(actorData.systemRole)
+          )
         ) {
           return { status: 403, payload: { success: false, reasonCode: 'PERMISSION_DENIED' } };
         }
@@ -1295,10 +1309,10 @@ async function startServer() {
           subscription: {
             exists: subSnap.exists,
             organizationId: subData.organizationId,
-            app: subData.app,
-            status: subData.status,
-            plan: subData.plan,
-            limitsUsers: subData.limits?.users
+            app: subData.apps?.musicscale?.app ?? subData.app,
+            status: subData.apps?.musicscale?.status ?? subData.status,
+            plan: subData.apps?.musicscale?.plan ?? subData.plan,
+            limitsUsers: subData.apps?.musicscale?.limits?.users ?? subData.limits?.users
           },
           organizationApp: {
             exists: !!orgData.apps?.musicscale,
@@ -1342,12 +1356,18 @@ async function startServer() {
         }, { merge: true });
 
         transaction.set(newInviteRef, {
-          schemaVersion: 1,
+          schemaVersion: 2,
           id: newInviteRef.id,
           organizationId,
           organizationName: orgData.name || inviteData.organizationName,
-          email: inviteData.emailNormalized,
-          emailNormalized: inviteData.emailNormalized,
+          inviteMode: isShareableLinkInvite ? 'link' : 'email',
+          identityBound: !isShareableLinkInvite,
+          ...(!isShareableLinkInvite
+            ? {
+                email: inviteData.emailNormalized,
+                emailNormalized: inviteData.emailNormalized
+              }
+            : {}),
           role: inviteData.role,
           status: 'pending',
           tokenHash: tokenResult.material.tokenHash,
@@ -1381,7 +1401,9 @@ async function startServer() {
               id: newInviteRef.id,
               organizationId,
               organizationName: orgData.name || inviteData.organizationName,
-              email: inviteData.emailNormalized,
+              inviteMode: isShareableLinkInvite ? 'link' : 'email',
+              identityBound: !isShareableLinkInvite,
+              ...(!isShareableLinkInvite ? { email: inviteData.emailNormalized } : {}),
               role: inviteData.role,
               status: 'pending',
               expiresAtMs: nowMs + INVITATION_TTL_MS
