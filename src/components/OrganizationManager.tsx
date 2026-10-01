@@ -294,25 +294,38 @@ export function OrganizationManager({
       }
 
       const inviteUrl = new URL(data.invitePath, window.location.origin).toString();
-      const emailResponse = await fetch('/api/v1/invitations/email', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          organizationId: organization.id,
-          invitationId: data.invitation.id,
-          inviteUrl
-        })
-      });
-      const emailData = await emailResponse.json().catch(() => ({}));
+      const isShareableLink =
+        data.invitation?.inviteMode === 'link' ||
+        data.invitation?.identityBound === false ||
+        invite?.inviteMode === 'link' ||
+        invite?.identityBound === false;
 
-      if (emailResponse.ok && emailData?.success === true) {
-        setInviteActionMessage(`Novo convite enviado para ${data.invitation.email}.`);
-      } else {
+      if (isShareableLink) {
         await navigator.clipboard.writeText(inviteUrl);
-        setInviteActionMessage('Novo convite criado com segurança e link copiado.');
+        setInviteActionMessage(
+          `Novo link de ${getOrganizationRoleLabel(String(data.invitation.role || invite.role || 'member'), organizationRoleLocale)} criado e copiado.`
+        );
+      } else {
+        const emailResponse = await fetch('/api/v1/invitations/email', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            organizationId: organization.id,
+            invitationId: data.invitation.id,
+            inviteUrl
+          })
+        });
+        const emailData = await emailResponse.json().catch(() => ({}));
+
+        if (emailResponse.ok && emailData?.success === true) {
+          setInviteActionMessage(`Novo convite enviado para ${data.invitation.email}.`);
+        } else {
+          await navigator.clipboard.writeText(inviteUrl);
+          setInviteActionMessage('Novo convite criado com segurança e link copiado.');
+        }
       }
     } catch (error: any) {
       console.error('[OrganizationManager] Invitation reissue failed', error);
@@ -1021,7 +1034,11 @@ export function OrganizationManager({
                              <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
                                Status: <span className={showAsExpired ? "text-red-400" : "text-[#10B981]"}>{showAsExpired ? 'Expirado' : 'Aguardando'}</span>
                              </span>
-                             <span className="text-xs text-[#A0A7B5] break-words [overflow-wrap:anywhere]">{invite.email || invite.emailNormalized || 'E-mail protegido'}</span>
+                             <span className="text-xs text-[#A0A7B5] break-words [overflow-wrap:anywhere]">
+                               {invite.inviteMode === 'link' || invite.identityBound === false
+                                 ? 'Link de convite · uso único'
+                                 : (invite.email || invite.emailNormalized || 'E-mail protegido')}
+                             </span>
                              <span className="text-xs text-[#A0A7B5]">Acesso: {getOrganizationRoleLabel(String(invite.role || 'member'), organizationRoleLocale)}</span>
                            </div>
                          </div>
@@ -1035,7 +1052,7 @@ export function OrganizationManager({
                                className="text-xs font-medium text-[#2B85EB] hover:text-[#3B95FB] transition-colors px-3 py-1.5 bg-[#2B85EB]/10 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
                              >
                                {reissuingInviteId === invite.id && <Loader2 className="w-3 h-3 animate-spin" />}
-                               Reenviar
+                               {invite.inviteMode === 'link' || invite.identityBound === false ? 'Gerar novo link' : 'Reenviar'}
                              </button>
                              <button onClick={() => handleRevokeInvite(invite.id)} className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 bg-red-500/10 rounded-lg">
                                Revogar
