@@ -12,14 +12,17 @@ interface InviteModalProps {
   handleCreateInvite: (
     role: "admin" | "manager" | "member" | "viewer",
     email: string,
-    overrideOrgId?: string
+    overrideOrgId?: string,
+    mode?: "email" | "link"
   ) => Promise<{
     inviteUrl: string;
     invitation: {
       id: string;
       organizationId: string;
       organizationName: string;
-      email: string;
+      inviteMode?: "email" | "link";
+      identityBound?: boolean;
+      email?: string;
       role: "admin" | "manager" | "member" | "viewer";
       status: "pending";
       expiresAtMs: number;
@@ -73,6 +76,7 @@ export function InviteModal({
   };
 
   const [role, setRole] = useState<"admin" | "manager" | "member" | "viewer">('member');
+  const [inviteMode, setInviteMode] = useState<"email" | "link">('email');
   const [email, setEmail] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -94,6 +98,7 @@ export function InviteModal({
         const defaultOption = options.find(o => o.value === 'member') || options[0];
         setRole(defaultOption.value as any);
       }
+      setInviteMode('email');
       setEmail('');
       setCopiedLink(false);
       setIsLoading(false);
@@ -154,7 +159,7 @@ export function InviteModal({
       return { url: createdInviteUrl, invitationId: createdInviteId };
     }
     
-    if (!email || !email.trim()) {
+    if (inviteMode === 'email' && (!email || !email.trim())) {
       setErrorMsg(t('dashboard.invite.email_required', 'Informe o e-mail da pessoa.'));
       return null;
     }
@@ -164,9 +169,17 @@ export function InviteModal({
     setSuccessMsg('');
     
     try {
-      const res = await handleCreateInvite(role, email, overrideOrgId);
+      const res = await handleCreateInvite(
+        role,
+        inviteMode === 'email' ? email : '',
+        overrideOrgId,
+        inviteMode
+      );
       setCreatedInviteUrl(res.inviteUrl);
       setCreatedInviteId(res.invitation.id);
+      if (inviteMode === 'link') {
+        setFallbackLink(true);
+      }
       return { url: res.inviteUrl, invitationId: res.invitation.id };
     } catch (err: any) {
       setErrorMsg(mapErrorCode(err.message));
@@ -174,6 +187,19 @@ export function InviteModal({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const onGenerateLink = async () => {
+    if (isLoading || inviteMode !== 'link') return;
+    const invite = await ensureInvite();
+    if (!invite) return;
+    setFallbackLink(true);
+    setSuccessMsg(
+      t(
+        'dashboard.invite.link_ready',
+        'Link criado. Quem abrir e concluir o cadastro entrará com a função selecionada.'
+      )
+    );
   };
 
   const onCopy = async () => {
@@ -195,11 +221,9 @@ export function InviteModal({
   const onWhatsApp = async () => {
     if (isLoading) return;
     
-    if (!createdInviteUrl) {
-      if (!email || !email.trim()) {
-        setErrorMsg(t('dashboard.invite.email_required', 'Informe o e-mail da pessoa.'));
-        return;
-      }
+    if (!createdInviteUrl && inviteMode === 'email' && (!email || !email.trim())) {
+      setErrorMsg(t('dashboard.invite.email_required', 'Informe o e-mail da pessoa.'));
+      return;
     }
     
     const popup = window.open('about:blank', '_blank');
@@ -211,7 +235,13 @@ export function InviteModal({
     }
     
     const orgName = overrideOrgId && adminOrgs ? (adminOrgs.find((o:any)=>o.id === overrideOrgId)?.name || 'Nossa Organização') : (organization?.name || 'Nossa Organização');
-    const text = encodeURIComponent(`Você foi convidado para entrar na organização ${orgName} na MillionsNest.\n\nAcesse: ${invite.url}`);
+    const selectedRoleLabel =
+      getInviteableRoles().find(option => option.value === role)?.label || role;
+    const text = encodeURIComponent(
+      inviteMode === 'link'
+        ? `Você foi convidado para entrar na organização ${orgName} na MillionsNest como ${selectedRoleLabel}.\n\nAcesse: ${invite.url}`
+        : `Você foi convidado para entrar na organização ${orgName} na MillionsNest.\n\nAcesse: ${invite.url}`
+    );
     
     if (popup) {
       popup.location.href = `https://wa.me/?text=${text}`;
@@ -223,7 +253,7 @@ export function InviteModal({
   };
 
   const onEmail = async () => {
-    if (isLoading || !user) return;
+    if (isLoading || !user || inviteMode !== 'email') return;
     const invite = await ensureInvite();
     if (!invite) return;
 
@@ -411,23 +441,79 @@ export function InviteModal({
                      </div>
                    </div>
                  ) : null}
-                 
+
                 <div>
-                  <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.email_label', 'E-mail da pessoa')} <span className="text-[#A0A7B5]/50 text-xs">{t('dashboard.invite.email_hint', 'Use o e-mail que a pessoa usará para entrar. O convite ficará protegido para essa conta.')}</span></label>
-                  <input
-                    type="email"
-                    required
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => {
-                       setEmail(e.target.value);
-                       setErrorMsg('');
-                    }}
-                    disabled={formDisabled}
-                    placeholder="email@exemplo.com"
-                    className="w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-[#F5F7FA] focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all outline-none placeholder:text-white/20 disabled:opacity-50"
-                  />
+                  <label className="block text-sm font-medium text-[#A0A7B5] mb-2">
+                    {t('dashboard.invite.method_label', 'Como deseja convidar?')}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#050505] border border-white/10 p-1">
+                    <button
+                      type="button"
+                      disabled={formDisabled}
+                      onClick={() => {
+                        setInviteMode('email');
+                        setCreatedInviteUrl('');
+                        setCreatedInviteId('');
+                        setFallbackLink(false);
+                        setErrorMsg('');
+                        setSuccessMsg('');
+                      }}
+                      className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition-all ${
+                        inviteMode === 'email'
+                          ? 'bg-white/10 text-white shadow-sm'
+                          : 'text-[#A0A7B5] hover:text-white'
+                      } disabled:opacity-50`}
+                    >
+                      {t('dashboard.invite.method_email', 'Por e-mail')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={formDisabled}
+                      onClick={() => {
+                        setInviteMode('link');
+                        setCreatedInviteUrl('');
+                        setCreatedInviteId('');
+                        setFallbackLink(false);
+                        setErrorMsg('');
+                        setSuccessMsg('');
+                      }}
+                      className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition-all ${
+                        inviteMode === 'link'
+                          ? 'bg-[#2B85EB]/20 text-[#6EAFFF] shadow-sm'
+                          : 'text-[#A0A7B5] hover:text-white'
+                      } disabled:opacity-50`}
+                    >
+                      {t('dashboard.invite.method_link', 'Por link')}
+                    </button>
+                  </div>
+                  {inviteMode === 'link' && (
+                    <p className="text-xs text-[#A0A7B5] mt-2">
+                      {t(
+                        'dashboard.invite.link_mode_hint',
+                        'Selecione a função e gere um link de uso único. A pessoa que usar o link entrará automaticamente com esse nível de acesso. O link expira em 7 dias.'
+                      )}
+                    </p>
+                  )}
                 </div>
+
+                {inviteMode === 'email' && (
+                  <div>
+                    <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.email_label', 'E-mail da pessoa')} <span className="text-[#A0A7B5]/50 text-xs">{t('dashboard.invite.email_hint', 'Use o e-mail que a pessoa usará para entrar. O convite ficará protegido para essa conta.')}</span></label>
+                    <input
+                      type="email"
+                      required
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => {
+                         setEmail(e.target.value);
+                         setErrorMsg('');
+                      }}
+                      disabled={formDisabled}
+                      placeholder="email@exemplo.com"
+                      className="w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-[#F5F7FA] focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all outline-none placeholder:text-white/20 disabled:opacity-50"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.role_label', 'Qual será o nível de acesso desta pessoa?')}</label>
                   <div className="flex flex-col gap-2">
@@ -461,7 +547,7 @@ export function InviteModal({
                   </div>
                 </div>
                 
-                {fallbackLink && createdInviteUrl && (
+                {(fallbackLink || inviteMode === 'link') && createdInviteUrl && (
                   <div>
                     <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.manual_link_label', 'Link do convite')}</label>
                     <input
@@ -474,18 +560,33 @@ export function InviteModal({
                   </div>
                 )}
                 
-                <div>
-                  <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.share_method', 'Como deseja enviar?')}</label>
-                  <div className="gap-2.5 sm:gap-3 grid grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={onEmail}
-                      disabled={isLoading}
-                      className="flex flex-col items-center justify-center gap-2 p-3.5 sm:p-4 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 border border-[#2B85EB]/20 rounded-xl transition-colors text-[#2B85EB] disabled:opacity-50"
-                    >
-                      {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Mail className="w-6 h-6" />}
-                      <span className="text-sm font-medium">{t('dashboard.invite.email_send', 'Enviar por e-mail')}</span>
-                    </button>
+                {inviteMode === 'link' && !createdInviteUrl && (
+                  <button
+                    type="button"
+                    onClick={onGenerateLink}
+                    disabled={isLoading}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-[#2B85EB] hover:bg-[#2B85EB]/90 text-white rounded-xl transition-colors font-semibold text-sm shadow-lg shadow-[#2B85EB]/20 disabled:opacity-50"
+                  >
+                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />}
+                    {t('dashboard.invite.generate_link', 'Gerar link desta função')}
+                  </button>
+                )}
+
+                {(inviteMode === 'email' || createdInviteUrl) && (
+                  <div>
+                    <label className="block text-sm font-medium text-[#A0A7B5] mb-2">{t('dashboard.invite.share_method', 'Como deseja enviar?')}</label>
+                    <div className="gap-2.5 sm:gap-3 grid grid-cols-2">
+                      {inviteMode === 'email' && (
+                        <button
+                          type="button"
+                          onClick={onEmail}
+                          disabled={isLoading}
+                          className="flex flex-col items-center justify-center gap-2 p-3.5 sm:p-4 bg-[#2B85EB]/10 hover:bg-[#2B85EB]/20 border border-[#2B85EB]/20 rounded-xl transition-colors text-[#2B85EB] disabled:opacity-50"
+                        >
+                          {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Mail className="w-6 h-6" />}
+                          <span className="text-sm font-medium">{t('dashboard.invite.email_send', 'Enviar por e-mail')}</span>
+                        </button>
+                      )}
                     <button
                       type="button"
                       onClick={onWhatsApp}
@@ -515,8 +616,9 @@ export function InviteModal({
                         <span className="text-sm font-medium">{t('dashboard.invite.share', 'Compartilhar')}</span>
                       </button>
                     )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </motion.div>
