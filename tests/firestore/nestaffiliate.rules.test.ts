@@ -217,3 +217,49 @@ test('affiliateResults cannot be written with a forged tenant', async () => {
     { organizationId: 'org-b', campaignId: 'campaign-1', revenue: 10 },
   ));
 });
+
+
+test('sensitive provider account collections are admin-only and backend-managed', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/nestaffiliate/affiliateAccounts/shopee'), {
+      organizationId: 'org-a',
+      provider: 'SHOPEE',
+      tokenRef: 'secret-manager://affiliate',
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/nestaffiliate/pinterestAccounts/primary'), {
+      organizationId: 'org-a',
+      provider: 'PINTEREST',
+      tokenRef: 'secret-manager://pinterest',
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/nestaffiliate/quotaUsage/2026-09-30'), {
+      organizationId: 'org-a',
+      provider: 'GEMINI_FREE',
+      used: 0,
+    });
+    await setDoc(doc(db, 'organizations/org-a/products/nestaffiliate/systemJobs/radar'), {
+      organizationId: 'org-a',
+      status: 'idle',
+    });
+  });
+
+  const viewer = env.authenticatedContext('viewer-a').firestore();
+  const editor = env.authenticatedContext('editor-a').firestore();
+  const admin = env.authenticatedContext('admin-a').firestore();
+
+  for (const path of [
+    'affiliateAccounts/shopee',
+    'pinterestAccounts/primary',
+    'quotaUsage/2026-09-30',
+    'systemJobs/radar',
+  ]) {
+    await assertFails(getDoc(doc(viewer, `organizations/org-a/products/nestaffiliate/${path}`)));
+    await assertFails(getDoc(doc(editor, `organizations/org-a/products/nestaffiliate/${path}`)));
+    await assertSucceeds(getDoc(doc(admin, `organizations/org-a/products/nestaffiliate/${path}`)));
+  }
+
+  await assertFails(setDoc(
+    doc(admin, 'organizations/org-a/products/nestaffiliate/pinterestAccounts/client-write'),
+    { organizationId: 'org-a', provider: 'PINTEREST' },
+  ));
+});
