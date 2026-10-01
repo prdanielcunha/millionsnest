@@ -181,6 +181,7 @@ export function getInvitationJoinMessage(
     es: {
       UNAUTHENTICATED: { title: 'No autenticado', description: 'Debes iniciar sesión para aceptar esta invitación.' },
       INVALID_TOKEN: { title: 'Token inválido', description: 'El enlace de la invitación está incompleto o es inválido.' },
+      INVALID_ORGANIZATION_ID: { title: 'Organización inválida', description: 'El enlace de la invitación no identifica una organización válida.' },
       AUTHENTICATED_EMAIL_REQUIRED: { title: 'Correo no verificado', description: 'Debes tener un correo autenticado para aceptar la invitación.' },
       INVALID_INVITE_ROLE: { title: 'Rol inválido', description: 'La invitación tiene un rol inválido y no puede ser aceptada.' },
       INVITE_IDENTITY_MISMATCH: { title: 'Invitación no autorizada', description: 'Esta invitación no fue enviada a tu dirección de correo.' },
