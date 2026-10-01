@@ -106,7 +106,7 @@ async function runTests() {
   assertCondition('24. texto vira INVALID_RESPONSE', parseInvitationJoinPayload("error").success === false);
 
   const reasons = [
-      'UNAUTHENTICATED', 'INVALID_TOKEN', 'AUTHENTICATED_EMAIL_REQUIRED', 'INVALID_INVITE_ROLE',
+      'UNAUTHENTICATED', 'INVALID_TOKEN', 'INVALID_ORGANIZATION_ID', 'AUTHENTICATED_EMAIL_REQUIRED', 'INVALID_INVITE_ROLE',
       'INVITE_IDENTITY_MISMATCH', 'INVITE_NOT_FOUND', 'ORGANIZATION_NOT_FOUND', 'ORGANIZATION_INACTIVE',
       'INVITE_STATE_INCONSISTENT', 'INVITE_REVOKED', 'INVITE_EXPIRED', 'INVITE_MAX_USES_REACHED',
       'MEMBERSHIP_INACTIVE', 'MEMBERSHIP_STATE_INCONSISTENT', 'INVITE_ALREADY_CONSUMED',
@@ -200,7 +200,7 @@ async function runTests() {
 
   assertCondition('69. Join não contém uiTexts', !joinContent.includes('const uiTexts ='));
   assertCondition('70. Join usa getInvitationJoinUiCopy', joinContent.includes('getInvitationJoinUiCopy('));
-  assertCondition('71. Join envia JSON.stringify({ token })', joinContent.includes('body: JSON.stringify({ token })'));
+  assertCondition('71. Join envia token e organizationId', joinContent.includes('body: JSON.stringify({ token, organizationId: orgId })'));
   assertCondition('72. Join não envia trimmedToken', !joinContent.includes('body: JSON.stringify({ token: trimmedToken })'));
   assertCondition('73. Join usa chave com user.uid, orgId e token', joinContent.includes('${user.uid}:${orgId}:${token}'));
   assertCondition('74. Join não usa requestFiredRef booleano', !joinContent.includes('requestFiredRef'));
