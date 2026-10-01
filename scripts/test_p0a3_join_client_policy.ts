@@ -70,6 +70,8 @@ async function runTests() {
   assertCondition('11. role owner é aceito', parseInvitationJoinPayload(validSuccessNew).success === true);
   assertCondition('12. role admin é aceito', parseInvitationJoinPayload({ ...validSuccessNew, membershipRole: 'admin' }).success === true);
   assertCondition('13. role member é aceito', parseInvitationJoinPayload({ ...validSuccessNew, membershipRole: 'member' }).success === true);
+  assertCondition('13b. role manager é aceito', parseInvitationJoinPayload({ ...validSuccessNew, membershipRole: 'manager' }).success === true);
+  assertCondition('13c. role viewer é aceito', parseInvitationJoinPayload({ ...validSuccessNew, membershipRole: 'viewer' }).success === true);
   
   const guestParsed = parseInvitationJoinPayload({ ...validSuccessNew, membershipRole: 'guest' });
   if (!guestParsed.success) {

@@ -371,6 +371,31 @@ const directCreateFail = planInvitationAcceptance({
 }, 1000);
 assertCondition('70. direct creation fails MEMBER_LIMIT_UNAVAILABLE with unresolved capacity', directCreateFail.success === false && directCreateFail.reasonCode === 'MEMBER_LIMIT_UNAVAILABLE');
 
+const directShareableLink = planInvitationAcceptance({
+  identity: { uid: 'u2', email: 'different@test.com' },
+  organization: { exists: true, status: 'active' },
+  invitation: {
+    exists: true,
+    organizationId: 'org1',
+    status: 'pending',
+    inviteMode: 'link',
+    identityBound: false,
+    role: 'manager',
+    maxUses: 1,
+    useCount: 0,
+    expiresAtMs: 2000,
+    revokedAtMs: undefined
+  },
+  existingMembership: { exists: false },
+  capacity: { resolved: true, mode: 'unlimited' }
+}, 1000);
+assertCondition(
+  '70b. shareable link accepts authenticated user without target email',
+  directShareableLink.success === true &&
+    directShareableLink.membershipRole === 'manager' &&
+    directShareableLink.consumeInviteUse === true
+);
+
 assertCondition('71. não existe let decodedToken', !endpointContent.includes('let decodedToken;'));
 assertCondition('72. não existe let authUser', !endpointContent.includes('let authUser;'));
 const hasUntypedLet = /let\s+[a-zA-Z0-9_]+\s*;/.test(endpointContent);
@@ -381,6 +406,8 @@ const capacityReasonIdx = endpointContent.indexOf('capacityResult.reasonCode');
 assertCondition('74. planInvitationAcceptance antes de usar capacityResult.reasonCode', planIdx !== -1 && capacityReasonIdx !== -1 && planIdx < capacityReasonIdx);
 
 assertCondition('75. capacityResult com falha convertido em { resolved: false }', endpointContent.includes('capacityResult.success ? capacityResult.capacity : { resolved: false }'));
+assertCondition('75b. endpoint encaminha inviteMode ao planner', endpointContent.includes('inviteMode: inviteData.inviteMode'));
+assertCondition('75c. endpoint encaminha identityBound ao planner', endpointContent.includes('identityBound: inviteData.identityBound'));
 
 assertCondition('76. ALREADY_MEMBER sem exigir capacityResult.success', endpointContent.includes("planResult.action === 'ALREADY_MEMBER'"));
 

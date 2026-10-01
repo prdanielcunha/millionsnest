@@ -114,6 +114,28 @@ i14.invitation.role = 'member';
 const r14 = planInvitationAcceptance(i14, nowMs) as InvitationAcceptanceSuccess;
 assertCondition('14. papel member válido', r14.success && r14.membershipRole === 'member');
 
+// 14b. link compartilhável não exige e-mail alvo e aplica a função do link.
+const i14b = createBaseInput();
+i14b.identity.email = 'different-person@example.com';
+i14b.invitation.inviteMode = 'link';
+i14b.invitation.identityBound = false;
+i14b.invitation.email = undefined;
+i14b.invitation.emailNormalized = undefined;
+i14b.invitation.role = 'manager';
+const r14b = planInvitationAcceptance(i14b, nowMs) as InvitationAcceptanceSuccess;
+assertCondition('14b. link compartilhável aceita identidade autenticada diferente', r14b.success);
+assertCondition('14c. link compartilhável aplica função manager', r14b.success && r14b.membershipRole === 'manager');
+
+// 14d. marca identityBound false é compatível com links já materializados.
+const i14d = createBaseInput();
+i14d.identity.email = 'another@example.com';
+i14d.invitation.identityBound = false;
+i14d.invitation.email = undefined;
+i14d.invitation.emailNormalized = undefined;
+i14d.invitation.role = 'viewer';
+const r14d = planInvitationAcceptance(i14d, nowMs) as InvitationAcceptanceSuccess;
+assertCondition('14d. identityBound false libera convite compartilhável', r14d.success && r14d.membershipRole === 'viewer');
+
 // 15. papel admin válido;
 const i15 = createBaseInput();
 i15.invitation.role = 'admin';

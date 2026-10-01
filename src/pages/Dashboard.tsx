@@ -1982,24 +1982,27 @@ export function Dashboard() {
   };
 
   const handleCreateInvite = async (
-    role: "admin" | "member",
+    role: "admin" | "manager" | "member" | "viewer",
     email: string,
-    overrideOrgId?: string
+    overrideOrgId?: string,
+    mode: "email" | "link" = "email"
   ): Promise<{
     inviteUrl: string;
     invitation: {
       id: string;
       organizationId: string;
       organizationName: string;
-      email: string;
-      role: "admin" | "member";
+      inviteMode?: "email" | "link";
+      identityBound?: boolean;
+      email?: string;
+      role: "admin" | "manager" | "member" | "viewer";
       status: "pending";
       expiresAtMs: number;
     };
   }> => {
     if (!user) throw new Error("UNAUTHENTICATED");
     const orgId = overrideOrgId || activeContextOrgId;
-    if (!email) throw new Error("INVALID_INVITE_EMAIL");
+    if (mode === "email" && !email) throw new Error("INVALID_INVITE_EMAIL");
 
     const idToken = await user.getIdToken();
     const abortController = new AbortController();
@@ -2015,8 +2018,9 @@ export function Dashboard() {
         },
         body: JSON.stringify({
           organizationId: orgId,
-          email,
-          role
+          ...(mode === "email" ? { email } : {}),
+          role,
+          mode
         }),
         signal: abortController.signal
       });

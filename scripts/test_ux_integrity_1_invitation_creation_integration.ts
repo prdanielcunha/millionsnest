@@ -33,6 +33,9 @@ assert(!serviceFile.includes('console.log(token)'), "Service does not log token"
 assert(!serviceFile.includes('console.log(tokenHash)'), "Service does not log tokenHash");
 assert(!serviceFile.includes('actorEmail'), "Service does not record full email in audit log");
 assert(serviceFile.includes('invitePath:'), "Service returns invitePath");
+assert(serviceFile.includes("inviteMode"), "Service persists invitation mode");
+assert(serviceFile.includes("identityBound"), "Service persists identity-binding semantics");
+assert(serviceFile.includes("inviteMode === 'email'"), "Service requires email only for email-bound invitations");
 assert(!serviceFile.includes('tokenHash: tokenHash') || serviceFile.includes('payload:'), "Service doesn't return tokenHash in response body");
 assert(serviceFile.includes("=== 'ceo'"), "Service recognizes global roles");
 assert(serviceFile.includes("=== 'global_admin'"), "Service recognizes global roles");
@@ -41,6 +44,8 @@ assert(serviceFile.includes("=== 'founder'"), "Service recognizes global roles")
 
 const dashboardFile = fs.readFileSync('src/pages/Dashboard.tsx', 'utf-8');
 assert(dashboardFile.includes("fetch('/api/v1/invitations'"), "Dashboard uses POST /api/v1/invitations");
+assert(dashboardFile.includes('mode: "email" | "link"'), "Dashboard supports email and link invite modes");
+assert(dashboardFile.includes('...(mode === "email" ? { email } : {})'), "Dashboard does not require an email for shareable links");
 assert(dashboardFile.includes("Bearer ${idToken}"), "Dashboard uses Authorization Bearer");
 assert(dashboardFile.includes("user.getIdToken()"), "Dashboard uses getIdToken without true");
 assert(dashboardFile.includes("AbortController"), "Dashboard uses AbortController");
@@ -56,6 +61,9 @@ assert(modalFile.includes('required'), "Modal email is required");
 assert(!modalFile.includes('Opcional.'), "Modal hint doesn't contain 'Opcional.'");
 assert(!modalFile.includes('value="leader"'), "Modal doesn't have leader option");
 assert(modalFile.includes('getInviteableRoles'), "Modal uses getInviteableRoles");
+assert(modalFile.includes("setInviteMode('link')"), "Modal exposes shareable-link mode");
+assert(modalFile.includes("Gerar link desta função"), "Modal can generate a role-specific link");
+assert(modalFile.includes("inviteMode === 'link'"), "Modal changes behavior for shareable links");
 assert(modalFile.includes('await handleCreateInvite'), "Modal shows success only after await");
 assert(modalFile.includes('setErrorMsg('), "Modal has error handling");
 assert(modalFile.includes('fallbackLink'), "Modal has fallback readonly link");
