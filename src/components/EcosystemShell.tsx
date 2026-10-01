@@ -13,6 +13,7 @@ import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
 import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
+import { isOrganizationLifecycleActive } from '../lib/organizationLifecycle.js';
 import { feedback } from '../packages/ui/feedback.js';
 
 interface EcosystemShellProps {
@@ -128,21 +129,19 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
       if (app.status !== 'active') return false;
       if (isGlobalPrivilegedUser(profile)) return true;
 
-      const organizationAppStatus = String(
-        organization?.apps?.[app.id]?.status || ''
-      ).toLowerCase();
       const appSubscriptionStatus = String(
         subscription?.apps?.[app.id]?.status ||
         (app.id === 'musicscale' ? subscription?.status : '') ||
         ''
       ).toLowerCase();
 
-      // During the short canonical access-projection handshake, a customer who
-      // already has an active/trialing purchase must not see an empty app
-      // launcher. This is display recovery only: openEcosystemModule still
-      // revalidates the server-side entitlement before entering the app.
-      return ['active', 'trialing'].includes(appSubscriptionStatus) &&
-        ['active', 'trialing'].includes(organizationAppStatus);
+      // The subscription is the purchase source of truth. organization.apps is
+      // only a projection/cache and can legitimately be a few writes behind.
+      // Keep an explicitly inactive tenant hidden, but never show an empty
+      // launcher just because that cache has not caught up yet. App opening
+      // still performs the authoritative server-side entitlement check.
+      return isOrganizationLifecycleActive(organization) &&
+        ['active', 'trialing'].includes(appSubscriptionStatus);
     })
     .map(app => app.id);
 

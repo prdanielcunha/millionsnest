@@ -3163,7 +3163,8 @@ export function Dashboard() {
         ? 'error'
         : (musicScaleProjectionLoading || musicScaleRecoveryInProgress)
           ? 'loading'
-          : musicScaleProjection?.catalogState || 'unavailable'
+          : musicScaleProjection?.catalogState || 'unavailable',
+      denialReason: musicScaleProjection?.denialReason || null
     },
     nestJourneyAccess: currentNestJourneyProjection
       ? {

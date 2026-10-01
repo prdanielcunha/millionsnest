@@ -60,6 +60,7 @@ export function resolveHubAppExperience(params: {
   musicScaleAccess?: {
     accessible?: boolean;
     catalogState?: string | null;
+    denialReason?: string | null;
   } | null;
   nestJourneyAccess?: CurrentNestJourneyLensAuthority | null;
   isGlobalAdmin?: boolean;
@@ -82,10 +83,40 @@ export function resolveHubAppExperience(params: {
   if (app.id === 'musicscale') {
     const accessState = normalizeState(musicScaleAccess?.catalogState) || 'unavailable';
     const accessible = musicScaleAccess?.accessible === true;
-    const state = isGlobalAdmin && accessible
+    const denialReason = String(musicScaleAccess?.denialReason || '').trim();
+    const appSubscription = subscription?.apps?.musicscale || null;
+    const subscriptionStatus = String(
+      appSubscription?.status || subscription?.status || ''
+    ).trim().toLowerCase();
+
+    const hasCanonicalPurchasedAccess =
+      app.status === 'active' &&
+      ['active', 'trialing'].includes(subscriptionStatus);
+
+    // Only entitlement/projection drift may use the purchase fallback.
+    // Identity, membership and explicit per-member access denials remain
+    // authoritative and must never be bypassed by a billing record.
+    const recoverableProjectionReasons = new Set([
+      '',
+      'SUBSCRIPTION_NOT_FOUND',
+      'ENTITLEMENT_NOT_CONFIGURED',
+      'ENTITLEMENT_INACTIVE',
+      'SUBSCRIPTION_INACTIVE'
+    ]);
+    const usePurchasedFallback =
+      !accessible &&
+      hasCanonicalPurchasedAccess &&
+      recoverableProjectionReasons.has(denialReason);
+
+    const state: HubAppState = isGlobalAdmin && accessible
       ? 'administrative'
-      : accessState;
-    const installed = accessible && ACTIVE_APP_STATES.has(state);
+      : usePurchasedFallback
+        ? (subscriptionStatus === 'trialing' ? 'trialing' : 'active')
+        : accessState;
+    const installed =
+      (accessible || usePurchasedFallback) &&
+      ACTIVE_APP_STATES.has(state);
+
     return {
       app,
       installed,
@@ -94,7 +125,12 @@ export function resolveHubAppExperience(params: {
       plan:
         isGlobalAdmin && accessible
           ? 'pro'
-          : appRecord?.plan || subscription?.plan || subscription?.tier || organization?.subscriptionPlan || null,
+          : appSubscription?.plan ||
+            appRecord?.plan ||
+            subscription?.plan ||
+            subscription?.tier ||
+            organization?.subscriptionPlan ||
+            null,
       needsAttention: state === 'payment_issue' || state === 'error',
       isOperational: app.status === 'active'
     };

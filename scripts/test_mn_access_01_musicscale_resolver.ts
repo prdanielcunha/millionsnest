@@ -454,29 +454,49 @@ async function runAllTests() {
     if (res.accessible || res.denialReason !== DENIAL_REASONS.SUBSCRIPTION_NOT_FOUND) throw new Error('Expected SUBSCRIPTION_NOT_FOUND');
   });
 
-  await runTest('53. subscription ativa + organizations.apps.musicscale ausente nega', 'u1', 'org1', 'musicscale', db => {
+  await runTest('53. subscription ativa + organizations.apps.musicscale ausente concede', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db);
-    db.setMockData('organizations/org1', { status: 'active' }); // missing apps object
+    db.setMockData('organizations/org1', { status: 'active' }); // projection/cache still missing
   }, res => {
-    if (res.accessible || res.denialReason !== DENIAL_REASONS.ENTITLEMENT_NOT_CONFIGURED) throw new Error('Expected ENTITLEMENT_NOT_CONFIGURED');
+    if (!res.accessible || res.entitlement?.canonicalStatus !== 'active') throw new Error('Expected canonical active access');
   });
 
-  await runTest('54. subscription ativa + app status canceled nega', 'u1', 'org1', 'musicscale', db => {
+  await runTest('54. subscription ativa + cache do app canceled ainda concede', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db, 'user', 'active', 'active', true, 'active', 'canceled');
   }, res => {
-    if (res.accessible || res.denialReason !== DENIAL_REASONS.ENTITLEMENT_INACTIVE) throw new Error('Expected ENTITLEMENT_INACTIVE');
+    if (!res.accessible || res.entitlement?.canonicalStatus !== 'active') throw new Error('Expected canonical active access despite stale cache');
   });
 
-  await runTest('55. subscription ativa + app status past_due nega', 'u1', 'org1', 'musicscale', db => {
+  await runTest('55. subscription ativa + cache do app past_due ainda concede', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db, 'user', 'active', 'active', true, 'active', 'past_due');
   }, res => {
-    if (res.accessible || res.denialReason !== DENIAL_REASONS.ENTITLEMENT_INACTIVE) throw new Error('Expected ENTITLEMENT_INACTIVE');
+    if (!res.accessible || res.entitlement?.canonicalStatus !== 'active') throw new Error('Expected canonical active access despite stale cache');
   });
 
-  await runTest('56. subscription ativa + app status desconhecido nega', 'u1', 'org1', 'musicscale', db => {
+  await runTest('56. subscription ativa + cache do app desconhecido ainda concede', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db, 'user', 'active', 'active', true, 'active', 'some_unknown');
   }, res => {
-    if (res.accessible || res.denialReason !== DENIAL_REASONS.ENTITLEMENT_INACTIVE) throw new Error('Expected ENTITLEMENT_INACTIVE');
+    if (!res.accessible || res.entitlement?.canonicalStatus !== 'active') throw new Error('Expected canonical active access despite stale cache');
+  });
+
+  await runTest('56b. app-scoped trialing prevalece sobre top-level legado canceled', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'canceled', 'canceled');
+    db.setMockData('subscriptions/org1', {
+      status: 'canceled',
+      apps: { musicscale: { status: 'trialing', plan: 'pro' } }
+    });
+  }, res => {
+    if (!res.accessible || res.entitlement?.canonicalStatus !== 'trialing') throw new Error('Expected app-scoped trialing access');
+  });
+
+  await runTest('56c. app-scoped payment issue prevalece sobre top-level legado active', 'u1', 'org1', 'musicscale', db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'active', 'active');
+    db.setMockData('subscriptions/org1', {
+      status: 'active',
+      apps: { musicscale: { status: 'past_due', plan: 'pro' } }
+    });
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.SUBSCRIPTION_PAYMENT_REQUIRED) throw new Error('Expected app-scoped payment issue denial');
   });
 
   await runTest('57. organizations.apps.musicscale.access true sozinho não concede', 'u1', 'org1', 'musicscale', db => {

@@ -45,6 +45,10 @@ const accessProjectionService = readFileSync(
   'src/server/services/EcosystemAccessProjectionService.ts',
   'utf8'
 );
+const ecosystemAccessResolver = readFileSync(
+  'src/server/services/EcosystemAccessResolver.ts',
+  'utf8'
+);
 
 const ecosystemShell = readFileSync(
   'src/components/EcosystemShell.tsx',
@@ -362,6 +366,32 @@ assert.match(
   accessProjectionService,
   /rawAppId === 'nestlocal' \? 'nestlocal' : 'musicscale'/,
   'canonical access projection must support each sellable app without trusting arbitrary app ids'
+);
+
+assert.match(
+  ecosystemAccessResolver,
+  /subData\.apps\?\.musicscale[\s\S]*appSubscription\?\.status[\s\S]*subData\.status/,
+  'MusicScale access must read the app-scoped canonical subscription before legacy top-level fields'
+);
+assert.equal(
+  /if \(!orgAppAccess\)[\s\S]{0,1200}ENTITLEMENT_NOT_CONFIGURED/.test(ecosystemAccessResolver),
+  false,
+  'a stale or missing organization app cache must not deny an otherwise valid canonical MusicScale purchase'
+);
+assert.match(
+  hubExperience,
+  /hasCanonicalPurchasedAccess[\s\S]*recoverableProjectionReasons[\s\S]*usePurchasedFallback/,
+  'Hub catalog must keep a purchased MusicScale visible while recoverable projection drift heals'
+);
+assert.match(
+  dashboard,
+  /denialReason:\s*musicScaleProjection\?\.denialReason \|\| null/,
+  'Hub purchase fallback must preserve explicit access denials instead of bypassing membership policy'
+);
+assert.match(
+  ecosystemShell,
+  /isOrganizationLifecycleActive\(organization\)[\s\S]*\['active', 'trialing'\]\.includes\(appSubscriptionStatus\)/,
+  'app switcher must trust canonical purchase state without requiring the lagging organization app cache'
 );
 
 assert.match(
