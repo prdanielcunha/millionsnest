@@ -226,8 +226,15 @@ export async function createInvitation(
       
       const { rawToken, tokenHash } = tokenMaterial.material;
 
-      // Check for tokenHash collision across all invites
-      const collisionQuery = await t.get(db.collectionGroup('invites').where('tokenHash', '==', tokenHash));
+      // Scope collision detection to this organization's invite collection.
+      // A collection-group query requires a dedicated Firestore collection-group
+      // index and was causing every real production invite creation to fail with
+      // INTERNAL_ERROR before the first write. Acceptance is organization-scoped,
+      // and the token has 256 bits of entropy, so cross-organization collisions
+      // are irrelevant to the lookup contract.
+      const collisionQuery = await t.get(
+        invitesRef.where('tokenHash', '==', tokenHash).limit(1)
+      );
       if (!collisionQuery.empty) {
          return { statusCode: 500, payload: { success: false, reasonCode: 'TOKEN_STATE_INCONSISTENT' } };
       }
@@ -297,7 +304,14 @@ export async function createInvitation(
 
     return res.status(result.statusCode).json(result.payload);
 
-  } catch (error) {
+  } catch (error: any) {
+    console.error('[InvitationCreation] Unhandled failure', {
+      code: error?.code || null,
+      message: error?.message || String(error),
+      organizationId: req.body?.organizationId || null,
+      mode: req.body?.mode === 'link' ? 'link' : 'email',
+      role: req.body?.role || null
+    });
     return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
   }
 }
