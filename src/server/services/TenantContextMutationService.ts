@@ -553,6 +553,8 @@ export async function acceptInvitation(
           exists: true,
           organizationId: orgId,
           status: inviteData.status,
+          inviteMode: inviteData.inviteMode,
+          identityBound: inviteData.identityBound,
           email: inviteData.email,
           emailNormalized: inviteData.emailNormalized,
           role: inviteData.role,
