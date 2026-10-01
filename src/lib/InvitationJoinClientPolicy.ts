@@ -37,7 +37,7 @@ export type InvitationJoinSuccessPayload = {
   organizationId: string;
   organizationName: string;
   activeOrganizationId: string;
-  membershipRole: 'owner' | 'admin' | 'member';
+  membershipRole: 'owner' | 'admin' | 'manager' | 'member' | 'viewer';
   alreadyMember: boolean;
   legacyTokenMigrated: false;
   reasonCode: 'ALREADY_MEMBER' | 'INVITATION_CAN_BE_ACCEPTED';
@@ -74,7 +74,13 @@ export function parseInvitationJoinPayload(value: unknown): InvitationJoinSucces
     if (typeof record.activeOrganizationId !== 'string' || record.activeOrganizationId.trim() === '') return { success: false, reasonCode: 'INVALID_RESPONSE' };
     if (record.organizationId !== record.activeOrganizationId) return { success: false, reasonCode: 'INVALID_RESPONSE' };
     
-    if (record.membershipRole !== 'owner' && record.membershipRole !== 'admin' && record.membershipRole !== 'member') {
+    if (
+      record.membershipRole !== 'owner' &&
+      record.membershipRole !== 'admin' &&
+      record.membershipRole !== 'manager' &&
+      record.membershipRole !== 'member' &&
+      record.membershipRole !== 'viewer'
+    ) {
        return { success: false, reasonCode: 'INVALID_RESPONSE' };
     }
     if (typeof record.alreadyMember !== 'boolean') return { success: false, reasonCode: 'INVALID_RESPONSE' };
