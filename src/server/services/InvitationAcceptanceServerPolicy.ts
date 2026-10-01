@@ -98,6 +98,17 @@ export function resolveCanonicalInvitationCapacity(input: CanonicalInvitationEnt
 
   const subscriptionPlan = normalizePlan(subscription.plan);
   const organizationPlan = normalizePlan(organizationApp.plan);
+  const hasExplicitSubscriptionPlan =
+    typeof subscription.plan === 'string' && subscription.plan.trim() !== '';
+  const hasExplicitOrganizationPlan =
+    typeof organizationApp.plan === 'string' && organizationApp.plan.trim() !== '';
+
+  if (hasExplicitSubscriptionPlan && !subscriptionPlan) {
+    return { success: false, reasonCode: 'MEMBER_LIMIT_INVALID' };
+  }
+  if (hasExplicitOrganizationPlan && !organizationPlan) {
+    return { success: false, reasonCode: 'MEMBER_LIMIT_INVALID' };
+  }
 
   if (!subscriptionPlan && !organizationPlan) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
