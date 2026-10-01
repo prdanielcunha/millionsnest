@@ -38,7 +38,7 @@ export type ResolveCanonicalInvitationCapacityResult = ResolveCanonicalInvitatio
 export function resolveCanonicalInvitationCapacity(input: CanonicalInvitationEntitlementInput): ResolveCanonicalInvitationCapacityResult {
   const { subscription, organizationApp, organizationId, memberStatuses } = input;
 
-  if (!subscription.exists || !organizationApp.exists) {
+  if (!subscription.exists) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
@@ -74,7 +74,16 @@ export function resolveCanonicalInvitationCapacity(input: CanonicalInvitationEnt
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
-  if (!validStatuses.includes(organizationAppStatus)) {
+  // organizations/{id}.apps.musicscale is a materialized entitlement cache.
+  // If it exists and explicitly says the app is inactive, fail closed. If the
+  // cache is temporarily missing/empty while the canonical subscription is
+  // already active or trialing, capacity can still be resolved safely from
+  // the subscription document and the server-owned plan catalog.
+  if (
+    organizationApp.exists &&
+    organizationAppStatus &&
+    !validStatuses.includes(organizationAppStatus)
+  ) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
