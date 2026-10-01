@@ -47,18 +47,22 @@ export async function createInvitation(
     }
     const uid = decodedToken.uid;
 
-    const { organizationId, email, role } = req.body;
-    
-    if (typeof email !== 'string') {
-      return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_EMAIL' });
-    }
+    const { organizationId, email, role, mode: rawMode } = req.body;
+    const inviteMode = rawMode === 'link' ? 'link' : 'email';
+
     if (!isInvitationRole(role)) {
       return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_ROLE' });
     }
-    
-    const normalizedEmail = normalizeInvitationEmail(email);
-    if (!normalizedEmail || !isValidInvitationCreationEmail(normalizedEmail)) {
-      return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_EMAIL' });
+
+    let normalizedEmail: string | null = null;
+    if (inviteMode === 'email') {
+      if (typeof email !== 'string') {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_EMAIL' });
+      }
+      normalizedEmail = normalizeInvitationEmail(email);
+      if (!normalizedEmail || !isValidInvitationCreationEmail(normalizedEmail)) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_EMAIL' });
+      }
     }
 
     const db = resolveFirestore();
@@ -119,12 +123,16 @@ export async function createInvitation(
              if (Number.isInteger(invData.maxUses) && invData.maxUses > 0 && 
                  Number.isInteger(invData.useCount) && invData.useCount < invData.maxUses) {
                  
-                 if (typeof invData.emailNormalized === 'string') {
-                     pendingInvitesCount++;
-                     
-                     if (invData.emailNormalized === normalizedEmail) {
-                       existingPendingInvite = invData;
-                     }
+                 // Every valid one-time pending invite reserves one seat on
+                 // limited plans, whether it is email-bound or shareable.
+                 pendingInvitesCount++;
+
+                 if (
+                   inviteMode === 'email' &&
+                   typeof invData.emailNormalized === 'string' &&
+                   invData.emailNormalized === normalizedEmail
+                 ) {
+                   existingPendingInvite = invData;
                  }
              }
           }
@@ -183,8 +191,9 @@ export async function createInvitation(
         },
         request: {
           organizationId,
-          email: normalizedEmail,
-          role
+          ...(normalizedEmail ? { email: normalizedEmail } : {}),
+          role,
+          mode: inviteMode
         },
         capacity: capacityInput,
         existingPendingInvitation: existingPendingInvite ? {
@@ -227,12 +236,18 @@ export async function createInvitation(
       const inviteId = inviteDoc.id;
 
       t.set(inviteDoc, {
-        schemaVersion: 1,
+        schemaVersion: 2,
         id: inviteId,
         organizationId,
         organizationName: planResult.organizationName,
-        email: normalizedEmail,
-        emailNormalized: normalizedEmail,
+        inviteMode: planResult.inviteMode,
+        identityBound: planResult.identityBound,
+        ...(planResult.email
+          ? {
+              email: planResult.email,
+              emailNormalized: planResult.emailNormalized
+            }
+          : {}),
         role: planResult.role,
         status: planResult.status,
         tokenHash,
@@ -269,7 +284,9 @@ export async function createInvitation(
             id: inviteId,
             organizationId,
             organizationName: planResult.organizationName,
-            email: normalizedEmail,
+            inviteMode: planResult.inviteMode,
+            identityBound: planResult.identityBound,
+            ...(planResult.email ? { email: planResult.email } : {}),
             role: planResult.role,
             status: planResult.status,
             expiresAtMs: planResult.expiresAtMs
