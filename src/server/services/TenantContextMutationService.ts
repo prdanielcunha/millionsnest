@@ -520,10 +520,10 @@ export async function acceptInvitation(
         subscription: {
            exists: subSnap.exists,
            organizationId: subData.organizationId,
-           app: subData.app,
-           status: subData.status,
-           plan: subData.plan,
-           limitsUsers: subData.limits?.users
+           app: subData.apps?.musicscale?.app ?? subData.app,
+           status: subData.apps?.musicscale?.status ?? subData.status,
+           plan: subData.apps?.musicscale?.plan ?? subData.plan,
+           limitsUsers: subData.apps?.musicscale?.limits?.users ?? subData.limits?.users
         },
         organizationApp: {
            exists: orgSnap.exists && !!orgData.apps?.musicscale,
