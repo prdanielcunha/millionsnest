@@ -1,0 +1,69 @@
+name: NestLume Workers AI Read-only Preflight
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - ".github/workflows/nestlume-workers-ai-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: nestlume-workers-ai-preflight
+  cancel-in-progress: true
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate as MillionsNest infrastructure admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Inventory Cloudflare-related secret names only
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud secrets list --project=millionsnest --format='value(name)'             | grep -Ei 'cloudflare|workers|wrangler|ai'             | sed 's/^/SECRET_NAME=/' || true
+
+      - name: Test existing Cloudflare token capabilities without inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud secrets versions access latest --secret=mn-cloudflare-dns-token --project=millionsnest)"
+          echo "::add-mask::$TOKEN"
+
+          curl --fail --silent --show-error             -H "Authorization: Bearer $TOKEN"             "https://api.cloudflare.com/client/v4/zones?name=millionsnest.com&status=active" >/tmp/zone.json
+
+          ACCOUNT_ID="$(jq -r '.result[0].account.id // empty' /tmp/zone.json)"
+          test -n "$ACCOUNT_ID"
+          echo "CLOUDFLARE_ACCOUNT_ID_DISCOVERED=true"
+
+          AI_CODE="$(curl --silent --show-error --output /tmp/ai-models.json --write-out '%{http_code}'             -H "Authorization: Bearer $TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/ai/models/search?search=gemma-4-26b-a4b-it&per_page=5")"
+          echo "WORKERS_AI_MODEL_SEARCH_HTTP=$AI_CODE"
+          if [ "$AI_CODE" = "200" ]; then
+            jq '{success,models:[.result[]? | {name:(.name // .id // .model),task:(.task // null)}]}' /tmp/ai-models.json
+            echo "EXISTING_TOKEN_HAS_WORKERS_AI_READ=true"
+          else
+            jq '{success,errors}' /tmp/ai-models.json 2>/dev/null || true
+            echo "EXISTING_TOKEN_HAS_WORKERS_AI_READ=false"
+          fi
+
+          BILLING_CODE="$(curl --silent --show-error --output /tmp/subscriptions.json --write-out '%{http_code}'             -H "Authorization: Bearer $TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/subscriptions")"
+          echo "CLOUDFLARE_SUBSCRIPTIONS_HTTP=$BILLING_CODE"
+          if [ "$BILLING_CODE" = "200" ]; then
+            jq '{success,subscriptions:[.result[]? | {id,state,rate_plan:(.rate_plan // null)}]}' /tmp/subscriptions.json
+          else
+            echo "CLOUDFLARE_BILLING_VISIBILITY=false"
+          fi
+
+          echo "NO_INFERENCE_EXECUTED=true"
+          echo "NO_CLOUDFLARE_RESOURCE_MUTATED=true"
