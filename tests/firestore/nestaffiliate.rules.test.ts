@@ -188,3 +188,32 @@ test('provider connection documents are backend-managed', async () => {
     ),
   );
 });
+
+
+test('performanceDaily records are tenant-scoped and viewer is read-only', async () => {
+  const editor = env.authenticatedContext('editor-a').firestore();
+  const viewer = env.authenticatedContext('viewer-a').firestore();
+  const otherTenant = env.authenticatedContext('editor-b').firestore();
+  const ref = doc(editor, 'organizations/org-a/products/nestaffiliate/performanceDaily/campaign-1-2026-09-30');
+
+  await assertSucceeds(setDoc(ref, {
+    organizationId: 'org-a',
+    campaignId: 'campaign-1',
+    date: '2026-09-30',
+    impressions: 100,
+    outboundClicks: 5,
+    revenue: 20,
+    source: 'MANUAL',
+  }));
+  await assertSucceeds(getDoc(doc(viewer, 'organizations/org-a/products/nestaffiliate/performanceDaily/campaign-1-2026-09-30')));
+  await assertFails(updateDoc(doc(viewer, 'organizations/org-a/products/nestaffiliate/performanceDaily/campaign-1-2026-09-30'), { revenue: 999 }));
+  await assertFails(getDoc(doc(otherTenant, 'organizations/org-a/products/nestaffiliate/performanceDaily/campaign-1-2026-09-30')));
+});
+
+test('affiliateResults cannot be written with a forged tenant', async () => {
+  const editor = env.authenticatedContext('editor-a').firestore();
+  await assertFails(setDoc(
+    doc(editor, 'organizations/org-a/products/nestaffiliate/affiliateResults/forged'),
+    { organizationId: 'org-b', campaignId: 'campaign-1', revenue: 10 },
+  ));
+});
