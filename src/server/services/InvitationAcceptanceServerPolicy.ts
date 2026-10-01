@@ -1,4 +1,5 @@
 import { InvitationMemberCapacity } from './InvitationAcceptancePlanner.js';
+import { MUSIC_SCALE_PLANS } from '../../lib/musicScalePlans.js';
 
 export type CanonicalMusicScalePlan = 'starter' | 'advanced' | 'pro';
 
@@ -41,71 +42,116 @@ export function resolveCanonicalInvitationCapacity(input: CanonicalInvitationEnt
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
-  if (subscription.organizationId !== organizationId) {
+  // The subscription document is already read from subscriptions/{organizationId}.
+  // Keep explicit identifiers as integrity checks when present, but do not make
+  // legacy records fail simply because older schemas did not duplicate them.
+  if (
+    subscription.organizationId !== undefined &&
+    subscription.organizationId !== null &&
+    subscription.organizationId !== '' &&
+    subscription.organizationId !== organizationId
+  ) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
-  if (subscription.app !== 'musicscale') {
+  if (
+    subscription.app !== undefined &&
+    subscription.app !== null &&
+    subscription.app !== '' &&
+    subscription.app !== 'musicscale'
+  ) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
+
+  const normalizeStatus = (value: unknown): string =>
+    typeof value === 'string' ? value.trim().toLowerCase() : '';
 
   const validStatuses = ['active', 'trialing'];
-  
-  if (typeof subscription.status !== 'string' || !validStatuses.includes(subscription.status)) {
+  const subscriptionStatus = normalizeStatus(subscription.status);
+  const organizationAppStatus = normalizeStatus(organizationApp.status);
+
+  if (!validStatuses.includes(subscriptionStatus)) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
-  if (typeof organizationApp.status !== 'string' || !validStatuses.includes(organizationApp.status)) {
+  if (!validStatuses.includes(organizationAppStatus)) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
-  if (subscription.plan !== organizationApp.plan) {
+  const normalizePlan = (value: unknown): CanonicalMusicScalePlan | null => {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'starter' || normalized === 'advanced' || normalized === 'pro') {
+      return normalized;
+    }
+    return null;
+  };
+
+  const subscriptionPlan = normalizePlan(subscription.plan);
+  const organizationPlan = normalizePlan(organizationApp.plan);
+
+  if (!subscriptionPlan && !organizationPlan) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
-  const plan = subscription.plan;
-  if (plan !== 'starter' && plan !== 'advanced' && plan !== 'pro') {
-    return { success: false, reasonCode: 'MEMBER_LIMIT_INVALID' };
+  // The app-specific subscription projection is canonical for billing. The
+  // organization app projection is an entitlement cache. A temporary missing
+  // plan in one side must not block an otherwise valid paid customer, but two
+  // explicit conflicting plans are treated as unavailable until reconciliation.
+  if (subscriptionPlan && organizationPlan && subscriptionPlan !== organizationPlan) {
+    return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
-  const expectedLimit = plan === 'starter' ? 10 : (plan === 'advanced' ? 20 : -1);
-
-  if (subscription.limitsUsers !== expectedLimit || organizationApp.limitsUsers !== expectedLimit) {
-    return { success: false, reasonCode: 'MEMBER_LIMIT_INVALID' };
+  const plan = subscriptionPlan || organizationPlan;
+  if (!plan) {
+    return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
+
+  // Capacity comes from the server-owned plan catalog, not duplicated limits
+  // stored in Firestore. This avoids false 503s after schema migrations while
+  // preserving the actual commercial limits.
+  const expectedLimit = MUSIC_SCALE_PLANS[plan].limits.users;
 
   let activeCount = 0;
-  for (const status of memberStatuses) {
-    if (status === 'active' || status === undefined) {
+  for (const rawStatus of memberStatuses) {
+    const status = typeof rawStatus === 'string'
+      ? rawStatus.trim().toLowerCase()
+      : rawStatus;
+
+    if (status === 'active' || status === undefined || status === null || status === '') {
       activeCount++;
-    } else if (['suspended', 'inactive', 'removed', 'revoked', 'deleted'].includes(status as string)) {
-      // Ignored
+    } else if (['suspended', 'inactive', 'removed', 'revoked', 'deleted', 'disabled', 'archived'].includes(status as string)) {
+      // Inactive memberships do not consume a slot.
     } else {
       return { success: false, reasonCode: 'MEMBER_LIMIT_INVALID' };
     }
   }
 
-  if (plan === 'pro') {
+  if (expectedLimit === -1) {
     return {
       success: true,
       capacity: {
         resolved: true,
         mode: 'unlimited'
       },
-      plan: 'pro'
-    };
-  } else {
-    return {
-      success: true,
-      capacity: {
-        resolved: true,
-        mode: 'limited',
-        currentActiveMembers: activeCount,
-        maxMembers: expectedLimit
-      },
-      plan: plan as 'starter' | 'advanced'
+      plan
     };
   }
+
+  if (!Number.isInteger(expectedLimit) || expectedLimit <= 0) {
+    return { success: false, reasonCode: 'MEMBER_LIMIT_INVALID' };
+  }
+
+  return {
+    success: true,
+    capacity: {
+      resolved: true,
+      mode: 'limited',
+      currentActiveMembers: activeCount,
+      maxMembers: expectedLimit
+    },
+    plan
+  };
 }
 
 export function normalizeInvitationTemporalMs(value: unknown): number | undefined {
