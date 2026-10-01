@@ -127,19 +127,30 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
   const fallbackInstalledAppIds = ECOSYSTEM_APPS
     .filter(app => {
       if (app.status !== 'active') return false;
+      if (isGlobalPrivilegedUser(profile)) return true;
+
       if (app.id === 'musicscale') {
-        return (
-          isGlobalPrivilegedUser(profile) ||
-          profile?.products?.includes('musicscale') ||
-          isSubscriptionValid(subscription) ||
-          organization?.enabledApps?.includes('musicscale')
-        );
+        const organizationStatus = String(organization?.status || 'active').toLowerCase();
+        const organizationOperational =
+          !['inactive', 'suspended', 'disabled', 'archived'].includes(organizationStatus);
+        const appSubscriptionStatus = String(
+          subscription?.apps?.musicscale?.status ||
+          subscription?.status ||
+          ''
+        ).toLowerCase();
+
+        return organizationOperational &&
+          ['active', 'trialing'].includes(appSubscriptionStatus);
       }
+
       return organization?.enabledApps?.includes(app.id) || organization?.apps?.[app.id]?.enabled === true;
     })
     .map(app => app.id);
 
-  const effectiveInstalledAppIds = installedAppIds ?? fallbackInstalledAppIds;
+  const effectiveInstalledAppIds = Array.from(new Set([
+    ...(installedAppIds || []),
+    ...fallbackInstalledAppIds
+  ]));
   const launcherApps = ECOSYSTEM_APPS.filter(app => effectiveInstalledAppIds.includes(app.id));
 
   let supportModeObj: any = null;
