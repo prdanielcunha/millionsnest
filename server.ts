@@ -808,10 +808,18 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     }
 
     const searchPayload = await searchResponse.json() as {
-      results?: Array<{ id?: string; name?: string }>;
+      paging?: { total?: number; limit?: number; offset?: number };
+      results?: Array<Record<string, any>>;
     };
     const candidates = (searchPayload.results || [])
-      .map((item) => ({ id: String(item.id || ''), name: String(item.name || '') }))
+      .map((item) => ({
+        id: String(item.id || ''),
+        name: String(item.name || item.family_name || ''),
+        status: String(item.status || ''),
+        permalink: String(item.permalink || ''),
+        pictures: Array.isArray(item.pictures) ? item.pictures : [],
+        buy_box_winner: item.buy_box_winner || null,
+      }))
       .filter((item) => item.id)
       .slice(0, limit);
 
@@ -832,26 +840,36 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     );
 
     const observedAt = new Date().toISOString();
-    const products = detailRows.flatMap((row) => {
-      if (!row) return [];
-      const product = row.detail;
-      const winner = product.buy_box_winner || {};
-      const itemId = String(winner.item_id || '');
-      const permalink = String(product.permalink || '');
-      if (!itemId || !permalink) return [];
+    const products = candidates.flatMap((candidate, index) => {
+      const detailed = detailRows[index]?.detail || {};
+      const product = { ...candidate, ...detailed };
+      const winner = product.buy_box_winner || candidate.buy_box_winner || {};
+      const catalogId = String(product.id || candidate.id);
+      const itemId = String(winner.item_id || catalogId);
+      const permalink = String(
+        product.permalink ||
+        candidate.permalink ||
+        (catalogId ? `https://www.mercadolivre.com.br/p/${encodeURIComponent(catalogId)}` : '')
+      );
+      const title = String(product.name || product.family_name || candidate.name || query).trim();
+      if (!catalogId || !title || !permalink) return [];
 
-      const picture = Array.isArray(product.pictures) ? product.pictures[0] : null;
-      const imageUrl = String(picture?.secure_url || picture?.url || '');
+      const pictures = Array.isArray(product.pictures) && product.pictures.length
+        ? product.pictures
+        : candidate.pictures;
+      const picture = Array.isArray(pictures) ? pictures[0] : null;
+      const imageUrl = String(picture?.secure_url || picture?.url || picture || '');
       const price = typeof winner.price === 'number' ? winner.price : undefined;
+      const status = String(product.status || candidate.status || '').toLowerCase();
 
       return [{
         productId: `meli:${itemId}`,
         organizationId,
         marketplace: 'MELI',
         externalId: itemId,
-        catalogProductId: String(product.id || row.candidate.id),
+        catalogProductId: catalogId,
         title: {
-          value: String(product.name || row.candidate.name || ''),
+          value: title,
           source: 'mercadolivre-catalog-api',
           observedAt,
         },
@@ -869,11 +887,11 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         } : {}),
         currency: {
           value: String(winner.currency_id || 'BRL'),
-          source: 'mercadolivre-buy-box',
+          source: typeof winner.price === 'number' ? 'mercadolivre-buy-box' : 'mercadolivre-catalog-api',
           observedAt,
         },
         availability: {
-          value: 'available',
+          value: status === 'inactive' ? 'unknown' : 'available',
           source: 'mercadolivre-catalog-api',
           observedAt,
         },
@@ -895,6 +913,12 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       provider: 'MELI',
       source: 'mercadolivre-catalog-api',
       observedAt,
+      meta: {
+        catalogTotal: Number(searchPayload.paging?.total || candidates.length),
+        candidates: candidates.length,
+        detailed: detailRows.filter(Boolean).length,
+        usable: products.length,
+      },
     });
   } catch (error) {
     console.error('[NestAffiliate/MELI] broker search failed', error);
