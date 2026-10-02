@@ -70,6 +70,8 @@ async function runTests() {
   assertCondition('11. role owner é aceito', parseInvitationJoinPayload(validSuccessNew).success === true);
   assertCondition('12. role admin é aceito', parseInvitationJoinPayload({ ...validSuccessNew, membershipRole: 'admin' }).success === true);
   assertCondition('13. role member é aceito', parseInvitationJoinPayload({ ...validSuccessNew, membershipRole: 'member' }).success === true);
+  assertCondition('13b. role manager é aceito', parseInvitationJoinPayload({ ...validSuccessNew, membershipRole: 'manager' }).success === true);
+  assertCondition('13c. role viewer é aceito', parseInvitationJoinPayload({ ...validSuccessNew, membershipRole: 'viewer' }).success === true);
   
   const guestParsed = parseInvitationJoinPayload({ ...validSuccessNew, membershipRole: 'guest' });
   if (!guestParsed.success) {
@@ -104,7 +106,7 @@ async function runTests() {
   assertCondition('24. texto vira INVALID_RESPONSE', parseInvitationJoinPayload("error").success === false);
 
   const reasons = [
-      'UNAUTHENTICATED', 'INVALID_TOKEN', 'AUTHENTICATED_EMAIL_REQUIRED', 'INVALID_INVITE_ROLE',
+      'UNAUTHENTICATED', 'INVALID_TOKEN', 'INVALID_ORGANIZATION_ID', 'AUTHENTICATED_EMAIL_REQUIRED', 'INVALID_INVITE_ROLE',
       'INVITE_IDENTITY_MISMATCH', 'INVITE_NOT_FOUND', 'ORGANIZATION_NOT_FOUND', 'ORGANIZATION_INACTIVE',
       'INVITE_STATE_INCONSISTENT', 'INVITE_REVOKED', 'INVITE_EXPIRED', 'INVITE_MAX_USES_REACHED',
       'MEMBERSHIP_INACTIVE', 'MEMBERSHIP_STATE_INCONSISTENT', 'INVITE_ALREADY_CONSUMED',
@@ -176,7 +178,7 @@ async function runTests() {
   assertCondition('55. Join possui aria-busy', joinContent.includes('aria-busy={'));
   assertCondition('56. retry somente aparece para erro retryable', joinContent.includes('errorMessage.retryable ?') || joinContent.includes('errorMessage?.retryable'));
   assertCondition('57. sucesso remove mn_invite_redirect', joinContent.includes("removeItem('mn_invite_redirect')"));
-  assertCondition('58. sucesso redireciona para /dashboard', joinContent.includes("window.location.href = '/dashboard'"));
+  assertCondition('58. sucesso redireciona para o dashboard', joinContent.includes("window.location.href = '/dashboard/overview'"));
   assertCondition('59. requestLoading foi removido', !joinContent.includes("setRequestLoading"));
   assertCondition('60. profile e switchOrganization não são desestruturados', !joinContent.includes("switchOrganization") && !joinContent.includes(" profile"));
 
@@ -198,7 +200,7 @@ async function runTests() {
 
   assertCondition('69. Join não contém uiTexts', !joinContent.includes('const uiTexts ='));
   assertCondition('70. Join usa getInvitationJoinUiCopy', joinContent.includes('getInvitationJoinUiCopy('));
-  assertCondition('71. Join envia JSON.stringify({ token })', joinContent.includes('body: JSON.stringify({ token })'));
+  assertCondition('71. Join envia token e organizationId', joinContent.includes('body: JSON.stringify({ token, organizationId: orgId })'));
   assertCondition('72. Join não envia trimmedToken', !joinContent.includes('body: JSON.stringify({ token: trimmedToken })'));
   assertCondition('73. Join usa chave com user.uid, orgId e token', joinContent.includes('${user.uid}:${orgId}:${token}'));
   assertCondition('74. Join não usa requestFiredRef booleano', !joinContent.includes('requestFiredRef'));
