@@ -2029,6 +2029,12 @@ service cloud.firestore {
           allow create, update, delete: if false;
         }
 
+        match /providerSecretState/{secretId} {
+          // Rotating OAuth state is backend-only. No browser user, including
+          // owners/admins, may read or mutate these documents.
+          allow read, create, update, delete: if false;
+        }
+
         match /affiliateAccounts/{accountId} {
           // Provider account/token material is server-managed.
           allow read: if nestAffiliateCanAdmin(orgId);
@@ -2070,7 +2076,7 @@ service cloud.firestore {
         }
 
         match /{collectionName}/{documentId} {
-          allow read: if !(collectionName in ['providerConnections', 'affiliateAccounts', 'pinterestAccounts', 'quotaUsage', 'systemJobs', 'auditEvents']) &&
+          allow read: if !(collectionName in ['providerConnections', 'providerSecretState', 'affiliateAccounts', 'pinterestAccounts', 'quotaUsage', 'systemJobs', 'auditEvents']) &&
             nestAffiliateCanRead(orgId);
           allow create: if collectionName in [
               'boards',
