@@ -45,6 +45,46 @@ jobs:
           curl --fail --silent --show-error -X PATCH             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/na-auth.json             "https://identitytoolkit.googleapis.com/admin/v2/projects/$FIREBASE_PROJECT/config?updateMask=authorizedDomains"             >/dev/null
           echo "NESTAFFILIATE_AUTH_DOMAINS_READY=true"
 
+      - name: Verify NestAffiliate Google Auth bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          APPS="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://firebase.googleapis.com/v1beta1/projects/$FIREBASE_PROJECT/webApps?pageSize=100")"
+          APP_NAME="$(jq -r '.apps[] | select(.displayName == "MillionsNest" or .displayName == "millionsnest") | .name' <<<"$APPS" | head -n1)"
+          if [ -z "$APP_NAME" ]; then
+            APP_NAME="$(jq -r '.apps[0].name // empty' <<<"$APPS")"
+          fi
+          test -n "$APP_NAME"
+
+          CONFIG="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://firebase.googleapis.com/v1beta1/$APP_NAME/config")"
+          API_KEY="$(jq -r '.apiKey // empty' <<<"$CONFIG")"
+          AUTH_DOMAIN="$(jq -r '.authDomain // empty' <<<"$CONFIG")"
+          test -n "$API_KEY"
+          test -n "$AUTH_DOMAIN"
+          echo "::add-mask::$API_KEY"
+          echo "FIREBASE_AUTH_DOMAIN=$AUTH_DOMAIN"
+
+          BODY="$(jq -nc --arg uri "https://$LIVE_DOMAIN/" '{providerId:"google.com",continueUri:$uri,customParameter:{prompt:"select_account"}}')"
+          STATUS="$(curl --silent --show-error \
+            --output /tmp/na-create-auth-uri.json \
+            --write-out '%{http_code}' \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "Origin: https://$LIVE_DOMAIN" \
+            -H "Referer: https://$LIVE_DOMAIN/" \
+            --data "$BODY" \
+            "https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=$API_KEY")"
+          echo "CREATE_AUTH_URI_STATUS=$STATUS"
+          jq '{authUri:(.authUri // null),providerId:(.providerId // null),error:(.error.message // null)}' /tmp/na-create-auth-uri.json
+          test "$STATUS" = "200"
+          jq -e '.authUri | strings | length > 0' /tmp/na-create-auth-uri.json >/dev/null
+          echo "NESTAFFILIATE_GOOGLE_AUTH_BOOTSTRAP_OK=true"
+
       - name: Ensure Firebase custom domain resource
         shell: bash
         run: |
