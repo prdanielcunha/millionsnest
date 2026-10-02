@@ -95,4 +95,11 @@ jobs:
           CONDITION="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID"             --workload-identity-pool="$POOL_ID"             --location=global             --project="$PROJECT_ID"             --format='value(attributeCondition)')"
           grep -F "$NESTAFFILIATE_REPOSITORY" <<<"$CONDITION" >/dev/null
           firebase hosting:sites:list --project "$PROJECT_ID" | grep -F "$FIREBASE_SITE" >/dev/null
+
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          AUTH_CONFIG="$(curl --fail --silent --show-error             -H "Authorization: Bearer $ACCESS_TOKEN"             "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/config")"
+          FALLBACK_DOMAIN="$FIREBASE_SITE.web.app"
+          jq -e --arg domain "$LIVE_DOMAIN" '.authorizedDomains | index($domain) != null' <<<"$AUTH_CONFIG" >/dev/null
+          jq -e --arg domain "$FALLBACK_DOMAIN" '.authorizedDomains | index($domain) != null' <<<"$AUTH_CONFIG" >/dev/null
+          echo "NESTAFFILIATE_AUTH_DOMAINS_VERIFIED=true"
           echo "NESTAFFILIATE_FIREBASE_BOOTSTRAP_OK=true"
