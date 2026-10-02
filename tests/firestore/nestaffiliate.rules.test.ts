@@ -343,3 +343,50 @@ test('provider secret state is invisible to every client role', async () => {
     await assertFails(updateDoc(ref, { refreshToken: 'tampered' }));
   }
 });
+
+
+test('Creative Pack collections preserve tenant RBAC and no-secret invariants', async () => {
+  const editor = env.authenticatedContext('editor-a').firestore();
+  const viewer = env.authenticatedContext('viewer-a').firestore();
+  const admin = env.authenticatedContext('admin-a').firestore();
+  const collections = ['creativePacks', 'creativeConcepts', 'sceneProfiles'] as const;
+
+  for (const collectionName of collections) {
+    const id = 'creative-' + collectionName;
+    const path = 'organizations/org-a/products/nestaffiliate/' + collectionName + '/' + id;
+    const ref = doc(editor, path);
+
+    await assertSucceeds(setDoc(ref, {
+      id,
+      organizationId: 'org-a',
+      campaignId: 'campaign-1',
+      version: 1,
+    }));
+    await assertSucceeds(updateDoc(ref, { version: 2 }));
+    await assertSucceeds(getDoc(doc(viewer, path)));
+    await assertFails(setDoc(doc(viewer, path + '-viewer'), {
+      organizationId: 'org-a',
+      campaignId: 'campaign-1',
+    }));
+    await assertFails(deleteDoc(ref));
+    await assertSucceeds(deleteDoc(doc(admin, path)));
+  }
+});
+
+test('Creative Pack collections reject cross-tenant writes and secret-like fields', async () => {
+  const editor = env.authenticatedContext('editor-a').firestore();
+
+  await assertFails(setDoc(
+    doc(editor, 'organizations/org-a/products/nestaffiliate/creativePacks/wrong-tenant'),
+    { organizationId: 'org-b', campaignId: 'campaign-1' },
+  ));
+
+  await assertFails(setDoc(
+    doc(editor, 'organizations/org-a/products/nestaffiliate/promptPackages/secret-prompt'),
+    {
+      organizationId: 'org-a',
+      campaignId: 'campaign-1',
+      secret: 'must-not-be-stored',
+    },
+  ));
+});
