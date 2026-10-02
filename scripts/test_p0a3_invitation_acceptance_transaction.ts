@@ -223,8 +223,10 @@ assertCondition('23. usa resolveCanonicalInvitationCapacity', endpointContent.in
 assertCondition('24. consulta somente hash SHA-256', endpointContent.includes('crypto.createHash') && endpointContent.includes('tokenHash'));
 assertCondition('25. não consulta token bruto', !endpointContent.includes("where('token',") && !endpointContent.includes("legacyQuery"));
 assertCondition('26. não contém legacyMigrated true', !endpointContent.includes("legacyMigrated = true") && !endpointContent.includes("legacyMigrated: true"));
-assertCondition('27. não usa limit(1)', !endpointContent.includes(".limit(1)"));
-assertCondition('28. exige caminho organizations/{orgId}/invites', endpointContent.includes("parts.length === 4 && parts[0] === 'organizations' && parts[2] === 'invites'"));
+assertCondition('27. lookup aceita no máximo dois resultados para detectar inconsistência', endpointContent.includes(".limit(2)"));
+assertCondition('28. lookup é escopado em organizations/{orgId}/invites', endpointContent.includes("doc(requestedOrganizationId)") && endpointContent.includes("collection('invites')"));
+assertCondition('28b. aceitação não depende de collectionGroup invites', !endpointContent.includes("collectionGroup('invites')"));
+assertCondition('28c. organizationId do request é validado', endpointContent.includes('isValidInvitationOrganizationId(requestedOrganizationId)'));
 assertCondition('29. getAuth().getUser ocorre antes de runTransaction', endpointContent.indexOf('getAuth().getUser') < endpointContent.indexOf('runTransaction'));
 assertCondition('30. acceptanceNowMs ocorre antes de runTransaction', endpointContent.indexOf('acceptanceNowMs =') < endpointContent.indexOf('runTransaction'));
 
@@ -353,6 +355,31 @@ const directCreateFail = planInvitationAcceptance({
 }, 1000);
 assertCondition('70. direct creation fails MEMBER_LIMIT_UNAVAILABLE with unresolved capacity', directCreateFail.success === false && directCreateFail.reasonCode === 'MEMBER_LIMIT_UNAVAILABLE');
 
+const directShareableLink = planInvitationAcceptance({
+  identity: { uid: 'u2', email: 'different@test.com' },
+  organization: { exists: true, status: 'active' },
+  invitation: {
+    exists: true,
+    organizationId: 'org1',
+    status: 'pending',
+    inviteMode: 'link',
+    identityBound: false,
+    role: 'manager',
+    maxUses: 1,
+    useCount: 0,
+    expiresAtMs: 2000,
+    revokedAtMs: undefined
+  },
+  existingMembership: { exists: false },
+  capacity: { resolved: true, mode: 'unlimited' }
+}, 1000);
+assertCondition(
+  '70b. shareable link accepts authenticated user without target email',
+  directShareableLink.success === true &&
+    directShareableLink.membershipRole === 'manager' &&
+    directShareableLink.consumeInviteUse === true
+);
+
 assertCondition('71. não existe let decodedToken', !endpointContent.includes('let decodedToken;'));
 assertCondition('72. não existe let authUser', !endpointContent.includes('let authUser;'));
 const hasUntypedLet = /let\s+[a-zA-Z0-9_]+\s*;/.test(endpointContent);
@@ -363,6 +390,8 @@ const capacityReasonIdx = endpointContent.indexOf('capacityResult.reasonCode');
 assertCondition('74. planInvitationAcceptance antes de usar capacityResult.reasonCode', planIdx !== -1 && capacityReasonIdx !== -1 && planIdx < capacityReasonIdx);
 
 assertCondition('75. capacityResult com falha convertido em { resolved: false }', endpointContent.includes('capacityResult.success ? capacityResult.capacity : { resolved: false }'));
+assertCondition('75b. endpoint encaminha inviteMode ao planner', endpointContent.includes('inviteMode: inviteData.inviteMode'));
+assertCondition('75c. endpoint encaminha identityBound ao planner', endpointContent.includes('identityBound: inviteData.identityBound'));
 
 assertCondition('76. ALREADY_MEMBER sem exigir capacityResult.success', endpointContent.includes("planResult.action === 'ALREADY_MEMBER'"));
 
