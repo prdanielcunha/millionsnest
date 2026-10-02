@@ -89,7 +89,7 @@ jobs:
             }
           }' firestore.rules >/tmp/ruleset-create.json
 
-          RULESET="$(curl --fail-with-body --silent --show-error -X POST             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/ruleset-create.json             "https://firebaserules.googleapis.com/v1/projects/millionsnest/rulesets")"
+          RULESET="$(curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 45 -X POST             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/ruleset-create.json             "https://firebaserules.googleapis.com/v1/projects/millionsnest/rulesets")"
 
           RULESET_NAME="$(jq -r '.name // empty' <<<"$RULESET")"
           test -n "$RULESET_NAME"
@@ -103,12 +103,12 @@ jobs:
             updateMask: "rulesetName"
           }' >/tmp/release-update.json
 
-          curl --fail-with-body --silent --show-error -X PATCH             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/release-update.json             "https://firebaserules.googleapis.com/v1/projects/millionsnest/releases/cloud.firestore"             >/tmp/release-result.json
+          curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 45 -X PATCH             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/release-update.json             "https://firebaserules.googleapis.com/v1/projects/millionsnest/releases/cloud.firestore"             >/tmp/release-result.json
 
           ACTIVE_RULESET="$(jq -r '.rulesetName // empty' /tmp/release-result.json)"
           test "$ACTIVE_RULESET" = "$RULESET_NAME"
 
-          VERIFY="$(curl --fail --silent --show-error             -H "Authorization: Bearer $ACCESS_TOKEN"             "https://firebaserules.googleapis.com/v1/$RULESET_NAME")"
+          VERIFY="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 45             -H "Authorization: Bearer $ACCESS_TOKEN"             "https://firebaserules.googleapis.com/v1/$RULESET_NAME")"
           SOURCE="$(jq -r '.source.files[]?.content // empty' <<<"$VERIFY")"
 
           grep -Fq 'function nestAffiliateProductEnabled(orgId)' <<<"$SOURCE"
