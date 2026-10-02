@@ -263,3 +263,82 @@ test('sensitive provider account collections are admin-only and backend-managed'
     { organizationId: 'org-a', provider: 'PINTEREST' },
   ));
 });
+
+
+test('market signal snapshots are tenant-scoped, editable and secret-safe', async () => {
+  const editor = env.authenticatedContext('editor-a').firestore();
+  const viewer = env.authenticatedContext('viewer-a').firestore();
+  const otherTenant = env.authenticatedContext('editor-b').firestore();
+  const ref = doc(editor, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/meli-trend-kitchen');
+
+  await assertSucceeds(setDoc(ref, {
+    organizationId: 'org-a',
+    source: 'MELI_TREND_GROWTH',
+    kind: 'DEMAND',
+    strength: 0.94,
+    confidence: 0.96,
+    keyword: 'organizador cozinha',
+    evidence: ['position:1'],
+    observedAt: '2026-10-02T12:00:00.000Z',
+  }));
+
+  await assertSucceeds(
+    getDoc(doc(viewer, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/meli-trend-kitchen')),
+  );
+
+  await assertFails(
+    updateDoc(
+      doc(viewer, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/meli-trend-kitchen'),
+      { strength: 0.1 },
+    ),
+  );
+
+  await assertFails(
+    getDoc(doc(otherTenant, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/meli-trend-kitchen')),
+  );
+
+  await assertFails(setDoc(
+    doc(editor, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/forged'),
+    {
+      organizationId: 'org-b',
+      source: 'MANUAL',
+      kind: 'DEMAND',
+      strength: 0.5,
+      confidence: 0.5,
+      evidence: [],
+      observedAt: '2026-10-02T12:00:00.000Z',
+    },
+  ));
+
+  await assertFails(setDoc(
+    doc(editor, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/secret'),
+    {
+      organizationId: 'org-a',
+      source: 'MELI_TREND_GROWTH',
+      kind: 'DEMAND',
+      strength: 0.9,
+      confidence: 0.9,
+      evidence: [],
+      observedAt: '2026-10-02T12:00:00.000Z',
+      accessToken: 'never-store-client-secrets',
+    },
+  ));
+});
+
+test('provider secret state is invisible to every client role', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/nestaffiliate/providerSecretState/mercadolivre'), {
+      organizationId: 'org-a',
+      provider: 'MELI',
+      refreshToken: 'server-only',
+    });
+  });
+
+  for (const uid of ['viewer-a', 'editor-a', 'admin-a', 'owner-a']) {
+    const db = env.authenticatedContext(uid).firestore();
+    const ref = doc(db, 'organizations/org-a/products/nestaffiliate/providerSecretState/mercadolivre');
+    await assertFails(getDoc(ref));
+    await assertFails(updateDoc(ref, { refreshToken: 'tampered' }));
+  }
+});
