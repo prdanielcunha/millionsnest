@@ -9,6 +9,7 @@ on:
       - "firebase.rules-test.json"
       - "tests/firestore/nestjourney.rules.test.ts"
       - "tests/firestore/musicscale_live.rules.test.ts"
+      - "tests/firestore/nestaffiliate.rules.test.ts"
       - ".github/workflows/firebase-firestore-rules-deploy.yml"
   workflow_dispatch:
 
@@ -65,13 +66,55 @@ jobs:
           --project demo-millionsnest-musicscale-live-release
           "npx tsx --test --test-concurrency=1 tests/firestore/musicscale_live.rules.test.ts"
 
-      - name: Deploy canonical Firestore rules
+      - name: Certify NestAffiliate Firestore boundary
         run: >-
-          npx firebase-tools@15.26.0 deploy
-          --only firestore:rules
+          npx firebase emulators:exec
           --config firebase.rules-test.json
-          --project millionsnest
-          --non-interactive
+          --only firestore
+          --project demo-millionsnest-nestaffiliate-release
+          "npx tsx --test --test-concurrency=1 tests/firestore/nestaffiliate.rules.test.ts"
 
-      - name: Confirm deployment contract
-        run: echo "MILLIONSNEST_FIRESTORE_RULES_DEPLOY_OK"
+      - name: Deploy and verify canonical Firestore rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+
+          jq -Rs '{
+            source: {
+              files: [{
+                name: "firestore.rules",
+                content: .
+              }]
+            }
+          }' firestore.rules >/tmp/ruleset-create.json
+
+          RULESET="$(curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 45 -X POST             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/ruleset-create.json             "https://firebaserules.googleapis.com/v1/projects/millionsnest/rulesets")"
+
+          RULESET_NAME="$(jq -r '.name // empty' <<<"$RULESET")"
+          test -n "$RULESET_NAME"
+          echo "RULESET_CREATED=$RULESET_NAME"
+
+          jq -n --arg name "projects/millionsnest/releases/cloud.firestore" --arg ruleset "$RULESET_NAME" '{
+            release: {
+              name: $name,
+              rulesetName: $ruleset
+            },
+            updateMask: "rulesetName"
+          }' >/tmp/release-update.json
+
+          curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 45 -X PATCH             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/release-update.json             "https://firebaserules.googleapis.com/v1/projects/millionsnest/releases/cloud.firestore"             >/tmp/release-result.json
+
+          ACTIVE_RULESET="$(jq -r '.rulesetName // empty' /tmp/release-result.json)"
+          test "$ACTIVE_RULESET" = "$RULESET_NAME"
+
+          VERIFY="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 45             -H "Authorization: Bearer $ACCESS_TOKEN"             "https://firebaserules.googleapis.com/v1/$RULESET_NAME")"
+          SOURCE="$(jq -r '.source.files[]?.content // empty' <<<"$VERIFY")"
+
+          grep -Fq 'function nestAffiliateProductEnabled(orgId)' <<<"$SOURCE"
+          grep -Fq "productId != 'raiz_e_mesa' && productId != 'nestaffiliate'" <<<"$SOURCE"
+          grep -Fq 'match /products/nestaffiliate' <<<"$SOURCE"
+          grep -Fq "'performanceDaily'" <<<"$SOURCE"
+          grep -Fq "'affiliateResults'" <<<"$SOURCE"
+
+          echo "MILLIONSNEST_FIRESTORE_RULES_DEPLOY_OK ruleset=$RULESET_NAME"
