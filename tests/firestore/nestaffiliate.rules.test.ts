@@ -324,3 +324,22 @@ test('market signal snapshots are tenant-scoped, editable and secret-safe', asyn
     },
   ));
 });
+
+
+test('provider secret state is invisible to every client role', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'organizations/org-a/products/nestaffiliate/providerSecretState/mercadolivre'), {
+      organizationId: 'org-a',
+      provider: 'MELI',
+      refreshToken: 'server-only',
+    });
+  });
+
+  for (const uid of ['viewer-a', 'editor-a', 'admin-a', 'owner-a']) {
+    const db = env.authenticatedContext(uid).firestore();
+    const ref = doc(db, 'organizations/org-a/products/nestaffiliate/providerSecretState/mercadolivre');
+    await assertFails(getDoc(ref));
+    await assertFails(updateDoc(ref, { refreshToken: 'tampered' }));
+  }
+});
