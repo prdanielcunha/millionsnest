@@ -1672,6 +1672,12 @@ export default {
     invite: {
       title: "Invite to {{orgName}}",
       subtitle: "Enter who is joining, choose their access, and send the invitation through the channel you prefer.",
+      method_label: "How do you want to invite?",
+      method_email: "By email",
+      method_link: "By link",
+      link_mode_hint: "Choose the role and generate a single-use link. The person who uses it will automatically join with that access level. The link expires in 7 days.",
+      generate_link: "Generate link for this role",
+      link_ready: "Link created. Whoever opens it and completes sign-up will join with the selected role.",
       email_sent: "Invitation sent by email.",
       email_app_opened: "We opened your email app with the invitation ready to send.",
       email_failed: "Could not send by email. Use WhatsApp or copy the link.",
