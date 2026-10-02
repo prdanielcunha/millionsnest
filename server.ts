@@ -690,6 +690,218 @@ export async function upsertEcosystemSubscription(params: {
   };
 }
 
+
+async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
+  try {
+    const authHeader = String(req.headers.authorization || '');
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'UNAUTHENTICATED' });
+    }
+
+    let decodedToken: admin.auth.DecodedIdToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+    } catch {
+      return res.status(401).json({ error: 'INVALID_TOKEN' });
+    }
+
+    const organizationId = String(req.query.organizationId || '').trim();
+    const query = String(req.query.q || '').trim();
+    const requestedLimit = Number(req.query.limit || 12);
+    const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 12, 20));
+
+    if (
+      !organizationId ||
+      organizationId.length > 256 ||
+      organizationId.includes('/') ||
+      organizationId.includes('\\') ||
+      query.length < 2 ||
+      query.length > 160
+    ) {
+      return res.status(400).json({ error: 'INVALID_REQUEST' });
+    }
+
+    const dbInstance = getDb();
+    if (!dbInstance) {
+      return res.status(503).json({ error: 'DATABASE_UNAVAILABLE' });
+    }
+
+    const [actorSnap, orgSnap, memberSnap] = await Promise.all([
+      dbInstance.collection('users').doc(decodedToken.uid).get(),
+      dbInstance.collection('organizations').doc(organizationId).get(),
+      dbInstance.collection('organizations').doc(organizationId).collection('members').doc(decodedToken.uid).get(),
+    ]);
+
+    if (!orgSnap.exists) {
+      return res.status(404).json({ error: 'ORGANIZATION_NOT_FOUND' });
+    }
+
+    const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+    const orgData = orgSnap.data() || {};
+    const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+    const systemRole = String(actorData.systemRole || actorData.globalRole || '').toLowerCase();
+    const isGlobal = isGlobalPrivilegedRole(systemRole);
+    const isOwner = [
+      orgData.ownerUid,
+      orgData.ownerId,
+      orgData.ownerUserId,
+      orgData.owner_user_id,
+    ].some((value) => value === decodedToken.uid);
+    const memberStatus = String(memberData.status || 'active').toLowerCase();
+    const memberRole = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+    const activeMember =
+      memberSnap.exists &&
+      ['active', 'ativo'].includes(memberStatus) &&
+      ['owner', 'admin', 'editor', 'viewer'].includes(memberRole);
+
+    if (!isGlobal && !isOwner && !activeMember) {
+      return res.status(403).json({ error: 'FORBIDDEN' });
+    }
+
+    const appAccess = orgData.apps?.nestaffiliate;
+    const entitlementActive =
+      appAccess === true ||
+      appAccess?.enabled === true ||
+      ['active', 'trialing'].includes(String(appAccess?.status || '').toLowerCase());
+
+    if (!isGlobal && !entitlementActive) {
+      return res.status(403).json({ error: 'NESTAFFILIATE_NOT_ENABLED' });
+    }
+
+    const secretSnap = await dbInstance
+      .collection('organizations')
+      .doc(organizationId)
+      .collection('products')
+      .doc('nestaffiliate')
+      .collection('providerSecretState')
+      .doc('mercadolivre')
+      .get();
+
+    if (!secretSnap.exists) {
+      return res.status(503).json({ error: 'MELI_NOT_CONNECTED' });
+    }
+
+    const secretState = secretSnap.data() || {};
+    const accessToken = String(secretState.accessToken || '');
+    const expiresAtMs = Date.parse(String(secretState.accessTokenExpiresAt || ''));
+
+    if (!accessToken || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now() + 30_000) {
+      return res.status(503).json({ error: 'MELI_TOKEN_STALE' });
+    }
+
+    const searchUrl = new URL('https://api.mercadolibre.com/products/search');
+    searchUrl.searchParams.set('status', 'active');
+    searchUrl.searchParams.set('site_id', 'MLB');
+    searchUrl.searchParams.set('q', query);
+    searchUrl.searchParams.set('limit', String(limit));
+
+    const providerHeaders = { Authorization: `Bearer ${accessToken}` };
+    const searchResponse = await fetch(searchUrl, { headers: providerHeaders });
+
+    if (!searchResponse.ok) {
+      const providerBody = await searchResponse.text();
+      console.error('[NestAffiliate/MELI] catalog search failed', searchResponse.status, providerBody.slice(0, 240));
+      return res.status(502).json({
+        error: 'MELI_SEARCH_FAILED',
+        providerStatus: searchResponse.status,
+      });
+    }
+
+    const searchPayload = await searchResponse.json() as {
+      results?: Array<{ id?: string; name?: string }>;
+    };
+    const candidates = (searchPayload.results || [])
+      .map((item) => ({ id: String(item.id || ''), name: String(item.name || '') }))
+      .filter((item) => item.id)
+      .slice(0, limit);
+
+    const detailRows = await Promise.all(
+      candidates.map(async (candidate) => {
+        try {
+          const detailResponse = await fetch(
+            `https://api.mercadolibre.com/products/${encodeURIComponent(candidate.id)}`,
+            { headers: providerHeaders },
+          );
+          if (!detailResponse.ok) return null;
+          const detail = await detailResponse.json() as Record<string, any>;
+          return { candidate, detail };
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    const observedAt = new Date().toISOString();
+    const products = detailRows.flatMap((row) => {
+      if (!row) return [];
+      const product = row.detail;
+      const winner = product.buy_box_winner || {};
+      const itemId = String(winner.item_id || '');
+      const permalink = String(product.permalink || '');
+      if (!itemId || !permalink) return [];
+
+      const picture = Array.isArray(product.pictures) ? product.pictures[0] : null;
+      const imageUrl = String(picture?.secure_url || picture?.url || '');
+      const price = typeof winner.price === 'number' ? winner.price : undefined;
+
+      return [{
+        productId: `meli:${itemId}`,
+        organizationId,
+        marketplace: 'MELI',
+        externalId: itemId,
+        catalogProductId: String(product.id || row.candidate.id),
+        title: {
+          value: String(product.name || row.candidate.name || ''),
+          source: 'mercadolivre-catalog-api',
+          observedAt,
+        },
+        url: {
+          value: permalink,
+          source: 'mercadolivre-catalog-api',
+          observedAt,
+        },
+        ...(typeof price === 'number' ? {
+          price: {
+            value: price,
+            source: 'mercadolivre-buy-box',
+            observedAt,
+          },
+        } : {}),
+        currency: {
+          value: String(winner.currency_id || 'BRL'),
+          source: 'mercadolivre-buy-box',
+          observedAt,
+        },
+        availability: {
+          value: 'available',
+          source: 'mercadolivre-catalog-api',
+          observedAt,
+        },
+        ...(imageUrl ? {
+          imageUrl: {
+            value: imageUrl.replace('http://', 'https://'),
+            source: 'mercadolivre-catalog-api',
+            observedAt,
+          },
+        } : {}),
+        assetRights: 'UNKNOWN',
+      }];
+    });
+
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.json({
+      products,
+      query,
+      provider: 'MELI',
+      source: 'mercadolivre-catalog-api',
+      observedAt,
+    });
+  } catch (error) {
+    console.error('[NestAffiliate/MELI] broker search failed', error);
+    return res.status(500).json({ error: 'MELI_BROKER_UNAVAILABLE' });
+  }
+}
+
 async function startServer() {
   try {
     console.log('[SERVER] Bootstrapping...');
@@ -718,6 +930,7 @@ async function startServer() {
   // P0-A Security and Governance Routes
   app.post('/api/v1/support/tickets', express.json({ limit: '32kb' }), createSupportTicket);
   app.get('/api/v1/support/capabilities', getSupportCapabilities);
+  app.get('/api/v1/nestaffiliate/mercadolivre/search', handleNestAffiliateMercadoLivreSearch);
   app.post('/api/v1/support/whatsapp-link', express.json({ limit: '8kb' }), createSupportWhatsAppLink);
   app.post('/api/v1/public/sales/whatsapp-link', express.json({ limit: '8kb' }), createPublicSalesWhatsAppLink);
   app.post('/api/v1/public/analytics/home', express.json({ limit: '2kb' }), async (req, res) => {
