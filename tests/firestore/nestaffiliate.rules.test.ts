@@ -263,3 +263,64 @@ test('sensitive provider account collections are admin-only and backend-managed'
     { organizationId: 'org-a', provider: 'PINTEREST' },
   ));
 });
+
+
+test('market signal snapshots are tenant-scoped, editable and secret-safe', async () => {
+  const editor = env.authenticatedContext('editor-a').firestore();
+  const viewer = env.authenticatedContext('viewer-a').firestore();
+  const otherTenant = env.authenticatedContext('editor-b').firestore();
+  const ref = doc(editor, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/meli-trend-kitchen');
+
+  await assertSucceeds(setDoc(ref, {
+    organizationId: 'org-a',
+    source: 'MELI_TREND_GROWTH',
+    kind: 'DEMAND',
+    strength: 0.94,
+    confidence: 0.96,
+    keyword: 'organizador cozinha',
+    evidence: ['position:1'],
+    observedAt: '2026-10-02T12:00:00.000Z',
+  }));
+
+  await assertSucceeds(
+    getDoc(doc(viewer, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/meli-trend-kitchen')),
+  );
+
+  await assertFails(
+    updateDoc(
+      doc(viewer, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/meli-trend-kitchen'),
+      { strength: 0.1 },
+    ),
+  );
+
+  await assertFails(
+    getDoc(doc(otherTenant, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/meli-trend-kitchen')),
+  );
+
+  await assertFails(setDoc(
+    doc(editor, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/forged'),
+    {
+      organizationId: 'org-b',
+      source: 'MANUAL',
+      kind: 'DEMAND',
+      strength: 0.5,
+      confidence: 0.5,
+      evidence: [],
+      observedAt: '2026-10-02T12:00:00.000Z',
+    },
+  ));
+
+  await assertFails(setDoc(
+    doc(editor, 'organizations/org-a/products/nestaffiliate/marketSignalSnapshots/secret'),
+    {
+      organizationId: 'org-a',
+      source: 'MELI_TREND_GROWTH',
+      kind: 'DEMAND',
+      strength: 0.9,
+      confidence: 0.9,
+      evidence: [],
+      observedAt: '2026-10-02T12:00:00.000Z',
+      accessToken: 'never-store-client-secrets',
+    },
+  ));
+});
