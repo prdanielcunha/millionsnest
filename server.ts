@@ -27,7 +27,6 @@ import {
   getToolGatewayCatalog,
   executeToolAction
 } from './src/server/services/ToolGatewayService.js';
-import { handleMusicScaleLiveAiRequest } from './src/server/services/MusicScaleLiveAiGatewayService.js';
 import {
   getToolApproval,
   requestToolApproval,
@@ -76,6 +75,7 @@ import {
   calculateOccupiedSlots
 } from './src/lib/musicScalePlans.js';
 import { NESTLOCAL_PLANS, normalizeNestLocalPlan } from './src/lib/nestLocalPlans.js';
+import { shouldRepairOrganizationLifecycleStatus } from './src/lib/organizationLifecycle.js';
 
 dotenv.config();
 
@@ -482,8 +482,18 @@ export async function upsertEcosystemSubscription(params: {
      }
   }
 
-  const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((subscription as any).current_period_end * 1000);
-  const trialEnd = (subscription as any).trial_end ? admin.firestore.Timestamp.fromMillis((subscription as any).trial_end * 1000) : null;
+  const subscriptionPeriodEndSeconds = Number(
+    (subscription as any).current_period_end ||
+    (subscription as any).items?.data?.[0]?.current_period_end ||
+    (subscription as any).trial_end ||
+    0
+  );
+  const currentPeriodEnd = subscriptionPeriodEndSeconds > 0
+    ? admin.firestore.Timestamp.fromMillis(subscriptionPeriodEndSeconds * 1000)
+    : null;
+  const trialEnd = (subscription as any).trial_end
+    ? admin.firestore.Timestamp.fromMillis((subscription as any).trial_end * 1000)
+    : null;
   const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(subscription.status);
 
   const priceId = (subscription as any).items?.data?.[0]?.price?.id || null;
@@ -572,10 +582,19 @@ export async function upsertEcosystemSubscription(params: {
       plan: resolvedPlan,
       subscriptionPlan: resolvedPlan,
       subscriptionStatus: subscription.status,
-      status: subscription.status,
       'apps.musicscale.supportTier': (planDetails.features as any)?.supportTier || 'basic',
       lastStripeEventTs: eventCreatedTs,
     });
+  }
+
+  // Tenant lifecycle is independent from billing lifecycle. Older versions
+  // accidentally wrote Stripe values such as "trialing" into organization.status,
+  // which disabled invitations/bootstrap even though the customer had paid.
+  // Heal only missing/known billing-derived values; never reactivate an
+  // administratively archived/inactive/suspended/disabled organization.
+  const existingOrganizationStatus = orgDoc.exists ? orgDoc.data()?.status : null;
+  if (!orgDoc.exists || shouldRepairOrganizationLifecycleStatus(existingOrganizationStatus)) {
+    orgPayload.status = 'active';
   }
   
   if (!orgDoc.exists) {
@@ -934,11 +953,6 @@ async function startServer() {
   
   // P0-A Security and Governance Routes
   app.post('/api/v1/support/tickets', express.json({ limit: '32kb' }), createSupportTicket);
-  app.post(
-    '/api/v1/organizations/:organizationId/musicscale-live/ai',
-    express.json({ limit: '64kb' }),
-    (req, res) => handleMusicScaleLiveAiRequest(req, res)
-  );
   app.get('/api/v1/support/capabilities', getSupportCapabilities);
   app.get('/api/v1/nestaffiliate/mercadolivre/search', handleNestAffiliateMercadoLivreSearch);
   app.post('/api/v1/support/whatsapp-link', express.json({ limit: '8kb' }), createSupportWhatsAppLink);
@@ -1130,6 +1144,8 @@ async function startServer() {
             id: document.id,
             organizationId,
             organizationName: data.organizationName || orgData.name || '',
+            inviteMode: data.inviteMode === 'link' ? 'link' : 'email',
+            identityBound: data.identityBound !== false,
             email: data.emailNormalized || data.email || '',
             role: data.role || 'member',
             status: 'pending',
@@ -1307,10 +1323,18 @@ async function startServer() {
       if (
         inviteData.organizationId !== organizationId ||
         inviteData.status !== 'pending' ||
+        inviteData.inviteMode === 'link' ||
+        inviteData.identityBound === false ||
         typeof inviteData.emailNormalized !== 'string' ||
         typeof inviteData.tokenHash !== 'string'
       ) {
-        return res.status(409).json({ success: false, reasonCode: 'INVITATION_STATE_INVALID' });
+        return res.status(409).json({
+          success: false,
+          reasonCode:
+            inviteData.inviteMode === 'link' || inviteData.identityBound === false
+              ? 'INVITATION_EMAIL_NOT_BOUND'
+              : 'INVITATION_STATE_INVALID'
+        });
       }
 
       const expiresAtMs = normalizeInvitationTemporalMs(inviteData.expiresAt);
@@ -1472,17 +1496,23 @@ async function startServer() {
           orgData.ownerUserId === decoded.uid ||
           orgData.owner_user_id === decoded.uid;
 
+        const isShareableLinkInvite =
+          inviteData.inviteMode === 'link' || inviteData.identityBound === false;
+
         if (
           inviteData.organizationId !== organizationId ||
           inviteData.status !== 'pending' ||
-          typeof inviteData.emailNormalized !== 'string' ||
-          !canInviteOrganizationRole(
-            {
-              systemRole: actorData.systemRole,
-              organizationRole: actorIsOwner ? 'owner' : membershipRole
-            },
-            inviteData.role
-          ) && !isGlobalPrivilegedRole(actorData.systemRole)
+          (!isShareableLinkInvite && typeof inviteData.emailNormalized !== 'string') ||
+          (
+            !canInviteOrganizationRole(
+              {
+                systemRole: actorData.systemRole,
+                organizationRole: actorIsOwner ? 'owner' : membershipRole
+              },
+              inviteData.role
+            ) &&
+            !isGlobalPrivilegedRole(actorData.systemRole)
+          )
         ) {
           return { status: 403, payload: { success: false, reasonCode: 'PERMISSION_DENIED' } };
         }
@@ -1516,10 +1546,10 @@ async function startServer() {
           subscription: {
             exists: subSnap.exists,
             organizationId: subData.organizationId,
-            app: subData.app,
-            status: subData.status,
-            plan: subData.plan,
-            limitsUsers: subData.limits?.users
+            app: subData.apps?.musicscale?.app ?? subData.app,
+            status: subData.apps?.musicscale?.status ?? subData.status,
+            plan: subData.apps?.musicscale?.plan ?? subData.plan,
+            limitsUsers: subData.apps?.musicscale?.limits?.users ?? subData.limits?.users
           },
           organizationApp: {
             exists: !!orgData.apps?.musicscale,
@@ -1547,7 +1577,7 @@ async function startServer() {
         }
 
         const collisionQuery = await transaction.get(
-          dbInstance.collectionGroup('invites').where('tokenHash', '==', tokenResult.material.tokenHash)
+          orgRef.collection('invites').where('tokenHash', '==', tokenResult.material.tokenHash).limit(1)
         );
         if (!collisionQuery.empty) {
           return { status: 500, payload: { success: false, reasonCode: 'TOKEN_STATE_INCONSISTENT' } };
@@ -1563,12 +1593,18 @@ async function startServer() {
         }, { merge: true });
 
         transaction.set(newInviteRef, {
-          schemaVersion: 1,
+          schemaVersion: 2,
           id: newInviteRef.id,
           organizationId,
           organizationName: orgData.name || inviteData.organizationName,
-          email: inviteData.emailNormalized,
-          emailNormalized: inviteData.emailNormalized,
+          inviteMode: isShareableLinkInvite ? 'link' : 'email',
+          identityBound: !isShareableLinkInvite,
+          ...(!isShareableLinkInvite
+            ? {
+                email: inviteData.emailNormalized,
+                emailNormalized: inviteData.emailNormalized
+              }
+            : {}),
           role: inviteData.role,
           status: 'pending',
           tokenHash: tokenResult.material.tokenHash,
@@ -1602,7 +1638,9 @@ async function startServer() {
               id: newInviteRef.id,
               organizationId,
               organizationName: orgData.name || inviteData.organizationName,
-              email: inviteData.emailNormalized,
+              inviteMode: isShareableLinkInvite ? 'link' : 'email',
+              identityBound: !isShareableLinkInvite,
+              ...(!isShareableLinkInvite ? { email: inviteData.emailNormalized } : {}),
               role: inviteData.role,
               status: 'pending',
               expiresAtMs: nowMs + INVITATION_TTL_MS
@@ -5879,6 +5917,267 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
+  app.post('/api/ecosystem/nestlocal/handoff/issue', express.json(), async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Vary', 'Origin');
+
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || Array.isArray(authHeader) || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({
+          error: 'Unauthorized: Missing or invalid authorization header.',
+          code: 'UNAUTHORIZED',
+          retryable: false,
+        });
+      }
+
+      let decoded: any;
+      try {
+        decoded = await admin.auth().verifyIdToken(authHeader.slice(7));
+      } catch {
+        return res.status(401).json({
+          error: 'Unauthorized: Invalid ID token.',
+          code: 'UNAUTHORIZED',
+          retryable: false,
+        });
+      }
+
+      const uid = typeof decoded?.uid === 'string' ? decoded.uid.trim() : '';
+      if (!uid) {
+        return res.status(401).json({
+          error: 'Unauthorized: Invalid ID token payload.',
+          code: 'UNAUTHORIZED',
+          retryable: false,
+        });
+      }
+
+      const body = req.body && typeof req.body === 'object' ? req.body as any : {};
+      const organizationId = typeof body.organizationId === 'string' ? body.organizationId.trim() : '';
+      const supportModeRequested = body.supportMode === true;
+
+      if (
+        !organizationId ||
+        organizationId.length > 256 ||
+        organizationId === '.' ||
+        organizationId === '..' ||
+        organizationId.includes('/') ||
+        organizationId.includes('\\') ||
+        /[\x00-\x1F\x7F]/.test(organizationId)
+      ) {
+        return res.status(400).json({
+          error: 'Invalid request: invalid organizationId.',
+          code: 'INVALID_REQUEST',
+          retryable: false,
+        });
+      }
+
+      if (body.supportMode !== undefined && body.supportMode !== null && typeof body.supportMode !== 'boolean') {
+        return res.status(400).json({
+          error: 'Invalid request: supportMode must be a boolean.',
+          code: 'INVALID_REQUEST',
+          retryable: false,
+        });
+      }
+
+      const databaseInst = getDb();
+      if (!databaseInst) {
+        return res.status(503).json({
+          error: 'Service Unavailable: Database not initialized.',
+          code: 'SERVICE_UNAVAILABLE',
+          retryable: true,
+        });
+      }
+
+      const originDecision = validateHandoffOrigin(req.headers.origin);
+      if (!originDecision.allowed) {
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.origin_rejected',
+          appId: 'nestlocal',
+          organizationId,
+          uid,
+          protocol: 'one_time_code',
+          reason: 'ORIGIN_NOT_ALLOWED',
+        }).catch(() => undefined);
+
+        return res.status(403).json({
+          error: 'Forbidden: Request origin is not allowed.',
+          code: 'ORIGIN_NOT_ALLOWED',
+          retryable: false,
+        });
+      }
+
+      if (originDecision.origin) {
+        res.setHeader('Access-Control-Allow-Origin', originDecision.origin);
+      }
+
+      let rateLimit;
+      try {
+        rateLimit = await enforceHandoffRateLimit({
+          db: databaseInst,
+          scope: 'ecosystem_handoff_issue',
+          uid,
+          appId: 'nestlocal',
+          organizationId,
+          nowMs: Date.now(),
+        });
+      } catch {
+        return res.status(503).json({
+          error: 'Service Unavailable: Handoff protection unavailable.',
+          code: 'HANDOFF_PROTECTION_UNAVAILABLE',
+          retryable: true,
+        });
+      }
+
+      if (!rateLimit.allowed) {
+        res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds));
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.rate_limited',
+          appId: 'nestlocal',
+          organizationId,
+          uid,
+          protocol: 'one_time_code',
+          reason: 'RATE_LIMITED',
+        }).catch(() => undefined);
+
+        return res.status(429).json({
+          error: 'Too many handoff requests.',
+          code: 'RATE_LIMITED',
+          retryable: true,
+          retryAfterSeconds: rateLimit.retryAfterSeconds,
+        });
+      }
+
+      const access = await resolveEcosystemAppAccess({
+        uid,
+        organizationId,
+        appId: 'nestlocal',
+        db: databaseInst,
+      });
+
+      if (!access || access.accessible !== true) {
+        const reason = access?.denialReason || 'UNKNOWN_REASON';
+        const retryable = reason === 'SUBSCRIPTION_NOT_FOUND' || reason === 'ENTITLEMENT_NOT_CONFIGURED';
+
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.denied',
+          appId: 'nestlocal',
+          organizationId,
+          uid,
+          accessSource: access?.accessSource || 'denied',
+          protocol: 'one_time_code',
+          reason,
+        }).catch(() => undefined);
+
+        return res.status(403).json({
+          error: 'Forbidden: Access denied to NestLocal.',
+          code: 'ECOSYSTEM_ACCESS_DENIED',
+          reason,
+          retryable,
+        });
+      }
+
+      if (supportModeRequested && !access.isGlobalAccess) {
+        return res.status(403).json({
+          error: 'Forbidden: Support mode is not allowed.',
+          code: 'SUPPORT_MODE_FORBIDDEN',
+          reason: 'SUPPORT_MODE_FORBIDDEN',
+          retryable: false,
+        });
+      }
+
+      const verifiedSupportMode = supportModeRequested && access.isGlobalAccess;
+      const sessionVersion = await readCanonicalEcosystemSessionVersion(databaseInst, uid);
+      const ttlMs = 90_000;
+
+      let code = '';
+      let codeHash = '';
+      let issued = false;
+
+      for (let attempt = 0; attempt < 3 && !issued; attempt++) {
+        code = crypto.randomBytes(32).toString('base64url');
+        codeHash = crypto.createHash('sha256').update(code).digest('hex');
+
+        try {
+          await databaseInst.collection('ecosystemHandoffs').doc(codeHash).create({
+            version: 1,
+            appId: 'nestlocal',
+            uid,
+            organizationId,
+            status: 'issued',
+            accessSource: access.accessSource,
+            supportMode: verifiedSupportMode,
+            sessionVersion,
+            issuedAt: admin.firestore.Timestamp.now(),
+            expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + ttlMs),
+            consumedAt: null,
+          });
+          issued = true;
+        } catch (error: any) {
+          if (error?.code === 6) continue;
+          throw error;
+        }
+      }
+
+      if (!issued) {
+        return res.status(500).json({
+          error: 'Internal Server Error: Failed to issue handoff code.',
+          code: 'HANDOFF_ISSUE_FAILED',
+          retryable: true,
+        });
+      }
+
+      try {
+        await writeHandoffAuditEvent({
+          db: databaseInst,
+          eventType: 'handoff.issued',
+          appId: 'nestlocal',
+          organizationId,
+          uid,
+          accessSource: access.accessSource,
+          protocol: 'one_time_code',
+          metadata: {
+            handoffVersion: 1,
+            ttlSeconds: 90,
+            supportMode: verifiedSupportMode,
+          },
+        });
+      } catch {
+        await databaseInst.collection('ecosystemHandoffs').doc(codeHash).set({
+          status: 'revoked',
+          revokedReason: 'AUDIT_UNAVAILABLE',
+          revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true }).catch(() => undefined);
+
+        return res.status(503).json({
+          error: 'Service Unavailable: Handoff audit unavailable.',
+          code: 'HANDOFF_AUDIT_UNAVAILABLE',
+          retryable: true,
+        });
+      }
+
+      return res.status(200).json({
+        code,
+        expiresInSeconds: Math.floor(ttlMs / 1000),
+      });
+    } catch (error: any) {
+      console.error('[NESTLOCAL_HANDOFF_ISSUE_ERROR]', {
+        code: error?.code || 'UNKNOWN',
+        message: error?.message || 'unknown',
+      });
+
+      return res.status(500).json({
+        error: 'Internal Server Error',
+        code: 'HANDOFF_ISSUE_FAILED',
+        retryable: true,
+      });
+    }
+  });
+
   app.post('/api/v1/auth/ecosystem-session/revoke', express.json(), async (req, res) => {
     return revokeCurrentEcosystemSession(req, res, {
       verifyIdToken: (token) => admin.auth().verifyIdToken(token),
@@ -5953,7 +6252,12 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       const uid = decodedToken.uid;
       
-      const { organizationId, sessionId } = req.body;
+      const { organizationId, sessionId, recoverOnly = false, app: requestedAppRaw } = req.body || {};
+      const requestedApp: 'musicscale' | 'nestlocal' =
+        requestedAppRaw === 'nestlocal' ? 'nestlocal' : 'musicscale';
+      if (typeof recoverOnly !== 'boolean') {
+          return res.status(400).json({ error: 'Invalid recoverOnly flag' });
+      }
       if (!organizationId) {
           return res.status(400).json({ error: 'Missing organizationId' });
       }
@@ -5967,18 +6271,20 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const syncUserDoc = await db.collection('users').doc(uid).get();
       const syncUserEmail = syncUserDoc.data()?.email;
       const syncSystemRole = syncUserDoc.data()?.systemRole || 'user';
-      let isMember = false;
-      let isSystemAdmin = canManageTenantBilling(syncSystemRole);
-      
-      if (orgContext.organizations) {
-         const orgItem = orgContext.organizations.find((o: any) => o.id === organizationId);
-         if (orgItem) {
-             isMember = true;
-         }
-      }
-      
-      if (!isMember && !isSystemAdmin) {
-         return res.status(403).json({ error: 'Você não tem permissão nesta organização.' });
+      const isSystemAdmin = canManageTenantBilling(syncSystemRole);
+      const syncOrganization = orgContext.organizations?.find((o: any) => o.id === organizationId) || null;
+      const syncMembership = orgContext.memberships?.find((m: any) => m.organizationId === organizationId) || syncOrganization?.membership || null;
+      const syncRole = String(syncMembership?.role || syncMembership?.organizationRole || syncOrganization?.userRole || '').toLowerCase();
+      const isOwner = orgContext.ownedOrganizations?.some((o: any) => o.id === organizationId) === true;
+      const canSyncBilling =
+        isSystemAdmin ||
+        isOwner ||
+        syncRole === 'owner' ||
+        syncRole === 'admin' ||
+        syncMembership?.permissions?.['organization.billing.manage'] === true;
+
+      if (!canSyncBilling) {
+         return res.status(403).json({ error: 'Você não tem permissão para sincronizar o faturamento desta organização.' });
       }
 
       let syncBillingEmail = syncUserEmail;
@@ -6009,8 +6315,12 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       // Check current subscription in Firestore
       const subDocBase = await db.collection('subscriptions').doc(organizationId).get();
       const subData = subDocBase.data();
-      let customerId = subData?.stripeCustomerId;
-      let knownSubId = subData?.stripeSubscriptionId;
+      let customerId =
+        subData?.apps?.[requestedApp]?.stripeCustomerId ||
+        subData?.stripeCustomerId;
+      let knownSubId =
+        subData?.apps?.[requestedApp]?.stripeSubscriptionId ||
+        (requestedApp === 'musicscale' ? subData?.stripeSubscriptionId : null);
 
       let allStripeSubs: Stripe.Subscription[] = [];
 
@@ -6025,10 +6335,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             const sessionApp = session.metadata?.app;
             const sessionUserId = session.metadata?.userId || session.metadata?.uid || session.client_reference_id;
             
-            if (sessionOrgId !== organizationId || sessionApp !== 'musicscale' || sessionUserId !== uid) {
+            if (sessionOrgId !== organizationId || sessionApp !== requestedApp || sessionUserId !== uid) {
                  console.error('[SYNC_SESSION_VALIDATION_FAILED]', {
                      expectedOrg: organizationId,
-                     expectedApp: 'musicscale'
+                     expectedApp: requestedApp
                  });
                  return res.status(403).json({ error: 'Sessão de checkout inválida ou não pertence a esta organização/usuário.' });
             }
@@ -6105,7 +6415,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         
         // Filter by canonical strong link
         allStripeSubs = potentialSubs.filter(s => {
-          const hasOrgIdAndApp = s.metadata?.organizationId === organizationId && s.metadata?.app === 'musicscale';
+          const hasOrgIdAndApp = s.metadata?.organizationId === organizationId && s.metadata?.app === requestedApp;
           const isHistorical = s.id === knownSubId;
           const isValidSession = validatedSessionSubId !== null && s.id === validatedSessionSubId;
           
@@ -6130,7 +6440,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       // Final Filter to only matching subscriptions
       const matchingSubs = allStripeSubs.filter(s => {
-          const hasOrgIdAndApp = s.metadata?.organizationId === organizationId && s.metadata?.app === 'musicscale';
+          const hasOrgIdAndApp = s.metadata?.organizationId === organizationId && s.metadata?.app === requestedApp;
           const isHistorical = s.id === knownSubId;
           const isValidSession = validatedSessionSubId !== null && s.id === validatedSessionSubId;
           
@@ -6138,6 +6448,35 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       });
 
       if (matchingSubs.length === 0) {
+        if (recoverOnly) {
+          return res.json({
+            ok: true,
+            organizationId,
+            accessAllowed: false,
+            subscriptionStatus:
+              subData?.apps?.[requestedApp]?.status ||
+              (requestedApp === 'musicscale' ? subData?.status : null) ||
+              'unknown',
+            reason: 'no_subscription_found',
+            currentPeriodEnd: null,
+            repaired: false,
+            retryable: true
+          });
+        }
+
+        if (requestedApp !== 'musicscale') {
+          return res.json({
+            ok: true,
+            organizationId,
+            app: requestedApp,
+            accessAllowed: false,
+            subscriptionStatus: 'none',
+            reason: 'no_subscription_found',
+            currentPeriodEnd: null,
+            repaired: false
+          });
+        }
+
         const batch = db.batch();
         batch.set(db.collection('subscriptions').doc(organizationId), {
           status: 'none',
@@ -6214,7 +6553,59 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const endMs = (sub as any).current_period_end ? (sub as any).current_period_end * 1000 : 0;
       const hasAccess = ['active', 'trialing', 'trial', 'pro'].includes(sub.status) || (sub.status === 'canceled' && Date.now() < endMs);
 
-      const currentPeriodEnd = admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000);
+      if (sub.status === 'active' || sub.status === 'trialing') {
+        const canonicalRepair = await upsertEcosystemSubscription({
+          userId: uid,
+          orgId: organizationId,
+          subscription: sub,
+          eventCreatedTs: Math.floor(Date.now() / 1000),
+          event_type: recoverOnly ? 'dashboard_recover_only' : 'billing_sync',
+          userEmail: syncBillingEmail || null
+        });
+
+        return res.json({
+          ok: true,
+          organizationId,
+          accessAllowed: true,
+          subscriptionStatus: sub.status,
+          reason: 'access_granted',
+          currentPeriodEnd: (sub as any).current_period_end
+            ? (sub as any).current_period_end * 1000
+            : ((sub as any).trial_end ? (sub as any).trial_end * 1000 : null),
+          repaired: canonicalRepair.skipped !== true,
+          canonical: true,
+          app: requestedApp
+        });
+      }
+
+      if (requestedApp === 'nestlocal') {
+        const canonicalRepair = await upsertEcosystemSubscription({
+          userId: uid,
+          orgId: organizationId,
+          subscription: sub,
+          eventCreatedTs: Math.floor(Date.now() / 1000),
+          event_type: recoverOnly ? 'dashboard_recover_only' : 'billing_sync',
+          userEmail: syncBillingEmail || null
+        });
+
+        return res.json({
+          ok: true,
+          organizationId,
+          app: requestedApp,
+          accessAllowed: hasAccess,
+          subscriptionStatus: sub.status,
+          reason: hasAccess ? 'access_granted' : 'subscription_inactive',
+          currentPeriodEnd: (sub as any).current_period_end
+            ? (sub as any).current_period_end * 1000
+            : null,
+          repaired: canonicalRepair.skipped !== true,
+          canonical: true
+        });
+      }
+
+      const currentPeriodEnd = (sub as any).current_period_end
+        ? admin.firestore.Timestamp.fromMillis((sub as any).current_period_end * 1000)
+        : null;
       const trialEnd = sub.trial_end ? admin.firestore.Timestamp.fromMillis(sub.trial_end * 1000) : null;
       
       const priceId = sub.items?.data?.[0]?.price?.id || null;
@@ -6292,6 +6683,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       return res.json({ 
          ok: true, 
          organizationId,
+         app: requestedApp,
          accessAllowed: hasAccess,
          subscriptionStatus: sub.status,
          reason: hasAccess ? 'access_granted' : 'subscription_inactive',
@@ -8110,13 +8502,42 @@ async function autoRepairSingleOrganizationUser(uid: string) {
              event_type: 'checkout_session_confirm'
           });
 
+          const confirmedApp =
+            session.metadata?.app === 'nestlocal' || session.metadata?.appId === 'nestlocal'
+              ? 'nestlocal'
+              : 'musicscale';
+
+          const accessDecision = await resolveEcosystemAppAccess({
+            uid: userId,
+            organizationId: orgId,
+            appId: confirmedApp,
+            db
+          });
+
+          if (!accessDecision.accessible) {
+            console.warn('[Checkout Confirm] Subscription exists but purchased app access is not ready yet.', {
+              organizationId: orgId,
+              app: confirmedApp,
+              denialReason: accessDecision.denialReason || 'UNKNOWN'
+            });
+            return res.json({
+              ok: true,
+              action: 'provisioning',
+              subscriptionStatus: sub.status,
+              retryAfterMs: 900,
+              organizationId: orgId,
+              app: confirmedApp,
+              reason: accessDecision.denialReason || 'ACCESS_NOT_READY'
+            });
+          }
+
           return res.json({
             ok: true,
             action: 'subscription_ready',
             subscriptionStatus: sub.status,
             hasAccess: true,
             organizationId: orgId,
-            app: session.metadata?.app || session.metadata?.appId || 'musicscale'
+            app: confirmedApp
           });
         } else {
           return res.json({
