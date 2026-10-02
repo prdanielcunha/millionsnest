@@ -22,6 +22,8 @@ env:
   PROVIDER_ID: github
   NESTAFFILIATE_REPOSITORY: prdanielcunha/NestAffiliate
   WEB_DEPLOYER: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+  SIGNAL_BROKER_ID: mn-nestaffiliate-signals
+  SIGNAL_BROKER: mn-nestaffiliate-signals@millionsnest.iam.gserviceaccount.com
   FIREBASE_SITE: mn-nestaffiliate-555464791734
   LIVE_DOMAIN: nestaffiliate.millionsnest.com
 
@@ -71,6 +73,35 @@ jobs:
             --member="$MEMBER" \
             --quiet >/tmp/nestaffiliate-binding.json
           echo "NESTAFFILIATE_WEB_DEPLOYER_BINDING_READY=true"
+
+      - name: Provision least-privilege NestAffiliate signal broker
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gcloud iam service-accounts describe "$SIGNAL_BROKER" --project="$PROJECT_ID" >/dev/null 2>&1; then
+            echo "NESTAFFILIATE_SIGNAL_BROKER_EXISTS=true"
+          else
+            gcloud iam service-accounts create "$SIGNAL_BROKER_ID" \
+              --project="$PROJECT_ID" \
+              --display-name="NestAffiliate Signal Broker"
+            echo "NESTAFFILIATE_SIGNAL_BROKER_CREATED=true"
+          fi
+
+          gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member="serviceAccount:$SIGNAL_BROKER" \
+            --role="roles/datastore.user" \
+            --condition=None \
+            --quiet >/tmp/nestaffiliate-signal-broker-role.json
+
+          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$NESTAFFILIATE_REPOSITORY"
+          gcloud iam service-accounts add-iam-policy-binding "$SIGNAL_BROKER" \
+            --project="$PROJECT_ID" \
+            --role="roles/iam.workloadIdentityUser" \
+            --member="$MEMBER" \
+            --quiet >/tmp/nestaffiliate-signal-broker-wif.json
+
+          echo "NESTAFFILIATE_SIGNAL_BROKER_READY=true"
 
       - name: Install pinned Firebase CLI
         run: npm install -g firebase-tools@15.26.0
@@ -221,5 +252,19 @@ jobs:
             --project="$PROJECT_ID" \
             --format='value(attributeCondition)')"
           grep -F "$NESTAFFILIATE_REPOSITORY" <<<"$CONDITION" >/dev/null
+
+          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$NESTAFFILIATE_REPOSITORY"
+          gcloud iam service-accounts get-iam-policy "$SIGNAL_BROKER" \
+            --project="$PROJECT_ID" \
+            --format=json >/tmp/nestaffiliate-signal-broker-policy.json
+          jq -e --arg member "$MEMBER" \
+            '.bindings[] | select(.role == "roles/iam.workloadIdentityUser") | .members[] | select(. == $member)' \
+            /tmp/nestaffiliate-signal-broker-policy.json >/dev/null
+
+          gcloud projects get-iam-policy "$PROJECT_ID" \
+            --flatten="bindings[].members" \
+            --filter="bindings.role:roles/datastore.user AND bindings.members:serviceAccount:$SIGNAL_BROKER" \
+            --format='value(bindings.role)' | grep -F 'roles/datastore.user' >/dev/null
+
           firebase hosting:sites:list --project "$PROJECT_ID" | grep -F "$FIREBASE_SITE" >/dev/null
           echo "NESTAFFILIATE_FIREBASE_BOOTSTRAP_OK=true"
