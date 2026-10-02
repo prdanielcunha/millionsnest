@@ -30,6 +30,8 @@ export type InvitationState = {
   exists: boolean;
   organizationId?: string;
   status?: string;
+  inviteMode?: 'email' | 'link';
+  identityBound?: boolean;
   email?: string;
   emailNormalized?: string;
   role?: string;
@@ -140,17 +142,22 @@ export function planInvitationAcceptance(input: InvitationAcceptanceInput, nowMs
     return { success: false, reasonCode: 'INVITE_EXPIRED' };
   }
 
-  const invE1 = normalizeInvitationEmail(inv.email);
-  const invE2 = normalizeInvitationEmail(inv.emailNormalized);
-  if (!invE1 && !invE2) {
-    return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
-  }
-  if (invE1 && invE2 && invE1 !== invE2) {
-    return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
-  }
-  const targetEmail = invE1 || invE2;
-  if (targetEmail !== authEmail) {
-    return { success: false, reasonCode: 'INVITE_IDENTITY_MISMATCH' };
+  const isShareableLinkInvite =
+    inv.inviteMode === 'link' || inv.identityBound === false;
+
+  if (!isShareableLinkInvite) {
+    const invE1 = normalizeInvitationEmail(inv.email);
+    const invE2 = normalizeInvitationEmail(inv.emailNormalized);
+    if (!invE1 && !invE2) {
+      return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
+    }
+    if (invE1 && invE2 && invE1 !== invE2) {
+      return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
+    }
+    const targetEmail = invE1 || invE2;
+    if (targetEmail !== authEmail) {
+      return { success: false, reasonCode: 'INVITE_IDENTITY_MISMATCH' };
+    }
   }
 
   const inviteRole = inv.role;
