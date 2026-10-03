@@ -636,11 +636,6 @@ export async function acceptInvitation(
       }
 
       if (planResult.action === 'ALREADY_MEMBER') {
-         t.set(memRef, {
-           ...authenticatedIdentity,
-           updatedAt: FieldValue.serverTimestamp()
-         }, { merge: true });
-
          t.set(userRef, {
            ...authenticatedIdentity,
            organizations: FieldValue.arrayUnion(orgId),
