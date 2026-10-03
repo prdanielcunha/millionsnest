@@ -615,6 +615,19 @@ export async function acceptInvitation(
       }
 
       if (planResult.action === 'ALREADY_MEMBER') {
+         const existingMemberData = memSnap.data() || {};
+         const existingMemberAppAccess = buildInvitationMemberAppAccess(
+           existingMemberData.appAccess,
+           invitationTarget,
+           existingMemberData.role || existingMemberData.organizationRole || planResult.membershipRole
+         );
+         if (existingMemberAppAccess) {
+           t.set(memRef, {
+             appAccess: existingMemberAppAccess,
+             updatedAt: FieldValue.serverTimestamp()
+           }, { merge: true });
+         }
+
          t.set(userRef, {
            organizations: FieldValue.arrayUnion(orgId),
            activeOrganizationId: orgId,
@@ -632,7 +645,13 @@ export async function acceptInvitation(
              membershipRole: planResult.membershipRole,
              alreadyMember: true,
              legacyTokenMigrated: false,
-             reasonCode: 'ALREADY_MEMBER'
+             reasonCode: 'ALREADY_MEMBER',
+             ...(invitationTarget
+               ? {
+                   targetAppId: invitationTarget.appId,
+                   targetPath: invitationTarget.destinationPath
+                 }
+               : {})
            }
          };
       }
@@ -651,6 +670,12 @@ export async function acceptInvitation(
       const userData = userSnap.data() || {};
       const newPrimary = (!userData.primaryOrganizationId || typeof userData.primaryOrganizationId !== 'string' || userData.primaryOrganizationId.trim() === '') ? orgId : userData.primaryOrganizationId;
 
+      const memberAppAccess = buildInvitationMemberAppAccess(
+        memSnap.data()?.appAccess,
+        invitationTarget,
+        planResult.membershipRole
+      );
+
       t.set(memRef, {
         uid: uid,
         emailNormalized: normalizedAuthenticatedEmail,
@@ -658,6 +683,7 @@ export async function acceptInvitation(
         role: planResult.membershipRole,
         organizationRole: planResult.membershipRole,
         status: 'active',
+        ...(memberAppAccess ? { appAccess: memberAppAccess } : {}),
         createdAt: FieldValue.serverTimestamp(),
         joinedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
@@ -711,6 +737,8 @@ export async function acceptInvitation(
         actorUid: uid,
         invitationId: inviteDoc.id,
         membershipRole: planResult.membershipRole,
+        targetAppId: invitationTarget?.appId || null,
+        targetPath: invitationTarget?.destinationPath || null,
         previousUseCount: previousUseCount,
         newUseCount: nextUseCount,
         timestamp: FieldValue.serverTimestamp()
@@ -726,7 +754,13 @@ export async function acceptInvitation(
           membershipRole: planResult.membershipRole,
           alreadyMember: false,
           legacyTokenMigrated: false,
-          reasonCode: 'INVITATION_CAN_BE_ACCEPTED'
+          reasonCode: 'INVITATION_CAN_BE_ACCEPTED',
+          ...(invitationTarget
+            ? {
+                targetAppId: invitationTarget.appId,
+                targetPath: invitationTarget.destinationPath
+              }
+            : {})
         }
       };
     });
