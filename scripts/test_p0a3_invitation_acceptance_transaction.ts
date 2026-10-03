@@ -474,5 +474,11 @@ assertCondition('90. o ramo que preserva capacityResult.reasonCode em falha ocor
 const amBranch = endpointContent.split("planResult.action === 'ALREADY_MEMBER'")[1].split("CREATE_MEMBERSHIP")[0];
 assertCondition('91. ramo ALREADY_MEMBER não altera membership, invitation, audit ou legacy', amBranch.includes('t.set(userRef') && !amBranch.includes('t.set(memRef') && !amBranch.includes('t.update(inviteDoc.ref') && !amBranch.includes('t.set(auditRef') && !amBranch.includes('t.set(legacyRef'));
 
+assertCondition('92. identidade autenticada inclui displayName quando disponível', endpointContent.includes('authenticatedDisplayName'));
+assertCondition('93. identidade autenticada inclui photoURL quando disponível', endpointContent.includes('authenticatedPhotoURL'));
+assertCondition('94. CREATE_MEMBERSHIP persiste identidade canônica na membership', endpointContent.includes('...authenticatedIdentity') && createMembershipWriteIdx !== -1);
+assertCondition('95. perfil do usuário recebe identidade autenticada no aceite', endpointContent.includes('t.set(userRef') && endpointContent.includes('...authenticatedIdentity'));
+assertCondition('96. bootstrap de tenant cura identidade de perfis existentes', serviceContent.includes('bootstrapIdentityUpdates'));
+
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
