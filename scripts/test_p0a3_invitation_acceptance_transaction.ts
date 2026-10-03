@@ -88,23 +88,29 @@ const r8 = resolveCanonicalInvitationCapacity({
 });
 assertCondition('8. assinatura canceled falha unavailable', !r8.success && (r8.success === false ? r8.reasonCode : '') === 'MEMBER_LIMIT_UNAVAILABLE');
 
-// 9. app canceled falha unavailable;
+// 9. cache organizacional canceled não bloqueia assinatura canônica ativa;
 const r9 = resolveCanonicalInvitationCapacity({
   organizationId: 'org1',
   subscription: { exists: true, organizationId: 'org1', app: 'musicscale', status: 'active', plan: 'starter', limitsUsers: 10 },
   organizationApp: { exists: true, status: 'canceled', plan: 'starter', limitsUsers: 10 },
   memberStatuses: []
 });
-assertCondition('9. app canceled falha unavailable', !r9.success && (r9.success === false ? r9.reasonCode : '') === 'MEMBER_LIMIT_UNAVAILABLE');
+assertCondition(
+  '9. cache organizacional canceled não bloqueia assinatura canônica ativa',
+  r9.success && r9.capacity.mode === 'limited' && r9.capacity.maxMembers === 10 && r9.plan === 'starter'
+);
 
-// 10. planos divergentes falham unavailable;
+// 10. plano divergente no cache não sobrepõe assinatura canônica;
 const r10 = resolveCanonicalInvitationCapacity({
   organizationId: 'org1',
   subscription: { exists: true, organizationId: 'org1', app: 'musicscale', status: 'active', plan: 'starter', limitsUsers: 10 },
-  organizationApp: { exists: true, status: 'active', plan: 'advanced', limitsUsers: 10 },
+  organizationApp: { exists: true, status: 'active', plan: 'advanced', limitsUsers: 20 },
   memberStatuses: []
 });
-assertCondition('10. planos divergentes falham unavailable', !r10.success && (r10.success === false ? r10.reasonCode : '') === 'MEMBER_LIMIT_UNAVAILABLE');
+assertCondition(
+  '10. plano divergente no cache não sobrepõe assinatura canônica',
+  r10.success && r10.capacity.mode === 'limited' && r10.capacity.maxMembers === 10 && r10.plan === 'starter'
+);
 
 // 11. plano desconhecido falha invalid;
 const r11 = resolveCanonicalInvitationCapacity({
