@@ -72,7 +72,9 @@ export async function createInvitation(
       const userRef = db.collection('users').doc(uid);
       const userSnap = await t.get(userRef);
       const userData = userSnap.data() || {};
-      const globalRole = userData.systemRole;
+      const globalRole = typeof userData.systemRole === 'string'
+        ? userData.systemRole.trim().toLowerCase()
+        : undefined;
       
       const isGlobalAdmin = canManageTenantMembers(globalRole);
       
@@ -173,38 +175,54 @@ export async function createInvitation(
         }
       }
       
-      // Use existing capacity resolver
-      const capacityResult = resolveCanonicalInvitationCapacity({
-        organizationId,
-        subscription: {
-          exists: subSnap.exists,
-          organizationId: subData.organizationId,
-          app: subData.apps?.musicscale?.app ?? subData.app,
-          status: subData.apps?.musicscale?.status ?? subData.status,
-          plan: subData.apps?.musicscale?.plan ?? subData.plan,
-          limitsUsers: subData.apps?.musicscale?.limits?.users ?? subData.limits?.users
-        },
-        organizationApp: {
-          exists: !!orgData.apps?.musicscale,
-          status: orgData.apps?.musicscale?.status,
-          plan: orgData.apps?.musicscale?.plan,
-          limitsUsers: orgData.apps?.musicscale?.limits?.users
-        },
-        memberStatuses
-      });
-      
-      let capacityInput: InvitationCreationInput['capacity'] = { resolved: false };
-      if (capacityResult.success) {
-         if (capacityResult.capacity.mode === 'unlimited') {
-            capacityInput = { resolved: true, mode: 'unlimited' };
-         } else if (capacityResult.capacity.mode === 'limited') {
-            capacityInput = { 
-              resolved: true, 
-              mode: 'limited', 
-              occupiedSlots: capacityResult.capacity.currentActiveMembers! + pendingInvitesCount, 
-              maxMembers: capacityResult.capacity.maxMembers! 
-            };
-         }
+      // Global ecosystem roles have canonical full MusicScale entitlements,
+      // including unlimited users. They must never depend on a tenant billing
+      // projection just to manage membership in an organization.
+      let capacityInput: InvitationCreationInput['capacity'] = isGlobalAdmin
+        ? { resolved: true, mode: 'unlimited' }
+        : { resolved: false };
+
+      if (!isGlobalAdmin) {
+        const appSubscription = subData.apps?.musicscale || null;
+        const capacityResult = resolveCanonicalInvitationCapacity({
+          organizationId,
+          subscription: {
+            exists: subSnap.exists,
+            organizationId: subData.organizationId,
+            app: appSubscription ? 'musicscale' : subData.app,
+            status: appSubscription?.status ?? subData.status,
+            plan:
+              appSubscription?.plan ??
+              subData.plan ??
+              subData.productPlan ??
+              subData.musicScalePlan ??
+              subData.priceNickname,
+            limitsUsers: appSubscription?.limits?.users ?? subData.limits?.users
+          },
+          organizationApp: {
+            exists: !!orgData.apps?.musicscale,
+            status: orgData.apps?.musicscale?.status,
+            plan:
+              orgData.apps?.musicscale?.plan ??
+              orgData.subscriptionPlan ??
+              orgData.plan,
+            limitsUsers: orgData.apps?.musicscale?.limits?.users
+          },
+          memberStatuses
+        });
+        
+        if (capacityResult.success) {
+           if (capacityResult.capacity.mode === 'unlimited') {
+              capacityInput = { resolved: true, mode: 'unlimited' };
+           } else if (capacityResult.capacity.mode === 'limited') {
+              capacityInput = { 
+                resolved: true, 
+                mode: 'limited', 
+                occupiedSlots: capacityResult.capacity.currentActiveMembers! + pendingInvitesCount, 
+                maxMembers: capacityResult.capacity.maxMembers! 
+              };
+           }
+        }
       }
 
       const input: InvitationCreationInput = {
