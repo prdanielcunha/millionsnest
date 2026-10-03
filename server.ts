@@ -789,11 +789,14 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       return res.status(503).json({ error: 'MELI_TOKEN_STALE' });
     }
 
+    const MIN_SOLD_QUANTITY = 50;
     const searchUrl = new URL('https://api.mercadolibre.com/products/search');
     searchUrl.searchParams.set('status', 'active');
     searchUrl.searchParams.set('site_id', 'MLB');
     searchUrl.searchParams.set('q', query);
-    searchUrl.searchParams.set('limit', String(limit));
+    // Pull the full supported page so the quality gate still has enough
+    // candidates after rejecting low-sales or unavailable listings.
+    searchUrl.searchParams.set('limit', '20');
 
     const providerHeaders = { Authorization: `Bearer ${accessToken}` };
     const searchResponse = await fetch(searchUrl, { headers: providerHeaders });
@@ -821,7 +824,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         buy_box_winner: item.buy_box_winner || null,
       }))
       .filter((item) => item.id)
-      .slice(0, limit);
+      .slice(0, 20);
 
     const detailRows = await Promise.all(
       candidates.map(async (candidate) => {
@@ -839,28 +842,126 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       }),
     );
 
-    const observedAt = new Date().toISOString();
-    const products = candidates.flatMap((candidate, index) => {
-      const detailed = detailRows[index]?.detail || {};
-      const product = { ...candidate, ...detailed };
-      const winner = product.buy_box_winner || candidate.buy_box_winner || {};
-      const catalogId = String(product.id || candidate.id);
-      const itemId = String(winner.item_id || catalogId);
-      const permalink = String(
-        product.permalink ||
-        candidate.permalink ||
-        (catalogId ? `https://www.mercadolivre.com.br/p/${encodeURIComponent(catalogId)}` : '')
-      );
-      const title = String(product.name || product.family_name || candidate.name || query).trim();
-      if (!catalogId || !title || !permalink) return [];
+    // Catalog "active" is not enough to prove that the listing/variation the
+    // user will actually open is available. Resolve the real winning ITEM and
+    // validate its live stock + sales before returning it to NestAffiliate.
+    const winnerIds = [...new Set(
+      detailRows.flatMap((row) => {
+        const winner = row?.detail?.buy_box_winner || row?.candidate?.buy_box_winner || {};
+        const itemId = String(winner?.item_id || '').trim();
+        return itemId ? [itemId] : [];
+      }),
+    )].slice(0, 20);
 
-      const pictures = Array.isArray(product.pictures) && product.pictures.length
-        ? product.pictures
-        : candidate.pictures;
-      const picture = Array.isArray(pictures) ? pictures[0] : null;
-      const imageUrl = String(picture?.secure_url || picture?.url || picture || '');
-      const price = typeof winner.price === 'number' ? winner.price : undefined;
-      const status = String(product.status || candidate.status || '').toLowerCase();
+    const itemFields = [
+      'body.id',
+      'body.status',
+      'body.title',
+      'body.permalink',
+      'body.price',
+      'body.currency_id',
+      'body.available_quantity',
+      'body.sold_quantity',
+      'body.thumbnail',
+      'body.catalog_product_id',
+    ].join(',');
+
+    let itemRows: Array<{ id?: string; status_code?: number; body?: Record<string, any> }> = [];
+    if (winnerIds.length) {
+      const itemResponse = await fetch(
+        `https://api.mercadolibre.com/items/bulk?ids=${encodeURIComponent(winnerIds.join(','))}&attributes=${encodeURIComponent(itemFields)}`,
+        { headers: providerHeaders },
+      );
+      if (!itemResponse.ok) {
+        const providerBody = await itemResponse.text();
+        console.error('[NestAffiliate/MELI] item validation failed', itemResponse.status, providerBody.slice(0, 240));
+        return res.status(502).json({
+          error: 'MELI_ITEM_VALIDATION_FAILED',
+          providerStatus: itemResponse.status,
+        });
+      }
+      itemRows = await itemResponse.json() as Array<{ id?: string; status_code?: number; body?: Record<string, any> }>;
+    }
+
+    const itemById = new Map<string, Record<string, any>>(
+      itemRows
+        .filter((row) => row?.status_code === 200 && row?.body?.id)
+        .map((row) => [String(row.body!.id), row.body!]),
+    );
+
+    const observedAt = new Date().toISOString();
+    let rejectedUnavailable = 0;
+    let rejectedLowSales = 0;
+    let rejectedUnverified = 0;
+
+    const products = detailRows.flatMap((row) => {
+      if (!row) {
+        rejectedUnverified += 1;
+        return [];
+      }
+
+      const candidate = row.candidate;
+      const product: Record<string, any> = { ...candidate, ...(row.detail || {}) };
+      const winner = product.buy_box_winner || candidate.buy_box_winner || {};
+      const catalogId = String(product.id || candidate.id || '').trim();
+      const itemId = String(winner.item_id || '').trim();
+
+      // Never treat a catalog product id as an ITEM id. Without a real listing
+      // there is no trustworthy stock/sales state to show to the user.
+      if (!catalogId || !itemId) {
+        rejectedUnverified += 1;
+        return [];
+      }
+
+      const item = itemById.get(itemId);
+      if (!item) {
+        rejectedUnverified += 1;
+        return [];
+      }
+
+      const status = String(item.status || '').toLowerCase();
+      const availableQuantity = Number(item.available_quantity);
+      const soldQuantity = Number(item.sold_quantity);
+
+      if (!Number.isFinite(availableQuantity)) {
+        rejectedUnverified += 1;
+        return [];
+      }
+      if (status !== 'active' || availableQuantity <= 0) {
+        rejectedUnavailable += 1;
+        return [];
+      }
+      if (!Number.isFinite(soldQuantity)) {
+        rejectedUnverified += 1;
+        return [];
+      }
+      if (soldQuantity < MIN_SOLD_QUANTITY) {
+        rejectedLowSales += 1;
+        return [];
+      }
+
+      const title = String(item.title || product.name || product.family_name || candidate.name || query).trim();
+      const permalink = String(item.permalink || '').trim();
+      const imageUrl = String(
+        item.thumbnail ||
+        product.pictures?.[0]?.secure_url ||
+        product.pictures?.[0]?.url ||
+        candidate.pictures?.[0]?.secure_url ||
+        candidate.pictures?.[0]?.url ||
+        '',
+      ).replace('http://', 'https://');
+      const livePrice = Number(item.price);
+      const fallbackPrice = Number(winner.price);
+      const price = Number.isFinite(livePrice) && livePrice > 0
+        ? livePrice
+        : Number.isFinite(fallbackPrice) && fallbackPrice > 0
+          ? fallbackPrice
+          : undefined;
+
+      if (!title || !permalink || !imageUrl) {
+        rejectedUnverified += 1;
+        return [];
+      }
 
       return [{
         productId: `meli:${itemId}`,
@@ -868,56 +969,71 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         marketplace: 'MELI',
         externalId: itemId,
         catalogProductId: catalogId,
+        listingVerified: true,
+        soldQuantity: {
+          value: soldQuantity,
+          source: 'mercadolivre-items-bulk',
+          observedAt,
+        },
+        availableQuantity: {
+          value: availableQuantity,
+          source: 'mercadolivre-items-bulk',
+          observedAt,
+        },
         title: {
           value: title,
-          source: 'mercadolivre-catalog-api',
+          source: 'mercadolivre-items-bulk',
           observedAt,
         },
         url: {
           value: permalink,
-          source: 'mercadolivre-catalog-api',
+          source: 'mercadolivre-items-bulk',
           observedAt,
         },
         ...(typeof price === 'number' ? {
           price: {
             value: price,
-            source: 'mercadolivre-buy-box',
+            source: Number.isFinite(livePrice) && livePrice > 0
+              ? 'mercadolivre-items-bulk'
+              : 'mercadolivre-buy-box',
             observedAt,
           },
         } : {}),
         currency: {
-          value: String(winner.currency_id || 'BRL'),
-          source: typeof winner.price === 'number' ? 'mercadolivre-buy-box' : 'mercadolivre-catalog-api',
+          value: String(item.currency_id || winner.currency_id || 'BRL'),
+          source: 'mercadolivre-items-bulk',
           observedAt,
         },
         availability: {
-          value: status === 'inactive' ? 'unknown' : 'available',
-          source: 'mercadolivre-catalog-api',
+          value: 'available',
+          source: 'mercadolivre-items-bulk',
           observedAt,
         },
-        ...(imageUrl ? {
-          imageUrl: {
-            value: imageUrl.replace('http://', 'https://'),
-            source: 'mercadolivre-catalog-api',
-            observedAt,
-          },
-        } : {}),
+        imageUrl: {
+          value: imageUrl,
+          source: item.thumbnail ? 'mercadolivre-items-bulk' : 'mercadolivre-catalog-api',
+          observedAt,
+        },
         assetRights: 'UNKNOWN',
       }];
-    });
+    }).slice(0, limit);
 
     res.setHeader('Cache-Control', 'private, no-store');
     return res.json({
       products,
       query,
       provider: 'MELI',
-      source: 'mercadolivre-catalog-api',
+      source: 'mercadolivre-items-bulk+catalog-api',
       observedAt,
       meta: {
         catalogTotal: Number(searchPayload.paging?.total || candidates.length),
         candidates: candidates.length,
         detailed: detailRows.filter(Boolean).length,
         usable: products.length,
+        minSoldQuantity: MIN_SOLD_QUANTITY,
+        rejectedUnavailable,
+        rejectedLowSales,
+        rejectedUnverified,
       },
     });
   } catch (error) {
