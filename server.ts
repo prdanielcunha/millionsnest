@@ -833,9 +833,9 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
             `https://api.mercadolibre.com/products/${encodeURIComponent(candidate.id)}`,
             { headers: providerHeaders },
           );
-          if (!detailResponse.ok) return null;
+          if (!detailResponse.ok) {\n            console.warn('[NestAffiliate/MELI] catalog detail unavailable; using search candidate', candidate.id, detailResponse.status);\n            return { candidate, detail: null, detailVerified: false };\n          }
           const detail = await detailResponse.json() as Record<string, any>;
-          return { candidate, detail };
+          return { candidate, detail, detailVerified: true };
         } catch {
           return null;
         }
@@ -1088,7 +1088,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       meta: {
         catalogTotal: Number(searchPayload.paging?.total || candidates.length),
         candidates: candidates.length,
-        detailed: detailRows.filter(Boolean).length,
+        detailed: detailRows.filter((row) => row.detailVerified).length,
         usable: products.length,
         minSoldQuantity: MIN_SOLD_QUANTITY,
         rejectedUnavailable,
