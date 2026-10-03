@@ -3004,6 +3004,14 @@ export function Dashboard() {
   const currentUserPerms = isGlobalAdmin
     ? normalizePermissions(undefined, 'owner', undefined)
     : normalizePermissions(currentUserData?.permissions, currentUserData?.role || 'member', currentUserData?.permissionsVersion);
+  const canEditSelectedMember = Boolean(
+    editingMember &&
+    (isGlobalAdmin || currentUserPerms['organization.members.manage']) &&
+    (
+      editingMember.id === user?.uid ||
+      canEditOrganizationRoleForMember(editingMember)
+    )
+  );
 
   const handleSyncStripeOnBlockedModal = async () => {
     if (!user || verifyingStripe) return;
@@ -4208,7 +4216,21 @@ export function Dashboard() {
                 <X className="w-5 h-5" />
               </button>
 
-               <h3 className="text-xl font-semibold text-white mb-6">Editar Membro</h3>
+              <div className="mb-6 pr-10">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-xl font-semibold text-white">Dados do integrante</h3>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] ${
+                    canEditSelectedMember
+                      ? 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-300'
+                      : 'border-white/10 bg-white/[0.04] text-[#A0A7B5]'
+                  }`}>
+                    {canEditSelectedMember ? 'Edição permitida' : 'Somente leitura'}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-[#A0A7B5]">
+                  Veja os dados, o nível de acesso e as opções permitidas pelo seu cargo.
+                </p>
+              </div>
 
               <div className="space-y-4">
                 <div>
@@ -4227,7 +4249,8 @@ export function Dashboard() {
                     type="text"
                     value={editingMemberName}
                     onChange={(e) => setEditingMemberName(e.target.value)}
-                    className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
+                    disabled={!canEditSelectedMember}
+                    className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                     placeholder="Nome do usuário"
                   />
                 </div>
@@ -4259,52 +4282,47 @@ export function Dashboard() {
                       type="url"
                       value={editingMemberPhoto}
                       onChange={(e) => setEditingMemberPhoto(e.target.value)}
-                      className="flex-1 bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors text-xs"
+                      disabled={!canEditSelectedMember}
+                      className="flex-1 bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors text-xs disabled:cursor-not-allowed disabled:opacity-60"
                       placeholder="Cole o link da foto"
                       aria-label="Link da foto do membro"
                     />
                   </div>
                 </details>
 
-                {(isGlobalAdmin || ['owner', 'admin'].includes(
-                  normalizeExistingOrganizationRole(
-                    currentUserData?.role || profile?.organizationRole || 'member'
-                  )
-                )) && (
-                  <div>
-                    <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Nível de acesso na Organização</label>
-                    {!canEditOrganizationRoleForMember(editingMember) ? (
-                       <div className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-[#A0A7B5] text-sm opacity-70 cursor-not-allowed">
-                         {getOrganizationRoleLabel(
-                           String(editingMember?.organizationRole ?? editingMember?.role ?? 'member')
-                         )}
-                       </div>
-                    ) : (
-                       <select
-                         value={editingMemberRole}
-                         onChange={(e) => setEditingMemberRole(e.target.value)}
-                         className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
-                       >
-                         {!getInviteableOrganizationRolesForActor({
-                           systemRole: profile?.systemRole,
-                           organizationRole: currentUserData?.role || profile?.organizationRole
-                         }).includes(editingMemberRole as any) && (
-                           <option value={editingMemberRole} disabled>
-                             {getOrganizationRoleLabel(editingMemberRole)}
-                           </option>
-                         )}
-                         {getInviteableOrganizationRolesForActor({
-                           systemRole: profile?.systemRole,
-                           organizationRole: currentUserData?.role || profile?.organizationRole
-                         }).map((r) => (
-                           <option key={r} value={r}>
-                             {getOrganizationRoleLabel(r)}
-                           </option>
-                         ))}
-                       </select>
-                    )}
-                  </div>
-                )}
+                <div>
+                  <label className="text-xs font-medium text-[#A0A7B5] mb-1.5 block">Nível de acesso na organização</label>
+                  {!canEditSelectedMember || !canEditOrganizationRoleForMember(editingMember) ? (
+                    <div className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-[#A0A7B5] text-sm opacity-80">
+                      {getOrganizationRoleLabel(
+                        String(editingMember?.organizationRole ?? editingMember?.role ?? 'member')
+                      )}
+                    </div>
+                  ) : (
+                    <select
+                      value={editingMemberRole}
+                      onChange={(e) => setEditingMemberRole(e.target.value)}
+                      className="w-full bg-[#1A1D24] border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-[#2B85EB] transition-colors"
+                    >
+                      {!getInviteableOrganizationRolesForActor({
+                        systemRole: profile?.systemRole,
+                        organizationRole: currentUserData?.role || profile?.organizationRole
+                      }).includes(editingMemberRole as any) && (
+                        <option value={editingMemberRole} disabled>
+                          {getOrganizationRoleLabel(editingMemberRole)}
+                        </option>
+                      )}
+                      {getInviteableOrganizationRolesForActor({
+                        systemRole: profile?.systemRole,
+                        organizationRole: currentUserData?.role || profile?.organizationRole
+                      }).map((r) => (
+                        <option key={r} value={r}>
+                          {getOrganizationRoleLabel(r)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
 
                 {msIsInstalled && musicScaleApp && (
                   <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
@@ -4325,16 +4343,18 @@ export function Dashboard() {
                   </div>
                 )}
 
-                <div className="pt-2 border-t border-white/5 mt-4">
-                  <button
-                    type="button"
-                    onClick={handleSendMemberPasswordReset}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold transition-all bg-white/5 text-[#A0A7B5] hover:bg-white/10 border border-white/10 text-xs"
-                  >
-                    <Mail className="w-3.5 h-3.5" />
-                    Enviar Link de Redefinição de Senha
-                  </button>
-                </div>
+                {canEditSelectedMember && (
+                  <div className="pt-2 border-t border-white/5 mt-4">
+                    <button
+                      type="button"
+                      onClick={handleSendMemberPasswordReset}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold transition-all bg-white/5 text-[#A0A7B5] hover:bg-white/10 border border-white/10 text-xs"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      Enviar link de redefinição de senha
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 mt-8">
@@ -4342,21 +4362,23 @@ export function Dashboard() {
                   onClick={() => setEditingMember(null)}
                   className="flex-1 px-4 py-3 rounded-xl font-semibold text-white bg-white/5 hover:bg-white/10 transition-colors"
                 >
-                  Cancelar
+                  {canEditSelectedMember ? 'Cancelar' : 'Fechar'}
                 </button>
-                <button
-                  onClick={handleSaveMemberEdit}
-                  disabled={editingMemberSaving}
-                  className="flex-1 px-4 py-3 rounded-xl font-semibold text-white bg-[#2B85EB] hover:bg-[#1E6FD6] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {editingMemberSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Salvando...
-                    </>
-                  ) : (
-                    "Salvar Alterações"
-                  )}
-                </button>
+                {canEditSelectedMember && (
+                  <button
+                    onClick={handleSaveMemberEdit}
+                    disabled={editingMemberSaving}
+                    className="flex-1 px-4 py-3 rounded-xl font-semibold text-white bg-[#2B85EB] hover:bg-[#1E6FD6] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {editingMemberSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Salvando...
+                      </>
+                    ) : (
+                      "Salvar alterações"
+                    )}
+                  </button>
+                )}
               </div>
             </motion.div>
           </motion.div>
