@@ -43,7 +43,16 @@ assert(serviceFile.includes("role: 'owner'"), "Service heals missing owner membe
 assert(serviceFile.includes('membershipData.organizationRole'), "Service accepts canonical organizationRole membership projection");
 assert(serviceFile.includes('membershipData.membershipRole'), "Service accepts membershipRole compatibility projection");
 
+const organizationManagerFile = fs.readFileSync('src/components/OrganizationManager.tsx', 'utf-8');
+assert(organizationManagerFile.includes("currentUserPerms?.['organization.members.invite']"), "Members invite CTA follows canonical capability instead of a hard-coded role list");
+assert(organizationManagerFile.includes('Convidar pessoa'), "Members area exposes a direct invite action");
+assert(organizationManagerFile.includes('Ver dados e permissões'), "Member identity opens the detail and permissions experience");
+assert(organizationManagerFile.includes('onEditMember?.(member)'), "Member identity delegates to the canonical member detail modal");
+
 const dashboardFile = fs.readFileSync('src/pages/Dashboard.tsx', 'utf-8');
+assert(dashboardFile.includes('canEditSelectedMember'), "Member detail modal computes edit authority from canonical permissions and hierarchy");
+assert(dashboardFile.includes('Dados do integrante'), "Member click opens a data-focused detail modal");
+assert(dashboardFile.includes('Somente leitura'), "Member detail modal exposes read-only state when the actor cannot edit");
 assert(dashboardFile.includes("fetch('/api/v1/invitations'"), "Dashboard uses POST /api/v1/invitations");
 assert(dashboardFile.includes('mode: "email" | "link"'), "Dashboard supports email and link invite modes");
 assert(dashboardFile.includes('...(mode === "email" ? { email } : {})'), "Dashboard does not require an email for shareable links");
