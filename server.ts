@@ -61,6 +61,8 @@ import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } f
 import { enforceHandoffRateLimit, validateHandoffOrigin, writeHandoffAuditEvent } from './src/server/services/HandoffSecurityService.js';
 import { handleEcosystemAccessProjectionRequest } from './src/server/services/EcosystemAccessProjectionService.js';
 import { handleConnectSessionContextRequest } from './src/server/services/ConnectSessionContextService.js';
+import { handleConnectChannelDelegationRequest } from './src/server/services/ConnectChannelDelegationService.js';
+import { verifyConnectRuntimeIdentityToken } from './src/server/services/ConnectRuntimeIdentityVerifier.js';
 import { handleNestJourneyFollowupContextRequest } from './src/server/services/NestJourneyFollowupContextService.js';
 import { handleNestJourneyWorkspaceProjectionRequest } from './src/server/services/NestJourneyWorkspaceProjectionService.js';
 import { BillingService } from './src/server/services/BillingService.js';
@@ -6399,6 +6401,23 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       verifyIdToken: (token) => admin.auth().verifyIdToken(token),
       getDb: () => db || null,
       logger: console
+    });
+  });
+
+  app.post('/api/ecosystem/connect/channel-delegation', express.json({ limit: '4kb' }), async (req, res) => {
+    return handleConnectChannelDelegationRequest(req, res, {
+      verifyServiceIdentity: (token) => verifyConnectRuntimeIdentityToken({
+        idToken: token,
+        audience: process.env.CONNECT_CHANNEL_DELEGATION_AUDIENCE
+          || 'https://www.millionsnest.com/api/ecosystem/connect/channel-delegation',
+        expectedServiceAccountEmail: process.env.CONNECT_TRUSTED_RUNTIME_SERVICE_ACCOUNT
+          || 'mn-connect-runtime@millionsnest.iam.gserviceaccount.com',
+      }),
+      getDb: () => db || null,
+      resolveAccess: resolveEcosystemAppAccess,
+      createCustomToken: (uid, claims) => admin.auth().createCustomToken(uid, claims),
+      now: () => Date.now(),
+      logger: console,
     });
   });
 
