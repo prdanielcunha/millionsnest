@@ -15,7 +15,8 @@ assert.ok(organization.includes("onOpenMusicScale?.('/profile')"), 'MusicScale p
 
 assert.ok(login.includes("navigate('/dashboard/overview')"), 'login must land on Hub Home');
 assert.ok(home.includes('<Navigate to="/dashboard/overview" replace />'), 'authenticated public home must land on Hub Home');
-assert.ok(join.includes("window.location.href = '/dashboard/overview'"), 'accepted invitation must land on Hub Home');
+assert.ok(join.includes('buildInvitationLaunchPath(target)'), 'accepted targeted invitation must launch its canonical app destination');
+assert.ok(join.includes('resolveInvitationAppTarget(parsed.targetAppId, parsed.targetPath)'), 'Join must validate the server-owned target before launching it');
 assert.ok(join.includes('to="/dashboard/overview"'), 'invitation fallback action must return to Hub Home');
 
 const memberSaveStart = dashboard.indexOf('const handleSaveMemberEdit');
@@ -49,4 +50,4 @@ assert.match(login, /setup_pending_title|Seu login foi confirmado/, 'login must 
 assert.match(dashboard, /Não conseguimos preparar sua conta/, 'Hub must provide profile recovery');
 assert.match(dashboard, /Sua organização ainda não apareceu/, 'Hub must provide organization-context recovery');
 
-console.log('PASS Hub entry: canonical Home, no auto-app bypass, canonical member commands, no legacy settings modal, and recovery UX');
+console.log('PASS Hub entry: canonical Home by default, targeted invites launch the invited app, canonical member commands, and recovery UX');
