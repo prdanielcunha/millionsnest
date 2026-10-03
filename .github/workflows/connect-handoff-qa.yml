@@ -18,6 +18,7 @@ on:
       - "server.ts"
       - "scripts/test_connect_handoff.ts"
       - "scripts/test_connect_official_launch.ts"
+      - "scripts/test_connect_channel_delegation.ts"
       - "scripts/test_connect_nestjourney_followup.ts"
       - "scripts/test_mn_access_02_musicscale_handoff.ts"
       - "scripts/test_nestfinance_handoff_contract.ts"
@@ -56,6 +57,8 @@ jobs:
         run: npx tsx scripts/test_connect_handoff.ts
       - name: Validate Connect official launch policy
         run: npx tsx scripts/test_connect_official_launch.ts
+      - name: Validate trusted Connect channel delegation
+        run: npx tsx scripts/test_connect_channel_delegation.ts
       - name: Validate NestJourney resolve-loop context
         run: npx tsx scripts/test_connect_nestjourney_followup.ts
       - run: npm run build

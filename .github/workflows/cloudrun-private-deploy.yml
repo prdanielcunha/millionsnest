@@ -189,3 +189,11 @@ jobs:
             -o /tmp/products.json
 
           node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/products.json','utf8'));if(!x||!Array.isArray(x.plans))process.exit(1);console.log('MILLIONSNEST_PRODUCTION_RELEASE_OK',x.plans.length);"
+
+          DELEGATION_STATUS="$(curl --silent --show-error --location \
+            --retry 12 --retry-delay 3 --retry-all-errors \
+            -o /tmp/connect-channel-delegation.json -w '%{http_code}' \
+            -X POST -H 'Content-Type: application/json' -d '{}' \
+            "https://www.millionsnest.com/api/ecosystem/connect/channel-delegation")"
+          test "$DELEGATION_STATUS" = "401"
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/connect-channel-delegation.json','utf8'));if(x.code!=='CONNECT_SERVICE_AUTH_REQUIRED')process.exit(1);console.log('CONNECT_CHANNEL_DELEGATION_BOUNDARY_OK');"
