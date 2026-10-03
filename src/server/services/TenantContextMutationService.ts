@@ -416,7 +416,11 @@ export async function bootstrapUserContext(req: Request, res: Response) {
 
 export type InvitationAcceptanceDependencies = {
   verifyIdToken?: (token: string) => Promise<{ uid: string }>;
-  getUser?: (uid: string) => Promise<{ email?: string | null }>;
+  getUser?: (uid: string) => Promise<{
+    email?: string | null;
+    displayName?: string | null;
+    photoURL?: string | null;
+  }>;
   getFirestore?: () => Firestore;
   now?: () => number;
 };
@@ -451,9 +455,19 @@ export async function acceptInvitation(
     }
 
     let normalizedAuthenticatedEmail: string | null = null;
+    let authenticatedDisplayName: string | null = null;
+    let authenticatedPhotoURL: string | null = null;
     try {
       const authUser = await getAuthenticatedUser(uid);
       normalizedAuthenticatedEmail = normalizeInvitationEmail(authUser.email);
+      authenticatedDisplayName =
+        typeof authUser.displayName === 'string' && authUser.displayName.trim()
+          ? authUser.displayName.trim()
+          : null;
+      authenticatedPhotoURL =
+        typeof authUser.photoURL === 'string' && authUser.photoURL.trim()
+          ? authUser.photoURL.trim()
+          : null;
     } catch (e) {
       return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
     }
@@ -471,6 +485,13 @@ export async function acceptInvitation(
     if (!isValidInvitationOrganizationId(requestedOrganizationId)) {
       return res.status(400).json({ success: false, reasonCode: 'INVALID_ORGANIZATION_ID' });
     }
+
+    const authenticatedIdentity = {
+      email: normalizedAuthenticatedEmail,
+      emailNormalized: normalizedAuthenticatedEmail,
+      ...(authenticatedDisplayName ? { displayName: authenticatedDisplayName } : {}),
+      ...(authenticatedPhotoURL ? { photoURL: authenticatedPhotoURL } : {})
+    };
 
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const acceptanceNowMs = now();
@@ -606,7 +627,13 @@ export async function acceptInvitation(
       }
 
       if (planResult.action === 'ALREADY_MEMBER') {
+         t.set(memRef, {
+           ...authenticatedIdentity,
+           updatedAt: FieldValue.serverTimestamp()
+         }, { merge: true });
+
          t.set(userRef, {
+           ...authenticatedIdentity,
            organizations: FieldValue.arrayUnion(orgId),
            activeOrganizationId: orgId,
            organizationId: orgId,
@@ -644,7 +671,7 @@ export async function acceptInvitation(
 
       t.set(memRef, {
         uid: uid,
-        emailNormalized: normalizedAuthenticatedEmail,
+        ...authenticatedIdentity,
         organizationId: orgId,
         role: planResult.membershipRole,
         organizationRole: planResult.membershipRole,
@@ -657,7 +684,7 @@ export async function acceptInvitation(
       const legacyRef = db.collection('organization_members').doc(`${uid}_${orgId}`);
       t.set(legacyRef, {
         uid: uid,
-        emailNormalized: normalizedAuthenticatedEmail,
+        ...authenticatedIdentity,
         organizationId: orgId,
         role: planResult.membershipRole,
         organizationRole: planResult.membershipRole,
@@ -665,6 +692,7 @@ export async function acceptInvitation(
       }, { merge: true });
 
       t.set(userRef, {
+        ...authenticatedIdentity,
         organizations: FieldValue.arrayUnion(orgId),
         activeOrganizationId: orgId,
         organizationId: orgId,
