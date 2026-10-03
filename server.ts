@@ -901,7 +901,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       }
 
       const candidate = row.candidate;
-      const product = { ...candidate, ...(row.detail || {}) };
+      const product: Record<string, any> = { ...candidate, ...(row.detail || {}) };
       const winner = product.buy_box_winner || candidate.buy_box_winner || {};
       const catalogId = String(product.id || candidate.id || '').trim();
       const itemId = String(winner.item_id || '').trim();
