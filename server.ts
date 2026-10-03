@@ -904,14 +904,17 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       const catalogId = String(product.id || candidate.id || '').trim();
       const itemId = String(winner.item_id || '').trim();
 
-      // Never treat a catalog product id as an ITEM id. Without a real listing
-      // there is no trustworthy stock/sales state to show to the user.
-      if (!catalogId || !itemId) {
+      // Product discovery and final publication are different gates. Mercado
+      // Livre's official catalog can return an active PDP without exposing a
+      // current item-level winner. Keep that official catalog product available
+      // for Radar comparison, but mark it as catalog-only so publish-time
+      // freshness/compliance can still require stronger evidence.
+      if (!catalogId) {
         rejectedUnverified += 1;
         return [];
       }
 
-      const item = itemById.get(itemId);
+      const item = itemId ? itemById.get(itemId) : undefined;
       const itemStatus = String(item?.status || '').toLowerCase();
       const productStatus = String(product.status || candidate.status || '').toLowerCase();
       const variations = Array.isArray(item?.variations) ? item.variations : [];
@@ -1001,12 +1004,12 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       }
 
       return [{
-        productId: `meli:${itemId}`,
+        productId: itemId ? `meli:${itemId}` : `meli:catalog:${catalogId}`,
         organizationId,
         marketplace: 'MELI',
-        externalId: itemId,
+        externalId: itemId || `catalog:${catalogId}`,
         catalogProductId: catalogId,
-        listingVerified: true,
+        listingVerified: Boolean(itemId),
         ...(hasSoldQuantity ? {
           soldQuantity: {
             value: soldQuantity,
@@ -1056,10 +1059,12 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
           observedAt,
         },
         availability: {
-          value: 'available',
-          source: hasAvailableQuantity
-            ? (Number.isFinite(winnerAvailableQuantity) ? 'mercadolivre-buy-box' : 'mercadolivre-items-bulk')
-            : 'mercadolivre-catalog-buy-box',
+          value: itemId ? 'available' : 'unknown',
+          source: itemId
+            ? (hasAvailableQuantity
+              ? (Number.isFinite(winnerAvailableQuantity) ? 'mercadolivre-buy-box' : 'mercadolivre-items-bulk')
+              : 'mercadolivre-catalog-buy-box')
+            : 'mercadolivre-catalog-api',
           observedAt,
         },
         imageUrl: {
