@@ -16,6 +16,7 @@ export async function deliverInvitationEmail(params: {
   organizationName: string;
   inviteUrl: string;
   roleLabel: string;
+  targetAppName?: string;
 }): Promise<InvitationEmailDeliveryResult> {
   const provider = process.env.INVITATION_EMAIL_PROVIDER || process.env.SUPPORT_EMAIL_PROVIDER;
   const apiKey = process.env.RESEND_API_KEY;
@@ -32,6 +33,7 @@ export async function deliverInvitationEmail(params: {
     const organizationName = escapeHtml(params.organizationName);
     const inviteUrl = escapeHtml(params.inviteUrl);
     const roleLabel = escapeHtml(params.roleLabel);
+    const targetAppName = escapeHtml(params.targetAppName || 'MillionsNest');
 
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -42,12 +44,12 @@ export async function deliverInvitationEmail(params: {
       body: JSON.stringify({
         from,
         to: [params.recipientEmail],
-        subject: `Convite para ${params.organizationName} no MillionsNest`,
+        subject: `Convite para ${params.organizationName} no ${params.targetAppName || 'MillionsNest'}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111827">
             <h2 style="margin-bottom:12px">Você foi convidado para ${organizationName}</h2>
             <p style="line-height:1.6;color:#4b5563">
-              Sua função inicial será <strong>${roleLabel}</strong>. Use o botão abaixo e entre com o mesmo e-mail que recebeu este convite.
+              Você foi convidado para acessar <strong>${targetAppName}</strong> como parte de <strong>${organizationName}</strong>. Sua função inicial será <strong>${roleLabel}</strong>. Use o botão abaixo e entre com o mesmo e-mail que recebeu este convite.
             </p>
             <p style="margin:28px 0">
               <a href="${inviteUrl}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-weight:700">
@@ -59,7 +61,7 @@ export async function deliverInvitationEmail(params: {
             </p>
           </div>
         `,
-        text: `Você foi convidado para ${params.organizationName} no MillionsNest como ${params.roleLabel}. Acesse: ${params.inviteUrl}`
+        text: `Você foi convidado para ${params.organizationName} no ${params.targetAppName || 'MillionsNest'} como ${params.roleLabel}. Acesse: ${params.inviteUrl}`
       }),
       signal: controller.signal
     });

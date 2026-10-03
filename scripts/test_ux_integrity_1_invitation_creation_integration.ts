@@ -48,6 +48,9 @@ assert(serviceFile.includes("appSubscription ? 'musicscale' : subData.app"), "Ap
 assert(serviceFile.includes("subData.productPlan"), "Legacy productPlan is supported for invitation capacity");
 assert(serviceFile.includes("subData.musicScalePlan"), "Legacy musicScalePlan is supported for invitation capacity");
 assert(serviceFile.includes("subData.priceNickname"), "Legacy priceNickname is supported for invitation capacity");
+assert(serviceFile.includes('resolveInvitationTargetAppId'), "Service validates targetAppId through the canonical app allowlist");
+assert(serviceFile.includes('targetAppId'), "Service persists the invitation target app");
+assert(serviceFile.includes('buildInvitationTargetUrl'), "Service returns an app-native invitation URL for targeted invitations");
 
 const organizationManagerFile = fs.readFileSync('src/components/OrganizationManager.tsx', 'utf-8');
 assert(organizationManagerFile.includes("currentUserPerms?.['organization.members.invite']"), "Members invite CTA follows canonical capability instead of a hard-coded role list");
@@ -89,6 +92,20 @@ assert(modalFile.includes('flex items-start justify-between gap-3'), "Modal keep
 assert(modalFile.includes('Array.isArray(data.organizations)'), "Modal parses data.organizations");
 assert(modalFile.includes('type="button"'), "Modal buttons have type button");
 assert(modalFile.includes('aria-label='), "Modal close button has aria-label");
+
+assert(dashboardFile.includes('targetAppId?: string'), "Dashboard invite command accepts an optional target app");
+assert(dashboardFile.includes('inviteTargetAppId'), "Dashboard preserves app context while the canonical invite modal is open");
+assert(modalFile.includes('targetAppId?: string'), "Canonical modal accepts the target app context");
+assert(modalFile.includes('targetAppName'), "Canonical modal brands sharing for the target app");
+
+const targetPolicyFile = fs.readFileSync('src/lib/InvitationTargetAppPolicy.ts', 'utf-8');
+assert(targetPolicyFile.includes('getEcosystemApp'), "Target app policy resolves destinations only from the canonical app registry");
+assert(targetPolicyFile.includes('buildInvitationTargetUrl'), "Target app policy owns app-native invitation URL construction");
+assert(targetPolicyFile.includes('isExpectedInvitationTargetUrl'), "Target app policy validates delivered invitation URLs exactly");
+assert(!targetPolicyFile.includes('returnUrl'), "Target app policy never accepts arbitrary return URLs");
+
+const appsFile = fs.readFileSync('src/lib/apps.ts', 'utf-8');
+assert(appsFile.includes("invitationJoinPath: '/join/:organizationId'"), "MusicScale declares its canonical invitation entry path");
 
 const ptLocales = fs.readFileSync('src/packages/i18n/locales/pt.ts', 'utf-8');
 assert(ptLocales.includes('email_hint:'), "pt has email_hint");
