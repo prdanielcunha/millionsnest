@@ -422,7 +422,13 @@ assertCondition('76. ALREADY_MEMBER sem exigir capacityResult.success', endpoint
 assertCondition('77. MEMBER_LIMIT_INVALID da política é preservado', endpointContent.includes("reasonCode = capacityResult.reasonCode;"));
 
 const alreadyMemberBlock = endpointContent.split("planResult.action === 'ALREADY_MEMBER'")[1].split("CREATE_MEMBERSHIP")[0];
-assertCondition('78. ramo ALREADY_MEMBER atualiza somente a projeção de contexto do usuário', alreadyMemberBlock.includes('t.set(userRef') && !alreadyMemberBlock.includes('t.update('));
+assertCondition(
+  '78. ramo ALREADY_MEMBER pode habilitar apenas o app-alvo e atualiza contexto do usuário',
+  alreadyMemberBlock.includes('buildInvitationMemberAppAccess') &&
+    alreadyMemberBlock.includes('appAccess: existingMemberAppAccess') &&
+    alreadyMemberBlock.includes('t.set(userRef') &&
+    !alreadyMemberBlock.includes('t.update(inviteDoc.ref')
+);
 
 const getMatches = txBody.match(/await t\.get\(/g) || [];
 const setMatches = txBody.match(/t\.set\(/g) || [];
@@ -472,7 +478,18 @@ const createMembershipWriteIdx = endpointContent.indexOf('t.set(memRef');
 assertCondition('90. o ramo que preserva capacityResult.reasonCode em falha ocorre antes das escritas de CREATE_MEMBERSHIP', reasonCodeFallbackIdx !== -1 && createMembershipWriteIdx !== -1 && reasonCodeFallbackIdx < createMembershipWriteIdx);
 
 const amBranch = endpointContent.split("planResult.action === 'ALREADY_MEMBER'")[1].split("CREATE_MEMBERSHIP")[0];
-assertCondition('91. ramo ALREADY_MEMBER não altera membership, invitation, audit ou legacy', amBranch.includes('t.set(userRef') && !amBranch.includes('t.set(memRef') && !amBranch.includes('t.update(inviteDoc.ref') && !amBranch.includes('t.set(auditRef') && !amBranch.includes('t.set(legacyRef'));
+assertCondition(
+  '91. ramo ALREADY_MEMBER não consome convite nem altera audit/legacy; membership só recebe acesso ao app-alvo',
+  amBranch.includes('t.set(userRef') &&
+    amBranch.includes('appAccess: existingMemberAppAccess') &&
+    !amBranch.includes('t.update(inviteDoc.ref') &&
+    !amBranch.includes('t.set(auditRef') &&
+    !amBranch.includes('t.set(legacyRef')
+);
+
+assertCondition('92. acceptance valida targetAppId e targetPath armazenados', endpointContent.includes('resolveInvitationAppTarget(inviteData.targetAppId, inviteData.targetPath)'));
+assertCondition('93. nova membership recebe appAccess do convite', endpointContent.includes('appAccess: memberAppAccess'));
+assertCondition('94. resposta de aceite devolve targetAppId e targetPath', endpointContent.includes('targetAppId: invitationTarget.appId') && endpointContent.includes('targetPath: invitationTarget.destinationPath'));
 
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
