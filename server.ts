@@ -6,7 +6,7 @@ import { generateInvitationTokenMaterial } from './src/server/services/Invitatio
 import { INVITATION_TTL_MS } from './src/server/services/InvitationCreationPlanner.js';
 import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './src/server/services/InvitationAcceptanceServerPolicy.js';
 import { canInviteOrganizationRole } from './src/lib/organizationRoles.js';
-import { buildInvitationTargetUrl, isExpectedInvitationTargetUrl, resolveInvitationTargetAppId } from './src/lib/InvitationTargetAppPolicy.js';
+import { buildInvitationTargetUrl, getInvitationTargetAppName, isExpectedInvitationTargetUrl, resolveInvitationTargetAppId } from './src/lib/InvitationTargetAppPolicy.js';
 import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
@@ -1595,7 +1595,8 @@ async function startServer() {
         recipientEmail: inviteData.emailNormalized,
         organizationName: String(orgData.name || inviteData.organizationName || 'Sua organização'),
         inviteUrl,
-        roleLabel: roleLabelMap[inviteData.role] || 'Membro'
+        roleLabel: roleLabelMap[inviteData.role] || 'Membro',
+        targetAppName: getInvitationTargetAppName(inviteData.targetAppId) || undefined
       });
 
       if (!result.success) {
