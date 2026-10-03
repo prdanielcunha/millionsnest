@@ -6,6 +6,7 @@ import { generateInvitationTokenMaterial } from './src/server/services/Invitatio
 import { INVITATION_TTL_MS } from './src/server/services/InvitationCreationPlanner.js';
 import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './src/server/services/InvitationAcceptanceServerPolicy.js';
 import { canInviteOrganizationRole } from './src/lib/organizationRoles.js';
+import { buildInvitationTargetUrl, getInvitationTargetAppName, isExpectedInvitationTargetUrl, resolveInvitationTargetAppId } from './src/lib/InvitationTargetAppPolicy.js';
 import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
@@ -1787,7 +1788,8 @@ async function startServer() {
             status: 'pending',
             expiresAtMs,
             createdAtMs,
-            lastSentAtMs
+            lastSentAtMs,
+            targetAppId: typeof data.targetAppId === 'string' ? data.targetAppId : null
           };
         })
         .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
@@ -1985,22 +1987,37 @@ async function startServer() {
         return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
       }
 
-      const requestHost = String(req.get('host') || '').toLowerCase();
-      const allowedHosts = new Set(['millionsnest.com', 'www.millionsnest.com', requestHost]);
-      const isLocalDevelopmentHost =
-        parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
-      if (
-        (!isLocalDevelopmentHost && parsedUrl.protocol !== 'https:') ||
-        !allowedHosts.has(parsedUrl.host.toLowerCase()) ||
-        parsedUrl.pathname !== `/join/${organizationId}` ||
-        Array.from(parsedUrl.searchParams.keys()).length !== 1
-      ) {
+      const rawToken = parsedUrl.searchParams.get('token') || '';
+      if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken) || Array.from(parsedUrl.searchParams.keys()).length !== 1) {
         return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
       }
 
-      const rawToken = parsedUrl.searchParams.get('token') || '';
-      if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken)) {
-        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+      const targetResolution = resolveInvitationTargetAppId(inviteData.targetAppId);
+      if (!targetResolution.valid) {
+        return res.status(409).json({ success: false, reasonCode: 'INVITATION_STATE_INVALID' });
+      }
+
+      if (targetResolution.targetAppId) {
+        if (!isExpectedInvitationTargetUrl({
+          targetAppId: targetResolution.targetAppId,
+          organizationId,
+          token: rawToken,
+          inviteUrl
+        })) {
+          return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+        }
+      } else {
+        const requestHost = String(req.get('host') || '').toLowerCase();
+        const allowedHosts = new Set(['millionsnest.com', 'www.millionsnest.com', requestHost]);
+        const isLocalDevelopmentHost =
+          parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
+        if (
+          (!isLocalDevelopmentHost && parsedUrl.protocol !== 'https:') ||
+          !allowedHosts.has(parsedUrl.host.toLowerCase()) ||
+          parsedUrl.pathname !== `/join/${organizationId}`
+        ) {
+          return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_URL' });
+        }
       }
 
       const tokenHash = crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex');
@@ -2039,7 +2056,8 @@ async function startServer() {
         recipientEmail: inviteData.emailNormalized,
         organizationName: String(orgData.name || inviteData.organizationName || 'Sua organização'),
         inviteUrl,
-        roleLabel: roleLabelMap[inviteData.role] || 'Membro'
+        roleLabel: roleLabelMap[inviteData.role] || 'Membro',
+        targetAppName: getInvitationTargetAppName(inviteData.targetAppId) || undefined
       });
 
       if (!result.success) {
@@ -2125,6 +2143,11 @@ async function startServer() {
         const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
         const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
         const inviteData = inviteSnap.data() || {};
+        const targetResolution = resolveInvitationTargetAppId(inviteData.targetAppId);
+        if (!targetResolution.valid) {
+          return { status: 409, payload: { success: false, reasonCode: 'INVITATION_STATE_INVALID' } };
+        }
+        const targetAppId = targetResolution.targetAppId;
         const membershipRole = String(memberData.role || memberData.organizationRole || '').toLowerCase();
         const actorIsOwner =
           orgData.ownerUid === decoded.uid ||
@@ -2250,7 +2273,8 @@ async function startServer() {
           expiresAt: admin.firestore.Timestamp.fromMillis(nowMs + INVITATION_TTL_MS),
           maxUses: 1,
           useCount: 0,
-          replacesInvitationId: invitationId
+          replacesInvitationId: invitationId,
+          ...(targetAppId ? { targetAppId } : {})
         });
 
         transaction.set(orgRef, {
@@ -2270,6 +2294,7 @@ async function startServer() {
           payload: {
             success: true,
             invitePath: `/join/${organizationId}?token=${encodeURIComponent(tokenResult.material.rawToken)}`,
+            ...(targetAppId ? { inviteUrl: buildInvitationTargetUrl(targetAppId, organizationId, tokenResult.material.rawToken) } : {}),
             invitation: {
               id: newInviteRef.id,
               organizationId,
@@ -2279,7 +2304,8 @@ async function startServer() {
               ...(!isShareableLinkInvite ? { email: inviteData.emailNormalized } : {}),
               role: inviteData.role,
               status: 'pending',
-              expiresAtMs: nowMs + INVITATION_TTL_MS
+              expiresAtMs: nowMs + INVITATION_TTL_MS,
+              ...(targetAppId ? { targetAppId } : {})
             }
           }
         };
