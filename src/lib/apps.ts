@@ -28,6 +28,7 @@ export interface EcosystemApp {
   hostingTarget?: string;
   firebaseHostingSite?: string;
   directEntrySso?: boolean;
+  invitationJoinPath?: string;
 }
 
 export const ECOSYSTEM_APPS: EcosystemApp[] = [
@@ -55,6 +56,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     hostingTarget: 'musicscale',
     firebaseHostingSite: 'mn-musicscale-555464791734',
     directEntrySso: true,
+    invitationJoinPath: '/join/:organizationId',
   },
   {
     id: 'nestfinance',
