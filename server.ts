@@ -1101,6 +1101,464 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
   }
 }
 
+
+type NestAffiliateShopeeContext = {
+  dbInstance: admin.firestore.Firestore;
+  organizationId: string;
+  actorUid: string;
+  isGlobal: boolean;
+  isOwner: boolean;
+  memberRole: string;
+};
+
+async function resolveNestAffiliateShopeeContext(
+  req: any,
+  res: any,
+  options: { adminOnly?: boolean } = {},
+): Promise<NestAffiliateShopeeContext | null> {
+  const authHeader = String(req.headers.authorization || '');
+  if (!authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'UNAUTHENTICATED' });
+    return null;
+  }
+
+  let decodedToken: admin.auth.DecodedIdToken;
+  try {
+    decodedToken = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+  } catch {
+    res.status(401).json({ error: 'INVALID_TOKEN' });
+    return null;
+  }
+
+  const organizationId = String(
+    req.method === 'GET' ? req.query.organizationId || '' : req.body?.organizationId || '',
+  ).trim();
+
+  if (
+    !organizationId ||
+    organizationId.length > 256 ||
+    organizationId.includes('/') ||
+    organizationId.includes('\\')
+  ) {
+    res.status(400).json({ error: 'INVALID_REQUEST' });
+    return null;
+  }
+
+  const dbInstance = getDb();
+  if (!dbInstance) {
+    res.status(503).json({ error: 'DATABASE_UNAVAILABLE' });
+    return null;
+  }
+
+  const [actorSnap, orgSnap, memberSnap] = await Promise.all([
+    dbInstance.collection('users').doc(decodedToken.uid).get(),
+    dbInstance.collection('organizations').doc(organizationId).get(),
+    dbInstance.collection('organizations').doc(organizationId).collection('members').doc(decodedToken.uid).get(),
+  ]);
+
+  if (!orgSnap.exists) {
+    res.status(404).json({ error: 'ORGANIZATION_NOT_FOUND' });
+    return null;
+  }
+
+  const actorData = actorSnap.exists ? actorSnap.data() || {} : {};
+  const orgData = orgSnap.data() || {};
+  const memberData = memberSnap.exists ? memberSnap.data() || {} : {};
+  const systemRole = String(actorData.systemRole || actorData.globalRole || '').toLowerCase();
+  const isGlobal = isGlobalPrivilegedRole(systemRole);
+  const isOwner = [
+    orgData.ownerUid,
+    orgData.ownerId,
+    orgData.ownerUserId,
+    orgData.owner_user_id,
+  ].some((value) => value === decodedToken.uid);
+  const memberStatus = String(memberData.status || 'active').toLowerCase();
+  const memberRole = String(memberData.role || memberData.organizationRole || '').toLowerCase();
+  const activeMember =
+    memberSnap.exists &&
+    ['active', 'ativo'].includes(memberStatus) &&
+    ['owner', 'admin', 'editor', 'viewer'].includes(memberRole);
+
+  if (!isGlobal && !isOwner && !activeMember) {
+    res.status(403).json({ error: 'FORBIDDEN' });
+    return null;
+  }
+
+  const appAccess = orgData.apps?.nestaffiliate;
+  const entitlementActive =
+    appAccess === true ||
+    appAccess?.enabled === true ||
+    ['active', 'trialing'].includes(String(appAccess?.status || '').toLowerCase());
+
+  if (!isGlobal && !entitlementActive) {
+    res.status(403).json({ error: 'NESTAFFILIATE_NOT_ENABLED' });
+    return null;
+  }
+
+  if (options.adminOnly && !isGlobal && !isOwner && !['owner', 'admin'].includes(memberRole)) {
+    res.status(403).json({ error: 'ADMIN_REQUIRED' });
+    return null;
+  }
+
+  return {
+    dbInstance,
+    organizationId,
+    actorUid: decodedToken.uid,
+    isGlobal,
+    isOwner,
+    memberRole,
+  };
+}
+
+function shopeeSecretRef(dbInstance: admin.firestore.Firestore, organizationId: string) {
+  return dbInstance
+    .collection('organizations')
+    .doc(organizationId)
+    .collection('products')
+    .doc('nestaffiliate')
+    .collection('providerSecretState')
+    .doc('shopee');
+}
+
+function normalizeShopeeNumber(value: unknown) {
+  if (value === null || value === undefined || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeShopeeRate(value: unknown) {
+  const parsed = normalizeShopeeNumber(value);
+  if (parsed === undefined || parsed < 0) return undefined;
+  if (parsed > 1 && parsed <= 100) return parsed / 100;
+  return parsed <= 1 ? parsed : undefined;
+}
+
+async function callShopeeAffiliateOpenApi(input: {
+  appId: string;
+  secret: string;
+  query: string;
+  variables?: Record<string, unknown>;
+}) {
+  const payload = JSON.stringify({
+    query: input.query,
+    variables: input.variables || {},
+  });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = crypto
+    .createHash('sha256')
+    .update(input.appId + timestamp + payload + input.secret)
+    .digest('hex');
+
+  const response = await fetch('https://open-api.affiliate.shopee.com.br/graphql', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: 'SHA256 Credential=' + input.appId + ', Timestamp=' + timestamp + ', Signature=' + signature,
+    },
+    body: payload,
+  });
+
+  const raw = await response.text();
+  let parsed: any = null;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch {
+    parsed = null;
+  }
+
+  if (!response.ok || !parsed || (Array.isArray(parsed.errors) && parsed.errors.length > 0)) {
+    const providerCode = parsed?.errors?.[0]?.extensions?.code;
+    const providerMessage = String(
+      parsed?.errors?.[0]?.extensions?.message ||
+      parsed?.errors?.[0]?.message ||
+      '',
+    ).slice(0, 240);
+    const error: any = new Error('SHOPEE_PROVIDER_ERROR');
+    error.providerStatus = response.status;
+    error.providerCode = providerCode;
+    error.providerMessage = providerMessage;
+    throw error;
+  }
+
+  return parsed;
+}
+
+const SHOPEE_PRODUCT_SEARCH_QUERY = [
+  'query NestAffiliateShopeeProducts($keyword: String!, $page: Int!, $limit: Int!, $sortType: Int!) {',
+  '  productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType) {',
+  '    nodes {',
+  '      itemId',
+  '      productName',
+  '      productLink',
+  '      offerLink',
+  '      imageUrl',
+  '      priceMin',
+  '      priceMax',
+  '      priceDiscountRate',
+  '      sales',
+  '      ratingStar',
+  '      commissionRate',
+  '      sellerCommissionRate',
+  '      shopeeCommissionRate',
+  '      commission',
+  '      shopId',
+  '      shopName',
+  '      shopType',
+  '      periodStartTime',
+  '      periodEndTime',
+  '    }',
+  '    pageInfo { page limit hasNextPage }',
+  '  }',
+  '}',
+].join('\n');
+
+async function handleNestAffiliateShopeeStatus(req: any, res: any) {
+  try {
+    const context = await resolveNestAffiliateShopeeContext(req, res);
+    if (!context) return;
+
+    const secretSnap = await shopeeSecretRef(context.dbInstance, context.organizationId).get();
+    const state = secretSnap.exists ? secretSnap.data() || {} : {};
+    const appId = String(state.appId || '');
+    const secret = String(state.secret || '');
+
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.json({
+      provider: 'SHOPEE',
+      configured: Boolean(appId && secret),
+      appIdHint: appId ? '*'.repeat(Math.max(0, appId.length - 4)) + appId.slice(-4) : null,
+      configuredAt: state.configuredAt || null,
+      verifiedAt: state.verifiedAt || null,
+    });
+  } catch (error) {
+    console.error('[NestAffiliate/Shopee] status failed', error);
+    return res.status(500).json({ error: 'SHOPEE_STATUS_UNAVAILABLE' });
+  }
+}
+
+async function handleNestAffiliateShopeeCredentials(req: any, res: any) {
+  try {
+    const context = await resolveNestAffiliateShopeeContext(req, res, { adminOnly: true });
+    if (!context) return;
+
+    const appId = String(req.body?.appId || '').trim();
+    const secret = String(req.body?.secret || '').trim();
+
+    if (!/^\d{4,32}$/.test(appId) || secret.length < 8 || secret.length > 512) {
+      return res.status(400).json({ error: 'SHOPEE_CREDENTIALS_INVALID_FORMAT' });
+    }
+
+    try {
+      await callShopeeAffiliateOpenApi({
+        appId,
+        secret,
+        query: [
+          'query NestAffiliateShopeeCredentialProbe {',
+          '  productOfferV2(page: 1, limit: 1, sortType: 1) {',
+          '    nodes { itemId }',
+          '    pageInfo { page limit hasNextPage }',
+          '  }',
+          '}',
+        ].join('\n'),
+      });
+    } catch (error: any) {
+      console.warn('[NestAffiliate/Shopee] credential verification rejected', {
+        providerStatus: error?.providerStatus,
+        providerCode: error?.providerCode,
+      });
+      return res.status(400).json({
+        error: 'SHOPEE_CREDENTIALS_REJECTED',
+        providerCode: error?.providerCode || null,
+      });
+    }
+
+    const now = new Date().toISOString();
+    await shopeeSecretRef(context.dbInstance, context.organizationId).set({
+      provider: 'SHOPEE',
+      appId,
+      secret,
+      configuredBy: context.actorUid,
+      configuredAt: now,
+      verifiedAt: now,
+      updatedAt: now,
+    }, { merge: true });
+
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.json({
+      provider: 'SHOPEE',
+      configured: true,
+      appIdHint: '*'.repeat(Math.max(0, appId.length - 4)) + appId.slice(-4),
+      verifiedAt: now,
+    });
+  } catch (error) {
+    console.error('[NestAffiliate/Shopee] credential setup failed', error);
+    return res.status(500).json({ error: 'SHOPEE_SETUP_UNAVAILABLE' });
+  }
+}
+
+async function handleNestAffiliateShopeeSearch(req: any, res: any) {
+  try {
+    const context = await resolveNestAffiliateShopeeContext(req, res);
+    if (!context) return;
+
+    const query = String(req.query.q || '').trim();
+    const requestedLimit = Number(req.query.limit || 20);
+    const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 20, 50));
+
+    if (query.length < 2 || query.length > 160) {
+      return res.status(400).json({ error: 'INVALID_REQUEST' });
+    }
+
+    const secretSnap = await shopeeSecretRef(context.dbInstance, context.organizationId).get();
+    if (!secretSnap.exists) {
+      return res.status(503).json({ error: 'SHOPEE_API_NOT_CONNECTED' });
+    }
+
+    const secretState = secretSnap.data() || {};
+    const appId = String(secretState.appId || '');
+    const secret = String(secretState.secret || '');
+    if (!appId || !secret) {
+      return res.status(503).json({ error: 'SHOPEE_API_NOT_CONNECTED' });
+    }
+
+    let payload: any;
+    try {
+      payload = await callShopeeAffiliateOpenApi({
+        appId,
+        secret,
+        query: SHOPEE_PRODUCT_SEARCH_QUERY,
+        variables: {
+          keyword: query,
+          page: 1,
+          limit,
+          sortType: 1,
+        },
+      });
+    } catch (error: any) {
+      console.error('[NestAffiliate/Shopee] product search failed', {
+        providerStatus: error?.providerStatus,
+        providerCode: error?.providerCode,
+        providerMessage: error?.providerMessage,
+      });
+      if (String(error?.providerCode || '') === '10020') {
+        return res.status(503).json({ error: 'SHOPEE_CREDENTIALS_STALE' });
+      }
+      return res.status(502).json({
+        error: 'SHOPEE_SEARCH_FAILED',
+        providerStatus: error?.providerStatus || null,
+        providerCode: error?.providerCode || null,
+      });
+    }
+
+    const connection = payload?.data?.productOfferV2 || {};
+    const nodes = Array.isArray(connection.nodes) ? connection.nodes : [];
+    const observedAt = new Date().toISOString();
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    let rejectedUnavailable = 0;
+    let rejectedUnverified = 0;
+
+    const products = nodes.flatMap((node: Record<string, any>) => {
+      const itemId = String(node.itemId || '').trim();
+      const title = String(node.productName || '').trim();
+      const productLink = String(node.productLink || '').trim();
+      const offerLink = String(node.offerLink || '').trim();
+      const imageUrl = String(node.imageUrl || '').trim().replace('http://', 'https://');
+      const periodStart = normalizeShopeeNumber(node.periodStartTime);
+      const periodEnd = normalizeShopeeNumber(node.periodEndTime);
+
+      if ((periodStart && periodStart > nowSeconds) || (periodEnd && periodEnd < nowSeconds)) {
+        rejectedUnavailable += 1;
+        return [];
+      }
+      if (!itemId || !title || !productLink) {
+        rejectedUnverified += 1;
+        return [];
+      }
+
+      const priceMin = normalizeShopeeNumber(node.priceMin);
+      const priceMax = normalizeShopeeNumber(node.priceMax);
+      const price = priceMin ?? priceMax;
+      const sales = normalizeShopeeNumber(node.sales);
+      const rating = normalizeShopeeNumber(node.ratingStar);
+      const commissionRate = normalizeShopeeRate(node.commissionRate);
+      const sellerCommissionRate = normalizeShopeeRate(node.sellerCommissionRate);
+      const shopeeCommissionRate = normalizeShopeeRate(node.shopeeCommissionRate);
+      const estimatedCommission = normalizeShopeeNumber(node.commission);
+      const discountRate = normalizeShopeeRate(node.priceDiscountRate);
+      const sellerName = String(node.shopName || '').trim();
+
+      return [{
+        productId: 'shopee:' + itemId,
+        organizationId: context.organizationId,
+        marketplace: 'SHOPEE',
+        externalId: itemId,
+        listingVerified: true,
+        title: { value: title, source: 'shopee-affiliate-open-api', observedAt },
+        url: { value: productLink, source: 'shopee-affiliate-open-api', observedAt },
+        ...(offerLink ? {
+          affiliateUrl: { value: offerLink, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        ...(price !== undefined ? {
+          price: { value: price, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        currency: { value: 'BRL', source: 'shopee-affiliate-open-api', observedAt },
+        ...(sellerName ? {
+          sellerName: { value: sellerName, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        ...(rating !== undefined ? {
+          rating: { value: rating, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        ...(sales !== undefined ? {
+          soldQuantity: { value: sales, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        availability: { value: 'available', source: 'shopee-affiliate-open-api', observedAt },
+        ...(imageUrl ? {
+          imageUrl: { value: imageUrl, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        ...(commissionRate !== undefined ? {
+          commissionRate: { value: commissionRate, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        ...(sellerCommissionRate !== undefined ? {
+          sellerCommissionRate: { value: sellerCommissionRate, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        ...(shopeeCommissionRate !== undefined ? {
+          shopeeCommissionRate: { value: shopeeCommissionRate, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        ...(estimatedCommission !== undefined ? {
+          estimatedCommission: { value: estimatedCommission, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        ...(discountRate !== undefined ? {
+          discountRate: { value: discountRate, source: 'shopee-affiliate-open-api', observedAt },
+        } : {}),
+        assetRights: 'PLATFORM_PROVIDED',
+      }];
+    });
+
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.json({
+      products,
+      query,
+      provider: 'SHOPEE',
+      source: 'shopee-affiliate-open-api',
+      observedAt,
+      meta: {
+        catalogTotal: products.length,
+        candidates: nodes.length,
+        usable: products.length,
+        minSoldQuantity: 0,
+        rejectedUnavailable,
+        rejectedLowSales: 0,
+        rejectedUnverified,
+        hasNextPage: Boolean(connection.pageInfo?.hasNextPage),
+      },
+    });
+  } catch (error) {
+    console.error('[NestAffiliate/Shopee] broker search failed', error);
+    return res.status(500).json({ error: 'SHOPEE_BROKER_UNAVAILABLE' });
+  }
+}
+
 async function startServer() {
   try {
     console.log('[SERVER] Bootstrapping...');
@@ -1130,6 +1588,9 @@ async function startServer() {
   app.post('/api/v1/support/tickets', express.json({ limit: '32kb' }), createSupportTicket);
   app.get('/api/v1/support/capabilities', getSupportCapabilities);
   app.get('/api/v1/nestaffiliate/mercadolivre/search', handleNestAffiliateMercadoLivreSearch);
+  app.get('/api/v1/nestaffiliate/shopee/status', handleNestAffiliateShopeeStatus);
+  app.post('/api/v1/nestaffiliate/shopee/credentials', express.json({ limit: '8kb' }), handleNestAffiliateShopeeCredentials);
+  app.get('/api/v1/nestaffiliate/shopee/search', handleNestAffiliateShopeeSearch);
   app.post('/api/v1/support/whatsapp-link', express.json({ limit: '8kb' }), createSupportWhatsAppLink);
   app.post('/api/v1/public/sales/whatsapp-link', express.json({ limit: '8kb' }), createPublicSalesWhatsAppLink);
   app.post('/api/v1/public/analytics/home', express.json({ limit: '2kb' }), async (req, res) => {
