@@ -51,7 +51,7 @@ export async function createInvitation(
     const { organizationId, email, role, mode: rawMode, targetAppId, targetPath } = req.body;
     const inviteMode = rawMode === 'link' ? 'link' : 'email';
     const targetResult = resolveInvitationAppTarget(targetAppId, targetPath);
-    if (!targetResult.success) {
+    if ('reasonCode' in targetResult) {
       return res.status(400).json({ success: false, reasonCode: targetResult.reasonCode });
     }
     const invitationTarget = targetResult.target;
