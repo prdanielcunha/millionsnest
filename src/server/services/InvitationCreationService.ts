@@ -47,18 +47,22 @@ export async function createInvitation(
     }
     const uid = decodedToken.uid;
 
-    const { organizationId, email, role } = req.body;
-    
-    if (typeof email !== 'string') {
-      return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_EMAIL' });
-    }
+    const { organizationId, email, role, mode: rawMode } = req.body;
+    const inviteMode = rawMode === 'link' ? 'link' : 'email';
+
     if (!isInvitationRole(role)) {
       return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_ROLE' });
     }
-    
-    const normalizedEmail = normalizeInvitationEmail(email);
-    if (!normalizedEmail || !isValidInvitationCreationEmail(normalizedEmail)) {
-      return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_EMAIL' });
+
+    let normalizedEmail: string | null = null;
+    if (inviteMode === 'email') {
+      if (typeof email !== 'string') {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_EMAIL' });
+      }
+      normalizedEmail = normalizeInvitationEmail(email);
+      if (!normalizedEmail || !isValidInvitationCreationEmail(normalizedEmail)) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_EMAIL' });
+      }
     }
 
     const db = resolveFirestore();
@@ -75,8 +79,8 @@ export async function createInvitation(
       let membershipData: any = {};
       let membershipExists = false;
       
+      const membershipRef = db.collection('organizations').doc(organizationId).collection('members').doc(uid);
       if (!isGlobalAdmin) {
-        const membershipRef = db.collection('organizations').doc(organizationId).collection('members').doc(uid);
         const membershipSnap = await t.get(membershipRef);
         membershipExists = membershipSnap.exists;
         membershipData = membershipSnap.data() || {};
@@ -88,6 +92,40 @@ export async function createInvitation(
         return { statusCode: 404, payload: { success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' } };
       }
       const orgData = orgSnap.data() || {};
+
+      // Ownership is an authority fact on the organization itself. Some older
+      // tenants predate the canonical organizations/{orgId}/members/{uid}
+      // projection or only expose organizationRole on that member document.
+      // Do not reject a real owner just because that projection is absent/stale.
+      const ownerIds = [
+        orgData.ownerUid,
+        orgData.ownerId,
+        orgData.ownerUserId,
+        orgData.owner_user_id
+      ].filter((value) => typeof value === 'string' && value.trim() !== '');
+      const isOrganizationOwner = ownerIds.includes(uid);
+
+      if (!isGlobalAdmin) {
+        if (isOrganizationOwner) {
+          membershipExists = true;
+          membershipData = {
+            ...membershipData,
+            role: 'owner',
+            organizationRole: 'owner',
+            status: membershipData.status || 'active'
+          };
+        } else if (membershipExists) {
+          const canonicalMembershipRole =
+            membershipData.role ||
+            membershipData.organizationRole ||
+            membershipData.membershipRole ||
+            null;
+          membershipData = {
+            ...membershipData,
+            role: canonicalMembershipRole
+          };
+        }
+      }
       
       const subRef = db.collection('subscriptions').doc(organizationId);
       const subSnap = await t.get(subRef);
@@ -119,12 +157,16 @@ export async function createInvitation(
              if (Number.isInteger(invData.maxUses) && invData.maxUses > 0 && 
                  Number.isInteger(invData.useCount) && invData.useCount < invData.maxUses) {
                  
-                 if (typeof invData.emailNormalized === 'string') {
-                     pendingInvitesCount++;
-                     
-                     if (invData.emailNormalized === normalizedEmail) {
-                       existingPendingInvite = invData;
-                     }
+                 // Every valid one-time pending invite reserves one seat on
+                 // limited plans, whether it is email-bound or shareable.
+                 pendingInvitesCount++;
+
+                 if (
+                   inviteMode === 'email' &&
+                   typeof invData.emailNormalized === 'string' &&
+                   invData.emailNormalized === normalizedEmail
+                 ) {
+                   existingPendingInvite = invData;
                  }
              }
           }
@@ -137,10 +179,10 @@ export async function createInvitation(
         subscription: {
           exists: subSnap.exists,
           organizationId: subData.organizationId,
-          app: subData.app,
-          status: subData.status,
-          plan: subData.plan,
-          limitsUsers: subData.limits?.users
+          app: subData.apps?.musicscale?.app ?? subData.app,
+          status: subData.apps?.musicscale?.status ?? subData.status,
+          plan: subData.apps?.musicscale?.plan ?? subData.plan,
+          limitsUsers: subData.apps?.musicscale?.limits?.users ?? subData.limits?.users
         },
         organizationApp: {
           exists: !!orgData.apps?.musicscale,
@@ -172,7 +214,7 @@ export async function createInvitation(
         },
         creatorMembership: {
           exists: membershipExists,
-          role: membershipData.role,
+          role: membershipData.role || membershipData.organizationRole || membershipData.membershipRole,
           status: membershipData.status
         },
         organization: {
@@ -183,8 +225,9 @@ export async function createInvitation(
         },
         request: {
           organizationId,
-          email: normalizedEmail,
-          role
+          ...(normalizedEmail ? { email: normalizedEmail } : {}),
+          role,
+          mode: inviteMode
         },
         capacity: capacityInput,
         existingPendingInvitation: existingPendingInvite ? {
@@ -217,8 +260,15 @@ export async function createInvitation(
       
       const { rawToken, tokenHash } = tokenMaterial.material;
 
-      // Check for tokenHash collision across all invites
-      const collisionQuery = await t.get(db.collectionGroup('invites').where('tokenHash', '==', tokenHash));
+      // Scope collision detection to this organization's invite collection.
+      // A collection-group query requires a dedicated Firestore collection-group
+      // index and was causing every real production invite creation to fail with
+      // INTERNAL_ERROR before the first write. Acceptance is organization-scoped,
+      // and the token has 256 bits of entropy, so cross-organization collisions
+      // are irrelevant to the lookup contract.
+      const collisionQuery = await t.get(
+        invitesRef.where('tokenHash', '==', tokenHash).limit(1)
+      );
       if (!collisionQuery.empty) {
          return { statusCode: 500, payload: { success: false, reasonCode: 'TOKEN_STATE_INCONSISTENT' } };
       }
@@ -227,12 +277,18 @@ export async function createInvitation(
       const inviteId = inviteDoc.id;
 
       t.set(inviteDoc, {
-        schemaVersion: 1,
+        schemaVersion: 2,
         id: inviteId,
         organizationId,
         organizationName: planResult.organizationName,
-        email: normalizedEmail,
-        emailNormalized: normalizedEmail,
+        inviteMode: planResult.inviteMode,
+        identityBound: planResult.identityBound,
+        ...(planResult.email
+          ? {
+              email: planResult.email,
+              emailNormalized: planResult.emailNormalized
+            }
+          : {}),
         role: planResult.role,
         status: planResult.status,
         tokenHash,
@@ -269,7 +325,9 @@ export async function createInvitation(
             id: inviteId,
             organizationId,
             organizationName: planResult.organizationName,
-            email: normalizedEmail,
+            inviteMode: planResult.inviteMode,
+            identityBound: planResult.identityBound,
+            ...(planResult.email ? { email: planResult.email } : {}),
             role: planResult.role,
             status: planResult.status,
             expiresAtMs: planResult.expiresAtMs
@@ -280,7 +338,14 @@ export async function createInvitation(
 
     return res.status(result.statusCode).json(result.payload);
 
-  } catch (error) {
+  } catch (error: any) {
+    console.error('[InvitationCreation] Unhandled failure', {
+      code: error?.code || null,
+      message: error?.message || String(error),
+      organizationId: req.body?.organizationId || null,
+      mode: req.body?.mode === 'link' ? 'link' : 'email',
+      role: req.body?.role || null
+    });
     return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
   }
 }
