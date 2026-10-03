@@ -52,6 +52,12 @@ export async function bootstrapUserContext(req: Request, res: Response) {
     return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
   }
 
+  const bootstrapIdentityUpdates = {
+    ...(userEmail ? { email: userEmail } : {}),
+    ...(userDisplayName ? { displayName: userDisplayName } : {}),
+    ...(userPhotoURL ? { photoURL: userPhotoURL } : {})
+  };
+
   const parseTimeMs = (val: any): number | undefined => {
     if (!val) return undefined;
     if (typeof val.toMillis === 'function') return val.toMillis();
@@ -216,6 +222,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         }
 
         const updates: any = {
+          ...bootstrapIdentityUpdates,
           lastLoginAt: FieldValue.serverTimestamp(),
           activeOrganizationId: orgId,
           primaryOrganizationId: finalPrimaryId,
@@ -276,6 +283,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         }
 
         const updates: any = {
+          ...bootstrapIdentityUpdates,
           lastLoginAt: FieldValue.serverTimestamp(),
           activeOrganizationId: orgId,
           primaryOrganizationId: finalPrimaryId,
@@ -363,6 +371,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         }
 
         const updates: any = {
+          ...bootstrapIdentityUpdates,
           lastLoginAt: FieldValue.serverTimestamp(),
           activeOrganizationId: targetOrgId,
           primaryOrganizationId: finalPrimaryId,
