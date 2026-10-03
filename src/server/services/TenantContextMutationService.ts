@@ -7,6 +7,8 @@ import { getFirestore, FieldValue, Firestore } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
 import { planInvitationAcceptance, normalizeInvitationEmail, InvitationAcceptanceInput } from './InvitationAcceptancePlanner.js';
 import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './InvitationAcceptanceServerPolicy.js';
+import { isOrganizationLifecycleActive } from '../../lib/organizationLifecycle.js';
+import { isValidInvitationOrganizationId } from '../../lib/InvitationRedirectPolicy.js';
 
 
 
@@ -83,7 +85,7 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         const checkOrg = await t.get(db.collection('organizations').doc(lockOrgId));
         if (checkOrg.exists) {
            lockOrgExists = true;
-           lockOrgActive = checkOrg.data()?.status === 'active';
+           lockOrgActive = isOrganizationLifecycleActive(checkOrg.data() || {});
         }
         const checkMem = await t.get(db.collection(`organizations/${lockOrgId}/members`).doc(uid));
         if (checkMem.exists) {
@@ -103,23 +105,28 @@ export async function bootstrapUserContext(req: Request, res: Response) {
         memberActive: lockMemberActive
       };
 
-      // Get Canonical Memberships
-      const membersQuery = await t.get(
-        db.collectionGroup('members').where('uid', '==', uid)
-      );
-      const allCanonical = membersQuery.docs
-        .filter(d => 
-           d.id === uid && 
-           d.ref.parent.id === 'members' && 
-           d.ref.parent.parent?.parent?.id === 'organizations'
-        )
-        .map(d => ({ ...d.data(), organizationId: d.ref.parent.parent!.id } as any));
+      // A truly first-time Firebase identity has no users/{uid} profile yet.
+      // Do not make that happy path depend on a collection-group index just to
+      // discover memberships that cannot normally exist before onboarding.
+      let allCanonical: any[] = [];
+      if (userSnap.exists) {
+        const membersQuery = await t.get(
+          db.collectionGroup('members').where('uid', '==', uid)
+        );
+        allCanonical = membersQuery.docs
+          .filter(d => 
+             d.id === uid && 
+             d.ref.parent.id === 'members' && 
+             d.ref.parent.parent?.parent?.id === 'organizations'
+          )
+          .map(d => ({ ...d.data(), organizationId: d.ref.parent.parent!.id } as any));
+      }
 
       const candidateCanonical = allCanonical.filter(m => !m.status || m.status === 'active');
       const validCanonical = [];
       for (const m of candidateCanonical) {
          const orgSnap = await t.get(db.collection('organizations').doc(m.organizationId));
-         if (orgSnap.exists && orgSnap.data()?.status === 'active') {
+         if (orgSnap.exists && isOrganizationLifecycleActive(orgSnap.data() || {})) {
             validCanonical.push(m);
          }
       }
@@ -155,34 +162,22 @@ export async function bootstrapUserContext(req: Request, res: Response) {
       const validLegacy = [];
       for (const m of resolveResult.memberships) {
           const orgSnap = await t.get(db.collection('organizations').doc(m.organizationId));
-          const orgValid = orgSnap.exists && orgSnap.data()?.status === 'active';
+          const orgValid = orgSnap.exists && isOrganizationLifecycleActive(orgSnap.data() || {});
           if (!orgValid) {
               throw new Error('BOOTSTRAP_STATE_INCONSISTENT');
           }
           validLegacy.push(m);
       }
 
-      // Get Invites
-      let pendingInvites: any[] = [];
-      const normalizedEmail = userEmail?.toLowerCase().trim();
-      if (normalizedEmail) {
-        const iQ1 = await t.get(db.collectionGroup('invites').where('emailNormalized', '==', normalizedEmail).where('status', '==', 'pending'));
-        const originalEmail = userEmail!.trim();
-        const iQ2 = await t.get(db.collectionGroup('invites').where('email', '==', originalEmail).where('status', '==', 'pending'));
-        const iQ3 = await t.get(db.collectionGroup('invites').where('email', '==', normalizedEmail).where('status', '==', 'pending'));
-        
-        const inviteMap = new Map();
-        [...iQ1.docs, ...iQ2.docs, ...iQ3.docs].forEach(d => {
-           inviteMap.set(d.ref.path, d.data());
-        });
-        
-        pendingInvites = Array.from(inviteMap.values()).map((d: any) => ({
-           email: d.email,
-           emailNormalized: d.emailNormalized,
-           status: d.status,
-           expiresAtMs: parseTimeMs(d.expiresAt)
-        }));
-      }
+      // Generic sign-in/bootstrap must never be blocked by an invitation that the
+      // user did not explicitly open. Invitation acceptance is a separate,
+      // token-bound flow handled by /join/:orgId, and AuthContext deliberately
+      // skips bootstrap when that explicit redirect is present.
+      //
+      // Keeping generic onboarding independent from collectionGroup('invites')
+      // also avoids making first-time Google sign-in depend on a collection-group
+      // index before the customer can even reach checkout.
+      const pendingInvites: any[] = [];
 
       const userContext = {
         activeOrganizationId: userData?.activeOrganizationId,
@@ -472,30 +467,39 @@ export async function acceptInvitation(
       return res.status(400).json({ success: false, reasonCode: 'INVALID_TOKEN' });
     }
 
+    const requestedOrganizationId = req.body?.organizationId;
+    if (!isValidInvitationOrganizationId(requestedOrganizationId)) {
+      return res.status(400).json({ success: false, reasonCode: 'INVALID_ORGANIZATION_ID' });
+    }
+
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const acceptanceNowMs = now();
     const db = resolveFirestore();
 
     const result = await db.runTransaction(async (t) => {
+      const orgInvitesRef = db
+        .collection('organizations')
+        .doc(requestedOrganizationId)
+        .collection('invites');
+
+      // Resolve the token inside the organization encoded in the /join URL.
+      // This deliberately avoids a collectionGroup query: production had no
+      // collection-group index for invites.tokenHash, so valid invitations
+      // failed at runtime even though unit/build QA was green.
       const invitesQuery = await t.get(
-        db.collectionGroup('invites').where('tokenHash', '==', tokenHash)
+        orgInvitesRef.where('tokenHash', '==', tokenHash).limit(2)
       );
 
-      const validInvites = invitesQuery.docs.filter(d => {
-        const parts = d.ref.path.split('/');
-        return parts.length === 4 && parts[0] === 'organizations' && parts[2] === 'invites';
-      });
-
-      if (validInvites.length === 0) {
+      if (invitesQuery.empty) {
          return { status: 404, data: { success: false, reasonCode: 'INVITE_NOT_FOUND' } };
       }
-      if (validInvites.length > 1) {
+      if (invitesQuery.size > 1) {
          return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
       }
 
-      const inviteDoc = validInvites[0];
+      const inviteDoc = invitesQuery.docs[0];
       const inviteData = inviteDoc.data();
-      const orgId = inviteDoc.ref.parent.parent!.id;
+      const orgId = requestedOrganizationId;
 
       if (Object.prototype.hasOwnProperty.call(inviteData, 'organizationId')) {
         if (typeof inviteData.organizationId !== 'string' || inviteData.organizationId !== orgId) {
@@ -526,10 +530,10 @@ export async function acceptInvitation(
         subscription: {
            exists: subSnap.exists,
            organizationId: subData.organizationId,
-           app: subData.app,
-           status: subData.status,
-           plan: subData.plan,
-           limitsUsers: subData.limits?.users
+           app: subData.apps?.musicscale?.app ?? subData.app,
+           status: subData.apps?.musicscale?.status ?? subData.status,
+           plan: subData.apps?.musicscale?.plan ?? subData.plan,
+           limitsUsers: subData.apps?.musicscale?.limits?.users ?? subData.limits?.users
         },
         organizationApp: {
            exists: orgSnap.exists && !!orgData.apps?.musicscale,
@@ -559,6 +563,8 @@ export async function acceptInvitation(
           exists: true,
           organizationId: orgId,
           status: inviteData.status,
+          inviteMode: inviteData.inviteMode,
+          identityBound: inviteData.identityBound,
           email: inviteData.email,
           emailNormalized: inviteData.emailNormalized,
           role: inviteData.role,
