@@ -15,6 +15,7 @@ import {
 } from './InvitationAcceptanceServerPolicy.js';
 import { normalizeInvitationEmail, isInvitationRole, InvitationRole } from './InvitationAcceptancePlanner.js';
 import { canManageTenantMembers } from '../../lib/permissionService.js';
+import { resolveInvitationAppTarget } from '../../lib/InvitationAppTargetPolicy.js';
 
 export type InvitationCreationDependencies = {
   verifyIdToken?: (token: string) => Promise<{ uid: string }>;
@@ -47,8 +48,13 @@ export async function createInvitation(
     }
     const uid = decodedToken.uid;
 
-    const { organizationId, email, role, mode: rawMode } = req.body;
+    const { organizationId, email, role, mode: rawMode, targetAppId, targetPath } = req.body;
     const inviteMode = rawMode === 'link' ? 'link' : 'email';
+    const targetResult = resolveInvitationAppTarget(targetAppId, targetPath);
+    if (!targetResult.success) {
+      return res.status(400).json({ success: false, reasonCode: targetResult.reasonCode });
+    }
+    const invitationTarget = targetResult.target;
 
     if (!isInvitationRole(role)) {
       return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_ROLE' });
@@ -315,7 +321,13 @@ export async function createInvitation(
         updatedAt: FieldValue.serverTimestamp(),
         expiresAt: Timestamp.fromMillis(planResult.expiresAtMs),
         maxUses: planResult.maxUses,
-        useCount: planResult.useCount
+        useCount: planResult.useCount,
+        ...(invitationTarget
+          ? {
+              targetAppId: invitationTarget.appId,
+              targetPath: invitationTarget.destinationPath
+            }
+          : {})
       });
 
       t.set(orgRef, {
@@ -330,6 +342,8 @@ export async function createInvitation(
         governanceScope: isGlobalAdmin ? 'ecosystem_global' : 'organization',
         invitationId: inviteId,
         membershipRole: planResult.role,
+        targetAppId: invitationTarget?.appId || null,
+        targetPath: invitationTarget?.destinationPath || null,
         timestamp: FieldValue.serverTimestamp()
       });
 
@@ -338,7 +352,7 @@ export async function createInvitation(
         payload: {
           success: true,
           reasonCode: planResult.reasonCode,
-          invitePath: `/join/${organizationId}?token=${encodeURIComponent(rawToken)}`,
+          invitePath: `/join/${organizationId}?token=${encodeURIComponent(rawToken)}${invitationTarget ? `&app=${encodeURIComponent(invitationTarget.appId)}` : ''}`,
           invitation: {
             id: inviteId,
             organizationId,
@@ -348,7 +362,13 @@ export async function createInvitation(
             ...(planResult.email ? { email: planResult.email } : {}),
             role: planResult.role,
             status: planResult.status,
-            expiresAtMs: planResult.expiresAtMs
+            expiresAtMs: planResult.expiresAtMs,
+            ...(invitationTarget
+              ? {
+                  targetAppId: invitationTarget.appId,
+                  targetPath: invitationTarget.destinationPath
+                }
+              : {})
           }
         }
       };
@@ -362,7 +382,8 @@ export async function createInvitation(
       message: error?.message || String(error),
       organizationId: req.body?.organizationId || null,
       mode: req.body?.mode === 'link' ? 'link' : 'email',
-      role: req.body?.role || null
+      role: req.body?.role || null,
+      targetAppId: req.body?.targetAppId || null
     });
     return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
   }
