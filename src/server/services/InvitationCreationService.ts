@@ -79,8 +79,8 @@ export async function createInvitation(
       let membershipData: any = {};
       let membershipExists = false;
       
+      const membershipRef = db.collection('organizations').doc(organizationId).collection('members').doc(uid);
       if (!isGlobalAdmin) {
-        const membershipRef = db.collection('organizations').doc(organizationId).collection('members').doc(uid);
         const membershipSnap = await t.get(membershipRef);
         membershipExists = membershipSnap.exists;
         membershipData = membershipSnap.data() || {};
@@ -92,6 +92,40 @@ export async function createInvitation(
         return { statusCode: 404, payload: { success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' } };
       }
       const orgData = orgSnap.data() || {};
+
+      // Ownership is an authority fact on the organization itself. Some older
+      // tenants predate the canonical organizations/{orgId}/members/{uid}
+      // projection or only expose organizationRole on that member document.
+      // Do not reject a real owner just because that projection is absent/stale.
+      const ownerIds = [
+        orgData.ownerUid,
+        orgData.ownerId,
+        orgData.ownerUserId,
+        orgData.owner_user_id
+      ].filter((value) => typeof value === 'string' && value.trim() !== '');
+      const isOrganizationOwner = ownerIds.includes(uid);
+
+      if (!isGlobalAdmin) {
+        if (isOrganizationOwner) {
+          membershipExists = true;
+          membershipData = {
+            ...membershipData,
+            role: 'owner',
+            organizationRole: 'owner',
+            status: membershipData.status || 'active'
+          };
+        } else if (membershipExists) {
+          const canonicalMembershipRole =
+            membershipData.role ||
+            membershipData.organizationRole ||
+            membershipData.membershipRole ||
+            null;
+          membershipData = {
+            ...membershipData,
+            role: canonicalMembershipRole
+          };
+        }
+      }
       
       const subRef = db.collection('subscriptions').doc(organizationId);
       const subSnap = await t.get(subRef);
@@ -180,7 +214,7 @@ export async function createInvitation(
         },
         creatorMembership: {
           exists: membershipExists,
-          role: membershipData.role,
+          role: membershipData.role || membershipData.organizationRole || membershipData.membershipRole,
           status: membershipData.status
         },
         organization: {
