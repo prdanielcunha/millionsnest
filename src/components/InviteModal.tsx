@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { useTranslation } from 'react-i18next';
 import { useOrganization } from '../contexts/OrganizationContext.js';
 import { getInviteableOrganizationRolesForActor, normalizeExistingOrganizationRole, getOrganizationRoleDescription } from '../lib/organizationRoles.js';
+import { getEcosystemApp } from '../lib/apps.js';
 
 interface InviteModalProps {
   isOpen: boolean;
@@ -13,7 +14,8 @@ interface InviteModalProps {
     role: "admin" | "manager" | "member" | "viewer",
     email: string,
     overrideOrgId?: string,
-    mode?: "email" | "link"
+    mode?: "email" | "link",
+    targetAppId?: string
   ) => Promise<{
     inviteUrl: string;
     invitation: {
@@ -33,6 +35,7 @@ interface InviteModalProps {
   maxUsersLimit?: number;
   onUpgradeClick?: () => void;
   canInvite?: boolean;
+  targetAppId?: string;
 }
 
 export function InviteModal({ 
@@ -43,11 +46,13 @@ export function InviteModal({
   occupiedSlots,
   maxUsersLimit,
   onUpgradeClick,
-  canInvite = true
+  canInvite = true,
+  targetAppId
 }: InviteModalProps) {
   const { profile, user } = useAuth();
   const { organization, memberRole } = useOrganization();
   const { t } = useTranslation();
+  const targetAppName = targetAppId ? getEcosystemApp(targetAppId)?.name || null : null;
   
   const isGlobalAdmin = profile?.systemRole === 'ceo' || profile?.systemRole === 'global_admin' || profile?.systemRole === 'ecosystem_owner' || profile?.systemRole === 'founder';
   
@@ -150,6 +155,7 @@ export function InviteModal({
       case 'MEMBER_LIMIT_REACHED': return t('dashboard.invite.errors.member_limit', 'O limite de pessoas do plano foi atingido.');
       case 'MEMBER_LIMIT_UNAVAILABLE': return t('dashboard.invite.errors.limit_unavailable', 'Não foi possível confirmar o limite do plano agora. Tente novamente.');
       case 'TIMEOUT': return t('dashboard.invite.errors.timeout', 'A criação do convite demorou mais que o esperado. Verifique sua conexão antes de tentar novamente.');
+      case 'INVALID_INVITE_TARGET_APP': return t('dashboard.invite.errors.invalid_target_app', 'O aplicativo de destino deste convite não é válido.');
       default: return t('dashboard.invite.errors.generic', 'Não foi possível criar o convite. Tente novamente.');
     }
   };
@@ -173,7 +179,8 @@ export function InviteModal({
         role,
         inviteMode === 'email' ? email : '',
         overrideOrgId,
-        inviteMode
+        inviteMode,
+        targetAppId
       );
       setCreatedInviteUrl(res.inviteUrl);
       setCreatedInviteId(res.invitation.id);
@@ -239,8 +246,8 @@ export function InviteModal({
       getInviteableRoles().find(option => option.value === role)?.label || role;
     const text = encodeURIComponent(
       inviteMode === 'link'
-        ? `Você foi convidado para entrar na organização ${orgName} na MillionsNest como ${selectedRoleLabel}.\n\nAcesse: ${invite.url}`
-        : `Você foi convidado para entrar na organização ${orgName} na MillionsNest.\n\nAcesse: ${invite.url}`
+        ? `Você foi convidado para entrar na organização ${orgName}${targetAppName ? ` no ${targetAppName}` : ' na MillionsNest'} como ${selectedRoleLabel}.\n\nAcesse: ${invite.url}`
+        : `Você foi convidado para entrar na organização ${orgName}${targetAppName ? ` no ${targetAppName}` : ' na MillionsNest'}.\n\nAcesse: ${invite.url}`
     );
     
     if (popup) {
@@ -284,8 +291,8 @@ export function InviteModal({
 
       if (data?.reasonCode === 'NOT_CONFIGURED') {
         const orgName = organization?.name || 'sua organização';
-        const subject = encodeURIComponent(`Convite para ${orgName} no MillionsNest`);
-        const body = encodeURIComponent(`Você foi convidado para entrar em ${orgName} no MillionsNest.\n\nAcesse: ${invite.url}`);
+        const subject = encodeURIComponent(`Convite para ${orgName} no ${targetAppName || 'MillionsNest'}`);
+        const body = encodeURIComponent(`Você foi convidado para entrar em ${orgName} no ${targetAppName || 'MillionsNest'}.\n\nAcesse: ${invite.url}`);
         window.location.href = `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`;
         setSuccessMsg(t('dashboard.invite.email_app_opened', 'Abrimos seu aplicativo de e-mail com o convite pronto para enviar.'));
         return;
@@ -306,8 +313,8 @@ export function InviteModal({
 
     try {
       await navigator.share({
-        title: t('dashboard.invite.share_title', 'Convite MillionsNest'),
-        text: t('dashboard.invite.share_text', 'Você recebeu um convite para entrar na organização no MillionsNest.'),
+        title: t('dashboard.invite.share_title', targetAppName ? `Convite ${targetAppName}` : 'Convite MillionsNest'),
+        text: t('dashboard.invite.share_text', targetAppName ? `Você recebeu um convite para entrar na organização no ${targetAppName}.` : 'Você recebeu um convite para entrar na organização no MillionsNest.'),
         url: invite.url
       });
       setSuccessMsg(t('dashboard.invite.share_opened', 'Opções de compartilhamento abertas.'));
