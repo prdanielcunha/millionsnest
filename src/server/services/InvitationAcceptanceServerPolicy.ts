@@ -68,30 +68,42 @@ export function resolveCanonicalInvitationCapacity(input: CanonicalInvitationEnt
 
   const validStatuses = ['active', 'trialing'];
   const subscriptionStatus = normalizeStatus(subscription.status);
-  const organizationAppStatus = normalizeStatus(organizationApp.status);
 
   if (!validStatuses.includes(subscriptionStatus)) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
-  // organizations/{id}.apps.musicscale is a materialized entitlement cache.
-  // If it exists and explicitly says the app is inactive, fail closed. If the
-  // cache is temporarily missing/empty while the canonical subscription is
-  // already active or trialing, capacity can still be resolved safely from
-  // the subscription document and the server-owned plan catalog.
-  if (
-    organizationApp.exists &&
-    organizationAppStatus &&
-    !validStatuses.includes(organizationAppStatus)
-  ) {
-    return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
-  }
+  // subscriptions/{orgId} is the canonical paid/trialing product state.
+  // organizations/{id}.apps.musicscale is only a materialized cache and can
+  // temporarily lag after checkout/reconciliation. A stale cache must never
+  // block a customer whose canonical subscription is active or trialing.
 
   const normalizePlan = (value: unknown): CanonicalMusicScalePlan | null => {
     if (typeof value !== 'string') return null;
     const normalized = value.trim().toLowerCase();
-    if (normalized === 'starter' || normalized === 'advanced' || normalized === 'pro') {
-      return normalized;
+    if (!normalized) return null;
+
+    // Keep compatibility with previous billing labels while preserving a
+    // strict finite result. Unknown values are not silently downgraded.
+    if (
+      normalized === 'pro' ||
+      normalized.includes('premium') ||
+      normalized.includes('complete') ||
+      normalized.includes('completo')
+    ) {
+      return 'pro';
+    }
+    if (
+      normalized === 'advanced' ||
+      normalized.includes('advance') ||
+      normalized.includes('intermediate') ||
+      normalized.includes('intermediario') ||
+      normalized.includes('intermediário')
+    ) {
+      return 'advanced';
+    }
+    if (normalized === 'starter' || normalized.includes('starter')) {
+      return 'starter';
     }
     return null;
   };
@@ -103,22 +115,17 @@ export function resolveCanonicalInvitationCapacity(input: CanonicalInvitationEnt
   const hasExplicitOrganizationPlan =
     typeof organizationApp.plan === 'string' && organizationApp.plan.trim() !== '';
 
-  if (hasExplicitSubscriptionPlan && !subscriptionPlan) {
+  // Prefer the canonical subscription plan. The organization-side plan is a
+  // compatibility fallback only when the subscription record predates the
+  // current plan field. Do not let a stale organization cache override or
+  // conflict with a valid canonical subscription.
+  if (hasExplicitSubscriptionPlan && !subscriptionPlan && !organizationPlan) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_INVALID' };
   }
-  if (hasExplicitOrganizationPlan && !organizationPlan) {
+  if (!subscriptionPlan && hasExplicitOrganizationPlan && !organizationPlan) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_INVALID' };
   }
-
   if (!subscriptionPlan && !organizationPlan) {
-    return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
-  }
-
-  // The app-specific subscription projection is canonical for billing. The
-  // organization app projection is an entitlement cache. A temporary missing
-  // plan in one side must not block an otherwise valid paid customer, but two
-  // explicit conflicting plans are treated as unavailable until reconciliation.
-  if (subscriptionPlan && organizationPlan && subscriptionPlan !== organizationPlan) {
     return { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' };
   }
 
