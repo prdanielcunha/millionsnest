@@ -587,6 +587,7 @@ export function Dashboard() {
   // Invite Link states
   const [copiedLink, setCopiedLink] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteTargetAppId, setInviteTargetAppId] = useState<string | null>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
@@ -1985,7 +1986,8 @@ export function Dashboard() {
     role: "admin" | "manager" | "member" | "viewer",
     email: string,
     overrideOrgId?: string,
-    mode: "email" | "link" = "email"
+    mode: "email" | "link" = "email",
+    targetAppId?: string
   ): Promise<{
     inviteUrl: string;
     invitation: {
@@ -2020,7 +2022,8 @@ export function Dashboard() {
           organizationId: orgId,
           ...(mode === "email" ? { email } : {}),
           role,
-          mode
+          mode,
+          ...(targetAppId ? { targetAppId } : {})
         }),
         signal: abortController.signal
       });
@@ -2046,8 +2049,13 @@ export function Dashboard() {
        throw new Error("GENERIC");
     }
 
-    const finalUrl = new URL(data.invitePath, window.location.origin);
-    if (finalUrl.origin !== window.location.origin) {
+    const finalUrl = data.inviteUrl
+      ? new URL(data.inviteUrl)
+      : new URL(data.invitePath, window.location.origin);
+    if (!data.inviteUrl && finalUrl.origin !== window.location.origin) {
+       throw new Error("GENERIC");
+    }
+    if (targetAppId && data.invitation?.targetAppId !== targetAppId) {
        throw new Error("GENERIC");
     }
 
@@ -2128,6 +2136,7 @@ export function Dashboard() {
 
   useEffect(() => {
     const handleInviteAction = () => {
+       setInviteTargetAppId(null);
        setIsInviteModalOpen(true);
        setActiveTab("organization"); // Switch to team/org view
     };
@@ -3509,7 +3518,10 @@ export function Dashboard() {
                 musicScaleSummary={musicScaleHubSummary}
                 musicScaleChanges={musicScaleChangeNotifications}
                 onAcknowledgeMusicScaleChange={acknowledgeMusicScaleChange}
-                onOpenInviteModal={() => setIsInviteModalOpen(true)}
+                onOpenInviteModal={() => {
+                  setInviteTargetAppId(selectedWorkspace !== 'home' ? selectedWorkspace : null);
+                  setIsInviteModalOpen(true);
+                }}
                 onNavigateToOrganizationMembers={() => navigate('/dashboard/organization/members')}
                 onNavigateToBilling={() => setActiveTab('billing')}
                 onNavigateToOrganizationSettings={onNavigateToOrganizationSettings}
@@ -3593,7 +3605,10 @@ export function Dashboard() {
                 handleRevokeInvite={handleRevokeInvite}
                 handleAcceptJoinRequest={handleAcceptJoinRequest}
                 handleRejectJoinRequest={handleRejectJoinRequest}
-                onOpenInviteModal={() => setIsInviteModalOpen(true)}
+                onOpenInviteModal={() => {
+                  setInviteTargetAppId(null);
+                  setIsInviteModalOpen(true);
+                }}
                 pendingInvites={pendingInvites}
                 joinRequests={joinRequests}
                 setJoinRequests={setJoinRequests}
@@ -4439,8 +4454,12 @@ export function Dashboard() {
         return (
           <InviteModal
             isOpen={isInviteModalOpen}
-            onClose={() => setIsInviteModalOpen(false)}
+            onClose={() => {
+              setIsInviteModalOpen(false);
+              setInviteTargetAppId(null);
+            }}
             handleCreateInvite={handleCreateInvite}
+            targetAppId={inviteTargetAppId || undefined}
             isAtLimit={isAtLimit}
             occupiedSlots={occupiedSlots}
             maxUsersLimit={maxUsersLimit}
