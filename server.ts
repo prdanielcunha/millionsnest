@@ -6,6 +6,7 @@ import { generateInvitationTokenMaterial } from './src/server/services/Invitatio
 import { INVITATION_TTL_MS } from './src/server/services/InvitationCreationPlanner.js';
 import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './src/server/services/InvitationAcceptanceServerPolicy.js';
 import { canInviteOrganizationRole } from './src/lib/organizationRoles.js';
+import { resolveInvitationAppTarget, getInvitationTargetAppName } from './src/lib/InvitationAppTargetPolicy.js';
 import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
@@ -1512,6 +1513,12 @@ async function startServer() {
         });
       }
 
+      const targetResult = resolveInvitationAppTarget(inviteData.targetAppId, inviteData.targetPath);
+      if (!targetResult.success) {
+        return res.status(409).json({ success: false, reasonCode: 'INVITATION_STATE_INVALID' });
+      }
+      const invitationTarget = targetResult.target;
+
       const expiresAtMs = normalizeInvitationTemporalMs(inviteData.expiresAt);
       if (!expiresAtMs || expiresAtMs <= Date.now()) {
         return res.status(409).json({ success: false, reasonCode: 'INVITATION_EXPIRED' });
@@ -1578,7 +1585,8 @@ async function startServer() {
         recipientEmail: inviteData.emailNormalized,
         organizationName: String(orgData.name || inviteData.organizationName || 'Sua organização'),
         inviteUrl,
-        roleLabel: roleLabelMap[inviteData.role] || 'Membro'
+        roleLabel: roleLabelMap[inviteData.role] || 'Membro',
+        targetAppName: invitationTarget ? getInvitationTargetAppName(invitationTarget.appId) : null
       });
 
       if (!result.success) {

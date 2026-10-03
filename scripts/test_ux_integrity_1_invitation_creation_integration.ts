@@ -48,6 +48,9 @@ assert(serviceFile.includes("appSubscription ? 'musicscale' : subData.app"), "Ap
 assert(serviceFile.includes("subData.productPlan"), "Legacy productPlan is supported for invitation capacity");
 assert(serviceFile.includes("subData.musicScalePlan"), "Legacy musicScalePlan is supported for invitation capacity");
 assert(serviceFile.includes("subData.priceNickname"), "Legacy priceNickname is supported for invitation capacity");
+assert(serviceFile.includes('resolveInvitationAppTarget(targetAppId, targetPath)'), "Service validates canonical invitation app target");
+assert(serviceFile.includes('targetAppId: invitationTarget.appId'), "Service persists target app");
+assert(serviceFile.includes('targetPath: invitationTarget.destinationPath'), "Service persists safe target path");
 
 const organizationManagerFile = fs.readFileSync('src/components/OrganizationManager.tsx', 'utf-8');
 assert(organizationManagerFile.includes("currentUserPerms?.['organization.members.invite']"), "Members invite CTA follows canonical capability instead of a hard-coded role list");
@@ -62,6 +65,8 @@ assert(dashboardFile.includes('Somente leitura'), "Member detail modal exposes r
 assert(dashboardFile.includes("fetch('/api/v1/invitations'"), "Dashboard uses POST /api/v1/invitations");
 assert(dashboardFile.includes('mode: "email" | "link"'), "Dashboard supports email and link invite modes");
 assert(dashboardFile.includes('...(mode === "email" ? { email } : {})'), "Dashboard does not require an email for shareable links");
+assert(dashboardFile.includes('target?.targetAppId'), "Dashboard forwards the selected app target");
+assert(dashboardFile.includes('target?.targetPath'), "Dashboard forwards the selected app destination");
 assert(dashboardFile.includes("Bearer ${idToken}"), "Dashboard uses Authorization Bearer");
 assert(dashboardFile.includes("user.getIdToken()"), "Dashboard uses getIdToken without true");
 assert(dashboardFile.includes("AbortController"), "Dashboard uses AbortController");
@@ -89,6 +94,9 @@ assert(modalFile.includes('flex items-start justify-between gap-3'), "Modal keep
 assert(modalFile.includes('Array.isArray(data.organizations)'), "Modal parses data.organizations");
 assert(modalFile.includes('type="button"'), "Modal buttons have type button");
 assert(modalFile.includes('aria-label='), "Modal close button has aria-label");
+assert(modalFile.includes("Onde essa pessoa vai começar?"), "Canonical Hub modal can select the app destination");
+assert(modalFile.includes('targetAppId'), "Canonical Hub modal carries target app context");
+assert(modalFile.includes('targetPath'), "Canonical Hub modal carries safe target path");
 
 const ptLocales = fs.readFileSync('src/packages/i18n/locales/pt.ts', 'utf-8');
 assert(ptLocales.includes('email_hint:'), "pt has email_hint");

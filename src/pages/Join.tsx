@@ -12,6 +12,12 @@ import {
   getInvitationJoinSuccessCopy,
   getInvitationJoinUiCopy
 } from '../lib/InvitationJoinClientPolicy.js';
+import {
+  buildInvitationLaunchPath,
+  getInvitationTargetAppName,
+  resolveInvitationAppTarget,
+  type InvitationTargetAppId,
+} from '../lib/InvitationAppTargetPolicy.js';
 
 type JoinStatus = 'validating' | 'success' | 'already_member' | 'error';
 
@@ -25,7 +31,12 @@ export function Join() {
   const [isAttemptActive, setIsAttemptActive] = useState(false);
   const [status, setStatus] = useState<JoinStatus>('validating');
   const [errorMessage, setErrorMessage] = useState<{ title: string; description: string; retryable: boolean } | null>(null);
-  const [inviteData, setInviteData] = useState<{ organizationName: string } | null>(null);
+  const [inviteData, setInviteData] = useState<{
+    organizationName: string;
+    targetAppId?: InvitationTargetAppId;
+    targetPath?: string;
+    targetAppName?: string;
+  } | null>(null);
   
   const automaticAttemptKeyRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -147,13 +158,24 @@ export function Join() {
       const parsed = parseInvitationJoinPayload(rawData);
       
       if (parsed.success === true) {
-        setInviteData({ organizationName: parsed.organizationName });
+        const targetResult = resolveInvitationAppTarget(parsed.targetAppId, parsed.targetPath);
+        const target = targetResult.success ? targetResult.target : null;
+        setInviteData({
+          organizationName: parsed.organizationName,
+          ...(target
+            ? {
+                targetAppId: target.appId,
+                targetPath: target.destinationPath,
+                targetAppName: getInvitationTargetAppName(target.appId) || undefined,
+              }
+            : {}),
+        });
         setStatus(parsed.alreadyMember ? 'already_member' : 'success');
         sessionStorage.removeItem('mn_invite_redirect');
-        
+
         timeoutRef.current = setTimeout(() => {
-          window.location.href = '/dashboard/overview';
-        }, 2500);
+          window.location.href = buildInvitationLaunchPath(target);
+        }, target ? 1200 : 2500);
         return;
       }
       
@@ -229,7 +251,11 @@ export function Join() {
                   <h2 className="text-[#F5F7FA] font-bold text-xl mb-2">{successCopy.title}</h2>
                   <p className="text-[#A0A7B5] text-sm mb-8">{successCopy.description}</p>
                   <p className="text-xs text-[#A0A7B5] flex items-center gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" /> {successCopy.redirectLabel}
+                    <Loader2 className="w-3 h-3 animate-spin" /> {
+                      inviteData.targetAppName
+                        ? `Abrindo ${inviteData.targetAppName}...`
+                        : successCopy.redirectLabel
+                    }
                   </p>
                 </>
               );

@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { useTranslation } from 'react-i18next';
 import { useOrganization } from '../contexts/OrganizationContext.js';
 import { getInviteableOrganizationRolesForActor, normalizeExistingOrganizationRole, getOrganizationRoleDescription } from '../lib/organizationRoles.js';
+import { ECOSYSTEM_APPS } from '../lib/apps.js';
+import { resolveInvitationAppTarget, type InvitationTargetAppId } from '../lib/InvitationAppTargetPolicy.js';
 
 interface InviteModalProps {
   isOpen: boolean;
@@ -13,7 +15,8 @@ interface InviteModalProps {
     role: "admin" | "manager" | "member" | "viewer",
     email: string,
     overrideOrgId?: string,
-    mode?: "email" | "link"
+    mode?: "email" | "link",
+    target?: { targetAppId?: InvitationTargetAppId; targetPath?: string }
   ) => Promise<{
     inviteUrl: string;
     invitation: {
@@ -33,6 +36,8 @@ interface InviteModalProps {
   maxUsersLimit?: number;
   onUpgradeClick?: () => void;
   canInvite?: boolean;
+  targetAppId?: InvitationTargetAppId;
+  targetPath?: string;
 }
 
 export function InviteModal({ 
@@ -43,7 +48,9 @@ export function InviteModal({
   occupiedSlots,
   maxUsersLimit,
   onUpgradeClick,
-  canInvite = true
+  canInvite = true,
+  targetAppId,
+  targetPath
 }: InviteModalProps) {
   const { profile, user } = useAuth();
   const { organization, memberRole } = useOrganization();
@@ -89,6 +96,7 @@ export function InviteModal({
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [fallbackLink, setFallbackLink] = useState(false);
+  const [selectedTargetAppId, setSelectedTargetAppId] = useState<InvitationTargetAppId | ''>(targetAppId || '');
 
   useEffect(() => {
     if (isOpen) {
@@ -107,10 +115,11 @@ export function InviteModal({
       setErrorMsg('');
       setSuccessMsg('');
       setFallbackLink(false);
+      setSelectedTargetAppId(targetAppId || '');
     } else {
       window.dispatchEvent(new CustomEvent('mn_modal_closed'));
     }
-  }, [isOpen, memberRole, organization, isGlobalAdmin]);
+  }, [isOpen, memberRole, organization, isGlobalAdmin, targetAppId]);
 
   useEffect(() => {
     if (isOpen && isGlobalAdmin && user) {
@@ -136,11 +145,34 @@ export function InviteModal({
     }
   }, [isOpen, isGlobalAdmin, user, t]);
 
+  const availableTargetApps = ECOSYSTEM_APPS.filter((app) => {
+    if (!app.directEntrySso || app.id === 'connect') return false;
+    if (app.status === 'disabled') return false;
+    const enabledApps = Array.isArray((organization as any)?.enabledApps) ? (organization as any).enabledApps : [];
+    const appState = (organization as any)?.apps?.[app.id];
+    const status = String(appState?.status || '').trim().toLowerCase();
+    return enabledApps.includes(app.id) || status === 'active' || status === 'trialing';
+  }).filter((app) =>
+    ['musicscale', 'nestfinance', 'nestlocal', 'nestjourney'].includes(app.id)
+  );
+
+  const selectedTarget = resolveInvitationAppTarget(
+    targetAppId || selectedTargetAppId || undefined,
+    targetPath
+  );
+  const effectiveTarget = selectedTarget.success ? selectedTarget.target : null;
+  const effectiveTargetAppName = effectiveTarget
+    ? ECOSYSTEM_APPS.find((app) => app.id === effectiveTarget.appId)?.name || effectiveTarget.appName
+    : null;
+
   const mapErrorCode = (code: string) => {
     switch(code) {
       case 'UNAUTHENTICATED': return t('dashboard.invite.errors.session_expired', 'Sua sessão expirou. Atualize a página e tente novamente.');
       case 'INVALID_INVITE_EMAIL': return t('dashboard.invite.errors.invalid_email', 'Informe um e-mail válido.');
       case 'INVALID_INVITE_ROLE': return t('dashboard.invite.errors.invalid_role', 'Escolha uma função válida.');
+      case 'INVALID_TARGET_APP':
+      case 'INVALID_TARGET_PATH':
+        return t('dashboard.invite.errors.invalid_target', 'O aplicativo de destino não é válido para este convite.');
       case 'ACTOR_MEMBERSHIP_REQUIRED':
       case 'ACTOR_MEMBERSHIP_INACTIVE':
       case 'PERMISSION_DENIED': return t('dashboard.invite.errors.permission_denied', 'Você não possui permissão para convidar pessoas nesta organização.');
@@ -173,7 +205,10 @@ export function InviteModal({
         role,
         inviteMode === 'email' ? email : '',
         overrideOrgId,
-        inviteMode
+        inviteMode,
+        effectiveTarget
+          ? { targetAppId: effectiveTarget.appId, targetPath: effectiveTarget.destinationPath }
+          : undefined
       );
       setCreatedInviteUrl(res.inviteUrl);
       setCreatedInviteId(res.invitation.id);
@@ -195,10 +230,16 @@ export function InviteModal({
     if (!invite) return;
     setFallbackLink(true);
     setSuccessMsg(
-      t(
-        'dashboard.invite.link_ready',
-        'Link criado. Quem abrir e concluir o cadastro entrará com a função selecionada.'
-      )
+      effectiveTargetAppName
+        ? t(
+            'dashboard.invite.link_ready_app',
+            'Link criado. Depois do cadastro, a pessoa será levada direto para {{app}}.',
+            { app: effectiveTargetAppName }
+          )
+        : t(
+            'dashboard.invite.link_ready',
+            'Link criado. Quem abrir e concluir o cadastro entrará com a função selecionada.'
+          )
     );
   };
 
@@ -238,9 +279,11 @@ export function InviteModal({
     const selectedRoleLabel =
       getInviteableRoles().find(option => option.value === role)?.label || role;
     const text = encodeURIComponent(
-      inviteMode === 'link'
-        ? `Você foi convidado para entrar na organização ${orgName} na MillionsNest como ${selectedRoleLabel}.\n\nAcesse: ${invite.url}`
-        : `Você foi convidado para entrar na organização ${orgName} na MillionsNest.\n\nAcesse: ${invite.url}`
+      effectiveTargetAppName
+        ? `Você foi convidado para usar o ${effectiveTargetAppName} na organização ${orgName} como ${selectedRoleLabel}. Ao concluir o cadastro, você entrará direto no aplicativo.\n\nAcesse: ${invite.url}`
+        : inviteMode === 'link'
+          ? `Você foi convidado para entrar na organização ${orgName} na MillionsNest como ${selectedRoleLabel}.\n\nAcesse: ${invite.url}`
+          : `Você foi convidado para entrar na organização ${orgName} na MillionsNest.\n\nAcesse: ${invite.url}`
     );
     
     if (popup) {
@@ -284,8 +327,16 @@ export function InviteModal({
 
       if (data?.reasonCode === 'NOT_CONFIGURED') {
         const orgName = organization?.name || 'sua organização';
-        const subject = encodeURIComponent(`Convite para ${orgName} no MillionsNest`);
-        const body = encodeURIComponent(`Você foi convidado para entrar em ${orgName} no MillionsNest.\n\nAcesse: ${invite.url}`);
+        const subject = encodeURIComponent(
+          effectiveTargetAppName
+            ? `Convite para usar ${effectiveTargetAppName} em ${orgName}`
+            : `Convite para ${orgName} no MillionsNest`
+        );
+        const body = encodeURIComponent(
+          effectiveTargetAppName
+            ? `Você foi convidado para usar ${effectiveTargetAppName} em ${orgName}. Depois do cadastro, você será levado diretamente ao aplicativo.\n\nAcesse: ${invite.url}`
+            : `Você foi convidado para entrar em ${orgName} no MillionsNest.\n\nAcesse: ${invite.url}`
+        );
         window.location.href = `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`;
         setSuccessMsg(t('dashboard.invite.email_app_opened', 'Abrimos seu aplicativo de e-mail com o convite pronto para enviar.'));
         return;
@@ -306,8 +357,16 @@ export function InviteModal({
 
     try {
       await navigator.share({
-        title: t('dashboard.invite.share_title', 'Convite MillionsNest'),
-        text: t('dashboard.invite.share_text', 'Você recebeu um convite para entrar na organização no MillionsNest.'),
+        title: effectiveTargetAppName
+          ? t('dashboard.invite.share_title_app', 'Convite para {{app}}', { app: effectiveTargetAppName })
+          : t('dashboard.invite.share_title', 'Convite MillionsNest'),
+        text: effectiveTargetAppName
+          ? t(
+              'dashboard.invite.share_text_app',
+              'Você recebeu um convite para usar {{app}} como integrante de uma organização.',
+              { app: effectiveTargetAppName }
+            )
+          : t('dashboard.invite.share_text', 'Você recebeu um convite para entrar na organização no MillionsNest.'),
         url: invite.url
       });
       setSuccessMsg(t('dashboard.invite.share_opened', 'Opções de compartilhamento abertas.'));
@@ -441,6 +500,30 @@ export function InviteModal({
                      </div>
                    </div>
                  ) : null}
+
+                {!targetAppId && availableTargetApps.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-[#A0A7B5] mb-2">
+                      {t('dashboard.invite.target_label', 'Onde essa pessoa vai começar?')}
+                    </label>
+                    <select
+                      value={selectedTargetAppId}
+                      onChange={(event) => setSelectedTargetAppId(event.target.value as InvitationTargetAppId | '')}
+                      disabled={formDisabled}
+                      className="w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-[#F5F7FA] focus:border-[#2B85EB] focus:ring-1 focus:ring-[#2B85EB]/50 transition-all outline-none disabled:opacity-50"
+                    >
+                      <option value="">{t('dashboard.invite.target_hub', 'MillionsNest / organização')}</option>
+                      {availableTargetApps.map((app) => (
+                        <option key={app.id} value={app.id}>{app.name}</option>
+                      ))}
+                    </select>
+                    <p className="mt-2 text-xs leading-5 text-[#667487]">
+                      {selectedTargetAppId
+                        ? t('dashboard.invite.target_app_hint', 'Depois do cadastro e da aceitação, a pessoa será levada direto para o aplicativo escolhido.')
+                        : t('dashboard.invite.target_hub_hint', 'Use esta opção para acessos administrativos que devem começar no painel do MillionsNest.')}
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-[#A0A7B5] mb-2">

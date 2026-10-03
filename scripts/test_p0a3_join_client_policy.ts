@@ -6,6 +6,7 @@ import {
   getInvitationJoinUiCopy,
   isInvitationJoinFailureReason
 } from '../src/lib/InvitationJoinClientPolicy.js';
+import { buildInvitationLaunchPath, resolveInvitationAppTarget } from '../src/lib/InvitationAppTargetPolicy.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -178,7 +179,7 @@ async function runTests() {
   assertCondition('55. Join possui aria-busy', joinContent.includes('aria-busy={'));
   assertCondition('56. retry somente aparece para erro retryable', joinContent.includes('errorMessage.retryable ?') || joinContent.includes('errorMessage?.retryable'));
   assertCondition('57. sucesso remove mn_invite_redirect', joinContent.includes("removeItem('mn_invite_redirect')"));
-  assertCondition('58. sucesso redireciona para o dashboard', joinContent.includes("window.location.href = '/dashboard/overview'"));
+  assertCondition('58. sucesso usa destino canônico do convite', joinContent.includes('buildInvitationLaunchPath(target)') && !joinContent.includes("window.location.href = '/dashboard/overview'"));
   assertCondition('59. requestLoading foi removido', !joinContent.includes("setRequestLoading"));
   assertCondition('60. profile e switchOrganization não são desestruturados', !joinContent.includes("switchOrganization") && !joinContent.includes(" profile"));
 
@@ -236,6 +237,33 @@ async function runTests() {
   assertCondition('99. retry invalida attemptVersionRef', joinContent.indexOf('attemptVersionRef.current += 1', joinContent.indexOf('handleRetry')) > -1);
   assertCondition('100. suíte não contém assertCondition incondicional', !hasUnconditionalTrue);
   assertCondition('101. report.txt não existe na raiz do projeto', !fs.existsSync(path.resolve(process.cwd(), 'report.txt')));
+
+  const parsedTarget = parseInvitationJoinPayload({
+    ...validSuccessNew,
+    targetAppId: 'musicscale',
+    targetPath: '/start'
+  });
+  assertCondition(
+    '102. resposta de aceite preserva alvo MusicScale',
+    parsedTarget.success === true &&
+      parsedTarget.targetAppId === 'musicscale' &&
+      parsedTarget.targetPath === '/start'
+  );
+
+  const invalidTarget = parseInvitationJoinPayload({
+    ...validSuccessNew,
+    targetAppId: 'musicscale',
+    targetPath: 'https://evil.example'
+  });
+  assertCondition('103. caminho externo de app vira INVALID_RESPONSE', invalidTarget.success === false);
+
+  const resolvedTarget = resolveInvitationAppTarget('musicscale', '/start');
+  assertCondition(
+    '104. lançamento de convite vai pela rota SSO do app',
+    resolvedTarget.success === true &&
+      resolvedTarget.target !== null &&
+      buildInvitationLaunchPath(resolvedTarget.target) === '/apps/musicscale/launch?returnTo=%2Fstart'
+  );
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   if (failed > 0) {

@@ -1985,7 +1985,8 @@ export function Dashboard() {
     role: "admin" | "manager" | "member" | "viewer",
     email: string,
     overrideOrgId?: string,
-    mode: "email" | "link" = "email"
+    mode: "email" | "link" = "email",
+    target?: { targetAppId?: "musicscale" | "nestfinance" | "nestlocal" | "nestjourney"; targetPath?: string }
   ): Promise<{
     inviteUrl: string;
     invitation: {
@@ -2020,7 +2021,9 @@ export function Dashboard() {
           organizationId: orgId,
           ...(mode === "email" ? { email } : {}),
           role,
-          mode
+          mode,
+          ...(target?.targetAppId ? { targetAppId: target.targetAppId } : {}),
+          ...(target?.targetPath ? { targetPath: target.targetPath } : {})
         }),
         signal: abortController.signal
       });
