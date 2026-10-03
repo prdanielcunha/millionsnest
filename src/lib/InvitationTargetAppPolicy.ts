@@ -57,3 +57,10 @@ export function isExpectedInvitationTargetUrl(params: {
     return false;
   }
 }
+
+export function getInvitationTargetAppName(targetAppId: unknown): string | null {
+  const resolved = resolveInvitationTargetAppId(targetAppId);
+  if (!resolved.valid || !resolved.targetAppId) return null;
+  const app = getEcosystemApp(resolved.targetAppId);
+  return app?.name || null;
+}
