@@ -1980,7 +1980,8 @@ export function Dashboard() {
     role: "admin" | "manager" | "member" | "viewer",
     email: string,
     overrideOrgId?: string,
-    mode: "email" | "link" = "email"
+    mode: "email" | "link" = "email",
+    targetAppId?: string
   ): Promise<{
     inviteUrl: string;
     invitation: {
@@ -2015,7 +2016,8 @@ export function Dashboard() {
           organizationId: orgId,
           ...(mode === "email" ? { email } : {}),
           role,
-          mode
+          mode,
+          ...(targetAppId ? { targetAppId } : {})
         }),
         signal: abortController.signal
       });
@@ -2041,8 +2043,13 @@ export function Dashboard() {
        throw new Error("GENERIC");
     }
 
-    const finalUrl = new URL(data.invitePath, window.location.origin);
-    if (finalUrl.origin !== window.location.origin) {
+    const finalUrl = data.inviteUrl
+      ? new URL(data.inviteUrl)
+      : new URL(data.invitePath, window.location.origin);
+    if (!data.inviteUrl && finalUrl.origin !== window.location.origin) {
+       throw new Error("GENERIC");
+    }
+    if (targetAppId && data.invitation?.targetAppId !== targetAppId) {
        throw new Error("GENERIC");
     }
 
