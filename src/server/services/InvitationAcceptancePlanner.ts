@@ -1,3 +1,5 @@
+import { isOrganizationLifecycleActive } from '../../lib/organizationLifecycle.js';
+
 export function normalizeInvitationEmail(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toLowerCase();
@@ -30,6 +32,8 @@ export type InvitationState = {
   exists: boolean;
   organizationId?: string;
   status?: string;
+  inviteMode?: 'email' | 'link';
+  identityBound?: boolean;
   email?: string;
   emailNormalized?: string;
   role?: string;
@@ -107,7 +111,7 @@ export function planInvitationAcceptance(input: InvitationAcceptanceInput, nowMs
   if (!input.organization.exists) {
     return { success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' };
   }
-  if (input.organization.status !== 'active') {
+  if (!isOrganizationLifecycleActive(input.organization.status)) {
     return { success: false, reasonCode: 'ORGANIZATION_INACTIVE' };
   }
 
@@ -140,17 +144,22 @@ export function planInvitationAcceptance(input: InvitationAcceptanceInput, nowMs
     return { success: false, reasonCode: 'INVITE_EXPIRED' };
   }
 
-  const invE1 = normalizeInvitationEmail(inv.email);
-  const invE2 = normalizeInvitationEmail(inv.emailNormalized);
-  if (!invE1 && !invE2) {
-    return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
-  }
-  if (invE1 && invE2 && invE1 !== invE2) {
-    return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
-  }
-  const targetEmail = invE1 || invE2;
-  if (targetEmail !== authEmail) {
-    return { success: false, reasonCode: 'INVITE_IDENTITY_MISMATCH' };
+  const isShareableLinkInvite =
+    inv.inviteMode === 'link' || inv.identityBound === false;
+
+  if (!isShareableLinkInvite) {
+    const invE1 = normalizeInvitationEmail(inv.email);
+    const invE2 = normalizeInvitationEmail(inv.emailNormalized);
+    if (!invE1 && !invE2) {
+      return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
+    }
+    if (invE1 && invE2 && invE1 !== invE2) {
+      return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
+    }
+    const targetEmail = invE1 || invE2;
+    if (targetEmail !== authEmail) {
+      return { success: false, reasonCode: 'INVITE_IDENTITY_MISMATCH' };
+    }
   }
 
   const inviteRole = inv.role;
