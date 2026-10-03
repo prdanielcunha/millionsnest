@@ -1680,6 +1680,12 @@ export default {
     invite: {
       title: "Invitar a {{orgName}}",
       subtitle: "Indica quién entrará, elige su acceso y envía la invitación por el canal que prefieras.",
+      method_label: "¿Cómo deseas invitar?",
+      method_email: "Por correo",
+      method_link: "Por enlace",
+      link_mode_hint: "Elige la función y genera un enlace de un solo uso. La persona que lo use entrará automáticamente con ese nivel de acceso. El enlace caduca en 7 días.",
+      generate_link: "Generar enlace de esta función",
+      link_ready: "Enlace creado. Quien lo abra y complete el registro entrará con la función seleccionada.",
       email_sent: "Invitación enviada por correo.",
       email_app_opened: "Abrimos tu aplicación de correo con la invitación lista para enviar.",
       email_failed: "No se pudo enviar por correo. Usa WhatsApp o copia el enlace.",
