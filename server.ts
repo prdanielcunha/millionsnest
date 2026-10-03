@@ -833,11 +833,15 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
             `https://api.mercadolibre.com/products/${encodeURIComponent(candidate.id)}`,
             { headers: providerHeaders },
           );
-          if (!detailResponse.ok) return null;
+          if (!detailResponse.ok) {
+            console.warn('[NestAffiliate/MELI] catalog detail unavailable; using search candidate', candidate.id, detailResponse.status);
+            return { candidate, detail: null, detailVerified: false };
+          }
           const detail = await detailResponse.json() as Record<string, any>;
-          return { candidate, detail };
-        } catch {
-          return null;
+          return { candidate, detail, detailVerified: true };
+        } catch (error) {
+          console.warn('[NestAffiliate/MELI] catalog detail request failed; using search candidate', candidate.id, error instanceof Error ? error.message : String(error));
+          return { candidate, detail: null, detailVerified: false };
         }
       }),
     );
@@ -893,11 +897,6 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     let rejectedUnverified = 0;
 
     const products = detailRows.flatMap((row) => {
-      if (!row) {
-        rejectedUnverified += 1;
-        return [];
-      }
-
       const candidate = row.candidate;
       const product: Record<string, any> = { ...candidate, ...(row.detail || {}) };
       const winner = product.buy_box_winner || candidate.buy_box_winner || {};
@@ -1088,7 +1087,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       meta: {
         catalogTotal: Number(searchPayload.paging?.total || candidates.length),
         candidates: candidates.length,
-        detailed: detailRows.filter(Boolean).length,
+        detailed: detailRows.filter((row) => row.detailVerified).length,
         usable: products.length,
         minSoldQuantity: MIN_SOLD_QUANTITY,
         rejectedUnavailable,
