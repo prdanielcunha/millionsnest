@@ -5,6 +5,7 @@ import {
 } from './InvitationAcceptancePlanner.js';
 import { isValidInvitationOrganizationId } from '../../lib/InvitationRedirectPolicy.js';
 import { canInviteOrganizationRole } from '../../lib/organizationRoles.js';
+import { isOrganizationLifecycleActive } from '../../lib/organizationLifecycle.js';
 
 export const INVITATION_TTL_MS = 604800000;
 
@@ -39,10 +40,13 @@ export type InvitationCreationOrganization = {
   status?: string;
 };
 
+export type InvitationCreationMode = 'email' | 'link';
+
 export type InvitationCreationRequest = {
   organizationId?: string;
   email?: string;
   role?: string;
+  mode?: InvitationCreationMode;
 };
 
 export type InvitationCreationCapacity = {
@@ -92,8 +96,10 @@ export type InvitationCreationSuccess = {
   reasonCode: 'INVITATION_CAN_BE_CREATED';
   organizationId: string;
   organizationName: string;
-  email: string;
-  emailNormalized: string;
+  inviteMode: InvitationCreationMode;
+  identityBound: boolean;
+  email?: string;
+  emailNormalized?: string;
   role: InvitationRole;
   status: 'pending';
   maxUses: 1;
@@ -174,7 +180,7 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
     return { success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' };
   }
 
-  if (input.organization.status !== 'active') {
+  if (!isOrganizationLifecycleActive(input.organization.status)) {
     return { success: false, reasonCode: 'ORGANIZATION_INACTIVE' };
   }
   if (typeof input.organization.name !== 'string' || input.organization.name.trim() === '') {
@@ -203,8 +209,14 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
     }
   }
 
-  const normalizedEmail = normalizeValidInvitationCreationEmail(input.request.email);
-  if (normalizedEmail === null) {
+  const inviteMode: InvitationCreationMode =
+    input.request.mode === 'link' ? 'link' : 'email';
+  const normalizedEmail =
+    inviteMode === 'email'
+      ? normalizeValidInvitationCreationEmail(input.request.email)
+      : null;
+
+  if (inviteMode === 'email' && normalizedEmail === null) {
     return { success: false, reasonCode: 'INVALID_INVITE_EMAIL' };
   }
 
@@ -228,7 +240,7 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
     };
   }
 
-  if (input.existingPendingInvitation.exists) {
+  if (inviteMode === 'email' && input.existingPendingInvitation.exists) {
     if (input.existingPendingInvitation.status === 'pending') {
       if (typeof input.existingPendingInvitation.emailNormalized !== 'string' || !isValidInvitationCreationEmail(input.existingPendingInvitation.emailNormalized)) {
         return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
@@ -239,7 +251,7 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
       if (typeof input.existingPendingInvitation.expiresAtMs !== 'number' || !Number.isFinite(input.existingPendingInvitation.expiresAtMs) || !Number.isInteger(input.existingPendingInvitation.expiresAtMs)) {
         return { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' };
       }
-      
+
       let isRevoked = false;
       if (input.existingPendingInvitation.revokedAtMs !== undefined) {
         if (typeof input.existingPendingInvitation.revokedAtMs !== 'number' || !Number.isFinite(input.existingPendingInvitation.revokedAtMs) || !Number.isInteger(input.existingPendingInvitation.revokedAtMs)) {
@@ -247,7 +259,7 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
         }
         isRevoked = true;
       }
-      
+
       if (!isRevoked && input.existingPendingInvitation.expiresAtMs > nowMs) {
         return { success: false, reasonCode: 'INVITE_ALREADY_PENDING' };
       }
@@ -285,8 +297,14 @@ export function planInvitationCreation(input: InvitationCreationInput, nowMs: nu
     reasonCode: 'INVITATION_CAN_BE_CREATED',
     organizationId: input.request.organizationId,
     organizationName: input.organization.name,
-    email: normalizedEmail,
-    emailNormalized: normalizedEmail,
+    inviteMode,
+    identityBound: inviteMode === 'email',
+    ...(normalizedEmail
+      ? {
+          email: normalizedEmail,
+          emailNormalized: normalizedEmail
+        }
+      : {}),
     role: requestRole,
     status: 'pending',
     maxUses: 1,
