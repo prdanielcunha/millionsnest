@@ -42,6 +42,12 @@ assert(serviceFile.includes('const isOrganizationOwner = ownerIds.includes(uid)'
 assert(serviceFile.includes("role: 'owner'"), "Service heals missing owner membership projection for invitation authorization");
 assert(serviceFile.includes('membershipData.organizationRole'), "Service accepts canonical organizationRole membership projection");
 assert(serviceFile.includes('membershipData.membershipRole'), "Service accepts membershipRole compatibility projection");
+assert(serviceFile.includes("isGlobalAdmin\n        ? { resolved: true, mode: 'unlimited' }"), "Global ecosystem roles bypass tenant member-limit projection");
+assert(serviceFile.includes("if (!isGlobalAdmin) {"), "Non-global invitation actors still resolve tenant capacity");
+assert(serviceFile.includes("appSubscription ? 'musicscale' : subData.app"), "App-scoped MusicScale subscription is recognized as canonical");
+assert(serviceFile.includes("subData.productPlan"), "Legacy productPlan is supported for invitation capacity");
+assert(serviceFile.includes("subData.musicScalePlan"), "Legacy musicScalePlan is supported for invitation capacity");
+assert(serviceFile.includes("subData.priceNickname"), "Legacy priceNickname is supported for invitation capacity");
 
 const organizationManagerFile = fs.readFileSync('src/components/OrganizationManager.tsx', 'utf-8');
 assert(organizationManagerFile.includes("currentUserPerms?.['organization.members.invite']"), "Members invite CTA follows canonical capability instead of a hard-coded role list");
