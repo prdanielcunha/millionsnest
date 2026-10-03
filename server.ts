@@ -875,13 +875,10 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       );
       if (!itemResponse.ok) {
         const providerBody = await itemResponse.text();
-        console.error('[NestAffiliate/MELI] item validation failed', itemResponse.status, providerBody.slice(0, 240));
-        return res.status(502).json({
-          error: 'MELI_ITEM_VALIDATION_FAILED',
-          providerStatus: itemResponse.status,
-        });
+        console.warn('[NestAffiliate/MELI] optional item enrichment failed', itemResponse.status, providerBody.slice(0, 240));
+      } else {
+        itemRows = await itemResponse.json() as Array<{ id?: string; status_code?: number; body?: Record<string, any> }>;
       }
-      itemRows = await itemResponse.json() as Array<{ id?: string; status_code?: number; body?: Record<string, any> }>;
     }
 
     const itemById = new Map<string, Record<string, any>>(
@@ -937,18 +934,23 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         return [];
       }
 
-      const variationAvailableQuantity = Number(matchingVariation?.available_quantity);
-      const winnerAvailableQuantity = Number(winner.available_quantity);
-      const itemAvailableQuantity = Number(item?.available_quantity);
+      const optionalNumber = (value: unknown) => {
+        if (value === null || value === undefined || value === '') return Number.NaN;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : Number.NaN;
+      };
+      const variationAvailableQuantity = optionalNumber(matchingVariation?.available_quantity);
+      const winnerAvailableQuantity = optionalNumber(winner.available_quantity);
+      const itemAvailableQuantity = optionalNumber(item?.available_quantity);
       const availableQuantity = Number.isFinite(variationAvailableQuantity)
         ? variationAvailableQuantity
         : Number.isFinite(winnerAvailableQuantity)
           ? winnerAvailableQuantity
           : itemAvailableQuantity;
 
-      const winnerSoldQuantity = Number(winner.sold_quantity);
-      const itemSoldQuantity = Number(item?.sold_quantity);
-      const productSoldQuantity = Number(product.sold_quantity);
+      const winnerSoldQuantity = optionalNumber(winner.sold_quantity);
+      const itemSoldQuantity = optionalNumber(item?.sold_quantity);
+      const productSoldQuantity = optionalNumber(product.sold_quantity);
       const soldQuantity = Number.isFinite(winnerSoldQuantity)
         ? winnerSoldQuantity
         : Number.isFinite(itemSoldQuantity)
