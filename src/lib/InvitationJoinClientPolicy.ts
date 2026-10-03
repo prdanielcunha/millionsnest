@@ -1,3 +1,4 @@
+import { resolveInvitationAppTarget, type InvitationTargetAppId } from './InvitationAppTargetPolicy.js';
 export type InvitationJoinLanguage = 'pt' | 'en' | 'es';
 
 export type InvitationJoinFailureReason =
@@ -42,6 +43,8 @@ export type InvitationJoinSuccessPayload = {
   alreadyMember: boolean;
   legacyTokenMigrated: false;
   reasonCode: 'ALREADY_MEMBER' | 'INVITATION_CAN_BE_ACCEPTED';
+  targetAppId?: InvitationTargetAppId;
+  targetPath?: string;
 };
 
 export type InvitationJoinFailurePayload = {
@@ -92,6 +95,8 @@ export function parseInvitationJoinPayload(value: unknown): InvitationJoinSucces
     if (record.alreadyMember === false && rawReason !== 'INVITATION_CAN_BE_ACCEPTED') return { success: false, reasonCode: 'INVALID_RESPONSE' };
 
     const finalReason = rawReason === 'ALREADY_MEMBER' ? 'ALREADY_MEMBER' : 'INVITATION_CAN_BE_ACCEPTED';
+    const targetResult = resolveInvitationAppTarget(record.targetAppId, record.targetPath);
+    if (!targetResult.success) return { success: false, reasonCode: 'INVALID_RESPONSE' };
 
     return {
       success: true,
@@ -101,7 +106,13 @@ export function parseInvitationJoinPayload(value: unknown): InvitationJoinSucces
       membershipRole: record.membershipRole,
       alreadyMember: record.alreadyMember,
       legacyTokenMigrated: false,
-      reasonCode: finalReason
+      reasonCode: finalReason,
+      ...(targetResult.target
+        ? {
+            targetAppId: targetResult.target.appId,
+            targetPath: targetResult.target.destinationPath
+          }
+        : {})
     };
   }
 
