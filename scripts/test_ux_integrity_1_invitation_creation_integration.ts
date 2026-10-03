@@ -38,6 +38,10 @@ assert(serviceFile.includes("identityBound"), "Service persists identity-binding
 assert(serviceFile.includes("inviteMode === 'email'"), "Service requires email only for email-bound invitations");
 assert(!serviceFile.includes('tokenHash: tokenHash') || serviceFile.includes('payload:'), "Service doesn't return tokenHash in response body");
 assert(serviceFile.includes('canManageTenantMembers(globalRole)'), "Service delegates global invite authority to canonical permission policy");
+assert(serviceFile.includes('const isOrganizationOwner = ownerIds.includes(uid)'), "Service recognizes organization owner fields as canonical authority");
+assert(serviceFile.includes("role: 'owner'"), "Service heals missing owner membership projection for invitation authorization");
+assert(serviceFile.includes('membershipData.organizationRole'), "Service accepts canonical organizationRole membership projection");
+assert(serviceFile.includes('membershipData.membershipRole'), "Service accepts membershipRole compatibility projection");
 
 const dashboardFile = fs.readFileSync('src/pages/Dashboard.tsx', 'utf-8');
 assert(dashboardFile.includes("fetch('/api/v1/invitations'"), "Dashboard uses POST /api/v1/invitations");
