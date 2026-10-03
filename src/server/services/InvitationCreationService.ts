@@ -352,7 +352,9 @@ export async function createInvitation(
         payload: {
           success: true,
           reasonCode: planResult.reasonCode,
-          invitePath: `/join/${organizationId}?token=${encodeURIComponent(rawToken)}${invitationTarget ? `&app=${encodeURIComponent(invitationTarget.appId)}` : ''}`,
+          // Keep the public join URL token-only. The target app is server-owned
+          // invitation metadata, so it cannot be spoofed or lost during login.
+          invitePath: `/join/${organizationId}?token=${encodeURIComponent(rawToken)}`,
           invitation: {
             id: inviteId,
             organizationId,
