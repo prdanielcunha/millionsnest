@@ -4,6 +4,7 @@ import { FieldValue, Firestore, getFirestore } from 'firebase-admin/firestore';
 import { canManageTenantMembers } from '../../lib/permissionService.js';
 import { isExistingMembershipRole, normalizeInvitationEmail } from './InvitationAcceptancePlanner.js';
 import { normalizeInvitationTemporalMs, resolveCanonicalInvitationCapacity } from './InvitationAcceptanceServerPolicy.js';
+import { isOrganizationLifecycleActive } from '../../lib/organizationLifecycle.js';
 
 type AuthenticatedUserRecord = {
   email?: string | null;
@@ -146,7 +147,7 @@ export async function createJoinRequest(req: Request, res: Response, dependencie
         transaction.get(orgRef), transaction.get(memberRef), transaction.get(requestRef)
       ]);
       if (!orgSnap.exists) return { statusCode: 404, payload: { success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' } };
-      if (orgSnap.data()?.status !== 'active') return { statusCode: 409, payload: { success: false, reasonCode: 'ORGANIZATION_INACTIVE' } };
+      if (!isOrganizationLifecycleActive(orgSnap.data() || {})) return { statusCode: 409, payload: { success: false, reasonCode: 'ORGANIZATION_INACTIVE' } };
 
       const membershipState = classifyMembership(memberSnap.data());
       if (membershipState === 'active') return { statusCode: 200, payload: { success: true, reasonCode: 'ALREADY_MEMBER' } };
@@ -212,7 +213,7 @@ async function resolveJoinRequest(req: Request, res: Response, command: Command,
         transaction.get(orgRef), transaction.get(actorRef), transaction.get(actorMemberRef), transaction.get(requestRef)
       ]);
       if (!orgSnap.exists) return { reasonCode: 'ORGANIZATION_NOT_FOUND' };
-      if (orgSnap.data()?.status !== 'active') return { reasonCode: 'ORGANIZATION_INACTIVE' };
+      if (!isOrganizationLifecycleActive(orgSnap.data() || {})) return { reasonCode: 'ORGANIZATION_INACTIVE' };
       const actorSystemRole = actorSnap.data()?.systemRole;
       const globalAuthority = canManageTenantMembers(actorSystemRole);
       if (!globalAuthority && !hasOrganizationAuthority(actorUid, orgSnap.data()!, actorMemberSnap.data())) return { reasonCode: 'PERMISSION_DENIED' };
@@ -263,10 +264,10 @@ async function resolveJoinRequest(req: Request, res: Response, command: Command,
           subscription: {
             exists: subSnap.exists,
             organizationId: subData.organizationId,
-            app: subData.app,
-            status: subData.status,
-            plan: subData.plan,
-            limitsUsers: subData.limits?.users
+            app: subData.apps?.musicscale?.app ?? subData.app,
+            status: subData.apps?.musicscale?.status ?? subData.status,
+            plan: subData.apps?.musicscale?.plan ?? subData.plan,
+            limitsUsers: subData.apps?.musicscale?.limits?.users ?? subData.limits?.users
           },
           organizationApp: {
             exists: !!orgData.apps?.musicscale,
