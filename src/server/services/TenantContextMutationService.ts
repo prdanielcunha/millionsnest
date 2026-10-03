@@ -9,6 +9,10 @@ import { planInvitationAcceptance, normalizeInvitationEmail, InvitationAcceptanc
 import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './InvitationAcceptanceServerPolicy.js';
 import { isOrganizationLifecycleActive } from '../../lib/organizationLifecycle.js';
 import { isValidInvitationOrganizationId } from '../../lib/InvitationRedirectPolicy.js';
+import {
+  buildInvitationMemberAppAccess,
+  resolveInvitationAppTarget,
+} from '../../lib/InvitationAppTargetPolicy.js';
 
 
 
@@ -500,6 +504,11 @@ export async function acceptInvitation(
       const inviteDoc = invitesQuery.docs[0];
       const inviteData = inviteDoc.data();
       const orgId = requestedOrganizationId;
+      const targetResult = resolveInvitationAppTarget(inviteData.targetAppId, inviteData.targetPath);
+      if (!targetResult.success) {
+        return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
+      }
+      const invitationTarget = targetResult.target;
 
       if (Object.prototype.hasOwnProperty.call(inviteData, 'organizationId')) {
         if (typeof inviteData.organizationId !== 'string' || inviteData.organizationId !== orgId) {
