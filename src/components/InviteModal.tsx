@@ -13,7 +13,8 @@ interface InviteModalProps {
     role: "admin" | "manager" | "member" | "viewer",
     email: string,
     overrideOrgId?: string,
-    mode?: "email" | "link"
+    mode?: "email" | "link",
+    targetAppId?: string
   ) => Promise<{
     inviteUrl: string;
     invitation: {
@@ -33,6 +34,7 @@ interface InviteModalProps {
   maxUsersLimit?: number;
   onUpgradeClick?: () => void;
   canInvite?: boolean;
+  targetAppId?: string;
 }
 
 export function InviteModal({ 
@@ -43,7 +45,8 @@ export function InviteModal({
   occupiedSlots,
   maxUsersLimit,
   onUpgradeClick,
-  canInvite = true
+  canInvite = true,
+  targetAppId
 }: InviteModalProps) {
   const { profile, user } = useAuth();
   const { organization, memberRole } = useOrganization();
@@ -173,7 +176,8 @@ export function InviteModal({
         role,
         inviteMode === 'email' ? email : '',
         overrideOrgId,
-        inviteMode
+        inviteMode,
+        targetAppId
       );
       setCreatedInviteUrl(res.inviteUrl);
       setCreatedInviteId(res.invitation.id);
