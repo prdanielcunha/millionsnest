@@ -789,7 +789,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       return res.status(503).json({ error: 'MELI_TOKEN_STALE' });
     }
 
-    const MIN_SOLD_QUANTITY = 50;
+    const MIN_SOLD_QUANTITY = 100;
     const searchUrl = new URL('https://api.mercadolibre.com/products/search');
     searchUrl.searchParams.set('status', 'active');
     searchUrl.searchParams.set('site_id', 'MLB');
