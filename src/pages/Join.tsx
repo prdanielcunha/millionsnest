@@ -136,7 +136,7 @@ export function Join() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, organizationId: orgId }),
         signal: currentSignal
       });
       if (!isCurrentAttempt()) return;
