@@ -6,6 +6,7 @@ import {
   INVITATION_TTL_MS
 } from '../src/server/services/InvitationCreationPlanner.js';
 import { canInviteOrganizationRole } from '../src/lib/organizationRoles.js';
+import { resolveCanonicalInvitationCapacity } from '../src/server/services/InvitationAcceptanceServerPolicy.js';
 import * as fs from 'fs';
 
 let passed = 0;
@@ -432,6 +433,130 @@ assertCondition("107. admin convida manager", canInviteOrganizationRole({ organi
 assertCondition("108. manager convida member", canInviteOrganizationRole({ organizationRole: 'manager' }, 'member'));
 assertCondition("109. manager convida viewer", canInviteOrganizationRole({ organizationRole: 'manager' }, 'viewer'));
 assertCondition("110. ecosystem_support não recebe matriz de owner", !canInviteOrganizationRole({ systemRole: 'ecosystem_support' }, 'admin'));
+
+// 14. Canonical invitation capacity must follow the same subscription authority
+// as MusicScale access. Organization app state is a cache and may lag.
+{
+  const result = resolveCanonicalInvitationCapacity({
+    organizationId: 'org-pro',
+    subscription: {
+      exists: true,
+      organizationId: 'org-pro',
+      app: 'musicscale',
+      status: 'active',
+      plan: 'pro'
+    },
+    organizationApp: {
+      exists: true,
+      status: 'inactive',
+      plan: 'starter'
+    },
+    memberStatuses: ['active']
+  });
+  assertCondition(
+    "111. assinatura Pro ativa ignora cache organizacional stale/inativo",
+    result.success === true && result.capacity.mode === 'unlimited' && result.plan === 'pro'
+  );
+}
+{
+  const result = resolveCanonicalInvitationCapacity({
+    organizationId: 'org-advanced',
+    subscription: {
+      exists: true,
+      organizationId: 'org-advanced',
+      app: 'musicscale',
+      status: 'trialing',
+      plan: 'advanced'
+    },
+    organizationApp: {
+      exists: true,
+      status: 'active',
+      plan: 'pro'
+    },
+    memberStatuses: ['active', 'active']
+  });
+  assertCondition(
+    "112. plano canônico da assinatura vence cache organizacional divergente",
+    result.success === true &&
+      result.capacity.mode === 'limited' &&
+      result.capacity.maxMembers === 20 &&
+      result.capacity.currentActiveMembers === 2 &&
+      result.plan === 'advanced'
+  );
+}
+{
+  const result = resolveCanonicalInvitationCapacity({
+    organizationId: 'org-legacy-pro',
+    subscription: {
+      exists: true,
+      organizationId: 'org-legacy-pro',
+      app: 'musicscale',
+      status: 'active',
+      plan: 'premium'
+    },
+    organizationApp: {
+      exists: false
+    },
+    memberStatuses: []
+  });
+  assertCondition(
+    "113. rótulo legado premium é normalizado para Pro sem falso MEMBER_LIMIT_UNAVAILABLE",
+    result.success === true && result.capacity.mode === 'unlimited' && result.plan === 'pro'
+  );
+}
+{
+  const result = resolveCanonicalInvitationCapacity({
+    organizationId: 'org-plan-fallback',
+    subscription: {
+      exists: true,
+      organizationId: 'org-plan-fallback',
+      app: 'musicscale',
+      status: 'active'
+    },
+    organizationApp: {
+      exists: true,
+      status: 'active',
+      plan: 'advanced'
+    },
+    memberStatuses: ['active']
+  });
+  assertCondition(
+    "114. assinatura ativa sem campo plan usa cache de plano compatível",
+    result.success === true &&
+      result.capacity.mode === 'limited' &&
+      result.capacity.maxMembers === 20 &&
+      result.plan === 'advanced'
+  );
+}
+{
+  const result = resolveCanonicalInvitationCapacity({
+    organizationId: 'org-no-sub',
+    subscription: {
+      exists: false
+    },
+    organizationApp: {
+      exists: true,
+      status: 'active',
+      plan: 'pro'
+    },
+    memberStatuses: []
+  });
+  assertCondition(
+    "115. usuário comum continua sem bypass quando assinatura canônica não existe",
+    result.success === false && result.reasonCode === 'MEMBER_LIMIT_UNAVAILABLE'
+  );
+}
+
+const creationServiceSource = fs.readFileSync('src/server/services/InvitationCreationService.ts', 'utf8');
+assertCondition(
+  "116. papel global recebe capacidade ilimitada antes de consultar limite do tenant",
+  creationServiceSource.includes("isGlobalAdmin\n        ? { resolved: true, mode: 'unlimited' }")
+);
+assertCondition(
+  "117. usuários comuns continuam passando pelo resolvedor canônico de capacidade",
+  creationServiceSource.includes("if (!isGlobalAdmin) {") &&
+    creationServiceSource.includes("resolveCanonicalInvitationCapacity({")
+);
 
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
