@@ -96,6 +96,11 @@ assertCondition("9. member é papel organizacional válido", isInvitationCreator
 }
 {
   const input = createValidInput();
+  input.organization.status = 'trialing';
+  assertCondition("17b. organização em período de avaliação continua operacional", planInvitationCreation(input as any, nowMs).success === true);
+}
+{
+  const input = createValidInput();
   input.organization.name = undefined as any;
   assertCondition("18. nome ausente falha", isFailureWithReason(planInvitationCreation(input as any, nowMs), 'ORGANIZATION_STATE_INCONSISTENT'));
 }
@@ -368,6 +373,33 @@ assertCondition("83. e-mail contendo somente espaços retorna false sem lançar"
   const input = createValidInput();
   input.request.email = '';
   assertCondition("85. planner com email vazio retorna INVALID_INVITE_EMAIL sem lançar", isFailureWithReason(planInvitationCreation(input as any, nowMs), 'INVALID_INVITE_EMAIL'));
+}
+{
+  const input = createValidInput();
+  input.request.mode = 'link';
+  input.request.email = undefined;
+  const result = planInvitationCreation(input as any, nowMs);
+  assertCondition("85b. convite por link não exige e-mail", result.success === true);
+  assertCondition("85c. convite por link preserva a função escolhida", result.success === true && result.role === 'member');
+  assertCondition("85d. convite por link não fica preso a identidade", result.success === true && result.identityBound === false);
+  assertCondition("85e. convite por link não retorna e-mail alvo", result.success === true && result.email === undefined);
+  assertCondition("85f. convite por link continua uso único", result.success === true && result.maxUses === 1);
+}
+{
+  const input = createValidInput();
+  input.request.mode = 'link';
+  input.request.email = undefined;
+  input.request.role = 'admin';
+  const result = planInvitationCreation(input as any, nowMs);
+  assertCondition("85g. owner pode gerar link de administrador", result.success === true && result.role === 'admin');
+}
+{
+  const input = createValidInput();
+  input.creatorMembership.role = 'admin';
+  input.request.mode = 'link';
+  input.request.email = undefined;
+  input.request.role = 'admin';
+  assertCondition("85h. link respeita a mesma matriz de permissão", isFailureWithReason(planInvitationCreation(input as any, nowMs), 'PERMISSION_DENIED'));
 }
 assertCondition("86. whitespace tab interno é rejeitado", !isValidInvitationCreationEmail('test\ttab@example.com'));
 assertCondition("87. whitespace de quebra de linha interno é rejeitado", !isValidInvitationCreationEmail('test\nline@example.com'));
