@@ -161,12 +161,18 @@ export function InviteModal({
     targetPath
   );
   const effectiveTarget = selectedTarget.success ? selectedTarget.target : null;
+  const effectiveTargetAppName = effectiveTarget
+    ? ECOSYSTEM_APPS.find((app) => app.id === effectiveTarget.appId)?.name || effectiveTarget.appName
+    : null;
 
   const mapErrorCode = (code: string) => {
     switch(code) {
       case 'UNAUTHENTICATED': return t('dashboard.invite.errors.session_expired', 'Sua sessão expirou. Atualize a página e tente novamente.');
       case 'INVALID_INVITE_EMAIL': return t('dashboard.invite.errors.invalid_email', 'Informe um e-mail válido.');
       case 'INVALID_INVITE_ROLE': return t('dashboard.invite.errors.invalid_role', 'Escolha uma função válida.');
+      case 'INVALID_TARGET_APP':
+      case 'INVALID_TARGET_PATH':
+        return t('dashboard.invite.errors.invalid_target', 'O aplicativo de destino não é válido para este convite.');
       case 'ACTOR_MEMBERSHIP_REQUIRED':
       case 'ACTOR_MEMBERSHIP_INACTIVE':
       case 'PERMISSION_DENIED': return t('dashboard.invite.errors.permission_denied', 'Você não possui permissão para convidar pessoas nesta organização.');
@@ -224,10 +230,16 @@ export function InviteModal({
     if (!invite) return;
     setFallbackLink(true);
     setSuccessMsg(
-      t(
-        'dashboard.invite.link_ready',
-        'Link criado. Quem abrir e concluir o cadastro entrará com a função selecionada.'
-      )
+      effectiveTargetAppName
+        ? t(
+            'dashboard.invite.link_ready_app',
+            'Link criado. Depois do cadastro, a pessoa será levada direto para {{app}}.',
+            { app: effectiveTargetAppName }
+          )
+        : t(
+            'dashboard.invite.link_ready',
+            'Link criado. Quem abrir e concluir o cadastro entrará com a função selecionada.'
+          )
     );
   };
 
@@ -267,9 +279,11 @@ export function InviteModal({
     const selectedRoleLabel =
       getInviteableRoles().find(option => option.value === role)?.label || role;
     const text = encodeURIComponent(
-      inviteMode === 'link'
-        ? `Você foi convidado para entrar na organização ${orgName} na MillionsNest como ${selectedRoleLabel}.\n\nAcesse: ${invite.url}`
-        : `Você foi convidado para entrar na organização ${orgName} na MillionsNest.\n\nAcesse: ${invite.url}`
+      effectiveTargetAppName
+        ? `Você foi convidado para usar o ${effectiveTargetAppName} na organização ${orgName} como ${selectedRoleLabel}. Ao concluir o cadastro, você entrará direto no aplicativo.\n\nAcesse: ${invite.url}`
+        : inviteMode === 'link'
+          ? `Você foi convidado para entrar na organização ${orgName} na MillionsNest como ${selectedRoleLabel}.\n\nAcesse: ${invite.url}`
+          : `Você foi convidado para entrar na organização ${orgName} na MillionsNest.\n\nAcesse: ${invite.url}`
     );
     
     if (popup) {
@@ -313,8 +327,16 @@ export function InviteModal({
 
       if (data?.reasonCode === 'NOT_CONFIGURED') {
         const orgName = organization?.name || 'sua organização';
-        const subject = encodeURIComponent(`Convite para ${orgName} no MillionsNest`);
-        const body = encodeURIComponent(`Você foi convidado para entrar em ${orgName} no MillionsNest.\n\nAcesse: ${invite.url}`);
+        const subject = encodeURIComponent(
+          effectiveTargetAppName
+            ? `Convite para usar ${effectiveTargetAppName} em ${orgName}`
+            : `Convite para ${orgName} no MillionsNest`
+        );
+        const body = encodeURIComponent(
+          effectiveTargetAppName
+            ? `Você foi convidado para usar ${effectiveTargetAppName} em ${orgName}. Depois do cadastro, você será levado diretamente ao aplicativo.\n\nAcesse: ${invite.url}`
+            : `Você foi convidado para entrar em ${orgName} no MillionsNest.\n\nAcesse: ${invite.url}`
+        );
         window.location.href = `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`;
         setSuccessMsg(t('dashboard.invite.email_app_opened', 'Abrimos seu aplicativo de e-mail com o convite pronto para enviar.'));
         return;
@@ -335,8 +357,16 @@ export function InviteModal({
 
     try {
       await navigator.share({
-        title: t('dashboard.invite.share_title', 'Convite MillionsNest'),
-        text: t('dashboard.invite.share_text', 'Você recebeu um convite para entrar na organização no MillionsNest.'),
+        title: effectiveTargetAppName
+          ? t('dashboard.invite.share_title_app', 'Convite para {{app}}', { app: effectiveTargetAppName })
+          : t('dashboard.invite.share_title', 'Convite MillionsNest'),
+        text: effectiveTargetAppName
+          ? t(
+              'dashboard.invite.share_text_app',
+              'Você recebeu um convite para usar {{app}} como integrante de uma organização.',
+              { app: effectiveTargetAppName }
+            )
+          : t('dashboard.invite.share_text', 'Você recebeu um convite para entrar na organização no MillionsNest.'),
         url: invite.url
       });
       setSuccessMsg(t('dashboard.invite.share_opened', 'Opções de compartilhamento abertas.'));
