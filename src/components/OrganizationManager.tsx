@@ -120,6 +120,11 @@ export function OrganizationManager({
   const ecosystemPrivilegePolicy = resolveEcosystemPrivilegePolicy(profile?.systemRole);
   const isEcosystemSupport = ecosystemPrivilegePolicy.isEcosystemSupportStaff;
   const canManageGlobalGovernance = ecosystemPrivilegePolicy.canManageGlobalGovernance;
+  const canInviteMembers = Boolean(currentUserPerms?.['organization.members.invite'] || isGlobalAdmin);
+  const canOpenMemberDetails = Boolean(
+    onEditMember &&
+    (currentUserPerms?.['organization.members.manage'] || canInviteMembers || isGlobalAdmin)
+  );
   const isCrossTenantSupportSession = isEcosystemSupport && Boolean(adminSelectedOrgId);
   const [activeTab, setActiveTabInternal] = useState<OrgTab>(
     (initialTab as OrgTab) || (isCrossTenantSupportSession ? 'members' : 'settings')
@@ -839,10 +844,14 @@ export function OrganizationManager({
                <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                  <h3 className="text-lg font-semibold text-[#F5F7FA]">Membros & Convites</h3>
                  
-                 {(currentUserRole === 'owner' || currentUserRole === 'admin' || isGlobalAdmin) && (
+                 {canInviteMembers && (
                    <div className="flex items-center gap-3">
-                     <button onClick={onOpenInviteModal} className="flex items-center gap-2 px-4 py-2 bg-[#F5F7FA] text-[#050505] rounded-xl hover:bg-white transition-colors text-sm font-semibold shadow-[0_0_20px_rgba(255,255,255,0.1)]">
-                       Convidar Membro
+                     <button
+                       type="button"
+                       onClick={onOpenInviteModal}
+                       className="flex min-h-[44px] items-center gap-2 rounded-xl bg-[#F5F7FA] px-4 py-2 text-sm font-semibold text-[#050505] shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-colors hover:bg-white"
+                     >
+                       Convidar pessoa
                      </button>
                    </div>
                  )}
@@ -857,8 +866,14 @@ export function OrganizationManager({
                <div className="bg-[#050505] rounded-2xl border border-white/5 overflow-hidden">
                   {members.map((member: any, i: number) => (
                     <div key={member.id} data-hub-member-row className={`flex flex-col gap-5 p-4 sm:p-5 ${i !== members.length - 1 ? 'border-b border-white/5' : ''}`}>
-                      <div className="flex w-full min-w-0 items-start gap-3">
-                        <div className="w-10 h-10 shrink-0 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA]">
+                      <button
+                        type="button"
+                        onClick={() => canOpenMemberDetails && onEditMember?.(member)}
+                        disabled={!canOpenMemberDetails}
+                        className="group/member flex w-full min-w-0 items-start gap-3 rounded-xl text-left outline-none transition-colors disabled:cursor-default focus-visible:ring-2 focus-visible:ring-[#2B85EB]/60"
+                        aria-label={canOpenMemberDetails ? `Abrir dados de ${member.displayName || member.email || 'integrante'}` : undefined}
+                      >
+                        <div className="w-10 h-10 shrink-0 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center font-bold text-sm text-[#F5F7FA] transition-colors group-enabled/member:group-hover/member:border-[#2B85EB]/35">
                           {member.photoURL ? <img src={member.photoURL} alt="" className="w-full h-full rounded-xl object-cover" /> : member.displayName?.charAt(0) || member.email?.charAt(0) || '?'}
                         </div>
                         <div className="flex min-w-0 flex-1 flex-col">
@@ -866,8 +881,13 @@ export function OrganizationManager({
                             {member.displayName || 'Usuário'} {member.id === user?.uid && '(Você)'}
                           </span>
                           <span title={member.email || ''} className="block max-w-full truncate text-xs text-[#A0A7B5]">{member.email}</span>
+                          {canOpenMemberDetails && (
+                            <span className="mt-1 text-[10px] font-semibold text-[#2B85EB] opacity-80">
+                              Ver dados e permissões
+                            </span>
+                          )}
                         </div>
-                      </div>
+                      </button>
                       
                       {(currentUserPerms['organization.roles.manage'] || isGlobalAdmin) ? (
                         <div data-hub-member-controls className="flex w-full min-w-0 flex-wrap items-end gap-3 border-t border-white/[0.06] pt-4">
