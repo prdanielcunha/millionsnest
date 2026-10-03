@@ -298,7 +298,9 @@ export function OrganizationManager({
         throw new Error(data?.reasonCode || 'REISSUE_FAILED');
       }
 
-      const inviteUrl = new URL(data.invitePath, window.location.origin).toString();
+      const inviteUrl = typeof data.inviteUrl === 'string' && data.inviteUrl
+        ? new URL(data.inviteUrl).toString()
+        : new URL(data.invitePath, window.location.origin).toString();
       const isShareableLink =
         data.invitation?.inviteMode === 'link' ||
         data.invitation?.identityBound === false ||
