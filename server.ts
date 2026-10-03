@@ -864,6 +864,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       'body.sold_quantity',
       'body.thumbnail',
       'body.catalog_product_id',
+      'body.variations',
     ].join(',');
 
     let itemRows: Array<{ id?: string; status_code?: number; body?: Record<string, any> }> = [];
@@ -920,14 +921,37 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       }
 
       const status = String(item.status || '').toLowerCase();
-      const availableQuantity = Number(item.available_quantity);
+      const variations = Array.isArray(item.variations) ? item.variations : [];
+      const matchingVariation = variations.find(
+        (variation: Record<string, any>) =>
+          String(variation?.catalog_product_id || '').trim() === catalogId,
+      );
+      const itemCatalogId = String(item.catalog_product_id || '').trim();
+      const winnerCatalogId = String(winner.product_id || '').trim();
+
+      // If the listing has variations, validate the exact catalog child that
+      // corresponds to the product shown in Radar. Item-level stock alone can
+      // be positive while a color/size variation is already unavailable.
+      if (variations.length > 0 && !matchingVariation) {
+        rejectedUnverified += 1;
+        return [];
+      }
+
+      const availableQuantity = Number(
+        matchingVariation?.available_quantity ?? item.available_quantity,
+      );
       const soldQuantity = Number(item.sold_quantity);
 
       if (!Number.isFinite(availableQuantity)) {
         rejectedUnverified += 1;
         return [];
       }
-      if (status !== 'active' || availableQuantity <= 0) {
+      if (
+        status !== 'active' ||
+        availableQuantity <= 0 ||
+        (winnerCatalogId && winnerCatalogId !== catalogId) ||
+        (itemCatalogId && variations.length === 0 && itemCatalogId !== catalogId)
+      ) {
         rejectedUnavailable += 1;
         return [];
       }
@@ -940,14 +964,14 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         return [];
       }
 
-      const title = String(item.title || product.name || product.family_name || candidate.name || query).trim();
-      const permalink = String(item.permalink || '').trim();
+      const title = String(product.name || product.family_name || item.title || candidate.name || query).trim();
+      const permalink = String(product.permalink || candidate.permalink || item.permalink || '').trim();
       const imageUrl = String(
-        item.thumbnail ||
         product.pictures?.[0]?.secure_url ||
         product.pictures?.[0]?.url ||
         candidate.pictures?.[0]?.secure_url ||
         candidate.pictures?.[0]?.url ||
+        item.thumbnail ||
         '',
       ).replace('http://', 'https://');
       const livePrice = Number(item.price);
@@ -977,7 +1001,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         },
         availableQuantity: {
           value: availableQuantity,
-          source: 'mercadolivre-items-bulk',
+          source: matchingVariation ? 'mercadolivre-item-variation' : 'mercadolivre-items-bulk',
           observedAt,
         },
         title: {
