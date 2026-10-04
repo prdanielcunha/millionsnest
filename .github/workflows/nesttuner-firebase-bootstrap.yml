@@ -1,0 +1,236 @@
+name: Bootstrap NestTuner Firebase and Domains
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/nesttuner-firebase-bootstrap.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: nesttuner-firebase-bootstrap
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: millionsnest
+  PROJECT_NUMBER: "555464791734"
+  POOL_ID: mn-prod-github
+  PROVIDER_ID: github
+  NESTTUNER_REPOSITORY: prdanielcunha/nesttuner
+  WEB_DEPLOYER: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+  PT_SITE: mn-nesttuner-pt-555464791734
+  EN_SITE: mn-nesttuner-en-555464791734
+  PT_DOMAIN: afinador.millionsnest.com
+  EN_DOMAIN: tuner.millionsnest.com
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout MillionsNest
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Authenticate as MillionsNest infrastructure admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Authorize NestTuner main in production WIF
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CURRENT="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID"             --workload-identity-pool="$POOL_ID"             --location=global             --project="$PROJECT_ID"             --format='value(attributeCondition)')"
+          test -n "$CURRENT"
+
+          if grep -Fq "$NESTTUNER_REPOSITORY" <<<"$CURRENT"; then
+            echo "NESTTUNER_REPOSITORY_ALREADY_ALLOWED=true"
+          else
+            CLAUSE="(assertion.repository == '$NESTTUNER_REPOSITORY' && assertion.ref == 'refs/heads/main')"
+            UPDATED="($CURRENT) || $CLAUSE"
+            gcloud iam workload-identity-pools providers update-oidc "$PROVIDER_ID"               --workload-identity-pool="$POOL_ID"               --location=global               --project="$PROJECT_ID"               --attribute-condition="$UPDATED"               --quiet
+            echo "NESTTUNER_REPOSITORY_ADDED=true"
+          fi
+
+      - name: Grant NestTuner web deployer impersonation
+        shell: bash
+        run: |
+          set -euo pipefail
+          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$NESTTUNER_REPOSITORY"
+          gcloud iam service-accounts add-iam-policy-binding "$WEB_DEPLOYER"             --project="$PROJECT_ID"             --role="roles/iam.workloadIdentityUser"             --member="$MEMBER"             --quiet >/tmp/nesttuner-web-deployer-binding.json
+          echo "NESTTUNER_WEB_DEPLOYER_BINDING_READY=true"
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools@15.25.1
+
+      - name: Ensure NestTuner Firebase Hosting sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXISTING="$(firebase hosting:sites:list --project "$PROJECT_ID")"
+          for SITE in "$PT_SITE" "$EN_SITE"; do
+            if grep -Fq "$SITE" <<<"$EXISTING"; then
+              echo "HOSTING_SITE_EXISTS=$SITE"
+            else
+              firebase hosting:sites:create "$SITE" --project "$PROJECT_ID"
+              echo "HOSTING_SITE_CREATED=$SITE"
+            fi
+          done
+
+      - name: Ensure NestTuner custom-domain resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+
+          ensure_domain() {
+            SITE="$1"
+            DOMAIN="$2"
+            BASE="https://firebasehosting.googleapis.com/v1beta1/projects/$PROJECT_ID/sites/$SITE/customDomains"
+            STATUS="$(curl --silent --output /tmp/domain-get.json --write-out '%{http_code}'               -H "Authorization: Bearer $TOKEN" "$BASE/$DOMAIN")"
+
+            if [ "$STATUS" = "200" ]; then
+              echo "CUSTOM_DOMAIN_EXISTS=$DOMAIN site=$SITE"
+              return 0
+            fi
+            if [ "$STATUS" != "404" ]; then
+              echo "Unexpected Firebase status $STATUS for $DOMAIN" >&2
+              cat /tmp/domain-get.json >&2
+              exit 1
+            fi
+
+            curl --fail --silent --show-error -X POST               -H "Authorization: Bearer $TOKEN"               -H "Content-Type: application/json"               -d '{"certPreference":"DEDICATED","annotations":{"managed-by":"millionsnest-ci","product":"nesttuner"}}'               "$BASE?customDomainId=$DOMAIN" >/tmp/domain-create.json
+            echo "CUSTOM_DOMAIN_CREATED=$DOMAIN site=$SITE"
+          }
+
+          ensure_domain "$PT_SITE" "$PT_DOMAIN"
+          ensure_domain "$EN_SITE" "$EN_DOMAIN"
+
+      - name: Read Firebase-required DNS records
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 15
+          TOKEN="$(gcloud auth print-access-token)"
+
+          collect_domain() {
+            SITE="$1"
+            DOMAIN="$2"
+            OUTPUT="$3"
+            URL="https://firebasehosting.googleapis.com/v1beta1/projects/$PROJECT_ID/sites/$SITE/customDomains/$DOMAIN"
+            curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$URL" > "$OUTPUT.json"
+
+            python3 - "$DOMAIN" "$SITE" "$OUTPUT.json" "$OUTPUT.tsv" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          domain, site, source, dest = sys.argv[1:]
+          data = json.loads(Path(source).read_text())
+          desired = list((data.get("requiredDnsUpdates") or {}).get("desired") or [])
+          desired += list((((data.get("cert") or {}).get("verification") or {}).get("dns") or {}).get("desired") or [])
+
+          seen = set()
+          rows = []
+          for record in desired:
+              name = str(record.get("domainName") or "").rstrip(".")
+              record_type = str(record.get("type") or "").upper()
+              value = str(record.get("rdata") or "").strip().strip('"').rstrip(".")
+              key = (name, record_type, value)
+              if not name or record_type not in {"A", "AAAA", "CNAME", "TXT"} or not value or key in seen:
+                  continue
+              if not (name == domain or name.endswith("." + domain)):
+                  raise SystemExit(f"Firebase returned out-of-scope DNS name: {name}")
+              seen.add(key)
+              rows.append(key)
+
+          if not rows and data.get("hostState") == "HOST_UNHOSTED":
+              rows.append((domain, "CNAME", f"{site}.web.app"))
+
+          Path(dest).write_text("\n".join("\t".join(row) for row in rows) + ("\n" if rows else ""))
+          print(json.dumps({
+              "domain": domain,
+              "ownershipState": data.get("ownershipState"),
+              "hostState": data.get("hostState"),
+              "certState": (data.get("cert") or {}).get("state"),
+              "dnsRecordCount": len(rows),
+          }, sort_keys=True))
+          PY
+          }
+
+          collect_domain "$PT_SITE" "$PT_DOMAIN" /tmp/nesttuner-pt
+          collect_domain "$EN_SITE" "$EN_DOMAIN" /tmp/nesttuner-en
+
+      - name: Apply only NestTuner DNS records in Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          CF_TOKEN="$(gcloud secrets versions access latest --secret=mn-cloudflare-dns-token --project="$PROJECT_ID")"
+          ZONES="$(curl --fail --silent --show-error             -H "Authorization: Bearer $CF_TOKEN"             'https://api.cloudflare.com/client/v4/zones?name=millionsnest.com&status=active')"
+          ZONE_ID="$(jq -r '.result[0].id // empty' <<<"$ZONES")"
+          test -n "$ZONE_ID"
+
+          apply_file() {
+            FILE="$1"
+            while IFS=$'\t' read -r NAME TYPE VALUE; do
+              test -n "$NAME" || continue
+              case "$NAME" in
+                "$PT_DOMAIN"|*."$PT_DOMAIN"|"$EN_DOMAIN"|*."$EN_DOMAIN") ;;
+                *) echo "Refusing out-of-scope DNS name: $NAME" >&2; exit 1 ;;
+              esac
+
+              EXISTING="$(curl --fail --silent --show-error -G                 -H "Authorization: Bearer $CF_TOKEN"                 --data-urlencode "name=$NAME"                 "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records")"
+
+              MATCH_ID="$(jq -r --arg type "$TYPE" --arg value "$VALUE"                 '.result[] | select(.type == $type and .content == $value) | .id' <<<"$EXISTING" | head -n1)"
+              if [ -n "$MATCH_ID" ]; then
+                echo "DNS_ALREADY_CORRECT name=$NAME type=$TYPE"
+                continue
+              fi
+
+              if [ "$TYPE" != "TXT" ]; then
+                while read -r RECORD_ID; do
+                  test -n "$RECORD_ID" || continue
+                  curl --fail --silent --show-error -X DELETE                     -H "Authorization: Bearer $CF_TOKEN"                     "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" >/dev/null
+                  echo "DNS_CONFLICT_REMOVED name=$NAME id=$RECORD_ID"
+                done < <(jq -r '.result[] | select(.type == "A" or .type == "AAAA" or .type == "CNAME") | .id' <<<"$EXISTING")
+              fi
+
+              PAYLOAD="$(jq -nc --arg type "$TYPE" --arg name "$NAME" --arg content "$VALUE"                 '{type:$type,name:$name,content:$content,ttl:300,proxied:false}')"
+              curl --fail --silent --show-error -X POST                 -H "Authorization: Bearer $CF_TOKEN"                 -H "Content-Type: application/json"                 --data "$PAYLOAD"                 "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" >/dev/null
+              echo "DNS_APPLIED name=$NAME type=$TYPE"
+            done < "$FILE"
+          }
+
+          apply_file /tmp/nesttuner-pt.tsv
+          apply_file /tmp/nesttuner-en.tsv
+
+      - name: Verify infrastructure and DNS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CONDITION="$(gcloud iam workload-identity-pools providers describe "$PROVIDER_ID"             --workload-identity-pool="$POOL_ID"             --location=global             --project="$PROJECT_ID"             --format='value(attributeCondition)')"
+          grep -F "$NESTTUNER_REPOSITORY" <<<"$CONDITION" >/dev/null
+          grep -F "refs/heads/main" <<<"$CONDITION" >/dev/null
+
+          MEMBER="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$NESTTUNER_REPOSITORY"
+          gcloud iam service-accounts get-iam-policy "$WEB_DEPLOYER"             --project="$PROJECT_ID" --format=json >/tmp/nesttuner-web-deployer-policy.json
+          jq -e --arg member "$MEMBER"             '.bindings[] | select(.role == "roles/iam.workloadIdentityUser") | .members[] | select(. == $member)'             /tmp/nesttuner-web-deployer-policy.json >/dev/null
+
+          SITES="$(firebase hosting:sites:list --project "$PROJECT_ID")"
+          grep -F "$PT_SITE" <<<"$SITES" >/dev/null
+          grep -F "$EN_SITE" <<<"$SITES" >/dev/null
+
+          for DOMAIN in "$PT_DOMAIN" "$EN_DOMAIN"; do
+            echo "===== $DOMAIN ====="
+            dig +short CNAME "$DOMAIN" || true
+            dig +short A "$DOMAIN" || true
+            dig +short AAAA "$DOMAIN" || true
+          done
+
+          echo "NESTTUNER_INFRA_BOOTSTRAP_OK=true"
