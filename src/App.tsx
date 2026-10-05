@@ -22,6 +22,7 @@ initializeOSHardening();
 const Home = lazy(() => import('./pages/Home.js').then(module => ({ default: module.Home })));
 const Terms = lazy(() => import('./pages/Terms.js').then(module => ({ default: module.Terms })));
 const Privacy = lazy(() => import('./pages/Privacy.js').then(module => ({ default: module.Privacy })));
+const DataDeletion = lazy(() => import('./pages/DataDeletion.js').then(module => ({ default: module.DataDeletion })));
 const Refunds = lazy(() => import('./pages/Refunds.js').then(module => ({ default: module.Refunds })));
 const Cancellation = lazy(() => import('./pages/Cancellation.js').then(module => ({ default: module.Cancellation })));
 const Login = lazy(() => import('./pages/Login.js').then(module => ({ default: module.Login })));
@@ -94,7 +95,11 @@ export default function App() {
                 <Route path="/apps/:appId/launch" element={<EcosystemAppLaunch />} />
                 <Route path="/musicscale" element={<MusicScaleLanding />} />
                 <Route path="/termos-de-uso" element={<Terms />} />
+                <Route path="/terms" element={<Terms />} />
                 <Route path="/politica-de-privacidade" element={<Privacy />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/exclusao-de-dados" element={<DataDeletion />} />
+                <Route path="/data-deletion" element={<DataDeletion />} />
                 <Route path="/politicas-de-reembolso" element={<Refunds />} />
                 <Route path="/politicas-de-cancelamento" element={<Cancellation />} />
                 <Route path="/:slug" element={<OrganizationPublicPage />} />
