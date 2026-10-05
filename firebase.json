@@ -9,7 +9,7 @@
     ],
     "headers": [
       {
-        "regex": "^/($|login$|dashboard(/.*)?$|join(/.*)?$|admin(/.*)?$|ecosystem(/.*)?$|upgrade$|checkout$|connect(/.*)?$|apps(/.*)?$|musicscale$|termos-de-uso$|politica-de-privacidade$|politicas-de-reembolso$|politicas-de-cancelamento$)",
+        "regex": "^/($|login$|dashboard(/.*)?$|join(/.*)?$|admin(/.*)?$|ecosystem(/.*)?$|upgrade$|checkout$|connect(/.*)?$|apps(/.*)?$|musicscale$|termos-de-uso$|terms$|politica-de-privacidade$|privacy$|exclusao-de-dados$|data-deletion$|politicas-de-reembolso$|politicas-de-cancelamento$)",
         "headers": [
           {
             "key": "Cache-Control",
