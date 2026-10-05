@@ -12,6 +12,12 @@ export function Footer() {
   const [isContacting, setIsContacting] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
   const location = useLocation();
+  const legalLocale = (i18n.resolvedLanguage || i18n.language || 'pt').split('-')[0];
+  const dataDeletionLabel = legalLocale === 'en'
+    ? 'Data deletion'
+    : legalLocale === 'es'
+      ? 'Eliminación de datos'
+      : 'Exclusão de dados';
 
   const handleContact = async () => {
     if (isContacting) return;
@@ -94,6 +100,7 @@ export function Footer() {
             <ul className="space-y-4">
               <li><Link to="/termos-de-uso" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">{t('footer_terms')}</Link></li>
               <li><Link to="/politica-de-privacidade" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">{t('footer_privacy')}</Link></li>
+              <li><Link to="/data-deletion" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">{dataDeletionLabel}</Link></li>
               <li><Link to="/politicas-de-cancelamento" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">{t('footer_cancel')}</Link></li>
               <li><Link to="/politicas-de-reembolso" className="text-sm font-normal text-[#A0A7B5] hover:text-white transition-colors">{t('footer_refund')}</Link></li>
               <li>
