@@ -8,6 +8,8 @@ const ISSUER = 'https://millionsnest.com';
 const AUDIENCE = 'nestai';
 const TOKEN_TTL_SECONDS = 300;
 const RESOLVER_APPS = new Set<EcosystemAppId>(['musicscale', 'nestfinance', 'nestlocal', 'nestjourney']);
+const PUBLIC_GUEST_APPS = new Set(['nestlume']);
+
 const KNOWN_APPS = new Set([
   'musicscale',
   'nestfinance',
@@ -65,6 +67,7 @@ export function issueNestAiToken(params: {
   appId: string;
   appCheckAppId: string;
   capabilities?: string[];
+  tokenType?: 'user' | 'guest' | 'service';
   locale?: "pt-BR" | "en" | "es";
   nowSeconds?: number;
   env?: NodeJS.ProcessEnv;
@@ -82,7 +85,7 @@ export function issueNestAiToken(params: {
     appId: params.appId,
     capabilities: params.capabilities ?? ['ai:run', 'ai:stream'],
     scopes: params.capabilities ?? ['ai:run', 'ai:stream'],
-    tokenType: 'user',
+    tokenType: params.tokenType ?? 'user',
     appCheckAppId: params.appCheckAppId,
     ...(params.locale ? { locale: params.locale } : {}),
     iat: now,
@@ -210,6 +213,59 @@ export async function handleNestAiTokenRequest(req: Request, res: Response, db: 
     return res.status(200).json({ token: issued.token, tokenType: 'Bearer', expiresIn: issued.expiresIn });
   } catch (error) {
     console.error('[NestAI] token issue failed', error instanceof Error ? error.message : 'unknown');
+    return res.status(503).json({ error: 'NESTAI_SIGNING_UNAVAILABLE' });
+  }
+}
+
+function normalizeLocale(value: unknown): 'pt-BR' | 'en' | 'es' {
+  const raw = String(value || 'pt-BR');
+  return ['pt-BR', 'en', 'es'].includes(raw) ? raw as 'pt-BR' | 'en' | 'es' : 'pt-BR';
+}
+
+async function verifiedAppCheckAppId(req: Request): Promise<string> {
+  const appCheckHeader = String(req.headers['x-firebase-appcheck'] || '');
+  if (!appCheckHeader) throw new Error('APP_CHECK_REQUIRED');
+  const claims = await admin.appCheck().verifyToken(appCheckHeader) as unknown as Record<string, unknown>;
+  const appId = String(claims.app_id || claims.sub || '').trim();
+  if (!appId) throw new Error('APP_CHECK_APP_ID_MISSING');
+  return appId;
+}
+
+export async function handleNestAiGuestTokenRequest(req: Request, res: Response): Promise<Response> {
+  const appId = String(req.body?.appId || '').trim().toLowerCase();
+  const locale = normalizeLocale(req.body?.locale);
+  const sessionId = String(req.body?.sessionId || '').trim();
+
+  if (!PUBLIC_GUEST_APPS.has(appId)) return res.status(403).json({ error: 'NESTAI_GUEST_APP_DENIED' });
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(sessionId)) return res.status(400).json({ error: 'NESTAI_GUEST_SESSION_INVALID' });
+
+  let appCheckAppId = '';
+  try {
+    appCheckAppId = await verifiedAppCheckAppId(req);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'APP_CHECK_INVALID';
+    return res.status(401).json({ error: code === 'APP_CHECK_REQUIRED' ? code : 'APP_CHECK_INVALID' });
+  }
+
+  const pseudonym = crypto.createHash('sha256')
+    .update(appId + ':' + appCheckAppId + ':' + sessionId)
+    .digest('hex')
+    .slice(0, 32);
+
+  try {
+    const issued = issueNestAiToken({
+      uid: 'guest:' + pseudonym,
+      organizationId: 'public:' + appId,
+      appId,
+      appCheckAppId,
+      capabilities: ['ai:run', 'ai:stream'],
+      tokenType: 'guest',
+      locale,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ token: issued.token, tokenType: 'Bearer', expiresIn: issued.expiresIn, organizationId: 'public:' + appId });
+  } catch (error) {
+    console.error('[NestAI] guest token issue failed', error instanceof Error ? error.message : 'unknown');
     return res.status(503).json({ error: 'NESTAI_SIGNING_UNAVAILABLE' });
   }
 }
