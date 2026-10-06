@@ -34,6 +34,7 @@ const STANDARD_HANDOFF_APPS = new Set<EcosystemAppId>([
   'nestfinance',
   'nestlocal',
   'nestjourney',
+  'nestlive',
 ]);
 
 function maskUid(uid: string): string {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Music, Calendar, Users, QrCode, Wallet, ShieldCheck, CreditCard, LayoutGrid } from 'lucide-react';
+import { Music, Calendar, Users, QrCode, Wallet, ShieldCheck, CreditCard, LayoutGrid, Radio } from 'lucide-react';
 import type { EcosystemApp } from '../../lib/apps.js';
 
 interface EcosystemAppIconProps {
@@ -29,6 +29,7 @@ export function EcosystemAppIcon({ app, iconClassName = '', assetClassName = '' 
     app.icon === 'Wallet' ? Wallet :
     app.icon === 'ShieldCheck' ? ShieldCheck :
     app.icon === 'CreditCard' ? CreditCard :
+    app.icon === 'Radio' ? Radio :
     LayoutGrid;
 
   return <IconComponent className={iconClassName} />;
