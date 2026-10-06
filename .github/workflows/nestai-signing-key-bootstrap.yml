@@ -1,7 +1,7 @@
 name: NestAI Signing Key Bootstrap
 on:
   push:
-    branches: ["main"]
+    branches: ["production"]
     paths:
       - ".github/workflows/nestai-signing-key-bootstrap.yml"
   workflow_dispatch:
