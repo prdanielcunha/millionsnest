@@ -1,0 +1,24 @@
+name: NestAI Hub Integration QA
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "src/server/services/NestAiTokenService.ts"
+      - "server.ts"
+      - "scripts/test_nestai_token_service.ts"
+      - ".github/workflows/nestai-hub-integration-qa.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npx tsx scripts/test_nestai_token_service.ts
+      - run: npm run build
