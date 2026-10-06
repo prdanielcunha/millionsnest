@@ -32,11 +32,11 @@ assert.equal(byId.get('nestlocal')?.handoffEntryPath, '/auth/handoff');
 assert.equal(byId.get('nestlocal')?.handoffConsumesGlobally, false);
 assert.equal(byId.get('nestfinance')?.url, 'https://nestfinance.millionsnest.com/auth/handoff');
 assert.equal(byId.get('nestjourney')?.url, 'https://nestjourney.millionsnest.com/');
-assert.equal(byId.get('nestlive')?.url, 'https://live.millionsnest.com/');
+assert.equal(byId.get('nestlive')?.url, 'https://nestlive.vercel.app/');
 assert.equal(byId.get('nestlive')?.canonicalOrigin, 'https://live.millionsnest.com');
 assert.equal(byId.get('nestlive')?.authMode, 'hub_handoff');
 assert.equal(byId.get('nestlive')?.directEntrySso, true);
-assert.equal(byId.get('nestlive')?.domainStatus, 'configured');
+assert.equal(byId.get('nestlive')?.domainStatus, 'setup_required');
 
 assert.equal(
   resolveSafePostLoginPath('?next=%2Fapps%2Fmusicscale%2Flaunch'),
@@ -147,7 +147,7 @@ assert.equal(musicScaleLaunch.searchParams.get('returnTo'), null);
 assert.ok(musicScaleLaunch.searchParams.get('ecosystem_ctx'));
 
 const nestLiveLaunch = await captureLaunch('nestlive', '/');
-assert.equal(nestLiveLaunch.origin, 'https://live.millionsnest.com');
+assert.equal(nestLiveLaunch.origin, 'https://nestlive.vercel.app');
 assert.equal(nestLiveLaunch.pathname, '/');
 assert.ok(nestLiveLaunch.searchParams.get('ecosystem_ctx'));
 
