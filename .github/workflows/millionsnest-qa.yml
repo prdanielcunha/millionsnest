@@ -166,6 +166,9 @@ jobs:
       - name: MusicScale handoff contract
         run: npx tsx scripts/test_mn_access_02_musicscale_handoff.ts
 
+      - name: Connect WhatsApp channel grant contract
+        run: npx tsx scripts/test_connect_channel_grants.ts
+
       - name: MusicScale entitlement hygiene
         run: npx tsx scripts/test_millionsnest_musicscale_entitlement_hygiene.ts
 
