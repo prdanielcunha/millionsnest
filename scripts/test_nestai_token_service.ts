@@ -18,6 +18,8 @@ const issued = issueNestAiToken({
   uid: 'user-1',
   organizationId: 'org-1',
   appId: 'nestlume',
+  appCheckAppId: '1:555464791734:web:test',
+  locale: 'pt-BR',
   nowSeconds: now,
   env,
 });
@@ -41,7 +43,11 @@ assert.equal(payload.aud, 'nestai');
 assert.equal(payload.sub, 'user-1');
 assert.equal(payload.organizationId, 'org-1');
 assert.equal(payload.appId, 'nestlume');
-assert.deepEqual(payload.capabilities, ['ai:run']);
+assert.deepEqual(payload.capabilities, ['ai:run', 'ai:stream']);
+assert.deepEqual(payload.scopes, ['ai:run', 'ai:stream']);
+assert.equal(payload.tokenType, 'user');
+assert.equal(payload.appCheckAppId, '1:555464791734:web:test');
+assert.equal(payload.locale, 'pt-BR');
 assert.equal(payload.iat, now);
 assert.equal(payload.exp, now + 300);
 assert.equal(payload.nbf, now - 5);
