@@ -66,4 +66,23 @@ const valid = crypto.verify(
 assert.equal(valid, true);
 
 assert.equal('d' in jwks.keys[0]!, false);
+
+const guestIssued = issueNestAiToken({
+  uid: 'guest:abc123',
+  organizationId: 'public:nestlume',
+  appId: 'nestlume',
+  appCheckAppId: '1:555464791734:web:test',
+  capabilities: ['ai:run', 'ai:stream'],
+  tokenType: 'guest',
+  locale: 'pt-BR',
+  nowSeconds: now,
+  env,
+});
+const guestPayload = decodeJson(guestIssued.token.split('.')[1]!);
+assert.equal(guestPayload.tokenType, 'guest');
+assert.equal(guestPayload.organizationId, 'public:nestlume');
+assert.equal(guestPayload.appId, 'nestlume');
+assert.equal(guestPayload.sub, 'guest:abc123');
+assert.deepEqual(guestPayload.capabilities, ['ai:run', 'ai:stream']);
+
 console.log('NESTAI_HUB_TOKEN_SERVICE_OK');
