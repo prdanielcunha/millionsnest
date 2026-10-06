@@ -98,6 +98,15 @@ export const APP_EXPERIENCE_REGISTRY: Readonly<Record<string, AppExperienceDefin
       overview: '/journey-overview'
     }
   },
+  nestlive: {
+    appId: 'nestlive',
+    sections: APP_EXPERIENCE_SECTIONS,
+    destinations: {
+      home: '/',
+      mix: '/',
+      remote: '/remote',
+    }
+  },
   connect: {
     appId: 'connect',
     sections: APP_EXPERIENCE_SECTIONS,
