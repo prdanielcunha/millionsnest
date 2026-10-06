@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "appId": "millionsnest",
+  "name": "MillionsNest Hub",
+  "ai": {
+    "enabled": true,
+    "tasks": [
+      "hub.operational.summary",
+      "hub.incident.explain"
+    ],
+    "defaultSensitivity": "P1_INTERNAL"
+  },
+  "locales": [
+    "pt-BR",
+    "en",
+    "es"
+  ],
+  "owner": {
+    "repository": "prdanielcunha/millionsnest"
+  }
+}
