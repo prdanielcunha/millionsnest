@@ -2204,24 +2204,32 @@ async function startServer() {
         }
 
         const subData = subSnap.exists ? subSnap.data() || {} : {};
-        const capacity = resolveCanonicalInvitationCapacity({
-          organizationId,
-          subscription: {
-            exists: subSnap.exists,
-            organizationId: subData.organizationId,
-            app: subData.apps?.musicscale?.app ?? subData.app,
-            status: subData.apps?.musicscale?.status ?? subData.status,
-            plan: subData.apps?.musicscale?.plan ?? subData.plan,
-            limitsUsers: subData.apps?.musicscale?.limits?.users ?? subData.limits?.users
-          },
-          organizationApp: {
-            exists: !!orgData.apps?.musicscale,
-            status: orgData.apps?.musicscale?.status,
-            plan: orgData.apps?.musicscale?.plan,
-            limitsUsers: orgData.apps?.musicscale?.limits?.users
-          },
-          memberStatuses
-        });
+        const capacity = targetAppId === 'nestjourney'
+          ? {
+              success: true as const,
+              capacity: {
+                resolved: true as const,
+                mode: 'unlimited' as const,
+              },
+            }
+          : resolveCanonicalInvitationCapacity({
+              organizationId,
+              subscription: {
+                exists: subSnap.exists,
+                organizationId: subData.organizationId,
+                app: subData.apps?.musicscale?.app ?? subData.app,
+                status: subData.apps?.musicscale?.status ?? subData.status,
+                plan: subData.apps?.musicscale?.plan ?? subData.plan,
+                limitsUsers: subData.apps?.musicscale?.limits?.users ?? subData.limits?.users
+              },
+              organizationApp: {
+                exists: !!orgData.apps?.musicscale,
+                status: orgData.apps?.musicscale?.status,
+                plan: orgData.apps?.musicscale?.plan,
+                limitsUsers: orgData.apps?.musicscale?.limits?.users
+              },
+              memberStatuses
+            });
 
         if (!capacity.success) {
           return { status: 503, payload: { success: false, reasonCode: 'MEMBER_LIMIT_UNAVAILABLE' } };
