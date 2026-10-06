@@ -2,9 +2,10 @@ name: Connect Handoff QA
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, production ]
     paths:
       - "src/server/services/ConnectHandoffService.ts"
+      - "src/server/services/ConnectChannelGrantService.ts"
       - "src/server/services/MusicScaleHandoffService.ts"
       - "src/server/services/EcosystemSessionVersionService.ts"
       - "src/server/services/HandoffSecurityService.ts"
@@ -17,6 +18,7 @@ on:
       - "src/server/services/NestJourneyFollowupContextService.ts"
       - "server.ts"
       - "scripts/test_connect_handoff.ts"
+      - "scripts/test_connect_channel_grants.ts"
       - "scripts/test_connect_official_launch.ts"
       - "scripts/test_connect_nestjourney_followup.ts"
       - "scripts/test_mn_access_02_musicscale_handoff.ts"
@@ -54,6 +56,8 @@ jobs:
         run: npx tsx scripts/test_handoff_security.ts
       - name: Validate Connect handoff contract
         run: npx tsx scripts/test_connect_handoff.ts
+      - name: Validate Connect WhatsApp channel grant contract
+        run: npx tsx scripts/test_connect_channel_grants.ts
       - name: Validate Connect official launch policy
         run: npx tsx scripts/test_connect_official_launch.ts
       - name: Validate NestJourney resolve-loop context
