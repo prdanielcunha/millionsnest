@@ -2278,7 +2278,10 @@ async function startServer() {
           maxUses: 1,
           useCount: 0,
           replacesInvitationId: invitationId,
-          ...(targetAppId ? { targetAppId } : {})
+          ...(targetAppId ? { targetAppId } : {}),
+          ...(targetAppId === 'nestjourney' && typeof inviteData.nestJourneyResponsibility === 'string'
+            ? { nestJourneyResponsibility: inviteData.nestJourneyResponsibility }
+            : {})
         });
 
         transaction.set(orgRef, {
@@ -2309,7 +2312,10 @@ async function startServer() {
               role: inviteData.role,
               status: 'pending',
               expiresAtMs: nowMs + INVITATION_TTL_MS,
-              ...(targetAppId ? { targetAppId } : {})
+              ...(targetAppId ? { targetAppId } : {}),
+              ...(targetAppId === 'nestjourney' && typeof inviteData.nestJourneyResponsibility === 'string'
+                ? { nestJourneyResponsibility: inviteData.nestJourneyResponsibility }
+                : {})
             }
           }
         };
