@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
 
-export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney';
+export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney' | 'nestlive';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
 
 export type CanonicalAppAccessState = 'granted' | 'denied';
@@ -317,7 +317,51 @@ export async function resolveEcosystemAppAccess(params: {
     };
   }
 
-  if (appId === 'musicscale') {
+  if (appId === 'nestlive') {
+    const orgAppAccess = orgData.apps?.nestlive;
+    const appStatus = String(orgAppAccess?.status || '').trim().toLowerCase();
+    const enabledApps = Array.isArray(orgData.enabledApps) ? orgData.enabledApps : [];
+    const organizationEnabled =
+      enabledApps.includes('nestlive') ||
+      ['active', 'trialing', 'beta'].includes(appStatus);
+
+    if (!organizationEnabled) {
+      return {
+        ...defaultDenied,
+        systemRole,
+        organizationRole,
+        denialReason: orgAppAccess
+          ? DENIAL_REASONS.ENTITLEMENT_INACTIVE
+          : DENIAL_REASONS.APP_NOT_ENABLED
+      };
+    }
+
+    const memberAccess = memData.appAccess?.nestlive;
+    if (memberAccess?.enabled === false) {
+      return {
+        ...defaultDenied,
+        systemRole,
+        organizationRole,
+        denialReason: DENIAL_REASONS.MEMBER_APP_ACCESS_DISABLED
+      };
+    }
+
+    return {
+      appId,
+      organizationId,
+      accessible: true,
+      isGlobalAccess: false,
+      accessSource: 'organization_membership',
+      systemRole,
+      organizationRole,
+      roles: memberAccess?.roles || [organizationRole],
+      permissions: memberAccess?.permissions || ['nestlive.use'],
+      scopes: memberAccess?.scopes || { nestlive: ['use'] },
+      decisionState: 'granted'
+    };
+  }
+
+    if (appId === 'musicscale') {
     let individualAccessSource: MusicScaleIndividualAccessSource = 'membership_compatibility';
 
     if (memData.appAccess?.musicscale?.enabled === false) {

@@ -23,6 +23,7 @@ const appDisplayName = (moduleKey: string) => {
   if (moduleKey === 'nestfinance') return 'NestFinance';
   if (moduleKey === 'nestlocal') return 'NestLocal';
   if (moduleKey === 'nestjourney') return 'NestJourney';
+  if (moduleKey === 'nestlive') return 'NestLive';
   return 'aplicativo';
 };
 

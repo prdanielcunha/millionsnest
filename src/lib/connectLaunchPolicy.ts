@@ -3,7 +3,7 @@ import { isAllowedAppDestinationPath } from './appExperienceRegistry.js';
 export const CONNECT_OFFICIAL_URL = 'https://connect.millionsnest.com';
 export const CONNECT_HUB_LAUNCH_PATH = '/connect/launch';
 
-const ECOSYSTEM_LAUNCH_PATH = /^\/apps\/(musicscale|nestfinance|nestlocal|nestjourney)\/launch$/;
+const ECOSYSTEM_LAUNCH_PATH = /^\/apps\/(musicscale|nestfinance|nestlocal|nestjourney|nestlive)\/launch$/;
 const MUSICSCALE_MAIN_PREVIEW_HOST = /^mn-musicscale-555464791734--main-review-[a-z0-9-]+\.web\.app$/;
 const MAX_RETURN_TO_CHARS = 512;
 
