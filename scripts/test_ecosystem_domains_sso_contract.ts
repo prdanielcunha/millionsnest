@@ -9,7 +9,7 @@ import { openEcosystemModule } from '../src/lib/ecosystemLauncher.ts';
 
 const byId = new Map(ECOSYSTEM_APPS.map(app => [app.id, app]));
 
-for (const id of ['musicscale', 'connect', 'nestfinance', 'nestjourney', 'nestlocal']) {
+for (const id of ['musicscale', 'connect', 'nestfinance', 'nestjourney', 'nestlocal', 'nestlive']) {
   assert.ok(byId.has(id), `missing canonical app registry entry: ${id}`);
 }
 
@@ -28,6 +28,11 @@ assert.equal(byId.get('nestlocal')?.url, 'https://nestlocal.web.app/');
 assert.equal(byId.get('nestlocal')?.canonicalOrigin, 'https://nestlocal.millionsnest.com');
 assert.equal(byId.get('nestfinance')?.url, 'https://nestfinance.millionsnest.com/auth/handoff');
 assert.equal(byId.get('nestjourney')?.url, 'https://nestjourney.millionsnest.com/');
+assert.equal(byId.get('nestlive')?.url, 'https://live.millionsnest.com/');
+assert.equal(byId.get('nestlive')?.canonicalOrigin, 'https://live.millionsnest.com');
+assert.equal(byId.get('nestlive')?.authMode, 'hub_handoff');
+assert.equal(byId.get('nestlive')?.directEntrySso, true);
+assert.equal(byId.get('nestlive')?.domainStatus, 'configured');
 
 assert.equal(
   resolveSafePostLoginPath('?next=%2Fapps%2Fmusicscale%2Flaunch'),
@@ -39,6 +44,7 @@ assert.equal(
 );
 assert.equal(resolveSafePostLoginPath('?next=https%3A%2F%2Fevil.example'), null);
 assert.equal(resolveSafePostLoginPath('?next=%2Fapps%2Fnestlocal%2Flaunch'), '/apps/nestlocal/launch');
+assert.equal(resolveSafePostLoginPath('?next=%2Fapps%2Fnestlive%2Flaunch'), '/apps/nestlive/launch');
 
 const previewOrigin = 'https://mn-musicscale-555464791734--main-review-kwai2lc4.web.app';
 assert.equal(resolveTrustedEcosystemReturnOrigin('musicscale', previewOrigin), previewOrigin);
@@ -61,7 +67,7 @@ const user = { uid: 'user-123' };
 const organization = { id: 'org-123' };
 
 async function captureLaunch(
-  appId: 'nestfinance' | 'musicscale',
+  appId: 'nestfinance' | 'musicscale' | 'nestlive',
   destinationPath: string,
   returnOrigin?: string,
 ) {
@@ -110,6 +116,11 @@ assert.equal(musicScaleLaunch.origin, 'https://musicscale.millionsnest.com');
 assert.equal(musicScaleLaunch.pathname, '/songs');
 assert.equal(musicScaleLaunch.searchParams.get('returnTo'), null);
 assert.ok(musicScaleLaunch.searchParams.get('ecosystem_ctx'));
+
+const nestLiveLaunch = await captureLaunch('nestlive', '/');
+assert.equal(nestLiveLaunch.origin, 'https://live.millionsnest.com');
+assert.equal(nestLiveLaunch.pathname, '/');
+assert.ok(nestLiveLaunch.searchParams.get('ecosystem_ctx'));
 
 const musicScalePreviewLaunch = await captureLaunch('musicscale', '/start', previewOrigin);
 assert.equal(musicScalePreviewLaunch.origin, previewOrigin);
