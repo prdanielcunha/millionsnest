@@ -16,6 +16,7 @@ const KNOWN_APPS = new Set([
   'connect',
   'nestaffiliate',
   'nestlume',
+  'nestai',
 ]);
 
 type PrivateJwk = JsonWebKey & { d?: string };
@@ -63,6 +64,7 @@ export function issueNestAiToken(params: {
   organizationId: string;
   appId: string;
   appCheckAppId: string;
+  capabilities?: string[];
   locale?: "pt-BR" | "en" | "es";
   nowSeconds?: number;
   env?: NodeJS.ProcessEnv;
@@ -78,8 +80,8 @@ export function issueNestAiToken(params: {
     sub: params.uid,
     organizationId: params.organizationId,
     appId: params.appId,
-    capabilities: ['ai:run', 'ai:stream'],
-    scopes: ['ai:run', 'ai:stream'],
+    capabilities: params.capabilities ?? ['ai:run', 'ai:stream'],
+    scopes: params.capabilities ?? ['ai:run', 'ai:stream'],
     tokenType: 'user',
     appCheckAppId: params.appCheckAppId,
     ...(params.locale ? { locale: params.locale } : {}),
@@ -140,6 +142,12 @@ export async function authorizeNestAiApp(params: {
   appId: string;
 }): Promise<boolean> {
   if (!KNOWN_APPS.has(params.appId)) return false;
+  if (params.appId === 'nestai') {
+    const userDoc = await params.db.collection('users').doc(params.uid).get();
+    if (!userDoc.exists) return false;
+    const user = userDoc.data() || {};
+    return isGlobalPrivilegedRole(user.systemRole || user.globalRole);
+  }
   if (RESOLVER_APPS.has(params.appId as EcosystemAppId)) {
     const access = await resolveEcosystemAppAccess({
       uid: params.uid,
@@ -188,7 +196,16 @@ export async function handleNestAiTokenRequest(req: Request, res: Response, db: 
   }
 
   try {
-    const issued = issueNestAiToken({ uid: decoded.uid, organizationId, appId, appCheckAppId, locale });
+    let capabilities = ['ai:run', 'ai:stream'];
+    if (appId === 'nestai') {
+      const userDoc = await db.collection('users').doc(decoded.uid).get();
+      const user = userDoc.exists ? userDoc.data() || {} : {};
+      if (!isGlobalPrivilegedRole(user.systemRole || user.globalRole)) {
+        return res.status(403).json({ error: 'NESTAI_ADMIN_ACCESS_DENIED' });
+      }
+      capabilities = ['ai:run', 'ai:stream', 'ai:admin'];
+    }
+    const issued = issueNestAiToken({ uid: decoded.uid, organizationId, appId, appCheckAppId, capabilities, locale });
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ token: issued.token, tokenType: 'Bearer', expiresIn: issued.expiresIn });
   } catch (error) {
