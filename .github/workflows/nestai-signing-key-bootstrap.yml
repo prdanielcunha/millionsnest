@@ -1,0 +1,57 @@
+name: NestAI Signing Key Bootstrap
+on:
+  push:
+    branches: ["production"]
+    paths:
+      - ".github/workflows/nestai-signing-key-bootstrap.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Authenticate as MillionsNest Infra Admin
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Ensure NestAI signing key secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT_ID=millionsnest
+          SECRET=millionsnest-nestai-signing-private-jwk
+          RUNTIME_SA=mn-hub-runtime@millionsnest.iam.gserviceaccount.com
+          gcloud config set project "$PROJECT_ID"
+
+          if ! gcloud secrets describe "$SECRET" --project="$PROJECT_ID" >/dev/null 2>&1; then
+            gcloud secrets create "$SECRET" --project="$PROJECT_ID" --replication-policy=automatic
+            echo "NESTAI_SIGNING_SECRET_CONTAINER_CREATED=true"
+          fi
+
+          ENABLED_VERSION="$(gcloud secrets versions list "$SECRET" --project="$PROJECT_ID" --filter='state=ENABLED' --format='value(name)' --limit=1 2>/dev/null || true)"
+          if [ -z "$ENABLED_VERSION" ]; then
+            node <<'NODE'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+          const privateJwk = privateKey.export({ format: 'jwk' });
+          fs.writeFileSync('/tmp/nestai-private-jwk.json', JSON.stringify(privateJwk), { mode: 0o600 });
+          NODE
+            gcloud secrets versions add "$SECRET" --project="$PROJECT_ID" --data-file=/tmp/nestai-private-jwk.json >/dev/null
+            shred -u /tmp/nestai-private-jwk.json || rm -f /tmp/nestai-private-jwk.json
+            echo "NESTAI_SIGNING_KEY_VERSION_CREATED=true"
+          else
+            echo "NESTAI_SIGNING_KEY_ALREADY_EXISTS=true"
+          fi
+
+          gcloud secrets add-iam-policy-binding "$SECRET"             --project="$PROJECT_ID"             --member="serviceAccount:$RUNTIME_SA"             --role="roles/secretmanager.secretAccessor"             --quiet >/dev/null
+
+          gcloud secrets versions list "$SECRET"             --project="$PROJECT_ID"             --filter='state=ENABLED'             --format='value(name)'             --limit=1 | grep -q .
+          echo "NESTAI_SIGNING_SECRET_READY=true"
