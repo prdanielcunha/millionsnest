@@ -9,6 +9,12 @@ import { planInvitationAcceptance, normalizeInvitationEmail, InvitationAcceptanc
 import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './InvitationAcceptanceServerPolicy.js';
 import { isOrganizationLifecycleActive } from '../../lib/organizationLifecycle.js';
 import { isValidInvitationOrganizationId } from '../../lib/InvitationRedirectPolicy.js';
+import { CURRENT_PERMISSIONS_VERSION } from '../../lib/rbac.js';
+import {
+  NESTJOURNEY_RESPONSIBILITIES,
+  projectedJourneyPermissions,
+  type NestJourneyResponsibility,
+} from './NestJourneyMemberResponsibilityCommandService.js';
 
 
 
@@ -531,6 +537,23 @@ export async function acceptInvitation(
       const inviteData = inviteDoc.data();
       const orgId = requestedOrganizationId;
 
+      const rawNestJourneyResponsibility = inviteData.nestJourneyResponsibility;
+      const normalizedNestJourneyResponsibility =
+        inviteData.targetAppId === 'nestjourney' && typeof rawNestJourneyResponsibility === 'string'
+          ? rawNestJourneyResponsibility.trim().toLowerCase() as NestJourneyResponsibility
+          : null;
+      if (
+        inviteData.targetAppId === 'nestjourney' &&
+        rawNestJourneyResponsibility !== undefined &&
+        (!normalizedNestJourneyResponsibility || !NESTJOURNEY_RESPONSIBILITIES.has(normalizedNestJourneyResponsibility))
+      ) {
+        return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
+      }
+      const nestJourneyResponsibility =
+        normalizedNestJourneyResponsibility && NESTJOURNEY_RESPONSIBILITIES.has(normalizedNestJourneyResponsibility)
+          ? normalizedNestJourneyResponsibility
+          : null;
+
       if (Object.prototype.hasOwnProperty.call(inviteData, 'organizationId')) {
         if (typeof inviteData.organizationId !== 'string' || inviteData.organizationId !== orgId) {
           return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
@@ -679,6 +702,13 @@ export async function acceptInvitation(
         organizationId: orgId,
         role: planResult.membershipRole,
         organizationRole: planResult.membershipRole,
+        ...(nestJourneyResponsibility
+          ? {
+              journeyRole: nestJourneyResponsibility,
+              permissions: projectedJourneyPermissions(nestJourneyResponsibility),
+              permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+            }
+          : {}),
         status: 'active',
         createdAt: FieldValue.serverTimestamp(),
         joinedAt: FieldValue.serverTimestamp(),
@@ -692,6 +722,13 @@ export async function acceptInvitation(
         organizationId: orgId,
         role: planResult.membershipRole,
         organizationRole: planResult.membershipRole,
+        ...(nestJourneyResponsibility
+          ? {
+              journeyRole: nestJourneyResponsibility,
+              permissions: projectedJourneyPermissions(nestJourneyResponsibility),
+              permissionsVersion: CURRENT_PERMISSIONS_VERSION,
+            }
+          : {}),
         status: 'active'
       }, { merge: true });
 
@@ -734,6 +771,7 @@ export async function acceptInvitation(
         actorUid: uid,
         invitationId: inviteDoc.id,
         membershipRole: planResult.membershipRole,
+        nestJourneyResponsibility: nestJourneyResponsibility || null,
         previousUseCount: previousUseCount,
         newUseCount: nextUseCount,
         timestamp: FieldValue.serverTimestamp()
@@ -747,6 +785,7 @@ export async function acceptInvitation(
           organizationName: orgData.name,
           activeOrganizationId: orgId,
           membershipRole: planResult.membershipRole,
+          ...(nestJourneyResponsibility ? { nestJourneyResponsibility } : {}),
           alreadyMember: false,
           legacyTokenMigrated: false,
           reasonCode: 'INVITATION_CAN_BE_ACCEPTED'

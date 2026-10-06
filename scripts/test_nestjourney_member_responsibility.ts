@@ -5,12 +5,35 @@ import {
   requireInvitationEmulator,
 } from './helpers/p0HandlerTestHarness.js';
 import {
+  NESTJOURNEY_RESPONSIBILITIES,
+  actorCanManageJourneyResponsibilities,
+  projectedJourneyPermissions,
   updateNestJourneyMemberResponsibility,
 } from '../src/server/services/NestJourneyMemberResponsibilityCommandService.js';
+import { buildInvitationTargetUrl } from '../src/lib/InvitationTargetAppPolicy.js';
 import { CURRENT_PERMISSIONS_VERSION } from '../src/lib/rbac.js';
 
 const db = requireInvitationEmulator();
 const { assert, finish } = createAssertions();
+
+assert(
+  '00a NestJourney is a canonical invitation target',
+  buildInvitationTargetUrl('nestjourney', 'org-1', 'token-1') ===
+    'https://nestjourney.millionsnest.com/join/org-1?token=token-1',
+);
+assert(
+  '00b invitation responsibility uses the canonical role set',
+  NESTJOURNEY_RESPONSIBILITIES.has('caregiver') &&
+    projectedJourneyPermissions('caregiver').canManageCare === true,
+);
+assert(
+  '00c organization managers cannot grant privileged Journey responsibilities',
+  actorCanManageJourneyResponsibilities({
+    actorGlobal: false,
+    actorMetadataOwner: false,
+    actorMembership: { role: 'manager', status: 'active' },
+  }) === false,
+);
 
 const deps = {
   verifyIdToken: async (token: string) => {
