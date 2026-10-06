@@ -227,11 +227,16 @@ export async function createInvitation(
       // Global ecosystem roles have canonical full MusicScale entitlements,
       // including unlimited users. They must never depend on a tenant billing
       // projection just to manage membership in an organization.
-      let capacityInput: InvitationCreationInput['capacity'] = isGlobalAdmin
-        ? { resolved: true, mode: 'unlimited' }
-        : { resolved: false };
+      // NestJourney membership is not a MusicScale seat. Reusing the
+      // MusicScale billing capacity here would block churches that use
+      // NestJourney independently and would couple one app's user limit to
+      // another app's onboarding.
+      let capacityInput: InvitationCreationInput['capacity'] =
+        isGlobalAdmin || targetAppId === 'nestjourney'
+          ? { resolved: true, mode: 'unlimited' }
+          : { resolved: false };
 
-      if (!isGlobalAdmin) {
+      if (!isGlobalAdmin && targetAppId !== 'nestjourney') {
         const appSubscription = subData.apps?.musicscale || null;
         const capacityResult = resolveCanonicalInvitationCapacity({
           organizationId,
