@@ -1,0 +1,41 @@
+name: NestAI Hub Live Smoke
+on:
+  push:
+    branches: ["production"]
+    paths:
+      - ".github/workflows/nestai-hub-live-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify public JWKS
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error             --retry 8 --retry-delay 3 --retry-all-errors             "https://www.millionsnest.com/api/v1/ai/jwks"             -o /tmp/jwks.json
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const jwks = JSON.parse(fs.readFileSync('/tmp/jwks.json','utf8'));
+          if (!Array.isArray(jwks.keys) || jwks.keys.length < 1) throw new Error('JWKS_KEYS_MISSING');
+          const key = jwks.keys[0];
+          if (key.kty !== 'EC' || key.crv !== 'P-256' || key.alg !== 'ES256' || key.use !== 'sig') {
+            throw new Error('JWKS_KEY_INVALID');
+          }
+          if (!key.kid || typeof key.kid !== 'string') throw new Error('JWKS_KID_MISSING');
+          if ('d' in key) throw new Error('JWKS_PRIVATE_MATERIAL_EXPOSED');
+          console.log('NESTAI_JWKS_LIVE_OK', key.kid);
+          NODE
+
+      - name: Verify token endpoint is protected
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS="$(curl --silent --show-error             -o /tmp/token.json             -w '%{http_code}'             -X POST             -H 'content-type: application/json'             --data '{"organizationId":"smoke","appId":"nestlume"}'             "https://www.millionsnest.com/api/v1/ai/token")"
+          test "$STATUS" = "401"
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/token.json','utf8'));if(x.error!=='UNAUTHENTICATED')process.exit(1);console.log('NESTAI_TOKEN_AUTH_GATE_LIVE_OK');"
