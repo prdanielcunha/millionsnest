@@ -48,7 +48,7 @@ assert.equal(payload.nbf, now - 5);
 assert.equal(typeof payload.jti, 'string');
 
 const publicKey = crypto.createPublicKey({
-  key: jwks.keys[0] as crypto.JsonWebKey,
+  key: jwks.keys[0] as unknown as crypto.JsonWebKey,
   format: 'jwk',
 });
 const valid = crypto.verify(
