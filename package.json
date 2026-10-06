@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test:musicscale-live-ai": "tsx scripts/test_musicscale_live_ai_gateway.ts"
+    "test:musicscale-live-ai": "tsx scripts/test_musicscale_live_ai_gateway.ts",
+    "test:connect-channel-grants": "tsx scripts/test_connect_channel_grants.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
