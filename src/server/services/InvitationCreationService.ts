@@ -16,6 +16,11 @@ import {
 import { normalizeInvitationEmail, isInvitationRole, InvitationRole } from './InvitationAcceptancePlanner.js';
 import { canManageTenantMembers } from '../../lib/permissionService.js';
 import { buildInvitationTargetUrl, resolveInvitationTargetAppId } from '../../lib/InvitationTargetAppPolicy.js';
+import {
+  NESTJOURNEY_RESPONSIBILITIES,
+  actorCanManageJourneyResponsibilities,
+  type NestJourneyResponsibility,
+} from './NestJourneyMemberResponsibilityCommandService.js';
 
 export type InvitationCreationDependencies = {
   verifyIdToken?: (token: string) => Promise<{ uid: string }>;
@@ -48,13 +53,39 @@ export async function createInvitation(
     }
     const uid = decodedToken.uid;
 
-    const { organizationId, email, role, mode: rawMode, targetAppId: rawTargetAppId } = req.body;
+    const {
+      organizationId,
+      email,
+      role,
+      mode: rawMode,
+      targetAppId: rawTargetAppId,
+      nestJourneyResponsibility: rawNestJourneyResponsibility,
+    } = req.body;
     const inviteMode = rawMode === 'link' ? 'link' : 'email';
     const targetResolution = resolveInvitationTargetAppId(rawTargetAppId);
     if ('reasonCode' in targetResolution) {
       return res.status(400).json({ success: false, reasonCode: targetResolution.reasonCode });
     }
     const targetAppId = targetResolution.targetAppId;
+
+    let nestJourneyResponsibility: NestJourneyResponsibility | null = null;
+    if (targetAppId === 'nestjourney') {
+      const normalizedResponsibility =
+        typeof rawNestJourneyResponsibility === 'string' && rawNestJourneyResponsibility.trim()
+          ? rawNestJourneyResponsibility.trim().toLowerCase()
+          : 'member';
+      const candidate = normalizedResponsibility as NestJourneyResponsibility;
+      if (!NESTJOURNEY_RESPONSIBILITIES.has(candidate)) {
+        return res.status(400).json({ success: false, reasonCode: 'INVALID_NESTJOURNEY_RESPONSIBILITY' });
+      }
+      nestJourneyResponsibility = candidate;
+    } else if (
+      rawNestJourneyResponsibility !== undefined &&
+      rawNestJourneyResponsibility !== null &&
+      rawNestJourneyResponsibility !== ''
+    ) {
+      return res.status(400).json({ success: false, reasonCode: 'INVALID_NESTJOURNEY_RESPONSIBILITY' });
+    }
 
     if (!isInvitationRole(role)) {
       return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_ROLE' });
@@ -133,6 +164,18 @@ export async function createInvitation(
             role: canonicalMembershipRole
           };
         }
+      }
+
+      if (
+        nestJourneyResponsibility &&
+        nestJourneyResponsibility !== 'member' &&
+        !actorCanManageJourneyResponsibilities({
+          actorGlobal: isGlobalAdmin,
+          actorMetadataOwner: isOrganizationOwner,
+          actorMembership: membershipData,
+        })
+      ) {
+        return { statusCode: 403, payload: { success: false, reasonCode: 'PERMISSION_DENIED' } };
       }
       
       const subRef = db.collection('subscriptions').doc(organizationId);
@@ -322,7 +365,8 @@ export async function createInvitation(
         expiresAt: Timestamp.fromMillis(planResult.expiresAtMs),
         maxUses: planResult.maxUses,
         useCount: planResult.useCount,
-        ...(targetAppId ? { targetAppId } : {})
+        ...(targetAppId ? { targetAppId } : {}),
+        ...(nestJourneyResponsibility ? { nestJourneyResponsibility } : {})
       });
 
       t.set(orgRef, {
@@ -338,6 +382,7 @@ export async function createInvitation(
         invitationId: inviteId,
         membershipRole: planResult.role,
         targetAppId: targetAppId || null,
+        nestJourneyResponsibility: nestJourneyResponsibility || null,
         timestamp: FieldValue.serverTimestamp()
       });
 
@@ -358,7 +403,8 @@ export async function createInvitation(
             role: planResult.role,
             status: planResult.status,
             expiresAtMs: planResult.expiresAtMs,
-            ...(targetAppId ? { targetAppId } : {})
+            ...(targetAppId ? { targetAppId } : {}),
+            ...(nestJourneyResponsibility ? { nestJourneyResponsibility } : {})
           }
         }
       };
@@ -373,7 +419,8 @@ export async function createInvitation(
       organizationId: req.body?.organizationId || null,
       mode: req.body?.mode === 'link' ? 'link' : 'email',
       role: req.body?.role || null,
-      targetAppId: req.body?.targetAppId || null
+      targetAppId: req.body?.targetAppId || null,
+      nestJourneyResponsibility: req.body?.nestJourneyResponsibility || null
     });
     return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
   }
