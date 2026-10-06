@@ -32,6 +32,11 @@ jobs:
           DOMAIN="ai.millionsnest.com"
 
           gcloud config set project "$PROJECT_ID"
+
+          for ROLE in roles/recaptchaenterprise.admin roles/firebaseappcheck.admin; do
+            gcloud projects add-iam-policy-binding "$PROJECT_ID"               --member="serviceAccount:mn-infra-admin@millionsnest.iam.gserviceaccount.com"               --role="$ROLE"               --condition=None               --quiet >/dev/null
+          done
+
           gcloud services enable recaptchaenterprise.googleapis.com firebaseappcheck.googleapis.com --project="$PROJECT_ID"
 
           BILLING_ENABLED="$(gcloud billing projects describe "$PROJECT_ID" --format='value(billingEnabled)' 2>/dev/null || echo unknown)"
