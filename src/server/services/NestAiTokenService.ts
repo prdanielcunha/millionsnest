@@ -62,6 +62,8 @@ export function issueNestAiToken(params: {
   uid: string;
   organizationId: string;
   appId: string;
+  appCheckAppId: string;
+  locale?: "pt-BR" | "en" | "es";
   nowSeconds?: number;
   env?: NodeJS.ProcessEnv;
 }): { token: string; expiresIn: number } {
@@ -76,7 +78,11 @@ export function issueNestAiToken(params: {
     sub: params.uid,
     organizationId: params.organizationId,
     appId: params.appId,
-    capabilities: ['ai:run'],
+    capabilities: ['ai:run', 'ai:stream'],
+    scopes: ['ai:run', 'ai:stream'],
+    tokenType: 'user',
+    appCheckAppId: params.appCheckAppId,
+    ...(params.locale ? { locale: params.locale } : {}),
     iat: now,
     nbf: now - 5,
     exp: now + TOKEN_TTL_SECONDS,
@@ -159,6 +165,20 @@ export async function handleNestAiTokenRequest(req: Request, res: Response, db: 
 
   const organizationId = String(req.body?.organizationId || '').trim();
   const appId = String(req.body?.appId || '').trim().toLowerCase();
+  const localeValue = String(req.body?.locale || 'pt-BR');
+  const locale = ['pt-BR', 'en', 'es'].includes(localeValue) ? localeValue as 'pt-BR' | 'en' | 'es' : 'pt-BR';
+
+  const appCheckHeader = String(req.headers['x-firebase-appcheck'] || '');
+  if (!appCheckHeader) return res.status(401).json({ error: 'APP_CHECK_REQUIRED' });
+
+  let appCheckAppId = '';
+  try {
+    const appCheckClaims = await admin.appCheck().verifyToken(appCheckHeader) as unknown as Record<string, unknown>;
+    appCheckAppId = String(appCheckClaims.app_id || appCheckClaims.sub || '').trim();
+    if (!appCheckAppId) return res.status(401).json({ error: 'APP_CHECK_APP_ID_MISSING' });
+  } catch {
+    return res.status(401).json({ error: 'APP_CHECK_INVALID' });
+  }
   if (!organizationId || organizationId.length > 256 || organizationId.includes('/') || !KNOWN_APPS.has(appId)) {
     return res.status(400).json({ error: 'INVALID_REQUEST' });
   }
@@ -168,7 +188,7 @@ export async function handleNestAiTokenRequest(req: Request, res: Response, db: 
   }
 
   try {
-    const issued = issueNestAiToken({ uid: decoded.uid, organizationId, appId });
+    const issued = issueNestAiToken({ uid: decoded.uid, organizationId, appId, appCheckAppId, locale });
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ token: issued.token, tokenType: 'Bearer', expiresIn: issued.expiresIn });
   } catch (error) {
