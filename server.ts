@@ -68,7 +68,7 @@ import {
 } from './src/server/services/ConnectChannelGrantService.js';
 import { handleNestJourneyFollowupContextRequest } from './src/server/services/NestJourneyFollowupContextService.js';
 import { handleNestJourneyWorkspaceProjectionRequest } from './src/server/services/NestJourneyWorkspaceProjectionService.js';
-import { handleNestAiTokenRequest, handleNestAiGuestTokenRequest, handleNestAiJwksRequest } from './src/server/services/NestAiTokenService.js';
+import { handleNestAiTokenRequest, handleNestAiGuestTokenRequest, handleNestAiAppSessionTokenRequest, handleNestAiJwksRequest } from './src/server/services/NestAiTokenService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
 import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy, canManageTenantMembers, canManageTenantBilling, canManageTenantSettings } from './src/lib/permissionService.js';
@@ -1136,6 +1136,11 @@ async function startServer() {
   app.post('/api/v1/support/tickets', express.json({ limit: '32kb' }), createSupportTicket);
   app.get('/api/v1/ai/jwks', handleNestAiJwksRequest);
   app.post('/api/v1/ai/guest-token', express.json({ limit: '4kb' }), handleNestAiGuestTokenRequest);
+  app.post('/api/v1/ai/app-session-token', express.json({ limit: '4kb' }), async (req, res) => {
+    const dbInstance = getDb();
+    if (!dbInstance) return res.status(503).json({ error: 'DATABASE_UNAVAILABLE' });
+    return handleNestAiAppSessionTokenRequest(req, res, dbInstance);
+  });
   app.post('/api/v1/ai/token', express.json({ limit: '8kb' }), async (req, res) => {
     const dbInstance = getDb();
     if (!dbInstance) return res.status(503).json({ error: 'DATABASE_UNAVAILABLE' });
