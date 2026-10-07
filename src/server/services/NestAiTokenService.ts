@@ -11,6 +11,7 @@ const RESOLVER_APPS = new Set<EcosystemAppId>(['musicscale', 'nestfinance', 'nes
 const PUBLIC_GUEST_APPS = new Set(['nestlume']);
 
 const KNOWN_APPS = new Set([
+  'millionsnest',
   'musicscale',
   'nestfinance',
   'nestlocal',
@@ -145,7 +146,9 @@ export async function authorizeNestAiApp(params: {
   appId: string;
 }): Promise<boolean> {
   if (!KNOWN_APPS.has(params.appId)) return false;
-  if (params.appId === 'nestai') {
+  // Hub AI summaries are ecosystem-level capabilities, not organization-admin features.
+  // Both NestAI console and MillionsNest Hub require a global privileged identity.
+  if (params.appId === 'nestai' || params.appId === 'millionsnest') {
     const userDoc = await params.db.collection('users').doc(params.uid).get();
     if (!userDoc.exists) return false;
     const user = userDoc.data() || {};
@@ -273,6 +276,10 @@ export async function handleNestAiTokenRequest(req: Request, res: Response, db: 
     return res.status(401).json({ error: 'APP_CHECK_INVALID' });
   }
   if (!organizationId || organizationId.length > 256 || organizationId.includes('/') || !KNOWN_APPS.has(appId)) {
+    return res.status(400).json({ error: 'INVALID_REQUEST' });
+  }
+  // The Hub's own AI tasks operate only in the reserved global namespace.
+  if (appId === 'millionsnest' && organizationId !== 'global') {
     return res.status(400).json({ error: 'INVALID_REQUEST' });
   }
 
