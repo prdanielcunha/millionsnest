@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
+    "@millionsnest/ai": "https://github.com/prdanielcunha/NestAI/releases/download/sdk-v0.2.0/millionsnest-ai-0.2.0.tgz",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tailwindcss/vite": "^4.1.14",
     "@types/compression": "^1.8.1",
