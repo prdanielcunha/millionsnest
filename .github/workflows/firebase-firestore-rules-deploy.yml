@@ -9,6 +9,7 @@ on:
       - "firebase.rules-test.json"
       - "tests/firestore/nestjourney.rules.test.ts"
       - "tests/firestore/musicscale_live.rules.test.ts"
+      - "scripts/test_shared_band_rules.ts"
       - "tests/firestore/nestaffiliate.rules.test.ts"
       - ".github/workflows/firebase-firestore-rules-deploy.yml"
   workflow_dispatch:
@@ -66,6 +67,14 @@ jobs:
           --project demo-millionsnest-musicscale-live-release
           "npx tsx --test --test-concurrency=1 tests/firestore/musicscale_live.rules.test.ts"
 
+      - name: Certify MusicScale band-scale write authorization
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-millionsnest-shared-band-release
+          "npx tsx scripts/test_shared_band_rules.ts"
+
       - name: Certify NestAffiliate Firestore boundary
         run: >-
           npx firebase emulators:exec
@@ -111,6 +120,7 @@ jobs:
           VERIFY="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 45             -H "Authorization: Bearer $ACCESS_TOKEN"             "https://firebaserules.googleapis.com/v1/$RULESET_NAME")"
           SOURCE="$(jq -r '.source.files[]?.content // empty' <<<"$VERIFY")"
 
+          grep -Fq 'function canWriteBandScale(orgId)' <<<"$SOURCE"
           grep -Fq 'function nestAffiliateProductEnabled(orgId)' <<<"$SOURCE"
           grep -Fq "productId != 'raiz_e_mesa' && productId != 'nestaffiliate'" <<<"$SOURCE"
           grep -Fq 'match /products/nestaffiliate' <<<"$SOURCE"
