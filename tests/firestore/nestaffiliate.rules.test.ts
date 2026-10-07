@@ -389,3 +389,51 @@ test('Creative Pack collections reject cross-tenant writes and secret-like field
     },
   ));
 });
+
+
+test('Revenue OS 3 statement event remains tenant-scoped and cannot have its business facts revised',async()=>{
+  const editor=env.authenticatedContext('editor-a').firestore();
+  const viewer=env.authenticatedContext('viewer-a').firestore();
+  const foreign=env.authenticatedContext('editor-b').firestore();
+  const path='organizations/org-a/products/nestaffiliate/affiliateResultEvents/MELI:txn-001:report-20261007';
+  const ref=doc(editor,path);
+  const row={
+    organizationId:'org-a',id:'MELI:txn-001',transactionId:'txn-001',eventId:'MELI:txn-001:report-20261007',
+    marketplace:'MELI',statementId:'report-20261007',source:'MANUAL_CSV_REPORTED',
+    status:'PENDING',commission:12.5,importedAt:'2026-10-07T13:00:00.000Z',
+    recordedAt:'2026-10-07T13:00:00.000Z',
+  };
+  await assertSucceeds(setDoc(ref,row));
+  await assertSucceeds(getDoc(doc(viewer,path)));
+  await assertFails(getDoc(doc(foreign,path)));
+  await assertSucceeds(updateDoc(ref,{importedAt:'2026-10-07T14:00:00.000Z'}));
+  await assertFails(updateDoc(ref,{status:'APPROVED'}));
+  await assertFails(updateDoc(ref,{commission:9999}));
+  await assertFails(deleteDoc(ref));
+  await assertFails(setDoc(doc(foreign,'organizations/org-a/products/nestaffiliate/affiliateResultEvents/forged'),{...row,eventId:'forged'}));
+  await assertFails(setDoc(doc(editor,'organizations/org-a/products/nestaffiliate/affiliateResultEvents/cross-tenant'),{...row,eventId:'cross-tenant',organizationId:'org-b'}));
+});
+
+test('Revenue OS 3 channel publication stays user-reported with eligibility and tenant checks',async()=>{
+  const editor=env.authenticatedContext('editor-a').firestore();
+  const viewer=env.authenticatedContext('viewer-a').firestore();
+  const foreign=env.authenticatedContext('editor-b').firestore();
+  const path='organizations/org-a/products/nestaffiliate/channelPublications/facebook-reel:c1:v1';
+  const data={
+    organizationId:'org-a',id:'facebook-reel:c1:v1',campaignId:'c1',campaignVersion:1,
+    channel:'FACEBOOK_REELS',marketplace:'SHOPEE',status:'USER_REPORTED',
+    externalUrl:'https://www.facebook.com/reel/123456789',actorId:'editor-a',
+    eligibilityAttested:true,tagAttested:true,footageRightsAttested:true,
+    updatedAt:'2026-10-07T13:00:00.000Z',
+  };
+  await assertFails(setDoc(doc(viewer,path),data));
+  await assertFails(setDoc(doc(editor,path),{...data,eligibilityAttested:false}));
+  await assertFails(setDoc(doc(editor,path),{...data,status:'PUBLISHED_CONFIRMED'}));
+  await assertFails(setDoc(doc(editor,path),{...data,organizationId:'org-b'}));
+  await assertSucceeds(setDoc(doc(editor,path),data));
+  await assertSucceeds(getDoc(doc(viewer,path)));
+  await assertFails(getDoc(doc(foreign,path)));
+  await assertFails(updateDoc(doc(editor,path),{status:'PUBLISHED_CONFIRMED'}));
+  await assertFails(deleteDoc(doc(editor,path)));
+  await assertSucceeds(updateDoc(doc(editor,path),{updatedAt:'2026-10-07T14:00:00.000Z'}));
+});
