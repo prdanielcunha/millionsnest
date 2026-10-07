@@ -5,7 +5,6 @@ on:
     paths:
       - "firestore.rules"
       - "scripts/test_shared_band_rules.ts"
-      - "scripts/firebase-band-rules-qa.json"
       - ".github/workflows/shared-band-rules-qa.yml"
   workflow_dispatch:
 permissions:
@@ -28,4 +27,4 @@ jobs:
           java-version: '21'
       - run: npm ci --no-audit --no-fund
       - name: Test shared band rules in isolated Firestore emulator
-        run: npx firebase-tools@15.26.0 emulators:exec --project demo-millionsnest-shared-band-qa --config scripts/firebase-band-rules-qa.json --only firestore "npx tsx scripts/test_shared_band_rules.ts"
+        run: npx firebase-tools@15.26.0 emulators:exec --project demo-millionsnest-shared-band-qa --config firebase.rules-test.json --only firestore "npx tsx scripts/test_shared_band_rules.ts"
