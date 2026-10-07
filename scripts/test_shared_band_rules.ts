@@ -16,20 +16,21 @@ const env = await initializeTestEnvironment({
 let assertions = 0;
 async function seed({ role = 'member', status = 'active', permissions = {}, uid = 'user-1', legacy = false, globalRole = 'user' } = {}) {
   await env.clearFirestore();
-  await env.withSecurityRulesDisabled(async ({ firestore }) => {
+  await env.withSecurityRulesDisabled(async context => {
+    const firestore = context.firestore();
     for (const orgId of ['org-one', 'org-two']) {
-      await setDoc(doc(firestore(), 'organizations', orgId), {
+      await setDoc(doc(firestore, 'organizations', orgId), {
         status: 'active', apps: { musicscale: { status: 'active' } },
       });
-      await setDoc(doc(firestore(), 'subscriptions', orgId), { status: 'active' });
+      await setDoc(doc(firestore, 'subscriptions', orgId), { status: 'active' });
     }
-    await setDoc(doc(firestore(), 'users', uid), { systemRole: globalRole });
+    await setDoc(doc(firestore, 'users', uid), { systemRole: globalRole });
     if (legacy) {
-      await setDoc(doc(firestore(), 'organization_members', uid + '_org-one'), {
+      await setDoc(doc(firestore, 'organization_members', uid + '_org-one'), {
         role, status, permissions,
       });
     } else {
-      await setDoc(doc(firestore(), 'organizations', 'org-one', 'members', uid), {
+      await setDoc(doc(firestore, 'organizations', 'org-one', 'members', uid), {
         organizationRole: role, status, permissions,
       });
     }
