@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { createHash } from 'node:crypto';
-import { GoogleGenAI } from '@google/genai';
+import { createNestAiClient } from '@millionsnest/ai';
 import { getAuth } from 'firebase-admin/auth';
 import {
   FieldValue,
@@ -10,6 +10,7 @@ import {
 import {
   resolveEcosystemAppAccess
 } from './EcosystemAccessResolver.js';
+import { issueNestAiToken } from './NestAiTokenService.js';
 
 export type MusicScaleLiveAiTask =
   | 'diagnostic_explanation'
@@ -40,6 +41,10 @@ type Dependencies = {
     model: string;
     prompt: string;
     timeoutMs: number;
+    task: MusicScaleLiveAiTask;
+    organizationId: string;
+    actorUid: string;
+    input: unknown;
   }) => Promise<{
     text: string;
     inputTokens?: number;
@@ -57,6 +62,16 @@ const TASKS = new Set<MusicScaleLiveAiTask>([
   'post_service_summary',
   'pre_service_risk_summary'
 ]);
+
+const NESTAI_TASK_IDS: Record<MusicScaleLiveAiTask, string> = {
+  diagnostic_explanation: 'musicscale.live.diagnostic.explain',
+  song_match_assist: 'musicscale.live.song-match.assist',
+  request_classification: 'musicscale.live.request.classify',
+  natural_search: 'musicscale.live.search.interpret',
+  metadata_normalization: 'musicscale.live.metadata.normalize',
+  post_service_summary: 'musicscale.live.post-service.summary',
+  pre_service_risk_summary: 'musicscale.live.pre-service-risk.explain'
+};
 
 const OUTPUT_SCHEMA = {
   type: 'object',
@@ -199,59 +214,47 @@ function readPositiveNumber(name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-function estimatedCost(
-  model: string,
-  inputTokens: number,
-  outputTokens: number
-): number {
-  const liteInput = readPositiveNumber('MUSICSCALE_LIVE_AI_LITE_INPUT_USD_PER_MILLION', 0.30);
-  const liteOutput = readPositiveNumber('MUSICSCALE_LIVE_AI_LITE_OUTPUT_USD_PER_MILLION', 2.50);
-  const advancedInput = readPositiveNumber('MUSICSCALE_LIVE_AI_ADVANCED_INPUT_USD_PER_MILLION', 0.75);
-  const advancedOutput = readPositiveNumber('MUSICSCALE_LIVE_AI_ADVANCED_OUTPUT_USD_PER_MILLION', 3.75);
-  const advanced = model === (process.env.MUSICSCALE_LIVE_AI_ADVANCED_MODEL || 'gemini-3.8-flash');
-  const inputRate = advanced ? advancedInput : liteInput;
-  const outputRate = advanced ? advancedOutput : liteOutput;
-  return Number((((inputTokens * inputRate) + (outputTokens * outputRate)) / 1_000_000).toFixed(8));
-}
-
-function selectModel(task: MusicScaleLiveAiTask, serializedInput: string): string {
-  const lite = process.env.MUSICSCALE_LIVE_AI_MODEL || 'gemini-3.5-flash-lite';
-  const advanced = process.env.MUSICSCALE_LIVE_AI_ADVANCED_MODEL || 'gemini-3.8-flash';
-  const complex =
-    serializedInput.length > 12_000
-    || (task === 'post_service_summary' && serializedInput.length > 7000)
-    || (task === 'diagnostic_explanation' && serializedInput.length > 9000);
-  return complex ? advanced : lite;
-}
-
 async function defaultGenerate(input: {
   model: string;
   prompt: string;
   timeoutMs: number;
+  task: MusicScaleLiveAiTask;
+  organizationId: string;
+  actorUid: string;
+  input: unknown;
 }): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) throw new Error('AI_PROVIDER_NOT_CONFIGURED');
+  const canonicalTask = NESTAI_TASK_IDS[input.task];
+  const issued = issueNestAiToken({
+    uid: input.actorUid,
+    organizationId: input.organizationId,
+    appId: 'musicscale',
+    appCheckAppId: 'server:millionsnest',
+    capabilities: ['ai:run'],
+    tokenType: 'service',
+    locale: 'pt-BR'
+  });
 
-  const client = new GoogleGenAI({ apiKey });
+  const client = createNestAiClient({
+    appId: 'musicscale',
+    organizationId: input.organizationId,
+    locale: 'pt-BR',
+    getToken: async () => issued.token,
+    baseUrl: process.env.NESTAI_BASE_URL || 'https://ai.millionsnest.com/v1/'
+  });
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), input.timeoutMs);
   try {
-    const response = await client.models.generateContent({
-      model: input.model,
-      contents: input.prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: OUTPUT_SCHEMA,
-        maxOutputTokens: 1400,
-        temperature: 0.2,
-        abortSignal: controller.signal
-      } as any
-    });
-    const usage = (response as any).usageMetadata || {};
+    const response = await Promise.race([
+      client.run<AiGatewayOutput>({ task: canonicalTask, input: input.input }),
+      new Promise<never>((_, reject) => {
+        controller.signal.addEventListener('abort', () => reject(new Error('AI_TIMEOUT')), { once: true });
+      })
+    ]);
     return {
-      text: String((response as any).text || ''),
-      inputTokens: Number(usage.promptTokenCount || 0),
-      outputTokens: Number(usage.candidatesTokenCount || usage.totalTokenCount || 0)
+      text: JSON.stringify(response.result),
+      inputTokens: 0,
+      outputTokens: 0
     };
   } finally {
     clearTimeout(timer);
@@ -441,19 +444,11 @@ export async function handleMusicScaleLiveAiRequest(
     });
   }
 
-  const model = selectModel(task, serializedInput);
-  const timeoutMs = Math.floor(readPositiveNumber('MUSICSCALE_LIVE_AI_TIMEOUT_MS', 8000));
+  const model = 'nestai-managed';
+  const timeoutMs = Math.floor(readPositiveNumber('MUSICSCALE_LIVE_AI_TIMEOUT_MS', 12_000));
   const prompt = [
-    'You are a preparation assistant for MusicScale Live.',
-    'NON-NEGOTIABLE SAFETY:',
-    '- Never execute, imply execution of, or manufacture TAKE/provider actions.',
-    '- Never authorize users.',
-    '- Never assert what is currently on air unless that exact observed fact is supplied in the input.',
-    '- Treat missing evidence as unknown.',
-    '- Return suggestions for human review only.',
+    'NestAI canonical task: ' + NESTAI_TASK_IDS[task],
     TASK_INSTRUCTIONS[task],
-    'Return only the requested JSON schema.',
-    `Task: ${task}`,
     `Input: ${serializedInput}`
   ].join('\n');
 
@@ -462,7 +457,11 @@ export async function handleMusicScaleLiveAiRequest(
     const generated = await (dependencies.generate ?? defaultGenerate)({
       model,
       prompt,
-      timeoutMs
+      timeoutMs,
+      task,
+      organizationId,
+      actorUid,
+      input: redactedInput
     });
     const parsed = JSON.parse(generated.text || '{}') as unknown;
     if (!validateOutput(parsed)) {
@@ -472,7 +471,7 @@ export async function handleMusicScaleLiveAiRequest(
     consecutiveProviderFailures = 0;
     const inputTokens = Number.isFinite(generated.inputTokens) ? Number(generated.inputTokens) : 0;
     const outputTokens = Number.isFinite(generated.outputTokens) ? Number(generated.outputTokens) : 0;
-    const cost = estimatedCost(model, inputTokens, outputTokens);
+    const cost = 0;
     const latencyMs = Date.now() - startedAt;
     const ttlMs = Math.floor(readPositiveNumber('MUSICSCALE_LIVE_AI_CACHE_TTL_MS', 15 * 60 * 1000));
 
