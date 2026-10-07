@@ -146,6 +146,7 @@ export async function authorizeNestAiApp(params: {
   appId: string;
 }): Promise<boolean> {
   if (!KNOWN_APPS.has(params.appId)) return false;
+  if (params.appId === 'millionsnest' && params.organizationId !== 'global') return false;
   // Hub AI summaries are ecosystem-level capabilities, not organization-admin features.
   // Both NestAI console and MillionsNest Hub require a global privileged identity.
   if (params.appId === 'nestai' || params.appId === 'millionsnest') {
