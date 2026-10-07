@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict';
 import * as crypto from 'node:crypto';
-import { getNestAiJwks, issueNestAiToken } from '../src/server/services/NestAiTokenService.js';
+import { authorizeNestAiApp, getNestAiJwks, issueNestAiToken } from '../src/server/services/NestAiTokenService.js';
 
 function decodeJson(value: string): any {
   return JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
