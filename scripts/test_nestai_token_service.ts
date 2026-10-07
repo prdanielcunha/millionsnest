@@ -1,5 +1,6 @@
 import * as assert from 'node:assert/strict';
 import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
 import { getNestAiJwks, issueNestAiToken } from '../src/server/services/NestAiTokenService.js';
 
 function decodeJson(value: string): any {
@@ -84,5 +85,33 @@ assert.equal(guestPayload.organizationId, 'public:nestlume');
 assert.equal(guestPayload.appId, 'nestlume');
 assert.equal(guestPayload.sub, 'guest:abc123');
 assert.deepEqual(guestPayload.capabilities, ['ai:run', 'ai:stream']);
+
+const serviceIssued = issueNestAiToken({
+  uid: 'user-nestlocal',
+  organizationId: 'org-nestlocal',
+  appId: 'nestlocal',
+  appCheckAppId: 'server:nestlocal-session-v1',
+  capabilities: ['ai:run', 'ai:stream'],
+  tokenType: 'service',
+  locale: 'pt-BR',
+  nowSeconds: now,
+  env,
+});
+const servicePayload = decodeJson(serviceIssued.token.split('.')[1]!);
+assert.equal(servicePayload.tokenType, 'service');
+assert.equal(servicePayload.appId, 'nestlocal');
+assert.equal(servicePayload.organizationId, 'org-nestlocal');
+assert.equal(servicePayload.appCheckAppId, 'server:nestlocal-session-v1');
+
+const serviceSource = fs.readFileSync('src/server/services/NestAiTokenService.ts', 'utf8');
+assert.ok(serviceSource.includes("appId !== 'nestlocal'"));
+assert.ok(serviceSource.includes("db.collection('nestlocal_sessions').doc(sessionHash)"));
+assert.ok(serviceSource.includes("currentSessionVersion !== sessionVersion"));
+assert.ok(serviceSource.includes("authorizeNestAiApp({ db, uid, organizationId, appId })"));
+assert.ok(serviceSource.includes("tokenType: 'service'"));
+assert.ok(serviceSource.includes("appCheckAppId: 'server:nestlocal-session-v1'"));
+
+const serverSource = fs.readFileSync('server.ts', 'utf8');
+assert.ok(serverSource.includes("'/api/v1/ai/app-session-token'"));
 
 console.log('NESTAI_HUB_TOKEN_SERVICE_OK');
