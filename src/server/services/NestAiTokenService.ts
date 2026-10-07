@@ -163,6 +163,88 @@ export async function authorizeNestAiApp(params: {
   return genericAppAccess(params);
 }
 
+function nestLocalSessionHash(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
+function validNestLocalSessionToken(raw: string): boolean {
+  return /^nl_[A-Za-z0-9_-]{43}$/.test(raw);
+}
+
+function normalizeEcosystemSessionVersion(value: unknown): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 ? value : 1;
+}
+
+export async function handleNestLocalNestAiSessionTokenRequest(
+  req: Request,
+  res: Response,
+  db: admin.firestore.Firestore,
+): Promise<Response> {
+  const authHeader = String(req.headers.authorization || '');
+  const rawSession = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : '';
+  if (!validNestLocalSessionToken(rawSession)) {
+    return res.status(401).json({ error: 'NESTLOCAL_SESSION_REQUIRED' });
+  }
+
+  try {
+    const sessionDoc = await db.collection('nestlocal_sessions').doc(nestLocalSessionHash(rawSession)).get();
+    if (!sessionDoc.exists) return res.status(401).json({ error: 'NESTLOCAL_SESSION_INVALID' });
+
+    const session = sessionDoc.data() || {};
+    const expiresAt = session.expiresAt?.toDate?.();
+    const uid = String(session.uid || '').trim();
+    const organizationId = String(session.organizationId || '').trim();
+    if (
+      session.status !== 'active' ||
+      session.appId !== 'nestlocal' ||
+      !uid ||
+      !organizationId ||
+      organizationId.includes('/') ||
+      !expiresAt ||
+      expiresAt.getTime() <= Date.now()
+    ) {
+      return res.status(401).json({ error: 'NESTLOCAL_SESSION_INVALID' });
+    }
+
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists) return res.status(401).json({ error: 'NESTLOCAL_SESSION_INVALID' });
+    const user = userDoc.data() || {};
+    if (normalizeEcosystemSessionVersion(user.ecosystemSessionVersion) !== Number(session.sessionVersion)) {
+      return res.status(401).json({ error: 'NESTLOCAL_SESSION_REVOKED' });
+    }
+
+    if (!await authorizeNestAiApp({ db, uid, organizationId, appId: 'nestlocal' })) {
+      return res.status(403).json({ error: 'NESTAI_ACCESS_DENIED' });
+    }
+
+    const localeValue = String(req.body?.locale || 'pt-BR');
+    const locale = ['pt-BR', 'en', 'es'].includes(localeValue)
+      ? localeValue as 'pt-BR' | 'en' | 'es'
+      : 'pt-BR';
+
+    const issued = issueNestAiToken({
+      uid,
+      organizationId,
+      appId: 'nestlocal',
+      appCheckAppId: 'server:nestlocal',
+      capabilities: ['ai:run', 'ai:stream'],
+      tokenType: 'service',
+      locale,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({
+      token: issued.token,
+      tokenType: 'Bearer',
+      expiresIn: issued.expiresIn,
+      organizationId,
+      appId: 'nestlocal',
+    });
+  } catch (error) {
+    console.error('[NestAI] NestLocal session exchange failed', error instanceof Error ? error.message : 'unknown');
+    return res.status(503).json({ error: 'NESTAI_SESSION_EXCHANGE_UNAVAILABLE' });
+  }
+}
+
 export async function handleNestAiTokenRequest(req: Request, res: Response, db: admin.firestore.Firestore): Promise<Response> {
   const authHeader = String(req.headers.authorization || '');
   if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'UNAUTHENTICATED' });
