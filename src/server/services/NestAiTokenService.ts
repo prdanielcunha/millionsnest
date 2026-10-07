@@ -231,6 +231,87 @@ async function verifiedAppCheckAppId(req: Request): Promise<string> {
   return appId;
 }
 
+export async function handleNestAiAppSessionTokenRequest(
+  req: Request,
+  res: Response,
+  db: admin.firestore.Firestore,
+): Promise<Response> {
+  const appId = String(req.body?.appId || '').trim().toLowerCase();
+  const locale = normalizeLocale(req.body?.locale);
+  if (appId !== 'nestlocal') return res.status(403).json({ error: 'NESTAI_APP_SESSION_APP_DENIED' });
+
+  const authHeader = String(req.headers.authorization || '');
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'UNAUTHENTICATED' });
+  const sessionToken = authHeader.slice('Bearer '.length).trim();
+  if (!/^nl_[A-Za-z0-9_-]{43}$/.test(sessionToken)) {
+    return res.status(401).json({ error: 'NESTAI_APP_SESSION_INVALID' });
+  }
+
+  const sessionHash = crypto.createHash('sha256').update(sessionToken).digest('hex');
+  const sessionRef = db.collection('nestlocal_sessions').doc(sessionHash);
+  const sessionDoc = await sessionRef.get();
+  if (!sessionDoc.exists) return res.status(401).json({ error: 'NESTAI_APP_SESSION_INVALID' });
+
+  const session = sessionDoc.data() || {};
+  const expiresAt = session.expiresAt?.toDate?.();
+  const uid = String(session.uid || '').trim();
+  const organizationId = String(session.organizationId || '').trim();
+  const sessionVersion = Number(session.sessionVersion);
+
+  if (
+    session.status !== 'active' ||
+    session.appId !== 'nestlocal' ||
+    !uid ||
+    !organizationId ||
+    organizationId.includes('/') ||
+    !Number.isSafeInteger(sessionVersion) ||
+    sessionVersion < 1 ||
+    !expiresAt ||
+    expiresAt.getTime() <= Date.now()
+  ) {
+    return res.status(401).json({ error: 'NESTAI_APP_SESSION_INVALID' });
+  }
+
+  const userDoc = await db.collection('users').doc(uid).get();
+  if (!userDoc.exists) return res.status(401).json({ error: 'NESTAI_APP_SESSION_INVALID' });
+  const user = userDoc.data() || {};
+  const currentSessionVersion = Number(user.ecosystemSessionVersion ?? 1);
+  if (
+    !Number.isSafeInteger(currentSessionVersion) ||
+    currentSessionVersion !== sessionVersion ||
+    ['inactive','suspended','disabled','removed','revoked','archived'].includes(String(user.status || 'active').toLowerCase()) ||
+    user.disabled === true
+  ) {
+    return res.status(401).json({ error: 'NESTAI_APP_SESSION_REVOKED' });
+  }
+
+  if (!await authorizeNestAiApp({ db, uid, organizationId, appId })) {
+    return res.status(403).json({ error: 'NESTAI_ACCESS_DENIED' });
+  }
+
+  try {
+    const issued = issueNestAiToken({
+      uid,
+      organizationId,
+      appId,
+      appCheckAppId: 'server:nestlocal-session-v1',
+      capabilities: ['ai:run', 'ai:stream'],
+      tokenType: 'service',
+      locale,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({
+      token: issued.token,
+      tokenType: 'Bearer',
+      expiresIn: issued.expiresIn,
+      organizationId,
+    });
+  } catch (error) {
+    console.error('[NestAI] app-session token issue failed', error instanceof Error ? error.message : 'unknown');
+    return res.status(503).json({ error: 'NESTAI_SIGNING_UNAVAILABLE' });
+  }
+}
+
 export async function handleNestAiGuestTokenRequest(req: Request, res: Response): Promise<Response> {
   const appId = String(req.body?.appId || '').trim().toLowerCase();
   const locale = normalizeLocale(req.body?.locale);
