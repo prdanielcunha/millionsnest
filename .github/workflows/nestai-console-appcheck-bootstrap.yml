@@ -1,4 +1,4 @@
-name: NestAI Console App Check Bootstrap
+name: NestAI Web App Check Bootstrap
 on:
   push:
     branches: ["production"]
@@ -21,7 +21,7 @@ jobs:
           workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
           service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
 
-      - name: Provision NestAI console App Check
+      - name: Provision shared NestAI App Check
         shell: bash
         run: |
           set -euo pipefail
@@ -29,7 +29,7 @@ jobs:
           PROJECT_NUMBER="555464791734"
           FIREBASE_APP_ID="1:555464791734:web:3059e8ac2b8089a1767817"
           DISPLAY_NAME="NestAI Console App Check"
-          DOMAIN="ai.millionsnest.com"
+          DOMAINS="ai.millionsnest.com,nestlume.millionsnest.com"
 
           gcloud config set project "$PROJECT_ID"
 
@@ -39,25 +39,13 @@ jobs:
 
           gcloud services enable recaptchaenterprise.googleapis.com firebaseappcheck.googleapis.com --project="$PROJECT_ID"
 
-          BILLING_ENABLED="$(gcloud billing projects describe "$PROJECT_ID" --format='value(billingEnabled)' 2>/dev/null || echo unknown)"
-          echo "NESTAI_APPCHECK_BILLING_ENABLED=$BILLING_ENABLED"
-
-          SITE_KEY="$(gcloud recaptcha keys list \
-            --project="$PROJECT_ID" \
-            --filter="displayName='$DISPLAY_NAME'" \
-            --format='value(name.basename())' \
-            --limit=1)"
+          SITE_KEY="$(gcloud recaptcha keys list             --project="$PROJECT_ID"             --filter="displayName='$DISPLAY_NAME'"             --format='value(name.basename())'             --limit=1)"
 
           if [ -z "$SITE_KEY" ]; then
-            SITE_KEY="$(gcloud recaptcha keys create \
-              --project="$PROJECT_ID" \
-              --web \
-              --display-name="$DISPLAY_NAME" \
-              --integration-type=score \
-              --domains="$DOMAIN" \
-              --format='value(name.basename())')"
+            SITE_KEY="$(gcloud recaptcha keys create               --project="$PROJECT_ID"               --web               --display-name="$DISPLAY_NAME"               --integration-type=score               --domains="$DOMAINS"               --format='value(name.basename())')"
             echo "NESTAI_APPCHECK_KEY_CREATED=true"
           else
+            gcloud recaptcha keys update "$SITE_KEY"               --project="$PROJECT_ID"               --web               --domains="$DOMAINS"               --quiet >/dev/null
             echo "NESTAI_APPCHECK_KEY_REUSED=true"
           fi
 
@@ -65,12 +53,6 @@ jobs:
           RESOURCE="projects/$PROJECT_NUMBER/apps/$FIREBASE_APP_ID/recaptchaEnterpriseConfig"
           BODY="$(node -e 'const [name,siteKey]=process.argv.slice(1); process.stdout.write(JSON.stringify({name,siteKey,tokenTtl:"604800s",riskAnalysis:{minValidScore:0.5}}))' "$RESOURCE" "$SITE_KEY")"
 
-          curl --fail --silent --show-error \
-            -X PATCH \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data "$BODY" \
-            "https://firebaseappcheck.googleapis.com/v1/$RESOURCE?updateMask=siteKey,tokenTtl,riskAnalysis" \
-            >/tmp/appcheck.json
+          curl --fail --silent --show-error             -X PATCH             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data "$BODY"             "https://firebaseappcheck.googleapis.com/v1/$RESOURCE?updateMask=siteKey,tokenTtl,riskAnalysis"             >/tmp/appcheck.json
 
           node -e 'const fs=require("fs");const x=JSON.parse(fs.readFileSync("/tmp/appcheck.json","utf8"));if(!x.siteKey)process.exit(1);console.log("NESTAI_APPCHECK_REGISTERED=true");console.log("NESTAI_APPCHECK_SITE_KEY="+x.siteKey);console.log("NESTAI_APPCHECK_TOKEN_TTL="+x.tokenTtl);'
