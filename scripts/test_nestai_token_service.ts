@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict';
 import * as crypto from 'node:crypto';
-import { getNestAiJwks, issueNestAiToken } from '../src/server/services/NestAiTokenService.js';
+import { authorizeNestAiApp, getNestAiJwks, issueNestAiToken } from '../src/server/services/NestAiTokenService.js';
 
 function decodeJson(value: string): any {
   return JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
@@ -85,4 +85,22 @@ assert.equal(guestPayload.appId, 'nestlume');
 assert.equal(guestPayload.sub, 'guest:abc123');
 assert.deepEqual(guestPayload.capabilities, ['ai:run', 'ai:stream']);
 
+
+const mockUserDb = {
+  collection: (_name: string) => ({
+    doc: (uid: string) => ({
+      get: async () => ({
+        exists: true,
+        data: () => ({ systemRole: uid === 'privileged' ? 'ceo' : 'member' }),
+      }),
+    }),
+  }),
+} as unknown as Parameters<typeof authorizeNestAiApp>[0]['db'];
+const checkHub = (uid: string, organizationId: string, appId = 'millionsnest') =>
+  authorizeNestAiApp({ db: mockUserDb, uid, organizationId, appId });
+
+assert.equal(await checkHub('privileged', 'global'), true);
+assert.equal(await checkHub('ordinary', 'global'), false);
+assert.equal(await checkHub('privileged', 'other'), false);
+assert.equal(await checkHub('privileged', 'global', 'unknown'), false);
 console.log('NESTAI_HUB_TOKEN_SERVICE_OK');

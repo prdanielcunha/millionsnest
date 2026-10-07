@@ -2,6 +2,8 @@ name: NestAI Hub Integration QA
 on:
   push:
     branches: ["main"]
+  pull_request:
+    branches: ["main"]
     paths:
       - "src/server/services/NestAiTokenService.ts"
       - "server.ts"
