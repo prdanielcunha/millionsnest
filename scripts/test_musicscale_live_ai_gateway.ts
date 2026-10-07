@@ -170,8 +170,8 @@ async function main() {
 
     assert.equal(recorder.read().statusCode, 200);
     assert.equal(recorder.read().jsonBody?.success, true);
-    assert.equal(capturedModel, 'gemini-3.5-flash-lite');
-    assert.match(capturedPrompt, /Never execute, imply execution of, or manufacture TAKE/);
+    assert.equal(capturedModel, 'nestai-managed');
+    assert.match(capturedPrompt, /musicscale\.live\.diagnostic\.explain/);
     assert.doesNotMatch(capturedPrompt, /operator@example\.com/);
     assert.doesNotMatch(capturedPrompt, /99999-1234/);
     assert.doesNotMatch(capturedPrompt, /super-sensitive-provider-token-value/);
@@ -271,7 +271,7 @@ async function main() {
       })
     );
     assert.equal(recorder.read().statusCode, 200);
-    assert.equal(model, 'gemini-3.8-flash');
+    assert.equal(model, 'nestai-managed');
   }
 
   console.log('MUSICSCALE_LIVE_AI_GATEWAY_QA_OK');
