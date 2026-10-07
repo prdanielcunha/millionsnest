@@ -1,3 +1,4 @@
+# Exact production redeploy marker — no runtime behavior change.
 name: Cloud Run Private Deploy
 
 on:
