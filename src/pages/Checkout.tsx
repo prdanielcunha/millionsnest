@@ -463,6 +463,26 @@ export default function Checkout() {
                     </p>
                 </div>
 
+                {trialOffer?.available && (
+                  <section aria-label={trialCopy.title}
+                    className="rounded-[1.75rem] border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 to-blue-500/5 p-5 sm:p-6 shadow-[0_16px_50px_rgba(0,0,0,.12)]">
+                    <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="max-w-xl space-y-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[.18em] text-emerald-300">
+                          {trialOffer.days} {String(i18n.language).startsWith('en')?'free days':String(i18n.language).startsWith('es')?'días gratis':'dias gratuitos'}
+                        </p>
+                        <h2 className="text-xl font-semibold text-white">{trialCopy.title}</h2>
+                        <p className="text-sm leading-relaxed text-slate-300">{trialCopy.description}</p>
+                        <p className="text-xs leading-relaxed text-slate-400">{trialCopy.note}</p>
+                      </div>
+                      <button type="button" onClick={beginNoCardTrial} disabled={trialStarting}
+                        className="w-full shrink-0 rounded-xl bg-emerald-400 px-5 py-3.5 text-sm font-bold text-emerald-950 shadow-lg transition hover:bg-emerald-300 disabled:opacity-50 sm:w-auto">
+                        {trialStarting?trialCopy.starting:trialCopy.action}
+                      </button>
+                    </div>
+                  </section>
+                )}
+
                 <section
                   aria-label={t('purchase_journey.kicker')}
                   className="rounded-[1.75rem] border border-white/[0.08] bg-white/[0.025] p-4 sm:p-5"
