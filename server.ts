@@ -794,10 +794,16 @@ async function respondWithMercadoLivreSearchFallback(input: {
     if (!id || !title || !permalink) return []; // Never manufacture an offer identity
 
     const price = Number(item.price);
-    const soldQuantity = Number(item.sold_quantity);
-    const availableQuantity = Number(item.available_quantity);
+    // Omitted fields are UNKNOWN, never inferred to zero.
+    const observedNumber=(value:unknown)=>{
+      if(value===undefined||value===null||value==='')return Number.NaN;
+      const numeric=Number(value);
+      return Number.isFinite(numeric)?numeric:Number.NaN;
+    };
+    const soldQuantity = observedNumber(item.sold_quantity);
+    const availableQuantity = observedNumber(item.available_quantity);
     const thumbnail = String(item.thumbnail || item.secure_thumbnail || '').replace(/^http:/, 'https:');
-    const status = String(item.status || 'active').toLowerCase();
+    const status = String(item.status || '').toLowerCase();
     return [{
       productId: `meli:${id}`,
       organizationId: input.organizationId,
@@ -820,9 +826,9 @@ async function respondWithMercadoLivreSearchFallback(input: {
         availableQuantity: { value: availableQuantity, source: 'mercadolivre-site-search', observedAt },
       } : {}),
       availability: {
-        value: status !== 'active'
+        value: status && status !== 'active'
           ? 'unavailable'
-          : Number.isFinite(availableQuantity)
+          : status === 'active' && Number.isFinite(availableQuantity)
             ? (availableQuantity > 0 ? 'available' : 'unavailable')
             : 'unknown',
         source: 'mercadolivre-site-search',
