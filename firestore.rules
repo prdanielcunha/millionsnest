@@ -2245,8 +2245,13 @@ service cloud.firestore {
         // Firestore ORs overlapping allow rules. Sensitive subcollections with
         // narrower policies must never inherit this generic tenant-wide access.
         allow read: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
-        allow create: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        // NestLocal product records are server-owned. A MusicScale subscription
+        // must never grant Firestore SDK writes to an expired NestLocal tenant.
+        // Likewise, Hub entitlement grants are emitted only by the backend.
+        // Firestore ORs overlapping allows: exclude these namespaces HERE,
+        // rather than adding a separate deny match that can be overridden.
+        allow create: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 
@@ -2853,6 +2858,18 @@ service cloud.firestore {
     match /system_settings/{settingId} {
       allow read: if isAuthenticated();
       allow write: if isSystemAdmin();
+    }
+
+    // Commercial authority data is Admin SDK-only. These explicit rules make
+    // the invariant visible; catch-all deny also covers these paths.
+    match /nestlocal_internal_trials/{organizationId} {
+      allow read, write: if false;
+    }
+    match /nestlocal_trial_owners/{ownerUid} {
+      allow read, write: if false;
+    }
+    match /nestai_credit_grant_outbox/{grantKey} {
+      allow read, write: if false;
     }
 
     match /ecosystemHandoffs/{handoffId} {
