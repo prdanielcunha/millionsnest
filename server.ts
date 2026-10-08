@@ -8910,7 +8910,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       for (const customerId of customerIds) {
         const eligibility = await resolveSubscriptionPurchaseEligibility(
-          stripe, db, organizationId, customerId, 'nestlocal',
+          stripe, db, organizationId, customerId, 'nestlocal', true,
         );
         if (!eligibility.allowed || eligibility.reason !== 'no_subscription') {
           return res.status(409).json({ error: 'Esta organização já possui histórico de contratação ou avaliação.', code: 'PRIOR_SUBSCRIPTION' });
