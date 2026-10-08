@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import * as crypto from 'node:crypto';
 import {
-  isNestLocalInternalTrialActive, resolveNestLocalAiEntitlement,
+  isNestLocalInternalTrialActive, isNestLocalInternalTrialExpired, resolveNestLocalAiEntitlement,
 } from '../src/server/services/NestLocalAiEntitlement.js';
 import { issueNestAiToken } from '../src/server/services/NestAiTokenService.js';
 
@@ -19,6 +19,15 @@ assert.equal(isNestLocalInternalTrialActive({...trial,expiresAt:new Date(now+8*8
 assert.equal(isNestLocalInternalTrialActive({...trial,source:'stripe'},now),false);
 assert.equal(isNestLocalInternalTrialActive({...trial,grantVersion:1},now),false);
 
+const issued={...trial,organizationId:'org-1',consumed:true};
+assert.equal(isNestLocalInternalTrialExpired(issued, now, 'org-1'),false);
+assert.equal(isNestLocalInternalTrialExpired(issued, trialEnd.getTime(), 'org-1'),true);
+assert.equal(isNestLocalInternalTrialExpired(issued, trialEnd.getTime(), 'org-2'),false);
+assert.equal(isNestLocalInternalTrialExpired({...issued,revoked:true},trialEnd.getTime(),'org-1'),false);
+assert.equal(isNestLocalInternalTrialExpired({...issued,consumed:false},trialEnd.getTime(),'org-1'),false);
+assert.equal(resolveNestLocalAiEntitlement({
+  organizationApp:{status:'trialing'},internalTrial:issued,now:trialEnd.getTime(),
+}),null);
 const org={status:'trialing'};
 const internal=resolveNestLocalAiEntitlement({organizationApp:org,internalTrial:trial,now});
 assert.equal(internal?.accessState,'trial_active');
