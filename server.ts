@@ -58,6 +58,7 @@ import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
+import { extendHubTrial, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } from './src/server/services/EcosystemSessionVersionService.js';
@@ -8955,6 +8956,42 @@ async function autoRepairSingleOrganizationUser(uid: string) {
   /** On-demand recovery for missed NestAI credit sync; no Stripe mutations.
    * Intentionally global-admin-only and closed while commercial flags are off.
    * Scheduled reconciliation with service OIDC will require a separate review. */
+  /** Global MillionsNest administration only: no self-service renewal and no Stripe write.
+   * One extension of 1–7 calendar days per organization and app, audit immutable. */
+  app.post('/api/v1/billing/trial/extend', express.json(), async (req: any, res) => {
+    if (process.env.HUB_TRIAL_EXTENSION_ADMIN_ENABLED !== 'true')
+      return res.status(404).json({error:'Extensão administrativa indisponível.'});
+    if (!db)return res.status(503).json({error:'Banco indisponível.'});
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith('Bearer '))return res.status(401).json({error:'Autenticação necessária.'});
+    let actorUid:string;
+    try {actorUid=(await admin.auth().verifyIdToken(auth.slice(7))).uid;}
+    catch{return res.status(401).json({error:'Sessão inválida.'});}
+    try {
+      const actor=await db.collection('users').doc(actorUid).get();
+      if(!actor.exists||!canManageTenantBilling(actor.data()?.systemRole)||
+         actor.data()?.disabled===true||
+         ['suspended','disabled','inactive'].includes(String(actor.data()?.status||'')))
+        return res.status(403).json({error:'Apenas a administração global pode estender avaliações.'});
+      const appId=req.body?.appId as TrialApp,organizationId=req.body?.organizationId;
+      if(!['musicscale','nestlocal'].includes(appId))
+        return res.status(400).json({error:'Aplicativo inválido.'});
+      if(appId==='nestlocal'&&process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED!=='true'||
+         appId==='musicscale'&&process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED!=='true')
+        return res.status(409).json({error:'O trial interno deste aplicativo não está ativado.'});
+      const result=await extendHubTrial({
+        db,appId,organizationId,adminUid:actorUid,
+        days:req.body?.days,reason:req.body?.reason,
+      });
+      return res.status(200).json({ok:true,...result});
+    }catch(error:any){
+      if(error instanceof TrialExtensionError)
+        return res.status(error.httpStatus).json({error:'Extensão não autorizada.',code:error.code});
+      console.warn('[Hub Trial Extension] rejected:',error?.message||'unexpected');
+      return res.status(503).json({error:'Não foi possível estender a avaliação. Tente novamente.'});
+    }
+  });
+
   app.post('/api/v1/billing/trial/credits/reconcile', express.json(), async (req: any, res) => {
     if (process.env.NESTAI_COMMERCIAL_CREDITS_ENABLED !== 'true' ||
         process.env.NESTAI_GRANTS_SYNC_ENABLED !== 'true') {
