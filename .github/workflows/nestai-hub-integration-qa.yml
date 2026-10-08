@@ -6,8 +6,32 @@ on:
     branches: ["main"]
     paths:
       - "src/server/services/NestAiTokenService.ts"
+      - "src/server/services/NestLocalAiEntitlement.ts"
+      - "src/server/services/HubNoCardTrialService.ts"
+      - "src/server/services/MusicScaleNoCardTrialService.ts"
+      - "src/server/services/HubTrialExtensionService.ts"
+      - "src/server/services/NestLocalTrialCreditOutboxService.ts"
+      - "src/server/services/SubscriptionEligibility.ts"
+      - "src/lib/nestLocalCommercialV2.ts"
+      - "src/server/services/NestAiCreditGrantSyncService.ts"
+      - "src/server/services/EcosystemAccessResolver.ts"
+      - "src/lib/permissionService.ts"
+      - "src/pages/TrialManagement.tsx"
+      - "src/components/EcosystemShell.tsx"
+      - "src/App.tsx"
+      - "firestore.rules"
       - "server.ts"
       - "scripts/test_nestai_token_service.ts"
+      - "scripts/test_nestlocal_ai_commercial_claims.ts"
+      - "scripts/test_hub_no_card_trial.ts"
+      - "scripts/test_hub_trial_extensions.ts"
+      - "scripts/test_trial_extension_rbac.ts"
+      - "scripts/test_nestlocal_trial_credit_outbox.ts"
+      - "scripts/test_nestlocal_strict_eligibility.ts"
+      - "scripts/test_nestlocal_readonly_access.ts"
+      - "scripts/test_nestlocal_firestore_guardrails.ts"
+      - "scripts/test_nestlocal_founders_policy.ts"
+      - "scripts/test_nestai_credit_grant_sync.ts"
       - ".github/workflows/nestai-hub-integration-qa.yml"
 permissions:
   contents: read
@@ -23,4 +47,14 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npx tsx scripts/test_nestai_token_service.ts
+      - run: npx tsx scripts/test_nestlocal_ai_commercial_claims.ts
+      - run: npx tsx scripts/test_hub_no_card_trial.ts
+      - run: npx tsx scripts/test_hub_trial_extensions.ts
+      - run: npx tsx scripts/test_trial_extension_rbac.ts
+      - run: npx tsx scripts/test_nestlocal_trial_credit_outbox.ts
+      - run: npx tsx scripts/test_nestlocal_strict_eligibility.ts
+      - run: npx tsx scripts/test_nestlocal_readonly_access.ts
+      - run: npx tsx scripts/test_nestlocal_firestore_guardrails.ts
+      - run: npx tsx scripts/test_nestlocal_founders_policy.ts
+      - run: npx tsx scripts/test_nestai_credit_grant_sync.ts
       - run: npm run build

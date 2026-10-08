@@ -22,6 +22,21 @@ service cloud.firestore {
       );
     }
 
+    function musicScaleInternalTrialCanWrite(orgId) {
+      let path = /databases/$(database)/documents/musicscale_internal_trials/$(orgId);
+      let trial = exists(path) ? get(path).data : {};
+      let end = trial.get('extensionCount', 0) == 1
+        ? trial.get('extensionEndsAt', null) : trial.get('expiresAt', null);
+      return trial.get('appId', '') == 'musicscale' &&
+        trial.get('organizationId', '') == orgId &&
+        trial.get('source', '') == 'hub_internal_trial' &&
+        trial.get('status', '') == 'active' &&
+        trial.get('consumed', false) == true &&
+        trial.get('revoked', false) == false &&
+        trial.get('grantVersion', 0) >= 2 &&
+        end != null && request.time < end;
+    }
+
     function isOrgActive(orgId) {
       let subDoc = get(/databases/$(database)/documents/subscriptions/$(orgId));
       let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
@@ -31,7 +46,7 @@ service cloud.firestore {
       
       let subActive = subData != null && 'status' in subData && (subData.status == 'active' || subData.status == 'trialing');
       
-      let appActive = orgData != null && 'apps' in orgData && 'musicscale' in orgData.apps && 'status' in orgData.apps.musicscale && (orgData.apps.musicscale.status == 'active' || orgData.apps.musicscale.status == 'trialing');
+      let appActive = orgData != null && 'apps' in orgData && 'musicscale' in orgData.apps && 'status' in orgData.apps.musicscale && (orgData.apps.musicscale.status == 'active' || orgData.apps.musicscale.status == 'trialing') && (orgData.apps.musicscale.get('trialSource', '') != 'hub_internal_trial' || musicScaleInternalTrialCanWrite(orgId));
 
       return subActive || appActive || isSystemAdmin();
     }
@@ -1593,6 +1608,26 @@ service cloud.firestore {
     // 2. DADOS DA ORGANIZAÇÃO (CORE)
     // ==========================================
 
+    // App-specific Stripe/trial projection is only written by trusted Hub
+    // transactions and verified webhooks (Admin SDK), never a user SDK.
+    // Other app projections can retain their existing compatibility rules.
+    function nestLocalCommercialProjectionUnchanged() {
+      return request.resource.data.get('apps', {}).get('nestlocal', null) ==
+        resource.data.get('apps', {}).get('nestlocal', null);
+    }
+    // Existing MusicScale tenants keep editing noncommercial organization
+    // settings. Only server-issued pilot trial status/deadline are immutable.
+    function musicScaleTrialProjectionProtected() {
+      let before = resource.data.get('apps', {}).get('musicscale', {});
+      let after = request.resource.data.get('apps', {}).get('musicscale', {});
+      return before.get('trialSource', '') != 'hub_internal_trial' || (
+        after.get('trialSource', '') == 'hub_internal_trial' &&
+        after.get('trialEndsAt', null) == before.get('trialEndsAt', null) &&
+        after.get('trialUsed', false) == true &&
+        after.get('status', '') == before.get('status', '')
+      );
+    }
+
     match /organizations/{orgId} {
       allow read: if isAuthenticated() && (
         isSystemAdmin() ||
@@ -1610,7 +1645,8 @@ service cloud.firestore {
         resource.data.get('ownerId', '') == request.auth.uid || 
         resource.data.get('owner_user_id', '') == request.auth.uid || 
         (checkMemberExists(orgId) && isOrgOwner(orgId))
-      );
+      ) && nestLocalCommercialProjectionUnchanged() &&
+        musicScaleTrialProjectionProtected();
       allow delete: if false; 
 
       // ---------------------------------------------------------------------------------
@@ -2245,8 +2281,13 @@ service cloud.firestore {
         // Firestore ORs overlapping allow rules. Sensitive subcollections with
         // narrower policies must never inherit this generic tenant-wide access.
         allow read: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
-        allow create: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        // NestLocal product records are server-owned. A MusicScale subscription
+        // must never grant Firestore SDK writes to an expired NestLocal tenant.
+        // Likewise, Hub entitlement grants are emitted only by the backend.
+        // Firestore ORs overlapping allows: exclude these namespaces HERE,
+        // rather than adding a separate deny match that can be overridden.
+        allow create: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 
@@ -2853,6 +2894,28 @@ service cloud.firestore {
     match /system_settings/{settingId} {
       allow read: if isAuthenticated();
       allow write: if isSystemAdmin();
+    }
+
+    // Commercial authority data is Admin SDK-only. These explicit rules make
+    // the invariant visible; catch-all deny also covers these paths.
+    match /musicscale_internal_trials/{organizationId} {
+      allow read, write: if false;
+    }
+    match /musicscale_trial_owners/{ownerUid} {
+      allow read, write: if false;
+    }
+    match /hub_trial_extension_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /nestlocal_internal_trials/{organizationId} {
+      allow read, write: if false;
+    }
+    match /nestlocal_trial_owners/{ownerUid} {
+      allow read, write: if false;
+    }
+    match /nestai_credit_grant_outbox/{grantKey} {
+      allow read, write: if false;
     }
 
     match /ecosystemHandoffs/{handoffId} {
