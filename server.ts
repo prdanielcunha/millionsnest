@@ -750,6 +750,7 @@ async function respondWithMercadoLivreSearchFallback(input: {
   res: any;
   accessToken?: string;
   reason: string;
+  discoveryMode?: boolean;
 }) {
   const fallbackUrl = new URL('https://api.mercadolibre.com/sites/MLB/search');
   fallbackUrl.searchParams.set('q', input.query);
@@ -787,7 +788,7 @@ async function respondWithMercadoLivreSearchFallback(input: {
     const id = String(item.id || '').trim();
     const title = String(item.title || '').trim();
     const permalink = String(item.permalink || '').trim();
-    if (!id || !title || !permalink) return [];
+    if (!id || !title || !permalink) return []; // Never manufacture an offer identity
 
     const price = Number(item.price);
     const soldQuantity = Number(item.sold_quantity);
@@ -847,6 +848,8 @@ async function respondWithMercadoLivreSearchFallback(input: {
       detailed: rows.length,
       usable: products.length,
       minSoldQuantity: 0,
+      discoveryMode: Boolean(input.discoveryMode),
+      sourceLimited: true,
       rejectedUnavailable: 0,
       rejectedLowSales: 0,
       rejectedUnverified: Math.max(0, rows.length - products.length),
@@ -871,6 +874,8 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     const organizationId = String(req.query.organizationId || '').trim();
     const query = String(req.query.q || '').trim();
     const requestedLimit = Number(req.query.limit || 12);
+    // Only an explicit V4 client request enters investigation mode; legacy remains unchanged.
+    const discoveryMode = req.query.mode === 'discovery_v4';
     const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 12, 20));
 
     if (
@@ -947,6 +952,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         limit,
         res,
         reason: 'MELI_NOT_CONNECTED',
+        discoveryMode,
       });
     }
 
@@ -961,16 +967,17 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         limit,
         res,
         reason: 'MELI_TOKEN_STALE',
+        discoveryMode,
       });
     }
 
-    const MIN_SOLD_QUANTITY = 100;
+    const MIN_SOLD_QUANTITY = discoveryMode ? 0 : 100;
     const searchUrl = new URL('https://api.mercadolibre.com/products/search');
     searchUrl.searchParams.set('status', 'active');
     searchUrl.searchParams.set('site_id', 'MLB');
     searchUrl.searchParams.set('q', query);
-    // Pull the full supported page so the quality gate still has enough
-    // candidates after rejecting low-sales or unavailable listings.
+    // Pull a bounded official page. In investigation mode, missing sales is UNKNOWN,
+    // never a confirmed zero. Publication-time gates remain independent.
     searchUrl.searchParams.set('limit', '20');
 
     const providerHeaders = { Authorization: `Bearer ${accessToken}` };
@@ -990,6 +997,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         res,
         accessToken,
         reason: `MELI_CATALOG_${searchResponse.status}`,
+        discoveryMode,
       });
     }
 
@@ -1161,7 +1169,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         rejectedUnavailable += 1;
         return [];
       }
-      if (hasSoldQuantity && soldQuantity < MIN_SOLD_QUANTITY) {
+      if (!discoveryMode && hasSoldQuantity && soldQuantity < MIN_SOLD_QUANTITY) {
         rejectedLowSales += 1;
         return [];
       }
@@ -1184,7 +1192,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
           ? itemPrice
           : undefined;
 
-      if (!title || !permalink || !imageUrl) {
+      if (!title || !permalink || (!discoveryMode && !imageUrl)) {
         rejectedUnverified += 1;
         return [];
       }
@@ -1253,13 +1261,13 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
             : 'mercadolivre-catalog-api',
           observedAt,
         },
-        imageUrl: {
+        ...(imageUrl ? {imageUrl: {
           value: imageUrl,
           source: product.pictures?.length || candidate.pictures?.length
             ? 'mercadolivre-catalog-api'
             : 'mercadolivre-items-bulk',
           observedAt,
-        },
+        }} : {}),
         assetRights: 'UNKNOWN',
       }];
     }).slice(0, limit);
@@ -1277,6 +1285,8 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         detailed: detailRows.filter((row) => row.detailVerified).length,
         usable: products.length,
         minSoldQuantity: MIN_SOLD_QUANTITY,
+        discoveryMode,
+        researchOnly: discoveryMode,
         rejectedUnavailable,
         rejectedLowSales,
         rejectedUnverified,
