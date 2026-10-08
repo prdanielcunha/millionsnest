@@ -45,9 +45,9 @@ export function nestLocalTrialEnabledForOrganization(
   return cohort.includes(organizationId);
 }
 export async function hasConsumedHubTrial(db: Firestore, orgId: string, appId: 'nestlocal' | 'musicscale'): Promise<boolean> {
-  if (appId !== 'nestlocal') return false;
+  if (!['nestlocal','musicscale'].includes(appId)) return false;
   if (!orgId || orgId.includes('/')) throw new HubTrialError('INVALID_ORGANIZATION', 400);
-  return (await db.collection('nestlocal_internal_trials').doc(orgId).get()).exists;
+  return (await db.collection(appId+'_internal_trials').doc(orgId).get()).exists;
 }
 function timeMs(value: any): number | null {
   if (value && typeof value.toMillis === 'function') return value.toMillis();
