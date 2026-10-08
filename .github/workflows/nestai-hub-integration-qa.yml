@@ -7,10 +7,12 @@ on:
     paths:
       - "src/server/services/NestAiTokenService.ts"
       - "src/server/services/NestLocalAiEntitlement.ts"
+      - "src/server/services/NestAiCreditGrantSyncService.ts"
       - "src/server/services/EcosystemAccessResolver.ts"
       - "server.ts"
       - "scripts/test_nestai_token_service.ts"
       - "scripts/test_nestlocal_ai_commercial_claims.ts"
+      - "scripts/test_nestai_credit_grant_sync.ts"
       - ".github/workflows/nestai-hub-integration-qa.yml"
 permissions:
   contents: read
@@ -27,4 +29,5 @@ jobs:
       - run: npm run lint
       - run: npx tsx scripts/test_nestai_token_service.ts
       - run: npx tsx scripts/test_nestlocal_ai_commercial_claims.ts
+      - run: npx tsx scripts/test_nestai_credit_grant_sync.ts
       - run: npm run build
