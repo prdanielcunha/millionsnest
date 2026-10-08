@@ -56,7 +56,7 @@ import admin from 'firebase-admin';
 import path from 'path';
 import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
-import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
+import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization, hasSearchableAuthenticatedEmail } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
 import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
@@ -9155,6 +9155,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         return res.status(403).json({error:'Usuário não está ativo para iniciar a avaliação.'});
       }
       const subData = subSnap.data() || {};
+      // The authenticated Firebase email is required to enumerate historical
+      // Stripe customers; an empty search must never certify a new trial.
+      if (!hasSearchableAuthenticatedEmail(email)) {
+        return res.status(409).json({
+          error: 'Histórico comercial requer verificação manual.',
+          code: 'STRIPE_HISTORY_REVIEW',
+        });
+      }
       const knownCustomerId = subData.apps?.[requestedApp]?.stripeCustomerId
         || userSnap.data()?.stripeCustomerId || subData.stripeCustomerId;
       const stripe = getStripe();
