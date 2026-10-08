@@ -91,6 +91,9 @@ jobs:
       - name: Firebase Hosting and Cloud Run migration contract
         run: npx tsx scripts/test_firebase_hosting_cloudrun_policy.ts
 
+      - name: Cloud Run runtime configuration preservation
+        run: npx tsx scripts/test_cloudrun_deploy_env_preservation.ts
+
       - name: Hub product positioning and trust contract
         run: npx tsx scripts/test_hub_product_positioning.ts
 
