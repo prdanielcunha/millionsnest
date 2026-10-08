@@ -1,6 +1,21 @@
 /** Server-only, no-card NestLocal trial. Never creates Stripe billing records or changes MusicScale. */
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
+import { createHash } from 'node:crypto';
 export const HUB_TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+/** Stable, non-PII key shared by issuance, outbox reconciliation, and NestAI. */
+export function nestLocalTrialOutboxIdentity(organizationId: string): {
+  documentId: string; sourceRef: string;
+} {
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(organizationId)) {
+    throw new HubTrialError('INVALID_ORGANIZATION', 400);
+  }
+  const digest = createHash('sha256').update('nestlocal:trial:v2:' + organizationId).digest('hex');
+  return {
+    documentId: 'nestlocal_trial_' + digest,
+    sourceRef: 'nestlocal_trial_v2_' + digest,
+  };
+}
+
 export class HubTrialError extends Error {
   constructor(public readonly code: string, public readonly httpStatus = 409) {
     super(code);
@@ -65,9 +80,11 @@ export async function activateNestLocalHubTrial(params: {
   const trialRef = db.collection('nestlocal_internal_trials').doc(organizationId);
   const ownerRef = db.collection('nestlocal_trial_owners').doc(ownerUid);
   const entitlementRef = orgRef.collection('app_entitlements').doc('nestlocal');
+  const outboxIdentity = nestLocalTrialOutboxIdentity(organizationId);
+  const outboxRef = db.collection('nestai_credit_grant_outbox').doc(outboxIdentity.documentId);
   return db.runTransaction(async (tx) => {
-    const [orgSnap, subSnap, trialSnap, ownerSnap, entitlementSnap] = await Promise.all([
-      tx.get(orgRef), tx.get(subRef), tx.get(trialRef), tx.get(ownerRef), tx.get(entitlementRef),
+    const [orgSnap, subSnap, trialSnap, ownerSnap, entitlementSnap, outboxSnap] = await Promise.all([
+      tx.get(orgRef), tx.get(subRef), tx.get(trialRef), tx.get(ownerRef), tx.get(entitlementRef), tx.get(outboxRef),
     ]);
     if (!orgSnap.exists) throw new HubTrialError('ORGANIZATION_NOT_FOUND', 404);
     const org = orgSnap.data() || {};
@@ -89,6 +106,7 @@ export async function activateNestLocalHubTrial(params: {
       throw new HubTrialError('TRIAL_ALREADY_CONSUMED');
     }
     if (ownerSnap.exists) throw new HubTrialError('OWNER_TRIAL_ALREADY_CONSUMED');
+    if (outboxSnap.exists) throw new HubTrialError('PREVIOUS_GRANT_OUTBOX_EXISTS');
     const appSubscription = subSnap.exists ? subSnap.data()?.apps?.nestlocal : undefined;
     const appProjection = org.apps?.nestlocal;
     const entitlement = entitlementSnap.exists ? entitlementSnap.data() : undefined;
@@ -110,6 +128,14 @@ export async function activateNestLocalHubTrial(params: {
       idempotencyKey: 'nestlocal_internal_trial:' + organizationId,
     });
     tx.create(ownerRef, { organizationId, appId: 'nestlocal', trialRef: trialRef.path, createdAt: beginsAt });
+    // Atomic transactional outbox: lost HTTP responses and process crashes cannot
+    // silently drop the future NestAI credit grant. The worker never trusts a caller's amount.
+    tx.create(outboxRef, {
+      schemaVersion: 1, kind: 'nestlocal_trial_credits', organizationId,
+      appId: 'nestlocal', source: 'trial', sourceRef: outboxIdentity.sourceRef,
+      grantVersion: 2, status: 'pending', attempts: 0,
+      beginsAt, expiresAt, createdAt: beginsAt, updatedAt: beginsAt,
+    });
     tx.set(entitlementRef, {
       schemaVersion: 3, appId: 'nestlocal', source,
       accessState: 'internal_trial_active', trialUsed: true,
