@@ -6,8 +6,11 @@ on:
     branches: ["main"]
     paths:
       - "src/server/services/NestAiTokenService.ts"
+      - "src/server/services/NestLocalAiEntitlement.ts"
+      - "src/server/services/EcosystemAccessResolver.ts"
       - "server.ts"
       - "scripts/test_nestai_token_service.ts"
+      - "scripts/test_nestlocal_ai_commercial_claims.ts"
       - ".github/workflows/nestai-hub-integration-qa.yml"
 permissions:
   contents: read
@@ -23,4 +26,5 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npx tsx scripts/test_nestai_token_service.ts
+      - run: npx tsx scripts/test_nestlocal_ai_commercial_claims.ts
       - run: npm run build
