@@ -8867,9 +8867,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       : requestedApp === 'musicscale' && process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED === 'true';
     if (!enabled) return res.status(404).json({error:'Avaliação sem cartão ainda não disponível.'});
     if (!db) return res.status(503).json({ error: 'Banco de dados indisponível.' });
-    if (req.body?.appId !== 'nestlocal') {
-      return res.status(400).json({ error: 'Este fluxo de avaliação está disponível somente para NestLocal.' });
-    }
+    if (!['musicscale','nestlocal'].includes(requestedApp)) return res.status(400).json({error:'Aplicativo inválido.'});
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Autenticação necessária.' });
@@ -8887,7 +8885,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     if (!organizationId || organizationId.includes('/')) {
       return res.status(400).json({ error: 'Organização válida é obrigatória.' });
     }
-    if (!nestLocalTrialEnabledForOrganization(organizationId)) {
+    const inCohort = requestedApp === 'nestlocal'
+      ? nestLocalTrialEnabledForOrganization(organizationId)
+      : musicScaleTrialEnabledForOrganization(organizationId);
+    if (!inCohort) {
       return res.status(403).json({ error: 'Esta organização ainda não está habilitada para a avaliação sem cartão.', code: 'TRIAL_COHORT_DISABLED' });
     }
     try {
@@ -8905,7 +8906,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         return res.status(403).json({error:'Usuário não está ativo para iniciar a avaliação.'});
       }
       const subData = subSnap.data() || {};
-      const knownCustomerId = subData.apps?.nestlocal?.stripeCustomerId
+      const knownCustomerId = subData.apps?.[requestedApp]?.stripeCustomerId
         || userSnap.data()?.stripeCustomerId || subData.stripeCustomerId;
       const stripe = getStripe();
       // Read-only Stripe audit before the Firestore transaction. Unknown history fails closed.
@@ -8920,7 +8921,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       for (const customerId of customerIds) {
         const eligibility = await resolveSubscriptionPurchaseEligibility(
-          stripe, db, organizationId, customerId, 'nestlocal', true,
+          stripe, db, organizationId, customerId, requestedApp, true,
         );
         if (!eligibility.allowed || eligibility.reason !== 'no_subscription') {
           return res.status(409).json({ error: 'Esta organização já possui histórico de contratação ou avaliação.', code: 'PRIOR_SUBSCRIPTION' });
