@@ -22,6 +22,11 @@ export class HubTrialError extends Error {
     this.name = 'HubTrialError';
   }
 }
+/** Stripe customer history cannot be certified if Firebase Auth provides no email.
+ * Do not mistake an empty customer search for evidence of no prior billing. */
+export function hasSearchableAuthenticatedEmail(email: unknown): email is string {
+  return typeof email === 'string' && email.trim().length > 0 && email.includes('@');
+}
 /** A used Hub trial disqualifies a second Stripe trial, even after flag rollback. */
 export function shouldAddStripeTrial(params: {
   appId: 'nestlocal' | 'musicscale';
