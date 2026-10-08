@@ -24,7 +24,7 @@ function subIdOf(invoice:Document):string|null {
 export function deriveNestLocalPaidInvoiceCredit(input:{
   invoice:Document;organizationId:string;subscription:Document;
   stripeSubscription:Document;
-}):{intent:NestLocalCreditGrantIntent;invoiceId:string;subscriptionId:string;
+}):{intent:Extract<NestLocalCreditGrantIntent,{source:'plan'}>;invoiceId:string;subscriptionId:string;
   customerId:string;amountPaid:number;livemode:boolean}{
   const {invoice,organizationId,subscription:canonical,stripeSubscription:live}=input;
   if(!/^[A-Za-z0-9_-]{1,128}$/.test(organizationId))reject('TENANT_ID_INVALID');
@@ -54,7 +54,6 @@ export function deriveNestLocalPaidInvoiceCredit(input:{
   const eligible=lines.data.filter((line:Document)=>{
     const linked=(typeof line.subscription==='string'?line.subscription:
       line.parent?.subscription_item_details?.subscription);
-    const price=line.price||line.pricing?.price_details?.price;
     return (linked===subscriptionId || (!linked&&lines.data.length===1)) &&
       line.period&&line.period.start&&line.period.end&&
       (line.price?.recurring?.interval==='month'||line.plan?.interval==='month' ||
