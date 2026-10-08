@@ -8711,7 +8711,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       const internalTrialConsumed = appId === 'nestlocal' && db
         ? await hasConsumedHubTrial(db, orgId, appId) : false;
-      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId);
+      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId, appId === 'nestlocal' && nestLocalTrialEnabledForOrganization(orgId));
 
       if (planLookupKey) {
         if (eligibility.decision === 'block_duplicate') {
@@ -9110,7 +9110,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       const internalTrialConsumed = appId === 'nestlocal' && db
         ? await hasConsumedHubTrial(db, orgId, appId) : false;
-      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId);
+      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId, appId === 'nestlocal' && nestLocalTrialEnabledForOrganization(orgId));
 
       if (eligibility.decision === 'block_duplicate') {
         return res.status(409).json({ 
