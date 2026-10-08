@@ -56,6 +56,7 @@ import admin from 'firebase-admin';
 import path from 'path';
 import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
+import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial } from './src/server/services/HubNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } from './src/server/services/EcosystemSessionVersionService.js';
@@ -8582,7 +8583,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         ? productsReq.plans.find(product => product.lookupKey === planLookupKey)
         : null;
       const requestedApp = String(req.body?.app || selectedPlan?.app || '').toLowerCase();
-      const appId: 'musicscale' | 'nestlocal' = requestedApp === 'nestlocal' ? 'nestlocal' : 'musicscale';
+      if (requestedApp !== 'musicscale' && requestedApp !== 'nestlocal') {
+        return res.status(400).json({ error: 'Aplicativo desconhecido. Selecione um produto válido.' });
+      }
+      const appId: 'musicscale' | 'nestlocal' = requestedApp;
       if (!selectedPlan || selectedPlan.app !== appId) {
         return res.status(400).json({ error: 'O plano selecionado não pertence ao aplicativo informado.' });
       }
@@ -8700,6 +8704,12 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }
       }
 
+      // Protect internal-trial history across feature-flag rollback and checkout entrypoints.
+      if (appId === 'nestlocal' && !db) {
+        return res.status(503).json({ error: 'Não foi possível verificar o histórico de avaliação. Tente novamente.' });
+      }
+      const internalTrialConsumed = appId === 'nestlocal' && db
+        ? await hasConsumedHubTrial(db, orgId, appId) : false;
       const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId);
 
       if (planLookupKey) {
@@ -8789,7 +8799,12 @@ async function autoRepairSingleOrganizationUser(uid: string) {
           }
         };
 
-        if (!hasTrialHistory) {
+        if (shouldAddStripeTrial({
+          appId,
+          hasLegacyTrialHistory: hasTrialHistory,
+          internalTrialConsumed,
+          newNestLocalTrialEnabled: process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED === 'true',
+        })) {
           sessionArgs.subscription_data.trial_period_days = 7;
         }
 
@@ -8839,6 +8854,80 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
+
+  /** Explicit, server-timed internal trial. OFF until NestLocal read-only, quotas and rules pass QA.
+   * Legacy MusicScale never enters this route; no Stripe write happens here. */
+  app.post('/api/v1/billing/trial/activate', express.json(), async (req: any, res) => {
+    if (process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED !== 'true') {
+      return res.status(404).json({ error: 'Avaliação sem cartão ainda não disponível.' });
+    }
+    if (!db) return res.status(503).json({ error: 'Banco de dados indisponível.' });
+    if (req.body?.appId !== 'nestlocal') {
+      return res.status(400).json({ error: 'Este fluxo de avaliação está disponível somente para NestLocal.' });
+    }
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Autenticação necessária.' });
+    }
+    let userId: string;
+    let email: string | undefined;
+    try {
+      const identity = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      userId = identity.uid;
+      email = identity.email;
+    } catch {
+      return res.status(401).json({ error: 'Sessão inválida.' });
+    }
+    const organizationId = typeof req.body?.organizationId === 'string' ? req.body.organizationId.trim() : '';
+    if (!organizationId || organizationId.includes('/')) {
+      return res.status(400).json({ error: 'Organização válida é obrigatória.' });
+    }
+    try {
+      // Only a verified owner can start the organization's irreversible lifetime trial.
+      const context = await resolveUserOrganizationContext(userId);
+      const isOwner = context.ownedOrganizations.some((org: any) => org.id === organizationId);
+      if (!isOwner) return res.status(403).json({ error: 'Somente o proprietário pode ativar a avaliação.' });
+      const [userSnap, subSnap] = await Promise.all([
+        db.collection('users').doc(userId).get(),
+        db.collection('subscriptions').doc(organizationId).get(),
+      ]);
+      const subData = subSnap.data() || {};
+      const knownCustomerId = subData.apps?.nestlocal?.stripeCustomerId
+        || userSnap.data()?.stripeCustomerId || subData.stripeCustomerId;
+      const stripe = getStripe();
+      // Read-only Stripe audit before the Firestore transaction. Unknown history fails closed.
+      const customerIds = new Set<string>();
+      if (knownCustomerId) customerIds.add(String(knownCustomerId));
+      if (email) {
+        const customers = await stripe.customers.list({ email, limit: 100 });
+        if (customers.has_more) {
+          return res.status(409).json({ error: 'Histórico comercial requer verificação manual.', code: 'STRIPE_HISTORY_REVIEW' });
+        }
+        for (const customer of customers.data) customerIds.add(customer.id);
+      }
+      for (const customerId of customerIds) {
+        const eligibility = await resolveSubscriptionPurchaseEligibility(
+          stripe, db, organizationId, customerId, 'nestlocal',
+        );
+        if (!eligibility.allowed || eligibility.reason !== 'no_subscription') {
+          return res.status(409).json({ error: 'Esta organização já possui histórico de contratação ou avaliação.', code: 'PRIOR_SUBSCRIPTION' });
+        }
+      }
+      const result = await activateNestLocalHubTrial({
+        db, organizationId, ownerUid: userId, stripeHistoricalClear: true,
+      });
+      return res.status(result.status === 'created' ? 201 : 200).json({
+        ok: true, appId: 'nestlocal', ...result,
+      });
+    } catch (error: any) {
+      if (error instanceof HubTrialError) {
+        return res.status(error.httpStatus).json({ error: 'A avaliação não pode ser ativada.', code: error.code });
+      }
+      console.error('[NestLocal Trial] activation blocked:', error?.message || 'unexpected error');
+      return res.status(503).json({ error: 'Não foi possível verificar a elegibilidade com segurança. Tente novamente.' });
+    }
+  });
+
   app.post('/api/v1/billing/checkout', async (req: any, res) => {
     try {
       const authHeader = req.headers.authorization;
@@ -8885,7 +8974,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const products = await service.getProducts();
       const planItem = products.plans.find(p => p.lookupKey === lookupKey);
       if (!planItem) return res.status(400).json({ error: 'Plano não encontrado no sistema.' });
-      const appId: 'musicscale' | 'nestlocal' = planItem.app === 'nestlocal' ? 'nestlocal' : 'musicscale';
+      if (planItem.app !== 'musicscale' && planItem.app !== 'nestlocal') {
+        return res.status(400).json({ error: 'Aplicativo desconhecido no catálogo de planos.' });
+      }
+      const appId: 'musicscale' | 'nestlocal' = planItem.app;
 
       let customerId: string | undefined;
       let orgId = userId;
@@ -8957,6 +9049,12 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }
       }
 
+      // Protect internal-trial history across feature-flag rollback and checkout entrypoints.
+      if (appId === 'nestlocal' && !db) {
+        return res.status(503).json({ error: 'Não foi possível verificar o histórico de avaliação. Tente novamente.' });
+      }
+      const internalTrialConsumed = appId === 'nestlocal' && db
+        ? await hasConsumedHubTrial(db, orgId, appId) : false;
       const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId);
 
       if (eligibility.decision === 'block_duplicate') {
@@ -9037,10 +9135,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/checkout?app=${appId}&plan=${encodeURIComponent(lookupKey)}`,
       };
 
-      if (!hasTrialHistory) {
-        if (sessionArgs.subscription_data) {
-          sessionArgs.subscription_data.trial_period_days = 7;
-        }
+      if (shouldAddStripeTrial({
+        appId,
+        hasLegacyTrialHistory: hasTrialHistory,
+        internalTrialConsumed,
+        newNestLocalTrialEnabled: process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED === 'true',
+      }) && sessionArgs.subscription_data) {
+        sessionArgs.subscription_data.trial_period_days = 7;
       }
 
       if (eligibility.decision === 'allow_new_subscription' && eligibility.hasResidualAccess && eligibility.accessUntil && sessionArgs.subscription_data) {
