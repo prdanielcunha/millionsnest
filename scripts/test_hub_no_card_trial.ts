@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict';
 import {
   HUB_TRIAL_DURATION_MS, shouldAddStripeTrial, hasConsumedHubTrial,
-  activateNestLocalHubTrial,
+  activateNestLocalHubTrial, nestLocalTrialEnabledForOrganization,
 } from '../src/server/services/HubNoCardTrialService.js';
 
 assert.equal(HUB_TRIAL_DURATION_MS, 168 * 60 * 60 * 1000);
+assert.equal(nestLocalTrialEnabledForOrganization('org-a', {}), false);
+assert.equal(nestLocalTrialEnabledForOrganization('org-a', { NESTLOCAL_INTERNAL_TRIAL_ENABLED:'true' }), false);
+assert.equal(nestLocalTrialEnabledForOrganization('org-a', {
+  NESTLOCAL_INTERNAL_TRIAL_ENABLED:'true',NESTLOCAL_INTERNAL_TRIAL_PILOT_ORGS:'org-b,org-a',
+}), true);
+assert.equal(nestLocalTrialEnabledForOrganization('org-c', {
+  NESTLOCAL_INTERNAL_TRIAL_ENABLED:'true',NESTLOCAL_INTERNAL_TRIAL_PILOT_ORGS:'org-b,org-a',
+}), false);
+assert.equal(nestLocalTrialEnabledForOrganization('org-c', {
+  NESTLOCAL_INTERNAL_TRIAL_ENABLED:'true',NESTLOCAL_INTERNAL_TRIAL_PUBLIC_ENABLED:'true',
+}), true);
+
 const legacyMusicScale = {
   appId: 'musicscale' as const, hasLegacyTrialHistory: false,
   internalTrialConsumed: false, newNestLocalTrialEnabled: true,
