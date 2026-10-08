@@ -296,6 +296,16 @@ export function canManageTenantMembers(profileOrRole: any) {
   return resolveEcosystemPrivilegePolicy(getSystemRole(profileOrRole)).canManageTenantMembers;
 }
 
+/**
+ * Limited operational grant: may extend a Hub-issued free trial by policy,
+ * but must NOT inherit billing changes, Stripe edits, ownership transfers,
+ * data exports, or any other global administration privilege.
+ */
+export function canExtendHubTrial(profileOrRole: any): boolean {
+  const role = getSystemRole(profileOrRole);
+  return isGlobalPrivilegedRole(role) || role === 'ecosystem_support';
+}
+
 export function canManageTenantBilling(profileOrRole: any) {
   return resolveEcosystemPrivilegePolicy(getSystemRole(profileOrRole)).canManageTenantBilling;
 }

@@ -1,5 +1,7 @@
 import * as admin from 'firebase-admin';
 import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
+import { isNestLocalInternalTrialActive, isNestLocalInternalTrialExpired } from './NestLocalAiEntitlement.js';
+import { trialWindow } from './HubTrialExtensionService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney' | 'nestlive';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -32,6 +34,10 @@ export type ResolvedAppAccess = {
   appId: EcosystemAppId;
   organizationId: string;
   accessible: boolean;
+  // Explicit capabilities for newer Hub clients; legacy boolean access retained.
+  readOnly?: boolean;
+  canWrite?: boolean;
+  canUseAI?: boolean;
   isGlobalAccess: boolean;
   accessSource: AppAccessSource;
   systemRole?: string;
@@ -271,18 +277,33 @@ export async function resolveEcosystemAppAccess(params: {
     const subDoc = await db.collection('subscriptions').doc(organizationId).get();
     const appSubscription = subDoc.exists ? subDoc.data()?.apps?.nestlocal : null;
     const orgAppAccess = orgData.apps?.nestlocal;
+    // Dedicated server-issued, no-card internal trial. Strictly opt-in; does not modify Stripe.
+    const internalTrialEnabled = process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED === 'true';
+    const trialDoc = internalTrialEnabled
+      ? await db.collection('nestlocal_internal_trials').doc(organizationId).get()
+      : null;
+    const internalTrialActive = internalTrialEnabled &&
+      isNestLocalInternalTrialActive(trialDoc?.exists ? trialDoc.data() : null);
+    const internalTrialExpired = internalTrialEnabled &&
+      isNestLocalInternalTrialExpired(trialDoc?.exists ? trialDoc.data() : null, Date.now(), organizationId);
+
     const subscriptionStatus = String(appSubscription?.status || '').toLowerCase();
     const organizationAppStatus = String(orgAppAccess?.status || '').toLowerCase();
     const paymentIssueStatuses = ['past_due', 'unpaid', 'incomplete', 'paused'];
     const activeStatuses = ['active', 'trialing'];
 
-    if (!appSubscription) {
+    // A valid paid/Stripe legacy subscription wins over an expired Hub trial.
+    // Otherwise a verified expired Hub trial may open READ-ONLY; it cannot
+    // grant AI, write or fresh Stripe trial in any downstream consumer.
+    const internalTrialReadOnly = internalTrialExpired && !activeStatuses.includes(subscriptionStatus) &&
+      !paymentIssueStatuses.includes(subscriptionStatus);
+    if (!appSubscription && !internalTrialActive && !internalTrialReadOnly) {
       return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_NOT_FOUND };
     }
     if (paymentIssueStatuses.includes(subscriptionStatus)) {
       return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_PAYMENT_REQUIRED };
     }
-    if (!activeStatuses.includes(subscriptionStatus)) {
+    if (!activeStatuses.includes(subscriptionStatus) && !internalTrialActive && !internalTrialReadOnly) {
       return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_INACTIVE };
     }
     if (!activeStatuses.includes(organizationAppStatus)) {
@@ -306,13 +327,16 @@ export async function resolveEcosystemAppAccess(params: {
       appId,
       organizationId,
       accessible: true,
+      readOnly: internalTrialReadOnly,
+      canWrite: !internalTrialReadOnly,
+      canUseAI: !internalTrialReadOnly,
       isGlobalAccess: false,
       accessSource: 'organization_membership',
       systemRole,
       organizationRole,
-      roles: memberAccess?.roles || [organizationRole],
-      permissions: memberAccess?.permissions || ['nestlocal.manage'],
-      scopes: memberAccess?.scopes || { nestlocal: ['manage'] },
+      roles: internalTrialReadOnly ? ['reader'] : (memberAccess?.roles || [organizationRole]),
+      permissions: internalTrialReadOnly ? ['nestlocal.read'] : (memberAccess?.permissions || ['nestlocal.manage']),
+      scopes: internalTrialReadOnly ? { nestlocal: ['read'] } : (memberAccess?.scopes || { nestlocal: ['manage'] }),
       decisionState: 'granted'
     };
   }
@@ -387,6 +411,33 @@ export async function resolveEcosystemAppAccess(params: {
 
     const subRef = db.collection('subscriptions').doc(organizationId);
     const subDoc = await subRef.get();
+
+    // New, explicitly piloted MusicScale trial. Stripe-backed subscriptions
+    // continue through the legacy branch below, unchanged.
+    if (!subDoc.exists && process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED === 'true') {
+      const trialSnap = await db.collection('musicscale_internal_trials').doc(organizationId).get();
+      const window = trialWindow('musicscale',trialSnap.exists?trialSnap.data():null,Date.now(),organizationId);
+      if (window.valid) {
+        const readonly = window.expired;
+        const p = memData.appAccess?.musicscale;
+        return {
+          appId,organizationId,accessible:true,readOnly:readonly,
+          canWrite:!readonly,canUseAI:!readonly,isGlobalAccess:false,
+          accessSource:'organization_membership',systemRole,organizationRole,
+          roles:readonly?['reader']:(p?.roles||[]),
+          permissions:readonly?['songs.read','scales.read','bandScales.read']:(p?.permissions||[]),
+          scopes:readonly?{musicscale:['read']}:(p?.scopes||{}),
+          decisionState:'granted',
+          entitlement:{
+            subscriptionStatus:readonly?'internal_trial_expired':'internal_trial_active',
+            organizationAppStatus:String(orgData.apps?.musicscale?.status||''),
+            canonicalStatus:readonly?'inactive':'trialing',
+            cancellationScheduled:false,currentPeriodEndMs:window.endsAt,
+            individualAccessSource,
+          },
+        };
+      }
+    }
 
     if (!subDoc.exists) {
       return {

@@ -56,6 +56,10 @@ import admin from 'firebase-admin';
 import path from 'path';
 import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
+import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
+import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
+import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
+import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization } from './src/server/services/MusicScaleNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } from './src/server/services/EcosystemSessionVersionService.js';
@@ -71,7 +75,7 @@ import { handleNestJourneyWorkspaceProjectionRequest } from './src/server/servic
 import { handleNestAiTokenRequest, handleNestAiGuestTokenRequest, handleNestAiJwksRequest, handleNestLocalNestAiSessionTokenRequest } from './src/server/services/NestAiTokenService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
-import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy, canManageTenantMembers, canManageTenantBilling, canManageTenantSettings } from './src/lib/permissionService.js';
+import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy, canManageTenantMembers, canManageTenantBilling, canManageTenantSettings, canExtendHubTrial } from './src/lib/permissionService.js';
 import { canChangeSystemRole, isAssignableSystemRole, normalizeLegacySystemRole } from './src/lib/roleResolver.js';
 import { 
   MUSIC_SCALE_PLANS, 
@@ -8765,7 +8769,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         ? productsReq.plans.find(product => product.lookupKey === planLookupKey)
         : null;
       const requestedApp = String(req.body?.app || selectedPlan?.app || '').toLowerCase();
-      const appId: 'musicscale' | 'nestlocal' = requestedApp === 'nestlocal' ? 'nestlocal' : 'musicscale';
+      if (requestedApp !== 'musicscale' && requestedApp !== 'nestlocal') {
+        return res.status(400).json({ error: 'Aplicativo desconhecido. Selecione um produto válido.' });
+      }
+      const appId: 'musicscale' | 'nestlocal' = requestedApp;
       if (!selectedPlan || selectedPlan.app !== appId) {
         return res.status(400).json({ error: 'O plano selecionado não pertence ao aplicativo informado.' });
       }
@@ -8883,7 +8890,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }
       }
 
-      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId);
+      // Protect internal-trial history across feature-flag rollback and checkout entrypoints.
+      if ((appId === 'nestlocal' || appId === 'musicscale') && !db) {
+        return res.status(503).json({ error: 'Não foi possível verificar o histórico de avaliação. Tente novamente.' });
+      }
+      const internalTrialConsumed = (appId === 'nestlocal' || appId === 'musicscale') && db
+        ? await hasConsumedHubTrial(db, orgId, appId) : false;
+      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId, (appId === 'nestlocal' && nestLocalTrialEnabledForOrganization(orgId)) || (appId === 'musicscale' && musicScaleTrialEnabledForOrganization(orgId)));
 
       if (planLookupKey) {
         if (eligibility.decision === 'block_duplicate') {
@@ -8972,7 +8985,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
           }
         };
 
-        if (!hasTrialHistory) {
+        if (shouldAddStripeTrial({
+          appId,
+          hasLegacyTrialHistory: hasTrialHistory,
+          internalTrialConsumed,
+          newNestLocalTrialEnabled: nestLocalTrialEnabledForOrganization(orgId),
+          newMusicScaleTrialEnabled: musicScaleTrialEnabledForOrganization(orgId),
+        })) {
           sessionArgs.subscription_data.trial_period_days = 7;
         }
 
@@ -9022,6 +9041,299 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
+
+  /** Explicit, server-timed internal trial. OFF until NestLocal read-only, quotas and rules pass QA.
+   * Legacy MusicScale never enters this route; no Stripe write happens here. */
+  /** Pilot-only offer discovery. Final eligibility is always revalidated
+   * server-side against full Stripe history on POST /trial/activate. */
+  app.get('/api/v1/billing/trial/offer', async (req: any, res) => {
+    if(!db)return res.status(503).json({error:'Banco indisponível.'});
+    const token=req.headers.authorization;
+    if(!token?.startsWith('Bearer '))return res.status(401).json({error:'Autenticação necessária.'});
+    const appId=req.query.appId as TrialApp;
+    const organizationId=String(req.query.organizationId||'');
+    if(!['musicscale','nestlocal'].includes(appId)||!/^[A-Za-z0-9_-]{1,128}$/.test(organizationId))
+      return res.status(400).json({error:'Aplicativo ou organização inválida.'});
+    try {
+      const decoded=await admin.auth().verifyIdToken(token.slice(7));
+      const context=await resolveUserOrganizationContext(decoded.uid);
+      if(!context.ownedOrganizations.some((o:any)=>o.id===organizationId))
+        return res.status(403).json({error:'Apenas o titular pode ativar a avaliação.'});
+      const offered=appId==='nestlocal'?nestLocalTrialEnabledForOrganization(organizationId):
+        musicScaleTrialEnabledForOrganization(organizationId);
+      if(!offered)return res.json({available:false,appId,organizationId});
+      const [userDoc,orgDoc,subDoc,trialDoc]=await Promise.all([
+        db.collection('users').doc(decoded.uid).get(),
+        db.collection('organizations').doc(organizationId).get(),
+        db.collection('subscriptions').doc(organizationId).get(),
+        db.collection(appId+'_internal_trials').doc(organizationId).get(),
+      ]);
+      const userData=userDoc.data()||{},org=orgDoc.data()||{},sub=subDoc.data()||{};
+      const suspended=['inactive','archived','suspended','disabled'];
+      const blockedUser=!userDoc.exists||userData.disabled===true||suspended.includes(String(userData.status||''));
+      const blockedOrg=!orgDoc.exists||org.disabled===true||suspended.includes(String(org.status||''));
+      const old=sub.apps?.[appId];
+      const priorSubscription=(old&&Object.keys(old).length>0)||
+        (appId==='musicscale'&&subDoc.exists&&Object.keys(sub).length>0);
+      const previousApp=org.apps?.[appId];
+      const existingApp=previousApp&&(previousApp.trialUsed||previousApp.stripeSubscriptionId||
+        ['active','trialing','expired','canceled','past_due','unpaid'].includes(String(previousApp.status||'')));
+      const available=!blockedUser&&!blockedOrg&&!trialDoc.exists&&!priorSubscription&&!existingApp;
+      return res.json({available:!!available,appId,organizationId,
+        days:appId==='musicscale'?14:7,requiresCard:false,
+        message:available?'Disponível após verificação do histórico Stripe.':'Avaliação indisponível para esta organização.'});
+    }catch(error:any){
+      console.warn('[Trial Offer] query blocked:',error?.message||'unexpected');
+      return res.status(503).json({error:'Não foi possível verificar a oferta. Tente novamente.'});
+    }
+  });
+
+  app.post('/api/v1/billing/trial/activate', express.json(), async (req: any, res) => {
+    const requestedApp = req.body?.appId as TrialApp;
+    const enabled = requestedApp === 'nestlocal'
+      ? process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED === 'true'
+      : requestedApp === 'musicscale' && process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED === 'true';
+    if (!enabled) return res.status(404).json({error:'Avaliação sem cartão ainda não disponível.'});
+    if (!db) return res.status(503).json({ error: 'Banco de dados indisponível.' });
+    if (!['musicscale','nestlocal'].includes(requestedApp)) return res.status(400).json({error:'Aplicativo inválido.'});
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Autenticação necessária.' });
+    }
+    let userId: string;
+    let email: string | undefined;
+    try {
+      const identity = await admin.auth().verifyIdToken(authHeader.slice('Bearer '.length));
+      userId = identity.uid;
+      email = identity.email;
+    } catch {
+      return res.status(401).json({ error: 'Sessão inválida.' });
+    }
+    const organizationId = typeof req.body?.organizationId === 'string' ? req.body.organizationId.trim() : '';
+    if (!organizationId || organizationId.includes('/')) {
+      return res.status(400).json({ error: 'Organização válida é obrigatória.' });
+    }
+    const inCohort = requestedApp === 'nestlocal'
+      ? nestLocalTrialEnabledForOrganization(organizationId)
+      : musicScaleTrialEnabledForOrganization(organizationId);
+    if (!inCohort) {
+      return res.status(403).json({ error: 'Esta organização ainda não está habilitada para a avaliação sem cartão.', code: 'TRIAL_COHORT_DISABLED' });
+    }
+    try {
+      // Only a verified owner can start the organization's irreversible lifetime trial.
+      const context = await resolveUserOrganizationContext(userId);
+      const isOwner = context.ownedOrganizations.some((org: any) => org.id === organizationId);
+      if (!isOwner) return res.status(403).json({ error: 'Somente o proprietário pode ativar a avaliação.' });
+      const [userSnap, subSnap] = await Promise.all([
+        db.collection('users').doc(userId).get(),
+        db.collection('subscriptions').doc(organizationId).get(),
+      ]);
+      const userData = userSnap.data() || {};
+      if (!userSnap.exists || userData.disabled === true ||
+          ['inactive','disabled','suspended'].includes(String(userData.status || '').toLowerCase())) {
+        return res.status(403).json({error:'Usuário não está ativo para iniciar a avaliação.'});
+      }
+      const subData = subSnap.data() || {};
+      const knownCustomerId = subData.apps?.[requestedApp]?.stripeCustomerId
+        || userSnap.data()?.stripeCustomerId || subData.stripeCustomerId;
+      const stripe = getStripe();
+      // Read-only Stripe audit before the Firestore transaction. Unknown history fails closed.
+      const customerIds = new Set<string>();
+      if (knownCustomerId) customerIds.add(String(knownCustomerId));
+      if (email) {
+        const customers = await stripe.customers.list({ email, limit: 100 });
+        if (customers.has_more) {
+          return res.status(409).json({ error: 'Histórico comercial requer verificação manual.', code: 'STRIPE_HISTORY_REVIEW' });
+        }
+        for (const customer of customers.data) customerIds.add(customer.id);
+      }
+      for (const customerId of customerIds) {
+        const eligibility = await resolveSubscriptionPurchaseEligibility(
+          stripe, db, organizationId, customerId, requestedApp, true,
+        );
+        if (!eligibility.allowed || eligibility.reason !== 'no_subscription') {
+          return res.status(409).json({ error: 'Esta organização já possui histórico de contratação ou avaliação.', code: 'PRIOR_SUBSCRIPTION' });
+        }
+      }
+      const result = requestedApp === 'nestlocal'
+        ? await activateNestLocalHubTrial({db,organizationId,ownerUid:userId,stripeHistoricalClear:true})
+        : await activateMusicScaleHubTrial({db,organizationId,ownerUid:userId,stripeHistoricalClear:true});
+      // Credits are an independent, recoverable operation. A successful trial
+      // is NEVER rolled back because the free AI provider is unavailable.
+      let creditsStatus = 'queued';
+      if (requestedApp === 'nestlocal' && process.env.NESTAI_COMMERCIAL_CREDITS_ENABLED === 'true' &&
+          process.env.NESTAI_GRANTS_SYNC_ENABLED === 'true') {
+        try {
+          const reconcile = await reconcileNestLocalTrialCredits({db,organizationId});
+          creditsStatus = reconcile.state === 'synced' || reconcile.state === 'already_synced'
+            ? 'synced' : reconcile.state;
+        } catch (error) {
+          console.warn('[NestLocal Trial] credit sync pending:', error instanceof Error ? error.message : 'error');
+          creditsStatus = 'retry_scheduled';
+        }
+      }
+      return res.status(result.status === 'created' ? 201 : 200).json({
+        ok: true, appId: requestedApp, ...result, creditsStatus:requestedApp==='nestlocal'?creditsStatus:'not_applicable',
+      });
+    } catch (error: any) {
+      if (error instanceof HubTrialError) {
+        return res.status(error.httpStatus).json({ error: 'A avaliação não pode ser ativada.', code: error.code });
+      }
+      console.error('[NestLocal Trial] activation blocked:', error?.message || 'unexpected error');
+      return res.status(503).json({ error: 'Não foi possível verificar a elegibilidade com segurança. Tente novamente.' });
+    }
+  });
+
+
+  /** On-demand recovery for missed NestAI credit sync; no Stripe mutations.
+   * Intentionally global-admin-only and closed while commercial flags are off.
+   * Scheduled reconciliation with service OIDC will require a separate review. */
+  /** Global MillionsNest administration only: no self-service renewal and no Stripe write.
+   * One extension of 1–7 calendar days per organization and app, audit immutable. */
+  /** Read-only, actor-authorized lookup for the limited trial support console. */
+  /** Tenant-name lookup restricted to CEO/admin/support; no billing metadata. */
+  app.get('/api/v1/billing/trial/admin/search', async (req: any, res) => {
+    if (process.env.HUB_TRIAL_EXTENSION_ADMIN_ENABLED !== 'true') return res.status(404).json({error:'Painel indisponível.'});
+    if (!db) return res.status(503).json({error:'Banco indisponível.'});
+    const bearer=req.headers.authorization;
+    if (!bearer?.startsWith('Bearer ')) return res.status(401).json({error:'Autenticação necessária.'});
+    try {
+      const token=await admin.auth().verifyIdToken(bearer.slice(7));
+      const actor=await db.collection('users').doc(token.uid).get();
+      if (!actor.exists || !canExtendHubTrial(actor.data()?.systemRole) ||
+        actor.data()?.disabled===true ||
+        ['inactive','disabled','suspended'].includes(String(actor.data()?.status||'').toLowerCase()))
+        return res.status(403).json({error:'Acesso restrito à equipe MillionsNest.'});
+      const term=String(req.query.term||'').trim();
+      if(term.length<2 || term.length>70)return res.status(400).json({error:'Pesquise com 2 a 70 caracteres.'});
+      const snap=await db.collection('organizations').orderBy('name')
+        .startAt(term).endAt(term+'\uf8ff').limit(20).get();
+      const organizations=snap.docs.filter(d=>{
+        const data=d.data()||{};
+        return data.disabled!==true && !['deleted','archived'].includes(String(data.status||'').toLowerCase());
+      }).map(d=>({id:d.id,name:String(d.data()?.name||d.id)}));
+      return res.json({ok:true,organizations});
+    }catch(error:any){
+      console.warn('[Hub Trial Search] unavailable:',error?.message||'unexpected');
+      return res.status(503).json({error:'Não foi possível pesquisar organizações.'});
+    }
+  });
+
+  app.get('/api/v1/billing/trial/admin/status', async (req: any, res) => {
+    if (process.env.HUB_TRIAL_EXTENSION_ADMIN_ENABLED !== 'true') return res.status(404).json({error:'Painel indisponível.'});
+    if (!db) return res.status(503).json({error:'Banco indisponível.'});
+    const bearer = req.headers.authorization;
+    if (!bearer?.startsWith('Bearer ')) return res.status(401).json({error:'Autenticação necessária.'});
+    try {
+      const identity = await admin.auth().verifyIdToken(bearer.slice(7));
+      const actor = await db.collection('users').doc(identity.uid).get();
+      if (!actor.exists || !canExtendHubTrial(actor.data()?.systemRole) ||
+        actor.data()?.disabled === true ||
+        ['inactive','disabled','suspended'].includes(String(actor.data()?.status || '').toLowerCase()))
+        return res.status(403).json({error:'Acesso exclusivo à equipe MillionsNest.'});
+      const appId=req.query.appId as TrialApp;
+      const organizationId=String(req.query.organizationId||'');
+      if (!['musicscale','nestlocal'].includes(appId) || !/^[A-Za-z0-9_-]{1,128}$/.test(organizationId))
+        return res.status(400).json({error:'Aplicativo ou organização inválida.'});
+      const [orgSnap,trialSnap,extensionSnap,subSnap]=await Promise.all([
+        db.collection('organizations').doc(organizationId).get(),
+        db.collection(appId+'_internal_trials').doc(organizationId).get(),
+        db.collection('hub_trial_extension_events').doc(appId+'_'+organizationId).get(),
+        db.collection('subscriptions').doc(organizationId).get(),
+      ]);
+      if (!orgSnap.exists) return res.status(404).json({error:'Organização não encontrada.'});
+      const trial=trialSnap.exists?trialSnap.data():null;
+      const window=trialWindow(appId,trial,Date.now(),organizationId);
+      const sub=subSnap.exists?subSnap.data()||{}:{};
+      const contract=sub.apps?.[appId];
+      const hasLegacySubscription=Boolean(contract&&Object.keys(contract).length) ||
+        (appId==='musicscale'&&Boolean(sub.stripeSubscriptionId||sub.subscriptionId||sub.status));
+      return res.json({
+        ok:true,appId,organizationId,organizationName:String(orgSnap.data()?.name||organizationId),
+        trial:window.valid?{
+          active:window.active,expired:window.expired,extended:window.extended,
+          baseEndsAt:trial?.expiresAt?.toDate?.()?.toISOString?.()||null,
+          effectiveEndsAt:new Date(window.endsAt).toISOString(),
+          extensionDays:Number(trial?.extensionDays||0),
+        }:null,
+        canExtend:window.valid&&!window.extended&&!extensionSnap.exists&&!hasLegacySubscription &&
+          Date.now()<=window.endsAt+2*86_400_000,
+        hasExistingSubscription:hasLegacySubscription,
+        extensionRecorded:extensionSnap.exists,
+      });
+    }catch(error:any){
+      console.warn('[Hub Trial] status read failure:',error?.message||'unexpected');
+      return res.status(503).json({error:'Não foi possível consultar o prazo.'});
+    }
+  });
+
+  app.post('/api/v1/billing/trial/extend', express.json(), async (req: any, res) => {
+    if (process.env.HUB_TRIAL_EXTENSION_ADMIN_ENABLED !== 'true')
+      return res.status(404).json({error:'Extensão administrativa indisponível.'});
+    if (!db)return res.status(503).json({error:'Banco indisponível.'});
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith('Bearer '))return res.status(401).json({error:'Autenticação necessária.'});
+    let actorUid:string;
+    try {actorUid=(await admin.auth().verifyIdToken(auth.slice(7))).uid;}
+    catch{return res.status(401).json({error:'Sessão inválida.'});}
+    try {
+      const actor=await db.collection('users').doc(actorUid).get();
+      if(!actor.exists||!canExtendHubTrial(actor.data()?.systemRole)||
+         actor.data()?.disabled===true||
+         ['suspended','disabled','inactive'].includes(String(actor.data()?.status||'')))
+        return res.status(403).json({error:'Somente CEO, administrador global ou suporte MillionsNest pode estender avaliações.'});
+      const appId=req.body?.appId as TrialApp,organizationId=req.body?.organizationId;
+      if(!['musicscale','nestlocal'].includes(appId))
+        return res.status(400).json({error:'Aplicativo inválido.'});
+      if(appId==='nestlocal'&&process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED!=='true'||
+         appId==='musicscale'&&process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED!=='true')
+        return res.status(409).json({error:'O trial interno deste aplicativo não está ativado.'});
+      const result=await extendHubTrial({
+        db,appId,organizationId,adminUid:actorUid,
+        days:req.body?.days,reason:req.body?.reason,
+      });
+      return res.status(200).json({ok:true,...result});
+    }catch(error:any){
+      if(error instanceof TrialExtensionError)
+        return res.status(error.httpStatus).json({error:'Extensão não autorizada.',code:error.code});
+      console.warn('[Hub Trial Extension] rejected:',error?.message||'unexpected');
+      return res.status(503).json({error:'Não foi possível estender a avaliação. Tente novamente.'});
+    }
+  });
+
+  app.post('/api/v1/billing/trial/credits/reconcile', express.json(), async (req: any, res) => {
+    if (process.env.NESTAI_COMMERCIAL_CREDITS_ENABLED !== 'true' ||
+        process.env.NESTAI_GRANTS_SYNC_ENABLED !== 'true') {
+      return res.status(404).json({error:'Reconciliação de créditos não habilitada.'});
+    }
+    if (!db) return res.status(503).json({error:'Banco indisponível.'});
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({error:'Autenticação necessária.'});
+    let uid:string;
+    try {
+      uid = (await admin.auth().verifyIdToken(authHeader.slice(7))).uid;
+    } catch {
+      return res.status(401).json({error:'Sessão inválida.'});
+    }
+    try {
+      const actor = await db.collection('users').doc(uid).get();
+      if (!actor.exists || !canManageTenantBilling(actor.data()?.systemRole) ||
+          ['inactive','disabled','suspended'].includes(String(actor.data()?.status||''))) {
+        return res.status(403).json({error:'Apenas a administração global pode reconciliar créditos.'});
+      }
+      const organizationId = typeof req.body?.organizationId === 'string'
+        ? req.body.organizationId.trim() : '';
+      if (!/^[a-zA-Z0-9_-]{1,128}$/.test(organizationId)) {
+        return res.status(400).json({error:'Organização inválida.'});
+      }
+      const result = await reconcileNestLocalTrialCredits({db,organizationId});
+      return res.status(200).json({ok:true,organizationId,...result});
+    } catch (error:any) {
+      console.warn('[NestLocal Credits] reconciliation deferred:',error?.message||'error');
+      return res.status(503).json({ok:false,error:'Conciliação pendente. Tente novamente.',code:'NESTAI_GRANT_RECONCILE_PENDING'});
+    }
+  });
+
   app.post('/api/v1/billing/checkout', async (req: any, res) => {
     try {
       const authHeader = req.headers.authorization;
@@ -9068,7 +9380,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const products = await service.getProducts();
       const planItem = products.plans.find(p => p.lookupKey === lookupKey);
       if (!planItem) return res.status(400).json({ error: 'Plano não encontrado no sistema.' });
-      const appId: 'musicscale' | 'nestlocal' = planItem.app === 'nestlocal' ? 'nestlocal' : 'musicscale';
+      if (planItem.app !== 'musicscale' && planItem.app !== 'nestlocal') {
+        return res.status(400).json({ error: 'Aplicativo desconhecido no catálogo de planos.' });
+      }
+      const appId: 'musicscale' | 'nestlocal' = planItem.app;
 
       let customerId: string | undefined;
       let orgId = userId;
@@ -9140,7 +9455,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }
       }
 
-      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId);
+      // Protect internal-trial history across feature-flag rollback and checkout entrypoints.
+      if ((appId === 'nestlocal' || appId === 'musicscale') && !db) {
+        return res.status(503).json({ error: 'Não foi possível verificar o histórico de avaliação. Tente novamente.' });
+      }
+      const internalTrialConsumed = (appId === 'nestlocal' || appId === 'musicscale') && db
+        ? await hasConsumedHubTrial(db, orgId, appId) : false;
+      const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId, (appId === 'nestlocal' && nestLocalTrialEnabledForOrganization(orgId)) || (appId === 'musicscale' && musicScaleTrialEnabledForOrganization(orgId)));
 
       if (eligibility.decision === 'block_duplicate') {
         return res.status(409).json({ 
@@ -9220,10 +9541,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/checkout?app=${appId}&plan=${encodeURIComponent(lookupKey)}`,
       };
 
-      if (!hasTrialHistory) {
-        if (sessionArgs.subscription_data) {
-          sessionArgs.subscription_data.trial_period_days = 7;
-        }
+      if (shouldAddStripeTrial({
+        appId,
+        hasLegacyTrialHistory: hasTrialHistory,
+        internalTrialConsumed,
+        newNestLocalTrialEnabled: nestLocalTrialEnabledForOrganization(orgId),
+          newMusicScaleTrialEnabled: musicScaleTrialEnabledForOrganization(orgId),
+      }) && sessionArgs.subscription_data) {
+        sessionArgs.subscription_data.trial_period_days = 7;
       }
 
       if (eligibility.decision === 'allow_new_subscription' && eligibility.hasResidualAccess && eligibility.accessUntil && sessionArgs.subscription_data) {

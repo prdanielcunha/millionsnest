@@ -21,12 +21,14 @@ export async function resolveSubscriptionPurchaseEligibility(
   db: any,
   organizationId: string,
   stripeCustomerId?: string,
-  appId: 'musicscale' | 'nestlocal' = 'musicscale'
+  appId: 'musicscale' | 'nestlocal' = 'musicscale',
+  strictConsistency = false
 ): Promise<SubscriptionPurchaseEligibility> {
   const managementUrl = '/dashboard/billing';
   let canonicalSubscriptionStatus: string | null = null;
   let canonicalSubscriptionId: string | null = null;
   let entitlementMaterialized = false;
+  if (strictConsistency && !db) throw new Error('BILLING_HISTORY_DB_UNAVAILABLE');
 
   try {
     const [subDoc, orgDoc] = await Promise.all([
@@ -51,6 +53,7 @@ export async function resolveSubscriptionPurchaseEligibility(
     }
   } catch (err) {
     console.error('Error fetching entitlement status for eligibility:', err);
+    if (strictConsistency) throw new Error('BILLING_HISTORY_DB_UNAVAILABLE');
   }
 
   const baseResponse = {
@@ -80,6 +83,8 @@ export async function resolveSubscriptionPurchaseEligibility(
     limit: 100
   });
 
+  if (strictConsistency && subscriptions.has_more) throw new Error('BILLING_HISTORY_INCOMPLETE');
+
   const activeStatuses = ['active', 'trialing'];
   const pendingStatuses = ['past_due', 'unpaid', 'incomplete', 'paused'];
 
@@ -95,7 +100,13 @@ export async function resolveSubscriptionPurchaseEligibility(
     const isCanonical = canonicalSubscriptionId && sub.id === canonicalSubscriptionId;
     const isAppMatch = sub.metadata?.app === appId;
     const isOrgMatch = (sub.metadata?.organizationId === organizationId || sub.metadata?.orgId === organizationId || sub.metadata?.uid === organizationId);
-    
+    // Some historical Stripe objects predate app metadata. For a NEW pilot
+    // trial/checkout, require manual reconciliation instead of misclassifying
+    // a same-tenant legacy subscription as a different product.
+    if (strictConsistency && isOrgMatch && !isCanonical && !sub.metadata?.app) {
+      throw new Error('BILLING_HISTORY_LEGACY_APP_REVIEW_REQUIRED');
+    }
+
     // We consider it relevant if it's explicitly matched or if it's the canonical one.
     if (!isCanonical && !(isOrgMatch && isAppMatch)) {
       continue;
