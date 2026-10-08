@@ -8927,13 +8927,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
           return res.status(409).json({ error: 'Esta organização já possui histórico de contratação ou avaliação.', code: 'PRIOR_SUBSCRIPTION' });
         }
       }
-      const result = await activateNestLocalHubTrial({
-        db, organizationId, ownerUid: userId, stripeHistoricalClear: true,
-      });
+      const result = requestedApp === 'nestlocal'
+        ? await activateNestLocalHubTrial({db,organizationId,ownerUid:userId,stripeHistoricalClear:true})
+        : await activateMusicScaleHubTrial({db,organizationId,ownerUid:userId,stripeHistoricalClear:true});
       // Credits are an independent, recoverable operation. A successful trial
       // is NEVER rolled back because the free AI provider is unavailable.
       let creditsStatus = 'queued';
-      if (process.env.NESTAI_COMMERCIAL_CREDITS_ENABLED === 'true' &&
+      if (requestedApp === 'nestlocal' && process.env.NESTAI_COMMERCIAL_CREDITS_ENABLED === 'true' &&
           process.env.NESTAI_GRANTS_SYNC_ENABLED === 'true') {
         try {
           const reconcile = await reconcileNestLocalTrialCredits({db,organizationId});
@@ -8945,7 +8945,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }
       }
       return res.status(result.status === 'created' ? 201 : 200).json({
-        ok: true, appId: 'nestlocal', ...result, creditsStatus,
+        ok: true, appId: requestedApp, ...result, creditsStatus:requestedApp==='nestlocal'?creditsStatus:'not_applicable',
       });
     } catch (error: any) {
       if (error instanceof HubTrialError) {
