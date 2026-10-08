@@ -15,12 +15,17 @@ on:
       - "src/lib/nestLocalCommercialV2.ts"
       - "src/server/services/NestAiCreditGrantSyncService.ts"
       - "src/server/services/EcosystemAccessResolver.ts"
+      - "src/lib/permissionService.ts"
+      - "src/pages/TrialManagement.tsx"
+      - "src/components/EcosystemShell.tsx"
+      - "src/App.tsx"
       - "firestore.rules"
       - "server.ts"
       - "scripts/test_nestai_token_service.ts"
       - "scripts/test_nestlocal_ai_commercial_claims.ts"
       - "scripts/test_hub_no_card_trial.ts"
       - "scripts/test_hub_trial_extensions.ts"
+      - "scripts/test_trial_extension_rbac.ts"
       - "scripts/test_nestlocal_trial_credit_outbox.ts"
       - "scripts/test_nestlocal_strict_eligibility.ts"
       - "scripts/test_nestlocal_readonly_access.ts"
@@ -45,6 +50,7 @@ jobs:
       - run: npx tsx scripts/test_nestlocal_ai_commercial_claims.ts
       - run: npx tsx scripts/test_hub_no_card_trial.ts
       - run: npx tsx scripts/test_hub_trial_extensions.ts
+      - run: npx tsx scripts/test_trial_extension_rbac.ts
       - run: npx tsx scripts/test_nestlocal_trial_credit_outbox.ts
       - run: npx tsx scripts/test_nestlocal_strict_eligibility.ts
       - run: npx tsx scripts/test_nestlocal_readonly_access.ts
