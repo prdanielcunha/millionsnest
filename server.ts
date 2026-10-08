@@ -8861,6 +8861,50 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
   /** Explicit, server-timed internal trial. OFF until NestLocal read-only, quotas and rules pass QA.
    * Legacy MusicScale never enters this route; no Stripe write happens here. */
+  /** Pilot-only offer discovery. Final eligibility is always revalidated
+   * server-side against full Stripe history on POST /trial/activate. */
+  app.get('/api/v1/billing/trial/offer', async (req: any, res) => {
+    if(!db)return res.status(503).json({error:'Banco indisponível.'});
+    const token=req.headers.authorization;
+    if(!token?.startsWith('Bearer '))return res.status(401).json({error:'Autenticação necessária.'});
+    const appId=req.query.appId as TrialApp;
+    const organizationId=String(req.query.organizationId||'');
+    if(!['musicscale','nestlocal'].includes(appId)||!/^[A-Za-z0-9_-]{1,128}$/.test(organizationId))
+      return res.status(400).json({error:'Aplicativo ou organização inválida.'});
+    try {
+      const decoded=await admin.auth().verifyIdToken(token.slice(7));
+      const context=await resolveUserOrganizationContext(decoded.uid);
+      if(!context.ownedOrganizations.some((o:any)=>o.id===organizationId))
+        return res.status(403).json({error:'Apenas o titular pode ativar a avaliação.'});
+      const offered=appId==='nestlocal'?nestLocalTrialEnabledForOrganization(organizationId):
+        musicScaleTrialEnabledForOrganization(organizationId);
+      if(!offered)return res.json({available:false,appId,organizationId});
+      const [userDoc,orgDoc,subDoc,trialDoc]=await Promise.all([
+        db.collection('users').doc(decoded.uid).get(),
+        db.collection('organizations').doc(organizationId).get(),
+        db.collection('subscriptions').doc(organizationId).get(),
+        db.collection(appId+'_internal_trials').doc(organizationId).get(),
+      ]);
+      const userData=userDoc.data()||{},org=orgDoc.data()||{},sub=subDoc.data()||{};
+      const suspended=['inactive','archived','suspended','disabled'];
+      const blockedUser=!userDoc.exists||userData.disabled===true||suspended.includes(String(userData.status||''));
+      const blockedOrg=!orgDoc.exists||org.disabled===true||suspended.includes(String(org.status||''));
+      const old=sub.apps?.[appId];
+      const priorSubscription=(old&&Object.keys(old).length>0)||
+        (appId==='musicscale'&&subDoc.exists&&Object.keys(sub).length>0);
+      const previousApp=org.apps?.[appId];
+      const existingApp=previousApp&&(previousApp.trialUsed||previousApp.stripeSubscriptionId||
+        ['active','trialing','expired','canceled','past_due','unpaid'].includes(String(previousApp.status||'')));
+      const available=!blockedUser&&!blockedOrg&&!trialDoc.exists&&!priorSubscription&&!existingApp;
+      return res.json({available:!!available,appId,organizationId,
+        days:appId==='musicscale'?14:7,requiresCard:false,
+        message:available?'Disponível após verificação do histórico Stripe.':'Avaliação indisponível para esta organização.'});
+    }catch(error:any){
+      console.warn('[Trial Offer] query blocked:',error?.message||'unexpected');
+      return res.status(503).json({error:'Não foi possível verificar a oferta. Tente novamente.'});
+    }
+  });
+
   app.post('/api/v1/billing/trial/activate', express.json(), async (req: any, res) => {
     const requestedApp = req.body?.appId as TrialApp;
     const enabled = requestedApp === 'nestlocal'
