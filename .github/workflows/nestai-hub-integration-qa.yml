@@ -17,6 +17,7 @@ on:
       - "src/server/services/NestAiCreditRevocationSyncService.ts"
       - "src/server/services/NestLocalPaidInvoiceCreditsService.ts"
       - "src/server/services/NestLocalPaidInvoiceCreditReconciler.ts"
+      - "src/server/services/NestLocalPaidInvoiceWebhookSync.ts"
       - "src/server/services/EcosystemAccessResolver.ts"
       - "src/lib/permissionService.ts"
       - "src/pages/TrialManagement.tsx"
@@ -42,6 +43,7 @@ on:
       - "scripts/test_nestai_credit_revocation_sync.ts"
       - "scripts/test_nestlocal_paid_invoice_credits.ts"
       - "scripts/test_nestlocal_paid_invoice_reconciler.ts"
+      - "scripts/test_nestlocal_paid_invoice_webhook_wiring.ts"
       - ".github/workflows/nestai-hub-integration-qa.yml"
 permissions:
   contents: read
@@ -73,4 +75,5 @@ jobs:
       - run: npx tsx scripts/test_nestai_credit_revocation_sync.ts
       - run: npx tsx scripts/test_nestlocal_paid_invoice_credits.ts
       - run: npx tsx scripts/test_nestlocal_paid_invoice_reconciler.ts
+      - run: npx tsx scripts/test_nestlocal_paid_invoice_webhook_wiring.ts
       - run: npm run build
