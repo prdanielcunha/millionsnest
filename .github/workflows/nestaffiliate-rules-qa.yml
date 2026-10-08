@@ -19,6 +19,12 @@ on:
       - "firestore.rules"
       - "firebase.rules-test.json"
       - "tests/firestore/nestaffiliate.rules.test.ts"
+      - "server.ts"
+      - "src/server/services/NestAffiliateReferenceMediaService.ts"
+      - "src/server/services/NestAffiliateRetryAfterPolicy.ts"
+      - "scripts/test_nestaffiliate_reference_media.ts"
+      - "scripts/test_nestaffiliate_retry_after.ts"
+      - ".github/workflows/nestaffiliate-rules-qa.yml"
   workflow_dispatch:
 
 permissions:
