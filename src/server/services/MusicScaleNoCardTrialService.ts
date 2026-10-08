@@ -3,6 +3,17 @@ import {Timestamp,type Firestore} from 'firebase-admin/firestore';
 import {DAY_MS,TRIAL_BASE_DAYS,trialWindow} from './HubTrialExtensionService.js';
 import {HubTrialError} from './HubNoCardTrialService.js';
 export const MUSICSCALE_TRIAL_MS=TRIAL_BASE_DAYS.musicscale*DAY_MS;
+/** Existing NestLocal subscription must not use up a MusicScale evaluation.
+ * Legacy MusicScale contracts live in the root of the subscription document.
+ */
+export function hasPriorMusicScaleSubscription(record:any):boolean {
+  if(!record || typeof record!=='object')return false;
+  if(record.apps?.musicscale && Object.keys(record.apps.musicscale).length>0)return true;
+  return Boolean(record.stripeSubscriptionId || record.subscriptionId ||
+    record.priceId || record.trialUsed || record.subscriptionStatus ||
+    record.app==='musicscale' || record.status || record.plan);
+}
+
 export function musicScaleTrialEnabledForOrganization(id:string,env:NodeJS.ProcessEnv=process.env) {
   if(!/^[A-Za-z0-9_-]{1,128}$/.test(id)||env.MUSICSCALE_INTERNAL_TRIAL_ENABLED!=='true')return false;
   if(env.MUSICSCALE_INTERNAL_TRIAL_PUBLIC_ENABLED==='true')return true;
@@ -38,7 +49,7 @@ export async function activateMusicScaleHubTrial(params:{
     }
     if(ownerSnap.exists)throw new HubTrialError('OWNER_TRIAL_ALREADY_CONSUMED');
     // Root subscriptions/{orgId} still carries legacy MusicScale customers.
-    if(subSnap.exists&&Object.keys(subSnap.data()||{}).length)
+    if(subSnap.exists&&hasPriorMusicScaleSubscription(subSnap.data()))
       throw new HubTrialError('PRIOR_MUSICSCALE_SUBSCRIPTION');
     const projection=org.apps?.musicscale,ent=entSnap.exists?entSnap.data():{};
     if(projection&&(projection.stripeSubscriptionId||projection.trialUsed||

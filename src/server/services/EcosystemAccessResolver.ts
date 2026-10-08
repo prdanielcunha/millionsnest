@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
 import { isNestLocalInternalTrialActive, isNestLocalInternalTrialExpired } from './NestLocalAiEntitlement.js';
 import { trialWindow } from './HubTrialExtensionService.js';
+import { hasPriorMusicScaleSubscription } from './MusicScaleNoCardTrialService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney' | 'nestlive';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -414,7 +415,11 @@ export async function resolveEcosystemAppAccess(params: {
 
     // New, explicitly piloted MusicScale trial. Stripe-backed subscriptions
     // continue through the legacy branch below, unchanged.
-    if (!subDoc.exists && process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED === 'true') {
+    const musicScaleSubscriptionAlreadyRecorded = subDoc.exists &&
+      hasPriorMusicScaleSubscription(subDoc.data());
+    if (!musicScaleSubscriptionAlreadyRecorded &&
+        orgData.apps?.musicscale?.trialSource === 'hub_internal_trial' &&
+        process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED === 'true') {
       const trialSnap = await db.collection('musicscale_internal_trials').doc(organizationId).get();
       const window = trialWindow('musicscale',trialSnap.exists?trialSnap.data():null,Date.now(),organizationId);
       if (window.valid) {
