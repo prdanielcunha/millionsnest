@@ -42,6 +42,7 @@ import {
   toPublicHomeAnalyticsDocument,
 } from './src/server/services/PublicHomeAnalyticsService.js';
 import { summarizeGrowthEvents, type GrowthAnalyticsEvent } from './src/server/services/GrowthFunnelService.js';
+import { resolveNestAffiliateRetryAfterSeconds } from './src/server/services/NestAffiliateRetryAfterPolicy.js';
 import { resolveLegacyMembershipCandidates } from './src/server/services/TenantBootstrapPlanner.js';
 import {
   applyEcosystemOrganizationCleanup,
@@ -768,6 +769,17 @@ async function respondWithMercadoLivreSearchFallback(input: {
     'meli-public-search-fallback',
   );
   if (!response.ok) {
+    if (response.status === 429) {
+      const retryAfterSeconds = resolveNestAffiliateRetryAfterSeconds(response.headers.get('Retry-After'));
+      input.res.setHeader('Retry-After', String(retryAfterSeconds));
+      input.res.setHeader('Cache-Control', 'private, no-store');
+      return input.res.status(429).json({
+        error: 'MELI_PROVIDER_RATE_LIMITED',
+        providerStatus: 429,
+        fallbackAttempted: true,
+        retryAfterSeconds,
+      });
+    }
     const body = await response.text();
     console.error('[NestAffiliate/MELI] fallback search failed', {
       status: response.status,
