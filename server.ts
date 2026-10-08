@@ -1343,6 +1343,21 @@ async function handleNestAffiliateReferenceUpload(req:any,res:any){
       }
       return res.status(200).json({asset:prior,alreadyExists:true});
     }
+    // Costs and abuse: one tenant-scoped, backend-owned 24 uploads/day quota.
+    const day=new Date().toISOString().slice(0,10);
+    const quotaRef=dbInstance.collection('organizations').doc(organizationId)
+      .collection('products').doc('nestaffiliate').collection('quotaUsage').doc('reference-'+day);
+    const withinQuota=await dbInstance.runTransaction(async tx=>{
+      const snapshot=await tx.get(quotaRef);
+      const count=Number(snapshot.data()?.count||0);
+      if(!Number.isFinite(count)||count>=24)return false;
+      tx.set(quotaRef,{
+        organizationId,kind:'REFERENCE_UPLOAD',day,count:count+1,
+        updatedAt:admin.firestore.FieldValue.serverTimestamp(),
+      },{merge:true});
+      return true;
+    });
+    if(!withinQuota)return res.status(429).json({error:'REFERENCE_DAILY_UPLOAD_LIMIT'});
     const storageFile=admin.storage().bucket(NESTAFFILIATE_REFERENCE_MEDIA_BUCKET).file(path);
     await storageFile.save(parsed.bytes,{
       resumable:false,
