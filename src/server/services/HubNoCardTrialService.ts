@@ -28,9 +28,11 @@ export function shouldAddStripeTrial(params: {
   hasLegacyTrialHistory: boolean;
   internalTrialConsumed: boolean;
   newNestLocalTrialEnabled: boolean;
+  newMusicScaleTrialEnabled?: boolean;
 }): boolean {
   if (params.hasLegacyTrialHistory || params.internalTrialConsumed) return false;
   if (params.appId === 'nestlocal' && params.newNestLocalTrialEnabled) return false;
+  if (params.appId === 'musicscale' && params.newMusicScaleTrialEnabled) return false;
   return true;
 }
 /** Pilot cohort by organization; global flag alone never changes everybody's Checkout. */
