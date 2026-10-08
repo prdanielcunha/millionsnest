@@ -1593,6 +1593,14 @@ service cloud.firestore {
     // 2. DADOS DA ORGANIZAÇÃO (CORE)
     // ==========================================
 
+    // App-specific Stripe/trial projection is only written by trusted Hub
+    // transactions and verified webhooks (Admin SDK), never a user SDK.
+    // Other app projections can retain their existing compatibility rules.
+    function nestLocalCommercialProjectionUnchanged() {
+      return request.resource.data.get('apps', {}).get('nestlocal', null) ==
+        resource.data.get('apps', {}).get('nestlocal', null);
+    }
+
     match /organizations/{orgId} {
       allow read: if isAuthenticated() && (
         isSystemAdmin() ||
@@ -1610,7 +1618,7 @@ service cloud.firestore {
         resource.data.get('ownerId', '') == request.auth.uid || 
         resource.data.get('owner_user_id', '') == request.auth.uid || 
         (checkMemberExists(orgId) && isOrgOwner(orgId))
-      );
+      ) && nestLocalCommercialProjectionUnchanged();
       allow delete: if false; 
 
       // ---------------------------------------------------------------------------------
