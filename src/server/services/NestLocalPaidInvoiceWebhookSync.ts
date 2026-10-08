@@ -23,7 +23,7 @@ export async function syncNestLocalPaidInvoiceFromWebhook(input:{
   if(!/^in_[A-Za-z0-9]{6,}$/.test(input.invoiceId)||
      !/^[A-Za-z0-9_-]{1,128}$/.test(input.organizationId))
     throw Error('PAID_CREDITS_WEBHOOK_INPUT_INVALID');
-  return (input.reconcile??reconcileNestLocalPaidInvoiceCredits)({
+  const outcome=await (input.reconcile??reconcileNestLocalPaidInvoiceCredits)({
     db:input.db,invoiceId:input.invoiceId,organizationId:input.organizationId,env,
     fetchStripe:async(invoiceId)=>{
       if(invoiceId!==input.invoiceId)throw Error('PAID_CREDITS_INVOICE_MISMATCH');
@@ -40,4 +40,10 @@ export async function syncNestLocalPaidInvoiceFromWebhook(input:{
       return {invoice,subscription};
     },
   });
+  // Stripe must NOT acknowledge a delivery if the grant was merely queued
+  // behind a lease or backoff. Ack would hide an unpaid-credit incident until
+  // someone manually invoked the outbox reconciler. Retain replay delivery.
+  if(outcome.state==='busy'||outcome.state==='retry_later')
+    throw Error('PAID_CREDITS_RETRY_SCHEDULED');
+  return outcome;
 }
