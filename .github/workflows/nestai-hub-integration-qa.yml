@@ -3,7 +3,7 @@ on:
   push:
     branches: ["main","production"]
   pull_request:
-    branches: ["main"]
+    branches: ["main","production"]
     paths:
       - "src/server/services/NestAiTokenService.ts"
       - "src/server/services/NestLocalAiEntitlement.ts"
