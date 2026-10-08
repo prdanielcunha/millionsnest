@@ -58,6 +58,7 @@ import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
+import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
 import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
 import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization } from './src/server/services/MusicScaleNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
@@ -2998,8 +2999,11 @@ async function startServer() {
 
           if (event.type.startsWith('invoice.')) {
             const invoice = event.data.object as any;
-            if (!invoice.subscription) break;
-            subscriptionId = invoice.subscription as string;
+            const normalizedInvoiceSubscription=invoice.subscription ||
+              (process.env.NESTLOCAL_PAID_CREDITS_OUTBOX_ENABLED === 'true'
+                ? invoice.parent?.subscription_details?.subscription : null);
+            if (!normalizedInvoiceSubscription) break;
+            subscriptionId = String(normalizedInvoiceSubscription);
             const stripe = getStripe();
             const sub = await stripe.subscriptions.retrieve(subscriptionId, {
               expand: ['discount', 'discount.promotion_code', 'discount.coupon']
@@ -3143,6 +3147,23 @@ async function startServer() {
                    eventCreatedTs,
                    event_type: event.type
                  });
+
+                 // Separate, opt-in ledger for NestLocal AI credits. A verified
+                 // Stripe invoice.paid event is the ONLY source; no trial/no checkout
+                 // confirmation grants paid credits. On error Stripe retries the
+                 // entire idempotent webhook and we do not silently lose a cycle.
+                 if(event.type==='invoice.paid' &&
+                    process.env.NESTLOCAL_PAID_CREDITS_OUTBOX_ENABLED==='true' &&
+                    stripeSubObj?.metadata?.app==='nestlocal'){
+                    const paidGrant=await stageNestLocalPaidInvoiceGrant({
+                       db,invoice:event.data.object as any,
+                       organizationId:orgId,stripeSubscription:stripeSubObj,
+                    });
+                    console.info('[NestAI/Billing] paid invoice outbox', {
+                      organizationId:orgId,invoiceId:(event.data.object as any).id,
+                      state:paidGrant.state,
+                    });
+                 }
 
                  if (result && !result.skipped) {
                    allCreatedDocs.push(...result.createdDocuments);
