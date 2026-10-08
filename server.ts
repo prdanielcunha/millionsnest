@@ -58,7 +58,7 @@ import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
-import { extendHubTrial, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
+import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
 import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization } from './src/server/services/MusicScaleNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
@@ -8963,6 +8963,55 @@ async function autoRepairSingleOrganizationUser(uid: string) {
    * Scheduled reconciliation with service OIDC will require a separate review. */
   /** Global MillionsNest administration only: no self-service renewal and no Stripe write.
    * One extension of 1–7 calendar days per organization and app, audit immutable. */
+  /** Read-only, actor-authorized lookup for the limited trial support console. */
+  app.get('/api/v1/billing/trial/admin/status', async (req: any, res) => {
+    if (process.env.HUB_TRIAL_EXTENSION_ADMIN_ENABLED !== 'true') return res.status(404).json({error:'Painel indisponível.'});
+    if (!db) return res.status(503).json({error:'Banco indisponível.'});
+    const bearer = req.headers.authorization;
+    if (!bearer?.startsWith('Bearer ')) return res.status(401).json({error:'Autenticação necessária.'});
+    try {
+      const identity = await admin.auth().verifyIdToken(bearer.slice(7));
+      const actor = await db.collection('users').doc(identity.uid).get();
+      if (!actor.exists || !canExtendHubTrial(actor.data()?.systemRole) ||
+        actor.data()?.disabled === true ||
+        ['inactive','disabled','suspended'].includes(String(actor.data()?.status || '').toLowerCase()))
+        return res.status(403).json({error:'Acesso exclusivo à equipe MillionsNest.'});
+      const appId=req.query.appId as TrialApp;
+      const organizationId=String(req.query.organizationId||'');
+      if (!['musicscale','nestlocal'].includes(appId) || !/^[A-Za-z0-9_-]{1,128}$/.test(organizationId))
+        return res.status(400).json({error:'Aplicativo ou organização inválida.'});
+      const [orgSnap,trialSnap,extensionSnap,subSnap]=await Promise.all([
+        db.collection('organizations').doc(organizationId).get(),
+        db.collection(appId+'_internal_trials').doc(organizationId).get(),
+        db.collection('hub_trial_extension_events').doc(appId+'_'+organizationId).get(),
+        db.collection('subscriptions').doc(organizationId).get(),
+      ]);
+      if (!orgSnap.exists) return res.status(404).json({error:'Organização não encontrada.'});
+      const trial=trialSnap.exists?trialSnap.data():null;
+      const window=trialWindow(appId,trial,Date.now(),organizationId);
+      const sub=subSnap.exists?subSnap.data()||{}:{};
+      const contract=sub.apps?.[appId];
+      const hasLegacySubscription=Boolean(contract&&Object.keys(contract).length) ||
+        (appId==='musicscale'&&Boolean(sub.stripeSubscriptionId||sub.subscriptionId||sub.status));
+      return res.json({
+        ok:true,appId,organizationId,organizationName:String(orgSnap.data()?.name||organizationId),
+        trial:window.valid?{
+          active:window.active,expired:window.expired,extended:window.extended,
+          baseEndsAt:trial?.expiresAt?.toDate?.()?.toISOString?.()||null,
+          effectiveEndsAt:new Date(window.endsAt).toISOString(),
+          extensionDays:Number(trial?.extensionDays||0),
+        }:null,
+        canExtend:window.valid&&!window.extended&&!extensionSnap.exists&&!hasLegacySubscription &&
+          Date.now()<=window.endsAt+2*86_400_000,
+        hasExistingSubscription:hasLegacySubscription,
+        extensionRecorded:extensionSnap.exists,
+      });
+    }catch(error:any){
+      console.warn('[Hub Trial] status read failure:',error?.message||'unexpected');
+      return res.status(503).json({error:'Não foi possível consultar o prazo.'});
+    }
+  });
+
   app.post('/api/v1/billing/trial/extend', express.json(), async (req: any, res) => {
     if (process.env.HUB_TRIAL_EXTENSION_ADMIN_ENABLED !== 'true')
       return res.status(404).json({error:'Extensão administrativa indisponível.'});
