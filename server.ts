@@ -55,6 +55,9 @@ import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import path from 'path';
 import crypto from 'crypto';
+import {
+  parseReferenceUpload, canonicalReferencePath, canAccessStoredReference, MAX_REFERENCE_BYTES,
+} from './src/server/services/NestAffiliateReferenceMediaService.js';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
@@ -1299,6 +1302,119 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
 }
 
 
+
+const NESTAFFILIATE_REFERENCE_MEDIA_BUCKET=
+  process.env.FIREBASE_STORAGE_BUCKET || 'millionsnest.firebasestorage.app';
+
+/** Opt-in backend activation, separate from client feature flags. */
+function nestAffiliateReferenceMediaEnabled(){
+  return process.env.NESTAFFILIATE_REFERENCE_MEDIA_ENABLED==='true';
+}
+
+async function handleNestAffiliateReferenceUpload(req:any,res:any){
+  if(!nestAffiliateReferenceMediaEnabled())return res.status(503).json({error:'REFERENCE_MEDIA_NOT_ENABLED'});
+  const context=await resolveNestAffiliateShopeeContext(req,res);
+  if(!context)return;
+  if(!context.isGlobal&&!context.isOwner&&!['owner','admin','editor'].includes(context.memberRole)){
+    return res.status(403).json({error:'REFERENCE_EDITOR_REQUIRED'});
+  }
+  let parsed:ReturnType<typeof parseReferenceUpload>;
+  try{parsed=parseReferenceUpload(req.body);}
+  catch(error){
+    return res.status(400).json({error:error instanceof Error?error.message:'REFERENCE_INVALID'});
+  }
+  const {organizationId,actorUid,dbInstance}=context;
+  const document=dbInstance.collection('organizations').doc(organizationId).collection('products').doc('nestaffiliate')
+    .collection('productReferences').doc(parsed.refId);
+  const path=canonicalReferencePath(organizationId,parsed.refId);
+  try{
+    const existing=await document.get();
+    if(existing.exists){
+      const prior=existing.data()||{};
+      if(!canAccessStoredReference(prior,organizationId,parsed.refId) || prior.sha256!==parsed.hash ||
+        prior.productId!==parsed.fields.productId || prior.externalListingId!==parsed.fields.externalListingId){
+        return res.status(409).json({error:'REFERENCE_CONFLICT_OR_REVOKED'});
+      }
+      return res.status(200).json({asset:prior,alreadyExists:true});
+    }
+    const storageFile=admin.storage().bucket(NESTAFFILIATE_REFERENCE_MEDIA_BUCKET).file(path);
+    await storageFile.save(parsed.bytes,{
+      resumable:false,
+      metadata:{
+        contentType:'image/webp',
+        cacheControl:'private, no-store',
+        metadata:{organizationId,actorUid,referenceId:parsed.refId},
+      },
+    });
+    const now=new Date().toISOString();
+    const asset={
+      id:parsed.refId,organizationId,productId:parsed.fields.productId,
+      marketplace:parsed.fields.marketplace,externalListingId:parsed.fields.externalListingId,
+      sourceType:parsed.fields.sourceType,rights:'USER_ATTESTED',
+      referenceStatus:'READY_FOR_AI',canSendToExternalAI:true,
+      rightsEvidence:parsed.fields.rightsEvidence.trim(),
+      sourceUrl:parsed.fields.sourceUrl,
+      variantFingerprint:parsed.fields.variantFingerprint,
+      sha256:parsed.hash,mimeType:'image/webp',
+      storagePath:path,createdBy:actorUid,
+      capturedAt:now,updatedAt:now,
+    };
+    try{
+      await document.create(asset);
+    }catch(error){
+      // Concurrent duplicate or failed Firestore write; prevent an orphan object.
+      await storageFile.delete({ignoreNotFound:true}).catch(()=>undefined);
+      throw error;
+    }
+    res.setHeader('Cache-Control','private, no-store');
+    return res.status(201).json({asset});
+  }catch(error){
+    console.error('[NestAffiliate/reference] secure upload failed',error instanceof Error?error.message:'UNKNOWN');
+    return res.status(503).json({error:'REFERENCE_PRIVATE_STORAGE_UNAVAILABLE'});
+  }
+}
+async function handleNestAffiliateReferenceDownload(req:any,res:any){
+  if(!nestAffiliateReferenceMediaEnabled())return res.status(503).json({error:'REFERENCE_MEDIA_NOT_ENABLED'});
+  const context=await resolveNestAffiliateShopeeContext(req,res);
+  if(!context)return;
+  const referenceId=String(req.query.referenceId||'').trim();
+  const {organizationId,dbInstance}=context;
+  let path='';
+  try{path=canonicalReferencePath(organizationId,referenceId);}
+  catch{return res.status(400).json({error:'REFERENCE_INVALID'});}
+  try{
+    const snapshot=await dbInstance.collection('organizations').doc(organizationId)
+      .collection('products').doc('nestaffiliate').collection('productReferences').doc(referenceId).get();
+    if(!snapshot.exists)return res.status(404).json({error:'REFERENCE_NOT_FOUND'});
+    const data=snapshot.data()||{};
+    if(!canAccessStoredReference(data,organizationId,referenceId)){
+      return res.status(403).json({error:'REFERENCE_NOT_AVAILABLE'});
+    }
+    const object=admin.storage().bucket(NESTAFFILIATE_REFERENCE_MEDIA_BUCKET).file(path);
+    const [meta]=await object.getMetadata();
+    const size=Number(meta.size||0);
+    if(size<=0||size>MAX_REFERENCE_BYTES||meta.contentType!=='image/webp'){
+      return res.status(409).json({error:'REFERENCE_OBJECT_INVALID'});
+    }
+    const [bytes]=await object.download();
+    if(bytes.length!==size){
+      return res.status(409).json({error:'REFERENCE_BINARY_INVALID'});
+    }
+    const actualHash=crypto.createHash('sha256').update(bytes).digest('hex');
+    if(actualHash!==data.sha256){
+      return res.status(409).json({error:'REFERENCE_HASH_MISMATCH'});
+    }
+    res.setHeader('Content-Type','image/webp');
+    res.setHeader('X-Content-Type-Options','nosniff');
+    res.setHeader('Cache-Control','private, no-store');
+    res.setHeader('Content-Disposition','attachment; filename="authorized-product-reference.webp"');
+    return res.status(200).end(bytes);
+  }catch(error){
+    console.error('[NestAffiliate/reference] private read failed',error instanceof Error?error.message:'UNKNOWN');
+    return res.status(503).json({error:'REFERENCE_PRIVATE_STORAGE_UNAVAILABLE'});
+  }
+}
+
 type NestAffiliateShopeeContext = {
   dbInstance: admin.firestore.Firestore;
   organizationId: string;
@@ -1803,6 +1919,9 @@ async function startServer() {
     return handleNestLocalNestAiSessionTokenRequest(req, res, dbInstance);
   });
   app.get('/api/v1/support/capabilities', getSupportCapabilities);
+  // Private GCS proxy. Never expose signed/public Storage tokens in the client.
+  app.post('/api/v1/nestaffiliate/reference-media', express.json({limit:'12mb'}), handleNestAffiliateReferenceUpload);
+  app.get('/api/v1/nestaffiliate/reference-media', handleNestAffiliateReferenceDownload);
   app.get('/api/v1/nestaffiliate/mercadolivre/search', handleNestAffiliateMercadoLivreSearch);
   app.get('/api/v1/nestaffiliate/shopee/status', handleNestAffiliateShopeeStatus);
   app.post('/api/v1/nestaffiliate/shopee/credentials', express.json({ limit: '8kb' }), handleNestAffiliateShopeeCredentials);
