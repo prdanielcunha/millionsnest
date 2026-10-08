@@ -56,7 +56,7 @@ import admin from 'firebase-admin';
 import path from 'path';
 import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
-import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial } from './src/server/services/HubNoCardTrialService.js';
+import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } from './src/server/services/EcosystemSessionVersionService.js';
@@ -8803,7 +8803,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
           appId,
           hasLegacyTrialHistory: hasTrialHistory,
           internalTrialConsumed,
-          newNestLocalTrialEnabled: process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED === 'true',
+          newNestLocalTrialEnabled: nestLocalTrialEnabledForOrganization(orgId),
         })) {
           sessionArgs.subscription_data.trial_period_days = 7;
         }
@@ -8881,6 +8881,9 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     const organizationId = typeof req.body?.organizationId === 'string' ? req.body.organizationId.trim() : '';
     if (!organizationId || organizationId.includes('/')) {
       return res.status(400).json({ error: 'Organização válida é obrigatória.' });
+    }
+    if (!nestLocalTrialEnabledForOrganization(organizationId)) {
+      return res.status(403).json({ error: 'Esta organização ainda não está habilitada para a avaliação sem cartão.', code: 'TRIAL_COHORT_DISABLED' });
     }
     try {
       // Only a verified owner can start the organization's irreversible lifetime trial.
@@ -9139,7 +9142,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         appId,
         hasLegacyTrialHistory: hasTrialHistory,
         internalTrialConsumed,
-        newNestLocalTrialEnabled: process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED === 'true',
+        newNestLocalTrialEnabled: nestLocalTrialEnabledForOrganization(orgId),
       }) && sessionArgs.subscription_data) {
         sessionArgs.subscription_data.trial_period_days = 7;
       }
