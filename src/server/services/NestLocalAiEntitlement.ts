@@ -56,6 +56,22 @@ export function isNestLocalInternalTrialActive(
   return true;
 }
 
+/** Expired trial permits read-only product access, NEVER an AI commercial claim.
+ * Source and window must originate from the immutable server-side trial grant. */
+export function isNestLocalInternalTrialExpired(
+  trial: RecordLike, now = Date.now(), expectedOrganizationId?: string,
+): boolean {
+  const data = asRecord(trial);
+  if (!data || data.appId !== 'nestlocal' || data.source !== 'hub_internal_trial' ||
+      data.revoked === true || data.consumed !== true || data.status !== 'active' ||
+      !Number.isSafeInteger(data.grantVersion) || Number(data.grantVersion) < 2 ||
+      (expectedOrganizationId && data.organizationId !== expectedOrganizationId)) return false;
+  const begins = timestampMillis(data.beginsAt);
+  const ends = timestampMillis(data.expiresAt);
+  return begins !== null && ends !== null &&
+    ends-begins === 168 * 60 * 60 * 1000 && now >= ends;
+}
+
 /** Explicitly recognizes paid-active subscriptions, never auto-equates a Stripe trial with paid status. */
 export function resolveNestLocalAiEntitlement(input: {
   subscription?: RecordLike;
