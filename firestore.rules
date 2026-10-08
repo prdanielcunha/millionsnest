@@ -2898,6 +2898,16 @@ service cloud.firestore {
 
     // Commercial authority data is Admin SDK-only. These explicit rules make
     // the invariant visible; catch-all deny also covers these paths.
+    match /musicscale_internal_trials/{organizationId} {
+      allow read, write: if false;
+    }
+    match /musicscale_trial_owners/{ownerUid} {
+      allow read, write: if false;
+    }
+    match /hub_trial_extension_events/{eventId} {
+      allow read, write: if false;
+    }
+
     match /nestlocal_internal_trials/{organizationId} {
       allow read, write: if false;
     }
