@@ -100,7 +100,13 @@ export async function resolveSubscriptionPurchaseEligibility(
     const isCanonical = canonicalSubscriptionId && sub.id === canonicalSubscriptionId;
     const isAppMatch = sub.metadata?.app === appId;
     const isOrgMatch = (sub.metadata?.organizationId === organizationId || sub.metadata?.orgId === organizationId || sub.metadata?.uid === organizationId);
-    
+    // Some historical Stripe objects predate app metadata. For a NEW pilot
+    // trial/checkout, require manual reconciliation instead of misclassifying
+    // a same-tenant legacy subscription as a different product.
+    if (strictConsistency && isOrgMatch && !isCanonical && !sub.metadata?.app) {
+      throw new Error('BILLING_HISTORY_LEGACY_APP_REVIEW_REQUIRED');
+    }
+
     // We consider it relevant if it's explicitly matched or if it's the canonical one.
     if (!isCanonical && !(isOrgMatch && isAppMatch)) {
       continue;
