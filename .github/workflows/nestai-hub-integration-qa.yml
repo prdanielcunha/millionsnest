@@ -14,6 +14,7 @@ on:
       - "src/server/services/SubscriptionEligibility.ts"
       - "src/lib/nestLocalCommercialV2.ts"
       - "src/server/services/NestAiCreditGrantSyncService.ts"
+      - "src/server/services/NestLocalPaidInvoiceCreditsService.ts"
       - "src/server/services/EcosystemAccessResolver.ts"
       - "src/lib/permissionService.ts"
       - "src/pages/TrialManagement.tsx"
@@ -32,6 +33,7 @@ on:
       - "scripts/test_nestlocal_firestore_guardrails.ts"
       - "scripts/test_nestlocal_founders_policy.ts"
       - "scripts/test_nestai_credit_grant_sync.ts"
+      - "scripts/test_nestlocal_paid_invoice_credits.ts"
       - ".github/workflows/nestai-hub-integration-qa.yml"
 permissions:
   contents: read
@@ -57,4 +59,5 @@ jobs:
       - run: npx tsx scripts/test_nestlocal_firestore_guardrails.ts
       - run: npx tsx scripts/test_nestlocal_founders_policy.ts
       - run: npx tsx scripts/test_nestai_credit_grant_sync.ts
+      - run: npx tsx scripts/test_nestlocal_paid_invoice_credits.ts
       - run: npm run build
