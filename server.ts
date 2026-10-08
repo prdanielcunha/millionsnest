@@ -59,7 +59,7 @@ import { resolveSubscriptionPurchaseEligibility } from './src/server/services/Su
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization, hasSearchableAuthenticatedEmail } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
-import { reconcileNestLocalPaidInvoiceCredits } from './src/server/services/NestLocalPaidInvoiceCreditReconciler.js';
+import { syncNestLocalPaidInvoiceFromWebhook } from './src/server/services/NestLocalPaidInvoiceWebhookSync.js';
 import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
 import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization, hasPriorMusicScaleSubscription } from './src/server/services/MusicScaleNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
@@ -3164,30 +3164,17 @@ async function startServer() {
                       organizationId:orgId,invoiceId:(event.data.object as any).id,
                       state:paidGrant.state,
                     });
-                    // A verified invoice can be settled without waiting for a
-                    // manual visit: a failed sync propagates 5xx to Stripe and
-                    // retains the idempotent outbox for a later retry.
-                    // Legacy customers are unaffected: every flag defaults OFF.
-                    if(process.env.NESTAI_COMMERCIAL_CREDITS_ENABLED==='true' &&
-                       process.env.NESTAI_GRANTS_SYNC_ENABLED==='true'){
-                      const invoiceId=String((event.data.object as any).id||'');
-                      const settled=await reconcileNestLocalPaidInvoiceCredits({
-                        db,invoiceId,organizationId:orgId,
-                        fetchStripe:async(expectedInvoiceId:string)=>{
-                          const stripe=getStripe();
-                          const verifiedInvoice=await stripe.invoices.retrieve(expectedInvoiceId);
-                          const linkedSub=(verifiedInvoice as any).subscription ||
-                            (verifiedInvoice as any).parent?.subscription_details?.subscription;
-                          if(typeof linkedSub!=='string')
-                            throw Error('PAID_CREDITS_STRIPE_SUBSCRIPTION_MISSING');
-                          const verifiedSub=await stripe.subscriptions.retrieve(linkedSub);
-                          return {invoice:verifiedInvoice as any,subscription:verifiedSub as any};
-                        },
-                      });
-                      console.info('[NestAI/Billing] paid invoice grant reconciliation',{
-                        invoiceId,state:settled.state,
-                      });
-                    }
+                    // Stripe signature and canonical subscription were checked
+                    // above. Re-fetch fresh Stripe objects before any grant.
+                    // All commercial flags default OFF; failure propagates a
+                    // retryable 5xx while the immutable outbox keeps its state.
+                    const invoiceId=String((event.data.object as any).id||'');
+                    const settled=await syncNestLocalPaidInvoiceFromWebhook({
+                      db,invoiceId,organizationId:orgId,stripe:getStripe(),
+                    });
+                    console.info('[NestAI/Billing] paid invoice grant reconciliation',{
+                      invoiceId,state:settled.state,
+                    });
                  }
 
                  if (result && !result.skipped) {
