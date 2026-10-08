@@ -22,6 +22,21 @@ service cloud.firestore {
       );
     }
 
+    function musicScaleInternalTrialCanWrite(orgId) {
+      let path = /databases/$(database)/documents/musicscale_internal_trials/$(orgId);
+      let trial = exists(path) ? get(path).data : {};
+      let end = trial.get('extensionCount', 0) == 1
+        ? trial.get('extensionEndsAt', null) : trial.get('expiresAt', null);
+      return trial.get('appId', '') == 'musicscale' &&
+        trial.get('organizationId', '') == orgId &&
+        trial.get('source', '') == 'hub_internal_trial' &&
+        trial.get('status', '') == 'active' &&
+        trial.get('consumed', false) == true &&
+        trial.get('revoked', false) == false &&
+        trial.get('grantVersion', 0) >= 2 &&
+        end != null && request.time < end;
+    }
+
     function isOrgActive(orgId) {
       let subDoc = get(/databases/$(database)/documents/subscriptions/$(orgId));
       let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
@@ -31,7 +46,7 @@ service cloud.firestore {
       
       let subActive = subData != null && 'status' in subData && (subData.status == 'active' || subData.status == 'trialing');
       
-      let appActive = orgData != null && 'apps' in orgData && 'musicscale' in orgData.apps && 'status' in orgData.apps.musicscale && (orgData.apps.musicscale.status == 'active' || orgData.apps.musicscale.status == 'trialing');
+      let appActive = orgData != null && 'apps' in orgData && 'musicscale' in orgData.apps && 'status' in orgData.apps.musicscale && (orgData.apps.musicscale.status == 'active' || orgData.apps.musicscale.status == 'trialing') && (orgData.apps.musicscale.get('trialSource', '') != 'hub_internal_trial' || musicScaleInternalTrialCanWrite(orgId));
 
       return subActive || appActive || isSystemAdmin();
     }
