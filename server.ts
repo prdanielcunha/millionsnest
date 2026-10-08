@@ -8895,6 +8895,11 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         db.collection('users').doc(userId).get(),
         db.collection('subscriptions').doc(organizationId).get(),
       ]);
+      const userData = userSnap.data() || {};
+      if (!userSnap.exists || userData.disabled === true ||
+          ['inactive','disabled','suspended'].includes(String(userData.status || '').toLowerCase())) {
+        return res.status(403).json({error:'Usuário não está ativo para iniciar a avaliação.'});
+      }
       const subData = subSnap.data() || {};
       const knownCustomerId = subData.apps?.nestlocal?.stripeCustomerId
         || userSnap.data()?.stripeCustomerId || subData.stripeCustomerId;
