@@ -8861,9 +8861,11 @@ async function autoRepairSingleOrganizationUser(uid: string) {
   /** Explicit, server-timed internal trial. OFF until NestLocal read-only, quotas and rules pass QA.
    * Legacy MusicScale never enters this route; no Stripe write happens here. */
   app.post('/api/v1/billing/trial/activate', express.json(), async (req: any, res) => {
-    if (process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED !== 'true') {
-      return res.status(404).json({ error: 'Avaliação sem cartão ainda não disponível.' });
-    }
+    const requestedApp = req.body?.appId as TrialApp;
+    const enabled = requestedApp === 'nestlocal'
+      ? process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED === 'true'
+      : requestedApp === 'musicscale' && process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED === 'true';
+    if (!enabled) return res.status(404).json({error:'Avaliação sem cartão ainda não disponível.'});
     if (!db) return res.status(503).json({ error: 'Banco de dados indisponível.' });
     if (req.body?.appId !== 'nestlocal') {
       return res.status(400).json({ error: 'Este fluxo de avaliação está disponível somente para NestLocal.' });
