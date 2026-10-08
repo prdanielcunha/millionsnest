@@ -48,6 +48,8 @@ export default function Checkout() {
   // Checkout Error State
   const [checkoutError, setCheckoutError] = useState('');
   const [checkoutAction, setCheckoutAction] = useState<{ code: string, label: string, url?: string } | null>(null);
+  const [trialOffer,setTrialOffer]=useState<{available:boolean;days:number}|null>(null);
+  const [trialStarting,setTrialStarting]=useState(false);
   const checkoutApp: 'musicscale' | 'nestlocal' = new URLSearchParams(window.location.search).get('app') === 'nestlocal'
     ? 'nestlocal'
     : 'musicscale';
@@ -106,6 +108,61 @@ export default function Checkout() {
          setLoading(false);
       });
   }, [user, navigate, checkoutApp]);
+
+  // A no-card trial is a separate, opt-in Hub entitlement — never a Stripe
+  // checkout session. Only show this CTA for the configured pilot cohort.
+  useEffect(()=>{
+    let cancelled=false;
+    setTrialOffer(null);
+    if(!user||!activeOrganizationId)return;
+    (async()=>{
+      try {
+        const token=await user.getIdToken();
+        const params=new URLSearchParams({appId:checkoutApp,organizationId:activeOrganizationId});
+        const response=await fetch('/api/v1/billing/trial/offer?'+params,{
+          headers:{Authorization:'Bearer '+token},cache:'no-store',
+        });
+        if(!response.ok)return;
+        const data=await response.json();
+        if(!cancelled&&data.available===true)setTrialOffer({available:true,days:Number(data.days)||0});
+      }catch{/* A failed pilot lookup never interferes with existing paid checkout. */}
+    })();
+    return ()=>{cancelled=true};
+  },[user,activeOrganizationId,checkoutApp]);
+
+  const trialCopy=(()=>{
+    const lang=String(i18n.language||'pt').slice(0,2);
+    if(lang==='en')return {
+      title:'Try before subscribing',description:'No card. No automatic charge. Start when your organization is ready.',
+      action:'Start free trial',starting:'Starting trial…',note:'Your existing data remains yours. Subscribe to continue after the trial ends.',
+    };
+    if(lang==='es')return {
+      title:'Prueba antes de suscribirte',description:'Sin tarjeta. Sin cobro automático. Comienza cuando tu organización esté lista.',
+      action:'Iniciar prueba gratuita',starting:'Iniciando prueba…',note:'Conservas tus datos. Para seguir trabajando al vencer la prueba, suscríbete.',
+    };
+    return {
+      title:'Experimente antes de assinar',description:'Sem cartão e sem cobrança automática. A contagem começa quando você ativa a avaliação.',
+      action:'Iniciar avaliação gratuita',starting:'Ativando avaliação…',note:'Seus dados continuam preservados. Ao fim do prazo, assine para continuar usando os recursos.',
+    };
+  })();
+
+  const beginNoCardTrial=async()=>{
+    if(!user||!activeOrganizationId||!trialOffer?.available||trialStarting)return;
+    setTrialStarting(true);setCheckoutError('');setCheckoutAction(null);
+    try {
+      const token=await user.getIdToken();
+      const response=await fetch('/api/v1/billing/trial/activate',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({appId:checkoutApp,organizationId:activeOrganizationId}),
+      });
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw Error(data?.error||'Não foi possível iniciar a avaliação. Tente novamente.');
+      navigate('/dashboard');
+    }catch(e){
+      setCheckoutError(e instanceof Error?e.message:'Não foi possível ativar a avaliação.');
+      setTrialOffer(null);
+    }finally{setTrialStarting(false)}
+  };
 
   const availablePlans = useMemo(() => {
      return plans.filter(p => billingCycle === 'yearly' ? p.interval === 'year' : p.interval === 'month');
