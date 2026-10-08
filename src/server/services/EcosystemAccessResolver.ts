@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
 import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
-import { isNestLocalInternalTrialActive } from './NestLocalAiEntitlement.js';
+import { isNestLocalInternalTrialActive, isNestLocalInternalTrialExpired } from './NestLocalAiEntitlement.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney' | 'nestlive';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -33,6 +33,10 @@ export type ResolvedAppAccess = {
   appId: EcosystemAppId;
   organizationId: string;
   accessible: boolean;
+  // Explicit capabilities for newer Hub clients; legacy boolean access retained.
+  readOnly?: boolean;
+  canWrite?: boolean;
+  canUseAI?: boolean;
   isGlobalAccess: boolean;
   accessSource: AppAccessSource;
   systemRole?: string;
@@ -279,19 +283,26 @@ export async function resolveEcosystemAppAccess(params: {
       : null;
     const internalTrialActive = internalTrialEnabled &&
       isNestLocalInternalTrialActive(trialDoc?.exists ? trialDoc.data() : null);
+    const internalTrialExpired = internalTrialEnabled &&
+      isNestLocalInternalTrialExpired(trialDoc?.exists ? trialDoc.data() : null, Date.now(), organizationId);
 
     const subscriptionStatus = String(appSubscription?.status || '').toLowerCase();
     const organizationAppStatus = String(orgAppAccess?.status || '').toLowerCase();
     const paymentIssueStatuses = ['past_due', 'unpaid', 'incomplete', 'paused'];
     const activeStatuses = ['active', 'trialing'];
 
-    if (!appSubscription && !internalTrialActive) {
+    // A valid paid/Stripe legacy subscription wins over an expired Hub trial.
+    // Otherwise a verified expired Hub trial may open READ-ONLY; it cannot
+    // grant AI, write or fresh Stripe trial in any downstream consumer.
+    const internalTrialReadOnly = internalTrialExpired && !activeStatuses.includes(subscriptionStatus) &&
+      !paymentIssueStatuses.includes(subscriptionStatus);
+    if (!appSubscription && !internalTrialActive && !internalTrialReadOnly) {
       return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_NOT_FOUND };
     }
     if (paymentIssueStatuses.includes(subscriptionStatus)) {
       return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_PAYMENT_REQUIRED };
     }
-    if (!activeStatuses.includes(subscriptionStatus) && !internalTrialActive) {
+    if (!activeStatuses.includes(subscriptionStatus) && !internalTrialActive && !internalTrialReadOnly) {
       return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_INACTIVE };
     }
     if (!activeStatuses.includes(organizationAppStatus)) {
@@ -315,13 +326,16 @@ export async function resolveEcosystemAppAccess(params: {
       appId,
       organizationId,
       accessible: true,
+      readOnly: internalTrialReadOnly,
+      canWrite: !internalTrialReadOnly,
+      canUseAI: !internalTrialReadOnly,
       isGlobalAccess: false,
       accessSource: 'organization_membership',
       systemRole,
       organizationRole,
-      roles: memberAccess?.roles || [organizationRole],
-      permissions: memberAccess?.permissions || ['nestlocal.manage'],
-      scopes: memberAccess?.scopes || { nestlocal: ['manage'] },
+      roles: internalTrialReadOnly ? ['reader'] : (memberAccess?.roles || [organizationRole]),
+      permissions: internalTrialReadOnly ? ['nestlocal.read'] : (memberAccess?.permissions || ['nestlocal.manage']),
+      scopes: internalTrialReadOnly ? { nestlocal: ['read'] } : (memberAccess?.scopes || { nestlocal: ['manage'] }),
       decisionState: 'granted'
     };
   }
