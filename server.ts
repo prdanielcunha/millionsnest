@@ -63,6 +63,7 @@ import { resolveSubscriptionPurchaseEligibility } from './src/server/services/Su
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization, hasSearchableAuthenticatedEmail } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
+import { syncNestLocalPaidInvoiceFromWebhook } from './src/server/services/NestLocalPaidInvoiceWebhookSync.js';
 import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
 import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization, hasPriorMusicScaleSubscription } from './src/server/services/MusicScaleNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
@@ -3354,6 +3355,16 @@ async function startServer() {
                     console.info('[NestAI/Billing] paid invoice outbox', {
                       organizationId:orgId,invoiceId:(event.data.object as any).id,
                       state:paidGrant.state,
+                    });
+                    // Full grant only after fresh Stripe invoice + subscription
+                    // checks, canonical org association and idempotent outbox.
+                    // The three commercial flags remain OFF by default.
+                    const invoiceId=String((event.data.object as any).id||'');
+                    const settled=await syncNestLocalPaidInvoiceFromWebhook({
+                      db,invoiceId,organizationId:orgId,stripe:getStripe(),
+                    });
+                    console.info('[NestAI/Billing] paid invoice grant reconciliation',{
+                      invoiceId,state:settled.state,
                     });
                  }
 
