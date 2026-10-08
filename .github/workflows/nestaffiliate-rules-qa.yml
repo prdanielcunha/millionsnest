@@ -8,6 +8,9 @@ on:
       - "firebase.rules-test.json"
       - "tests/firestore/nestaffiliate.rules.test.ts"
       - ".github/workflows/nestaffiliate-rules-qa.yml"
+      - "server.ts"
+      - "src/server/services/NestAffiliateReferenceMediaService.ts"
+      - "scripts/test_nestaffiliate_reference_media.ts"
   pull_request:
     branches: [main, production]
     paths:
@@ -39,6 +42,8 @@ jobs:
           java-version: "21"
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: Validate Reference Lock 4.0 media security
+        run: npx tsx --test scripts/test_nestaffiliate_reference_media.ts
       - name: Test NestAffiliate Firestore boundary
         run: >-
           npx firebase emulators:exec

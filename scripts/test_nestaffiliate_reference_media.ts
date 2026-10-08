@@ -41,3 +41,28 @@ test('private download is identity, tenant, status and path scoped',()=>{
  assert.equal(canAccessStoredReference({...asset,referenceStatus:'REVOKED'},organizationId,id),false);
  assert.equal(canAccessStoredReference({...asset,storagePath:'organizations/org-b/product-references/p.webp'},organizationId,id),false);
 });
+
+test('valid bounded, metadata-free reference is accepted and hash verified',()=>{
+  const data=Buffer.alloc(108);
+  const chunk=Buffer.alloc(8);chunk.write('VP8 ',0);chunk.writeUInt32LE(data.length,4);
+  const header=Buffer.alloc(12);header.write('RIFF',0);header.writeUInt32LE(4+chunk.length+data.length,4);header.write('WEBP',8);
+  const bytes=Buffer.concat([header,chunk,data]);
+  assert.equal(bytes.length,128);
+  assert.equal(isWebPWithoutLocationMetadata(bytes),true);
+  const raw={
+    productId:'meli:MLB123',marketplace:'MELI',externalListingId:'MLB123',
+    sourceType:'USER_OWN_PHOTO',rightsEvidence:'Photo created by test owner',
+    sourceUrl:'https://www.mercadolivre.com.br/item/MLB123',
+    variantFingerprint:'MELI|MLB123|pink',
+    sha256:crypto.createHash('sha256').update(bytes).digest('hex'),
+    imageBase64:bytes.toString('base64'),canSendToExternalAI:true,
+  };
+  const result=parseReferenceUpload(raw);
+  assert.equal(result.hash,raw.sha256);
+  assert.equal(result.bytes.length,bytes.length);
+  assert.match(result.refId,/^ref-MELI-MLB123-/);
+  assert.throws(()=>parseReferenceUpload({...raw,sha256:'0'.repeat(64)}),/REFERENCE_HASH_MISMATCH/);
+  const malicious=Buffer.from(bytes);
+  malicious.write('EXIF',12);
+  assert.equal(isWebPWithoutLocationMetadata(malicious),false);
+});
