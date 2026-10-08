@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
 import {
   HUB_TRIAL_DURATION_MS, shouldAddStripeTrial, hasConsumedHubTrial,
-  activateNestLocalHubTrial, nestLocalTrialEnabledForOrganization,
+  activateNestLocalHubTrial, nestLocalTrialEnabledForOrganization, hasSearchableAuthenticatedEmail,
 } from '../src/server/services/HubNoCardTrialService.js';
 
+assert.equal(hasSearchableAuthenticatedEmail('owner@example.com'), true);
+assert.equal(hasSearchableAuthenticatedEmail(' owner@example.com '), true);
+assert.equal(hasSearchableAuthenticatedEmail(undefined), false);
+assert.equal(hasSearchableAuthenticatedEmail(''), false);
+assert.equal(hasSearchableAuthenticatedEmail('owner-without-email'), false);
+// A missing verified identity email cannot certify absence of Stripe history.
+// All existing subscriptions and historical customer records remain untouched.
 assert.equal(HUB_TRIAL_DURATION_MS, 168 * 60 * 60 * 1000);
 assert.equal(nestLocalTrialEnabledForOrganization('org-a', {}), false);
 assert.equal(nestLocalTrialEnabledForOrganization('org-a', { NESTLOCAL_INTERNAL_TRIAL_ENABLED:'true' }), false);
