@@ -5,6 +5,6 @@ assert.match(workflow, /--update-env-vars\s+"/, 'Hub deployment must update, not
 assert.match(workflow, /--update-secrets\s+"/, 'Hub deployment must preserve unrelated Secret Manager bindings');
 assert.doesNotMatch(workflow, /--set-env-vars|--clear-env-vars|--set-secrets|--clear-secrets/);
 assert.match(workflow, /STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY=/);
-assert.match(workflow, /NESTAFFILIATE_REFERENCE_MEDIA_ENABLED=true/);
+assert.match(workflow, /NODE_ENV=production/);
 assert.match(workflow, /--no-allow-unauthenticated/);
 console.log('PASS Hub Cloud Run env/secret preservation and deployed production safety keys');
