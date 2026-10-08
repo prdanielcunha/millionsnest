@@ -32,6 +32,25 @@ await assert.rejects(
   resolveSubscriptionPurchaseEligibility(truncated as any,dbOk as any,...base,true),
   /BILLING_HISTORY_INCOMPLETE/,
 );
+const sameTenantLegacy={
+  subscriptions:{list:async()=>({has_more:false,data:[{
+    id:'sub_legacy',status:'active',created:10,
+    metadata:{organizationId:'org_new'},
+  }]})},
+};
+await assert.rejects(
+  resolveSubscriptionPurchaseEligibility(sameTenantLegacy as any,dbOk as any,...base,true),
+  /BILLING_HISTORY_LEGACY_APP_REVIEW_REQUIRED/,
+);
+const knownOtherTenant={
+  subscriptions:{list:async()=>({has_more:false,data:[{
+    id:'sub_legacy_other',status:'active',created:10,
+    metadata:{organizationId:'org_other'},
+  }]})},
+};
+assert.equal((await resolveSubscriptionPurchaseEligibility(
+  knownOtherTenant as any,dbOk as any,...base,true,
+)).allowed,true);
 const compatibility=await resolveSubscriptionPurchaseEligibility(stripeOk as any,failDb as any,...base);
 assert.equal(compatibility.allowed,true);
 console.log('PASS: Strict pilot blocks incomplete Stripe or Firestore history while legacy path unchanged');
