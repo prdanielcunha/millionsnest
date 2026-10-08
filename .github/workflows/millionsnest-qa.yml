@@ -133,6 +133,9 @@ jobs:
       - name: Subscription ownership integrity
         run: npx tsx scripts/test_subscription_ownership_integrity.ts
 
+      - name: Canonical paid subscriptions cannot create duplicate Checkout
+        run: npx tsx scripts/test_subscription_canonical_duplicate_guard.ts
+
       - name: Public home conversion funnel and analytics security
         run: npx tsx scripts/test_public_home_funnel.ts
 
