@@ -151,20 +151,6 @@ jobs:
             --role="roles/run.invoker" \
             --quiet
 
-      - name: NestAffiliate reference API auth smoke
-        if: steps.secrets.outputs.ready == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          for PATHNAME in "/api/v1/nestaffiliate/reference-media?organizationId=smoke&referenceId=ref-example" "/api/v1/nestaffiliate/mercadolivre/search?organizationId=smoke&q=teste&mode=discovery_v4"; do
-            code="$(curl --silent --show-error --output /tmp/na-private-api.json --write-out '%{http_code}' "https://www.millionsnest.com$PATHNAME" || true)"
-            if [ "$code" != "401" ]; then
-              echo "NESTAFFILIATE_PRIVATE_ENDPOINT_SMOKE_FAILED:$PATHNAME:$code"
-              exit 1
-            fi
-            node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/na-private-api.json','utf8'));if(x.error!=='UNAUTHENTICATED')process.exit(1)"
-          done
-
       - name: Build Hub Hosting bundle
         if: steps.secrets.outputs.ready == 'true'
         run: |
@@ -183,6 +169,20 @@ jobs:
             --project "$PROJECT_ID" \
             --only hosting:hub,firestore:rules \
             --non-interactive
+
+      - name: NestAffiliate reference API auth smoke
+        if: steps.secrets.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for PATHNAME in "/api/v1/nestaffiliate/reference-media?organizationId=smoke&referenceId=ref-example" "/api/v1/nestaffiliate/mercadolivre/search?organizationId=smoke&q=teste&mode=discovery_v4"; do
+            code="$(curl --silent --show-error --output /tmp/na-private-api.json --write-out '%{http_code}' "https://www.millionsnest.com$PATHNAME" || true)"
+            if [ "$code" != "401" ]; then
+              echo "NESTAFFILIATE_PRIVATE_ENDPOINT_SMOKE_FAILED:$PATHNAME:$code"
+              exit 1
+            fi
+            node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/na-private-api.json','utf8'));if(x.error!=='UNAUTHENTICATED')process.exit(1)"
+          done
 
       - name: Production smoke
         if: steps.secrets.outputs.ready == 'true'
