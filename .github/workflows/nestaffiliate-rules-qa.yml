@@ -11,6 +11,8 @@ on:
       - "server.ts"
       - "src/server/services/NestAffiliateReferenceMediaService.ts"
       - "scripts/test_nestaffiliate_reference_media.ts"
+      - "src/server/services/NestAffiliateRetryAfterPolicy.ts"
+      - "scripts/test_nestaffiliate_retry_after.ts"
   pull_request:
     branches: [main, production]
     paths:
@@ -44,6 +46,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Validate Reference Lock 4.0 media security
         run: npx tsx --test scripts/test_nestaffiliate_reference_media.ts
+      - name: Validate Mercado Livre source rate-limit contract
+        run: npx tsx --test scripts/test_nestaffiliate_retry_after.ts
       - name: Test NestAffiliate Firestore boundary
         run: >-
           npx firebase emulators:exec
