@@ -2917,6 +2917,9 @@ service cloud.firestore {
     match /nestai_credit_grant_outbox/{grantKey} {
       allow read, write: if false;
     }
+    match /nestai_paid_invoice_grant_outbox/{grantKey} {
+      allow read, write: if false;
+    }
 
     match /ecosystemHandoffs/{handoffId} {
       allow read, write: if false;
