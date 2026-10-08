@@ -21,12 +21,14 @@ export async function resolveSubscriptionPurchaseEligibility(
   db: any,
   organizationId: string,
   stripeCustomerId?: string,
-  appId: 'musicscale' | 'nestlocal' = 'musicscale'
+  appId: 'musicscale' | 'nestlocal' = 'musicscale',
+  strictConsistency = false
 ): Promise<SubscriptionPurchaseEligibility> {
   const managementUrl = '/dashboard/billing';
   let canonicalSubscriptionStatus: string | null = null;
   let canonicalSubscriptionId: string | null = null;
   let entitlementMaterialized = false;
+  if (strictConsistency && !db) throw new Error('BILLING_HISTORY_DB_UNAVAILABLE');
 
   try {
     const [subDoc, orgDoc] = await Promise.all([
@@ -51,6 +53,7 @@ export async function resolveSubscriptionPurchaseEligibility(
     }
   } catch (err) {
     console.error('Error fetching entitlement status for eligibility:', err);
+    if (strictConsistency) throw new Error('BILLING_HISTORY_DB_UNAVAILABLE');
   }
 
   const baseResponse = {
@@ -79,6 +82,8 @@ export async function resolveSubscriptionPurchaseEligibility(
     status: 'all',
     limit: 100
   });
+
+  if (strictConsistency && subscriptions.has_more) throw new Error('BILLING_HISTORY_INCOMPLETE');
 
   const activeStatuses = ['active', 'trialing'];
   const pendingStatuses = ['past_due', 'unpaid', 'incomplete', 'paused'];
