@@ -2194,6 +2194,11 @@ service cloud.firestore {
           allow delete: if false;
         }
 
+        match /privateReferenceBytes/{binaryId} {
+          // Only the authenticated Cloud Run backend may read/write image bytes.
+          allow read, create, update, delete: if false;
+        }
+
         match /sourceCoverageRuns/{runId} {
           allow read: if nestAffiliateCanRead(orgId);
           allow create: if nestAffiliateCanEdit(orgId) &&
@@ -2228,7 +2233,7 @@ service cloud.firestore {
         }
 
         match /{collectionName}/{documentId} {
-          allow read: if !(collectionName in ['providerConnections', 'providerSecretState', 'affiliateAccounts', 'pinterestAccounts', 'quotaUsage', 'systemJobs', 'auditEvents']) &&
+          allow read: if !(collectionName in ['providerConnections', 'providerSecretState', 'affiliateAccounts', 'pinterestAccounts', 'quotaUsage', 'systemJobs', 'auditEvents', 'privateReferenceBytes']) &&
             nestAffiliateCanRead(orgId);
           allow create: if collectionName in [
               'boards',

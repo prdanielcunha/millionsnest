@@ -516,3 +516,13 @@ test('V4 opportunity assessments accept versioned research only',async()=>{
     organizationId:'org-a',version:'1.0',runId:'run-1',
   }));
 });
+
+test('V4 private media bytes are inaccessible via browser even to owner/editor',async()=>{
+ const owner=env.authenticatedContext('owner-a').firestore();
+ const viewer=env.authenticatedContext('viewer-a').firestore();
+ const ref=doc(owner,'organizations/org-a/products/nestaffiliate/privateReferenceBytes/ref-secret');
+ await assertFails(setDoc(ref,{organizationId:'org-a',bytes:'never-client-readable'}));
+ await assertFails(getDoc(ref));
+ await assertFails(getDoc(doc(viewer,ref.path)));
+ await assertFails(updateDoc(ref,{bytes:'changed'}));
+});

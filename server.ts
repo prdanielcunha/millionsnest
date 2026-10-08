@@ -1359,14 +1359,28 @@ async function handleNestAffiliateReferenceUpload(req:any,res:any){
     });
     if(!withinQuota)return res.status(429).json({error:'REFERENCE_DAILY_UPLOAD_LIMIT'});
     const storageFile=admin.storage().bucket(NESTAFFILIATE_REFERENCE_MEDIA_BUCKET).file(path);
-    await storageFile.save(parsed.bytes,{
-      resumable:false,
-      metadata:{
-        contentType:'image/webp',
-        cacheControl:'private, no-store',
-        metadata:{organizationId,actorUid,referenceId:parsed.refId},
-      },
-    });
+    const privateBytesRef=dbInstance.collection('organizations').doc(organizationId).collection('products')
+      .doc('nestaffiliate').collection('privateReferenceBytes').doc(parsed.refId);
+    let storageMode:'FIREBASE_STORAGE'|'FIRESTORE_PRIVATE'='FIREBASE_STORAGE';
+    try{
+      await storageFile.save(parsed.bytes,{
+        resumable:false,
+        metadata:{
+          contentType:'image/webp',
+          cacheControl:'private, no-store',
+          metadata:{organizationId,actorUid,referenceId:parsed.refId},
+        },
+      });
+    }catch(storageError){
+      // Shared bucket IAM may be restricted. Never make media public or bypass tenancy.
+      // A bounded backend-only Firestore binary document is the private fallback.
+      if(parsed.bytes.length>620_000)throw storageError;
+      await privateBytesRef.create({
+        organizationId,sha256:parsed.hash,contentType:'image/webp',
+        bytes:parsed.bytes,createdAt:admin.firestore.FieldValue.serverTimestamp(),
+      });
+      storageMode='FIRESTORE_PRIVATE';
+    }
     const now=new Date().toISOString();
     const asset={
       id:parsed.refId,organizationId,productId:parsed.fields.productId,
@@ -1377,14 +1391,15 @@ async function handleNestAffiliateReferenceUpload(req:any,res:any){
       sourceUrl:parsed.fields.sourceUrl,
       variantFingerprint:parsed.fields.variantFingerprint,
       sha256:parsed.hash,mimeType:'image/webp',
-      storagePath:path,createdBy:actorUid,
+      storagePath:path,storageMode,createdBy:actorUid,
       capturedAt:now,updatedAt:now,
     };
     try{
       await document.create(asset);
     }catch(error){
       // Concurrent duplicate or failed Firestore write; prevent an orphan object.
-      await storageFile.delete({ignoreNotFound:true}).catch(()=>undefined);
+      if(storageMode==='FIRESTORE_PRIVATE')await privateBytesRef.delete().catch(()=>undefined);
+      else await storageFile.delete({ignoreNotFound:true}).catch(()=>undefined);
       throw error;
     }
     res.setHeader('Cache-Control','private, no-store');
@@ -1411,15 +1426,30 @@ async function handleNestAffiliateReferenceDownload(req:any,res:any){
     if(!canAccessStoredReference(data,organizationId,referenceId)){
       return res.status(403).json({error:'REFERENCE_NOT_AVAILABLE'});
     }
-    const object=admin.storage().bucket(NESTAFFILIATE_REFERENCE_MEDIA_BUCKET).file(path);
-    const [meta]=await object.getMetadata();
-    const size=Number(meta.size||0);
-    if(size<=0||size>MAX_REFERENCE_BYTES||meta.contentType!=='image/webp'){
-      return res.status(409).json({error:'REFERENCE_OBJECT_INVALID'});
-    }
-    const [bytes]=await object.download();
-    if(bytes.length!==size){
-      return res.status(409).json({error:'REFERENCE_BINARY_INVALID'});
+    let bytes:Buffer;
+    if(data.storageMode==='FIRESTORE_PRIVATE'){
+      const fileSnap=await dbInstance.collection('organizations').doc(organizationId)
+        .collection('products').doc('nestaffiliate').collection('privateReferenceBytes').doc(referenceId).get();
+      if(!fileSnap.exists)return res.status(404).json({error:'REFERENCE_OBJECT_MISSING'});
+      const fileData=fileSnap.data()||{};
+      const binary=fileData.bytes;
+      if(fileData.sha256!==data.sha256||fileData.organizationId!==organizationId||
+        fileData.contentType!=='image/webp'){
+        return res.status(409).json({error:'REFERENCE_PRIVATE_DATA_INVALID'});
+      }
+      bytes=Buffer.isBuffer(binary)?binary:
+        typeof binary?.toUint8Array==='function'?Buffer.from(binary.toUint8Array()):Buffer.alloc(0);
+      if(bytes.length<=0||bytes.length>620_000)return res.status(409).json({error:'REFERENCE_OBJECT_INVALID'});
+    }else{
+      const object=admin.storage().bucket(NESTAFFILIATE_REFERENCE_MEDIA_BUCKET).file(path);
+      const [meta]=await object.getMetadata();
+      const size=Number(meta.size||0);
+      if(size<=0||size>MAX_REFERENCE_BYTES||meta.contentType!=='image/webp'){
+        return res.status(409).json({error:'REFERENCE_OBJECT_INVALID'});
+      }
+      const [stored]=await object.download();
+      if(stored.length!==size)return res.status(409).json({error:'REFERENCE_BINARY_INVALID'});
+      bytes=stored;
     }
     const actualHash=crypto.createHash('sha256').update(bytes).digest('hex');
     if(actualHash!==data.sha256){
