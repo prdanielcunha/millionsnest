@@ -74,6 +74,7 @@ before(async () => {
       currentVersion: { version: 1 },
     });
 
+    await setDoc(doc(db, 'organizations/org-a/products/nestaffiliate/productReferences/ref-example'), sampleReference());
     await setDoc(doc(db, 'organizations/org-a/products/nestaffiliate/auditEvents/audit-1'), {
       organizationId: 'org-a',
       action: 'SEEDED',
@@ -451,12 +452,12 @@ function sampleReference(id = 'ref-example') {
     updatedAt:'2026-10-08T12:00:00Z',
   };
 }
-test('V4 reference accepts authorized editor and remains scoped to its tenant',async()=>{
+test('V4 reference is backend-created and remains scoped to its tenant',async()=>{
   const editor=env.authenticatedContext('editor-a').firestore();
   const viewer=env.authenticatedContext('viewer-a').firestore();
   const other=env.authenticatedContext('editor-b').firestore();
   const ref=doc(editor,'organizations/org-a/products/nestaffiliate/productReferences/ref-example');
-  await assertSucceeds(setDoc(ref,sampleReference()));
+  await assertFails(setDoc(doc(editor,'organizations/org-a/products/nestaffiliate/productReferences/ref-editor-forged'),sampleReference('ref-editor-forged')));
   await assertSucceeds(getDoc(doc(viewer,ref.path)));
   await assertFails(getDoc(doc(other,ref.path)));
   await assertFails(setDoc(doc(viewer,'organizations/org-a/products/nestaffiliate/productReferences/ref-viewer'),sampleReference('ref-viewer')));

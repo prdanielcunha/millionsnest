@@ -2180,22 +2180,8 @@ service cloud.firestore {
         // NestAffiliate V4: additive, append-only, and tenant-specific rules.
         match /productReferences/{referenceId} {
           allow read: if nestAffiliateCanRead(orgId);
-          allow create: if nestAffiliateCanEdit(orgId) &&
-            nestAffiliateTenantCreate(orgId) &&
-            nestAffiliateNoSecretFields(request.resource.data) &&
-            !request.resource.data.keys().hasAny(['inlineBytes','rawBytes','base64','imageBytes','blob','bytes']) &&
-            request.resource.data.get('id', '') == referenceId &&
-            request.resource.data.get('productId', '') is string &&
-            request.resource.data.get('externalListingId', '') is string &&
-            request.resource.data.get('createdBy', '') == request.auth.uid &&
-            request.resource.data.get('referenceStatus', '') == 'READY_FOR_AI' &&
-            request.resource.data.get('rights', '') == 'USER_ATTESTED' &&
-            request.resource.data.get('canSendToExternalAI', false) == true &&
-            request.resource.data.get('sourceType', '') in ['USER_OWN_PHOTO','OWNER_AUTHORIZED','LICENSED_MEDIA'] &&
-            request.resource.data.get('mimeType', '') == 'image/webp' &&
-            request.resource.data.get('sha256', '').matches('^[a-f0-9]{64}$') &&
-            request.resource.data.get('rightsEvidence', '').size() >= 12 &&
-            request.resource.data.get('storagePath', '').matches('^organizations/' + orgId + '/product-references/.*');
+          // Only the authenticated Hub backend may create media identity records.
+          allow create: if false;
           allow update: if nestAffiliateCanEdit(orgId) &&
             nestAffiliateTenantUnchanged(orgId) &&
             nestAffiliateNoSecretFields(request.resource.data) &&
