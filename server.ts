@@ -59,7 +59,7 @@ import { resolveSubscriptionPurchaseEligibility } from './src/server/services/Su
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
 import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
-import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization } from './src/server/services/MusicScaleNoCardTrialService.js';
+import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization, hasPriorMusicScaleSubscription } from './src/server/services/MusicScaleNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } from './src/server/services/EcosystemSessionVersionService.js';
@@ -9074,7 +9074,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const blockedOrg=!orgDoc.exists||org.disabled===true||suspended.includes(String(org.status||''));
       const old=sub.apps?.[appId];
       const priorSubscription=(old&&Object.keys(old).length>0)||
-        (appId==='musicscale'&&subDoc.exists&&Object.keys(sub).length>0);
+        (appId==='musicscale'&&hasPriorMusicScaleSubscription(sub));
       const previousApp=org.apps?.[appId];
       const existingApp=previousApp&&(previousApp.trialUsed||previousApp.stripeSubscriptionId||
         ['active','trialing','expired','canceled','past_due','unpaid'].includes(String(previousApp.status||'')));
