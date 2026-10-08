@@ -33,6 +33,7 @@ const BillingSuccess = lazy(() => import('./pages/BillingSuccess.js'));
 const AdminDebug = lazy(() => import('./pages/AdminDebug.js'));
 const EcosystemAdmin = lazy(() => import('./pages/EcosystemAdmin.js').then(module => ({ default: module.EcosystemAdmin })));
 const EcosystemDataConsole = lazy(() => import('./pages/EcosystemDataConsole.js').then(module => ({ default: module.EcosystemDataConsole })));
+const TrialManagement = lazy(() => import('./pages/TrialManagement.js').then(module => ({default:module.TrialManagement})));
 const OrganizationPublicPage = lazy(() => import('./pages/OrganizationPublicPage.js').then(module => ({ default: module.OrganizationPublicPage })));
 const MusicScaleLanding = lazy(() => import('./pages/MusicScaleLanding.js').then(module => ({ default: module.MusicScaleLanding })));
 const ConnectLaunch = lazy(() => import('./pages/ConnectLaunch.js').then(module => ({ default: module.ConnectLaunch })));
@@ -87,6 +88,7 @@ export default function App() {
                 <Route path="/admin/debug/organization" element={<AdminDebug />} />
                 <Route path="/admin/ecosystem" element={<EcosystemAdmin />} />
                 <Route path="/admin/ecosystem-data" element={<EcosystemDataConsole />} />
+                <Route path="/admin/trials" element={<TrialManagement />} />
                 <Route path="/admin/database" element={<EcosystemDataConsole />} />
                 <Route path="/ecosystem/data-console" element={<EcosystemDataConsole />} />
                 <Route path="/upgrade" element={<Checkout />} />
