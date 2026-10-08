@@ -8,12 +8,14 @@ on:
       - "src/server/services/NestAiTokenService.ts"
       - "src/server/services/NestLocalAiEntitlement.ts"
       - "src/server/services/HubNoCardTrialService.ts"
+      - "src/lib/nestLocalCommercialV2.ts"
       - "src/server/services/NestAiCreditGrantSyncService.ts"
       - "src/server/services/EcosystemAccessResolver.ts"
       - "server.ts"
       - "scripts/test_nestai_token_service.ts"
       - "scripts/test_nestlocal_ai_commercial_claims.ts"
       - "scripts/test_hub_no_card_trial.ts"
+      - "scripts/test_nestlocal_founders_policy.ts"
       - "scripts/test_nestai_credit_grant_sync.ts"
       - ".github/workflows/nestai-hub-integration-qa.yml"
 permissions:
@@ -32,5 +34,6 @@ jobs:
       - run: npx tsx scripts/test_nestai_token_service.ts
       - run: npx tsx scripts/test_nestlocal_ai_commercial_claims.ts
       - run: npx tsx scripts/test_hub_no_card_trial.ts
+      - run: npx tsx scripts/test_nestlocal_founders_policy.ts
       - run: npx tsx scripts/test_nestai_credit_grant_sync.ts
       - run: npm run build
