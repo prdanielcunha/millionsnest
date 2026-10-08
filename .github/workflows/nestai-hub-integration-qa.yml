@@ -8,6 +8,8 @@ on:
       - "src/server/services/NestAiTokenService.ts"
       - "src/server/services/NestLocalAiEntitlement.ts"
       - "src/server/services/HubNoCardTrialService.ts"
+      - "src/server/services/MusicScaleNoCardTrialService.ts"
+      - "src/server/services/HubTrialExtensionService.ts"
       - "src/server/services/NestLocalTrialCreditOutboxService.ts"
       - "src/server/services/SubscriptionEligibility.ts"
       - "src/lib/nestLocalCommercialV2.ts"
@@ -18,6 +20,7 @@ on:
       - "scripts/test_nestai_token_service.ts"
       - "scripts/test_nestlocal_ai_commercial_claims.ts"
       - "scripts/test_hub_no_card_trial.ts"
+      - "scripts/test_hub_trial_extensions.ts"
       - "scripts/test_nestlocal_trial_credit_outbox.ts"
       - "scripts/test_nestlocal_strict_eligibility.ts"
       - "scripts/test_nestlocal_readonly_access.ts"
@@ -41,6 +44,7 @@ jobs:
       - run: npx tsx scripts/test_nestai_token_service.ts
       - run: npx tsx scripts/test_nestlocal_ai_commercial_claims.ts
       - run: npx tsx scripts/test_hub_no_card_trial.ts
+      - run: npx tsx scripts/test_hub_trial_extensions.ts
       - run: npx tsx scripts/test_nestlocal_trial_credit_outbox.ts
       - run: npx tsx scripts/test_nestlocal_strict_eligibility.ts
       - run: npx tsx scripts/test_nestlocal_readonly_access.ts
