@@ -1615,6 +1615,18 @@ service cloud.firestore {
       return request.resource.data.get('apps', {}).get('nestlocal', null) ==
         resource.data.get('apps', {}).get('nestlocal', null);
     }
+    // Existing MusicScale tenants keep editing noncommercial organization
+    // settings. Only server-issued pilot trial status/deadline are immutable.
+    function musicScaleTrialProjectionProtected() {
+      let before = resource.data.get('apps', {}).get('musicscale', {});
+      let after = request.resource.data.get('apps', {}).get('musicscale', {});
+      return before.get('trialSource', '') != 'hub_internal_trial' || (
+        after.get('trialSource', '') == 'hub_internal_trial' &&
+        after.get('trialEndsAt', null) == before.get('trialEndsAt', null) &&
+        after.get('trialUsed', false) == true &&
+        after.get('status', '') == before.get('status', '')
+      );
+    }
 
     match /organizations/{orgId} {
       allow read: if isAuthenticated() && (
@@ -1633,7 +1645,8 @@ service cloud.firestore {
         resource.data.get('ownerId', '') == request.auth.uid || 
         resource.data.get('owner_user_id', '') == request.auth.uid || 
         (checkMemberExists(orgId) && isOrgOwner(orgId))
-      ) && nestLocalCommercialProjectionUnchanged();
+      ) && nestLocalCommercialProjectionUnchanged() &&
+        musicScaleTrialProjectionProtected();
       allow delete: if false; 
 
       // ---------------------------------------------------------------------------------
