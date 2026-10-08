@@ -1,6 +1,8 @@
 /** Hub-only NestLocal AI commercialization rules. No Stripe writes and no Firebase writes.
  * This file evaluates server-fetched records; NEVER build the input from client-supplied fields.
  */
+import { trialWindow } from './HubTrialExtensionService.js';
+
 export type NestLocalAiEntitlement = {
   appId: 'nestlocal';
   accessState: 'trial_active' | 'paid_active' | 'expired_read_only';
@@ -43,17 +45,7 @@ export function isNestLocalInternalTrialActive(
   trial: RecordLike,
   now = Date.now(),
 ): boolean {
-  const data = asRecord(trial);
-  if (!data || data.status !== 'active' || data.appId !== 'nestlocal' ||
-      data.source !== 'hub_internal_trial' || data.revoked === true) return false;
-  const begins = timestampMillis(data.beginsAt);
-  const ends = timestampMillis(data.expiresAt);
-  if (begins === null || ends === null || begins >= ends || now < begins || now >= ends ||
-      ends - begins > 7 * 86_400_000) return false;
-  // Trial issuance must be a one-time, server-authoritative document.
-  if (typeof data.grantVersion !== 'number' || !Number.isSafeInteger(data.grantVersion) ||
-      data.grantVersion < 2) return false;
-  return true;
+  return trialWindow('nestlocal',trial,now).active;
 }
 
 /** Expired trial permits read-only product access, NEVER an AI commercial claim.
@@ -61,15 +53,7 @@ export function isNestLocalInternalTrialActive(
 export function isNestLocalInternalTrialExpired(
   trial: RecordLike, now = Date.now(), expectedOrganizationId?: string,
 ): boolean {
-  const data = asRecord(trial);
-  if (!data || data.appId !== 'nestlocal' || data.source !== 'hub_internal_trial' ||
-      data.revoked === true || data.consumed !== true || data.status !== 'active' ||
-      !Number.isSafeInteger(data.grantVersion) || Number(data.grantVersion) < 2 ||
-      (expectedOrganizationId && data.organizationId !== expectedOrganizationId)) return false;
-  const begins = timestampMillis(data.beginsAt);
-  const ends = timestampMillis(data.expiresAt);
-  return begins !== null && ends !== null &&
-    ends-begins === 168 * 60 * 60 * 1000 && now >= ends;
+  return trialWindow('nestlocal',trial,now,expectedOrganizationId).expired;
 }
 
 /** Explicitly recognizes paid-active subscriptions, never auto-equates a Stripe trial with paid status. */
@@ -95,7 +79,7 @@ export function resolveNestLocalAiEntitlement(input: {
   }
 
   if (isNestLocalInternalTrialActive(input.internalTrial, now)) {
-    const ends = timestampMillis(asRecord(input.internalTrial)?.expiresAt)!;
+    const ends = trialWindow('nestlocal',input.internalTrial,now).endsAt;
     return {appId:'nestlocal',accessState:'trial_active',canUseAI:true,
       billingSource:'hub_internal_trial',grantVersion:2,trialEndsAt:new Date(ends).toISOString()};
   }
