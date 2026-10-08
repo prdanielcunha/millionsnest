@@ -55,6 +55,9 @@ import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import path from 'path';
 import crypto from 'crypto';
+import {
+  parseReferenceUpload, canonicalReferencePath, canAccessStoredReference, MAX_REFERENCE_BYTES,
+} from './src/server/services/NestAffiliateReferenceMediaService.js';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
@@ -750,6 +753,7 @@ async function respondWithMercadoLivreSearchFallback(input: {
   res: any;
   accessToken?: string;
   reason: string;
+  discoveryMode?: boolean;
 }) {
   const fallbackUrl = new URL('https://api.mercadolibre.com/sites/MLB/search');
   fallbackUrl.searchParams.set('q', input.query);
@@ -787,13 +791,19 @@ async function respondWithMercadoLivreSearchFallback(input: {
     const id = String(item.id || '').trim();
     const title = String(item.title || '').trim();
     const permalink = String(item.permalink || '').trim();
-    if (!id || !title || !permalink) return [];
+    if (!id || !title || !permalink) return []; // Never manufacture an offer identity
 
     const price = Number(item.price);
-    const soldQuantity = Number(item.sold_quantity);
-    const availableQuantity = Number(item.available_quantity);
+    // Omitted fields are UNKNOWN, never inferred to zero.
+    const observedNumber=(value:unknown)=>{
+      if(value===undefined||value===null||value==='')return Number.NaN;
+      const numeric=Number(value);
+      return Number.isFinite(numeric)?numeric:Number.NaN;
+    };
+    const soldQuantity = observedNumber(item.sold_quantity);
+    const availableQuantity = observedNumber(item.available_quantity);
     const thumbnail = String(item.thumbnail || item.secure_thumbnail || '').replace(/^http:/, 'https:');
-    const status = String(item.status || 'active').toLowerCase();
+    const status = String(item.status || '').toLowerCase();
     return [{
       productId: `meli:${id}`,
       organizationId: input.organizationId,
@@ -816,9 +826,9 @@ async function respondWithMercadoLivreSearchFallback(input: {
         availableQuantity: { value: availableQuantity, source: 'mercadolivre-site-search', observedAt },
       } : {}),
       availability: {
-        value: status !== 'active'
+        value: status && status !== 'active'
           ? 'unavailable'
-          : Number.isFinite(availableQuantity)
+          : status === 'active' && Number.isFinite(availableQuantity)
             ? (availableQuantity > 0 ? 'available' : 'unavailable')
             : 'unknown',
         source: 'mercadolivre-site-search',
@@ -847,6 +857,8 @@ async function respondWithMercadoLivreSearchFallback(input: {
       detailed: rows.length,
       usable: products.length,
       minSoldQuantity: 0,
+      discoveryMode: Boolean(input.discoveryMode),
+      sourceLimited: true,
       rejectedUnavailable: 0,
       rejectedLowSales: 0,
       rejectedUnverified: Math.max(0, rows.length - products.length),
@@ -871,6 +883,8 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     const organizationId = String(req.query.organizationId || '').trim();
     const query = String(req.query.q || '').trim();
     const requestedLimit = Number(req.query.limit || 12);
+    // Only an explicit V4 client request enters investigation mode; legacy remains unchanged.
+    const discoveryMode = req.query.mode === 'discovery_v4';
     const limit = Math.max(1, Math.min(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 12, 20));
 
     if (
@@ -947,6 +961,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         limit,
         res,
         reason: 'MELI_NOT_CONNECTED',
+        discoveryMode,
       });
     }
 
@@ -961,16 +976,17 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         limit,
         res,
         reason: 'MELI_TOKEN_STALE',
+        discoveryMode,
       });
     }
 
-    const MIN_SOLD_QUANTITY = 100;
+    const MIN_SOLD_QUANTITY = discoveryMode ? 0 : 100;
     const searchUrl = new URL('https://api.mercadolibre.com/products/search');
     searchUrl.searchParams.set('status', 'active');
     searchUrl.searchParams.set('site_id', 'MLB');
     searchUrl.searchParams.set('q', query);
-    // Pull the full supported page so the quality gate still has enough
-    // candidates after rejecting low-sales or unavailable listings.
+    // Pull a bounded official page. In investigation mode, missing sales is UNKNOWN,
+    // never a confirmed zero. Publication-time gates remain independent.
     searchUrl.searchParams.set('limit', '20');
 
     const providerHeaders = { Authorization: `Bearer ${accessToken}` };
@@ -990,6 +1006,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         res,
         accessToken,
         reason: `MELI_CATALOG_${searchResponse.status}`,
+        discoveryMode,
       });
     }
 
@@ -1161,7 +1178,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         rejectedUnavailable += 1;
         return [];
       }
-      if (hasSoldQuantity && soldQuantity < MIN_SOLD_QUANTITY) {
+      if (!discoveryMode && hasSoldQuantity && soldQuantity < MIN_SOLD_QUANTITY) {
         rejectedLowSales += 1;
         return [];
       }
@@ -1184,7 +1201,7 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
           ? itemPrice
           : undefined;
 
-      if (!title || !permalink || !imageUrl) {
+      if (!title || !permalink || (!discoveryMode && !imageUrl)) {
         rejectedUnverified += 1;
         return [];
       }
@@ -1253,13 +1270,13 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
             : 'mercadolivre-catalog-api',
           observedAt,
         },
-        imageUrl: {
+        ...(imageUrl ? {imageUrl: {
           value: imageUrl,
           source: product.pictures?.length || candidate.pictures?.length
             ? 'mercadolivre-catalog-api'
             : 'mercadolivre-items-bulk',
           observedAt,
-        },
+        }} : {}),
         assetRights: 'UNKNOWN',
       }];
     }).slice(0, limit);
@@ -1277,6 +1294,8 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
         detailed: detailRows.filter((row) => row.detailVerified).length,
         usable: products.length,
         minSoldQuantity: MIN_SOLD_QUANTITY,
+        discoveryMode,
+        researchOnly: discoveryMode,
         rejectedUnavailable,
         rejectedLowSales,
         rejectedUnverified,
@@ -1288,6 +1307,164 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
   }
 }
 
+
+
+const NESTAFFILIATE_REFERENCE_MEDIA_BUCKET=
+  process.env.FIREBASE_STORAGE_BUCKET || 'millionsnest.firebasestorage.app';
+
+/** Opt-in backend activation, separate from client feature flags. */
+function nestAffiliateReferenceMediaEnabled(){
+  return process.env.NESTAFFILIATE_REFERENCE_MEDIA_ENABLED==='true';
+}
+
+async function handleNestAffiliateReferenceUpload(req:any,res:any){
+  if(!nestAffiliateReferenceMediaEnabled())return res.status(503).json({error:'REFERENCE_MEDIA_NOT_ENABLED'});
+  const context=await resolveNestAffiliateShopeeContext(req,res);
+  if(!context)return;
+  if(!context.isGlobal&&!context.isOwner&&!['owner','admin','editor'].includes(context.memberRole)){
+    return res.status(403).json({error:'REFERENCE_EDITOR_REQUIRED'});
+  }
+  let parsed:ReturnType<typeof parseReferenceUpload>;
+  try{parsed=parseReferenceUpload(req.body);}
+  catch(error){
+    return res.status(400).json({error:error instanceof Error?error.message:'REFERENCE_INVALID'});
+  }
+  const {organizationId,actorUid,dbInstance}=context;
+  const document=dbInstance.collection('organizations').doc(organizationId).collection('products').doc('nestaffiliate')
+    .collection('productReferences').doc(parsed.refId);
+  const path=canonicalReferencePath(organizationId,parsed.refId);
+  try{
+    const existing=await document.get();
+    if(existing.exists){
+      const prior=existing.data()||{};
+      if(!canAccessStoredReference(prior,organizationId,parsed.refId) || prior.sha256!==parsed.hash ||
+        prior.productId!==parsed.fields.productId || prior.externalListingId!==parsed.fields.externalListingId){
+        return res.status(409).json({error:'REFERENCE_CONFLICT_OR_REVOKED'});
+      }
+      return res.status(200).json({asset:prior,alreadyExists:true});
+    }
+    // Costs and abuse: one tenant-scoped, backend-owned 24 uploads/day quota.
+    const day=new Date().toISOString().slice(0,10);
+    const quotaRef=dbInstance.collection('organizations').doc(organizationId)
+      .collection('products').doc('nestaffiliate').collection('quotaUsage').doc('reference-'+day);
+    const withinQuota=await dbInstance.runTransaction(async tx=>{
+      const snapshot=await tx.get(quotaRef);
+      const count=Number(snapshot.data()?.count||0);
+      if(!Number.isFinite(count)||count>=24)return false;
+      tx.set(quotaRef,{
+        organizationId,kind:'REFERENCE_UPLOAD',day,count:count+1,
+        updatedAt:admin.firestore.FieldValue.serverTimestamp(),
+      },{merge:true});
+      return true;
+    });
+    if(!withinQuota)return res.status(429).json({error:'REFERENCE_DAILY_UPLOAD_LIMIT'});
+    const storageFile=admin.storage().bucket(NESTAFFILIATE_REFERENCE_MEDIA_BUCKET).file(path);
+    const privateBytesRef=dbInstance.collection('organizations').doc(organizationId).collection('products')
+      .doc('nestaffiliate').collection('privateReferenceBytes').doc(parsed.refId);
+    let storageMode:'FIREBASE_STORAGE'|'FIRESTORE_PRIVATE'='FIREBASE_STORAGE';
+    try{
+      await storageFile.save(parsed.bytes,{
+        resumable:false,
+        metadata:{
+          contentType:'image/webp',
+          cacheControl:'private, no-store',
+          metadata:{organizationId,actorUid,referenceId:parsed.refId},
+        },
+      });
+    }catch(storageError){
+      // Shared bucket IAM may be restricted. Never make media public or bypass tenancy.
+      // A bounded backend-only Firestore binary document is the private fallback.
+      if(parsed.bytes.length>620_000)throw storageError;
+      await privateBytesRef.create({
+        organizationId,sha256:parsed.hash,contentType:'image/webp',
+        bytes:parsed.bytes,createdAt:admin.firestore.FieldValue.serverTimestamp(),
+      });
+      storageMode='FIRESTORE_PRIVATE';
+    }
+    const now=new Date().toISOString();
+    const asset={
+      id:parsed.refId,organizationId,productId:parsed.fields.productId,
+      marketplace:parsed.fields.marketplace,externalListingId:parsed.fields.externalListingId,
+      sourceType:parsed.fields.sourceType,rights:'USER_ATTESTED',
+      referenceStatus:'READY_FOR_AI',canSendToExternalAI:true,
+      rightsEvidence:parsed.fields.rightsEvidence.trim(),
+      sourceUrl:parsed.fields.sourceUrl,
+      variantFingerprint:parsed.fields.variantFingerprint,
+      sha256:parsed.hash,mimeType:'image/webp',
+      storagePath:path,storageMode,createdBy:actorUid,
+      capturedAt:now,updatedAt:now,
+    };
+    try{
+      await document.create(asset);
+    }catch(error){
+      // Concurrent duplicate or failed Firestore write; prevent an orphan object.
+      if(storageMode==='FIRESTORE_PRIVATE')await privateBytesRef.delete().catch(()=>undefined);
+      else await storageFile.delete({ignoreNotFound:true}).catch(()=>undefined);
+      throw error;
+    }
+    res.setHeader('Cache-Control','private, no-store');
+    return res.status(201).json({asset});
+  }catch(error){
+    console.error('[NestAffiliate/reference] secure upload failed',error instanceof Error?error.message:'UNKNOWN');
+    return res.status(503).json({error:'REFERENCE_PRIVATE_STORAGE_UNAVAILABLE'});
+  }
+}
+async function handleNestAffiliateReferenceDownload(req:any,res:any){
+  if(!nestAffiliateReferenceMediaEnabled())return res.status(503).json({error:'REFERENCE_MEDIA_NOT_ENABLED'});
+  const context=await resolveNestAffiliateShopeeContext(req,res);
+  if(!context)return;
+  const referenceId=String(req.query.referenceId||'').trim();
+  const {organizationId,dbInstance}=context;
+  let path='';
+  try{path=canonicalReferencePath(organizationId,referenceId);}
+  catch{return res.status(400).json({error:'REFERENCE_INVALID'});}
+  try{
+    const snapshot=await dbInstance.collection('organizations').doc(organizationId)
+      .collection('products').doc('nestaffiliate').collection('productReferences').doc(referenceId).get();
+    if(!snapshot.exists)return res.status(404).json({error:'REFERENCE_NOT_FOUND'});
+    const data=snapshot.data()||{};
+    if(!canAccessStoredReference(data,organizationId,referenceId)){
+      return res.status(403).json({error:'REFERENCE_NOT_AVAILABLE'});
+    }
+    let bytes:Buffer;
+    if(data.storageMode==='FIRESTORE_PRIVATE'){
+      const fileSnap=await dbInstance.collection('organizations').doc(organizationId)
+        .collection('products').doc('nestaffiliate').collection('privateReferenceBytes').doc(referenceId).get();
+      if(!fileSnap.exists)return res.status(404).json({error:'REFERENCE_OBJECT_MISSING'});
+      const fileData=fileSnap.data()||{};
+      const binary=fileData.bytes;
+      if(fileData.sha256!==data.sha256||fileData.organizationId!==organizationId||
+        fileData.contentType!=='image/webp'){
+        return res.status(409).json({error:'REFERENCE_PRIVATE_DATA_INVALID'});
+      }
+      bytes=Buffer.isBuffer(binary)?binary:
+        typeof binary?.toUint8Array==='function'?Buffer.from(binary.toUint8Array()):Buffer.alloc(0);
+      if(bytes.length<=0||bytes.length>620_000)return res.status(409).json({error:'REFERENCE_OBJECT_INVALID'});
+    }else{
+      const object=admin.storage().bucket(NESTAFFILIATE_REFERENCE_MEDIA_BUCKET).file(path);
+      const [meta]=await object.getMetadata();
+      const size=Number(meta.size||0);
+      if(size<=0||size>MAX_REFERENCE_BYTES||meta.contentType!=='image/webp'){
+        return res.status(409).json({error:'REFERENCE_OBJECT_INVALID'});
+      }
+      const [stored]=await object.download();
+      if(stored.length!==size)return res.status(409).json({error:'REFERENCE_BINARY_INVALID'});
+      bytes=stored;
+    }
+    const actualHash=crypto.createHash('sha256').update(bytes).digest('hex');
+    if(actualHash!==data.sha256){
+      return res.status(409).json({error:'REFERENCE_HASH_MISMATCH'});
+    }
+    res.setHeader('Content-Type','image/webp');
+    res.setHeader('X-Content-Type-Options','nosniff');
+    res.setHeader('Cache-Control','private, no-store');
+    res.setHeader('Content-Disposition','attachment; filename="authorized-product-reference.webp"');
+    return res.status(200).end(bytes);
+  }catch(error){
+    console.error('[NestAffiliate/reference] private read failed',error instanceof Error?error.message:'UNKNOWN');
+    return res.status(503).json({error:'REFERENCE_PRIVATE_STORAGE_UNAVAILABLE'});
+  }
+}
 
 type NestAffiliateShopeeContext = {
   dbInstance: admin.firestore.Firestore;
@@ -1793,6 +1970,9 @@ async function startServer() {
     return handleNestLocalNestAiSessionTokenRequest(req, res, dbInstance);
   });
   app.get('/api/v1/support/capabilities', getSupportCapabilities);
+  // Private GCS proxy. Never expose signed/public Storage tokens in the client.
+  app.post('/api/v1/nestaffiliate/reference-media', express.json({limit:'12mb'}), handleNestAffiliateReferenceUpload);
+  app.get('/api/v1/nestaffiliate/reference-media', handleNestAffiliateReferenceDownload);
   app.get('/api/v1/nestaffiliate/mercadolivre/search', handleNestAffiliateMercadoLivreSearch);
   app.get('/api/v1/nestaffiliate/shopee/status', handleNestAffiliateShopeeStatus);
   app.post('/api/v1/nestaffiliate/shopee/credentials', express.json({ limit: '8kb' }), handleNestAffiliateShopeeCredentials);
