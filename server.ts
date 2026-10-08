@@ -701,6 +701,158 @@ export async function upsertEcosystemSubscription(params: {
 }
 
 
+async function fetchMarketplaceWithRetry(
+  url: string | URL,
+  init: RequestInit = {},
+  label = 'marketplace',
+  maxAttempts = 4,
+) {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(url, init);
+      const retryable = response.status === 429 || response.status >= 500;
+      if (!retryable || attempt === maxAttempts) return response;
+
+      const retryAfterSeconds = Number(response.headers.get('retry-after') || 0);
+      const delayMs = Math.max(
+        Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : 0,
+        Math.min(6000, 500 * (2 ** (attempt - 1))),
+      );
+      console.warn('[NestAffiliate/provider] retry', {
+        label,
+        status: response.status,
+        attempt,
+        delayMs,
+      });
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) throw error;
+      const delayMs = Math.min(6000, 500 * (2 ** (attempt - 1)));
+      console.warn('[NestAffiliate/provider] network retry', {
+        label,
+        attempt,
+        delayMs,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('PROVIDER_REQUEST_FAILED');
+}
+
+async function respondWithMercadoLivreSearchFallback(input: {
+  organizationId: string;
+  query: string;
+  limit: number;
+  res: any;
+  accessToken?: string;
+  reason: string;
+}) {
+  const fallbackUrl = new URL('https://api.mercadolibre.com/sites/MLB/search');
+  fallbackUrl.searchParams.set('q', input.query);
+  fallbackUrl.searchParams.set('limit', String(Math.max(1, Math.min(input.limit, 20))));
+
+  const headers: Record<string,string> = { Accept: 'application/json' };
+  if (input.accessToken) headers.Authorization = `Bearer ${input.accessToken}`;
+
+  const response = await fetchMarketplaceWithRetry(
+    fallbackUrl,
+    { headers },
+    'meli-public-search-fallback',
+  );
+  if (!response.ok) {
+    const body = await response.text();
+    console.error('[NestAffiliate/MELI] fallback search failed', {
+      status: response.status,
+      reason: input.reason,
+      body: body.slice(0, 220),
+    });
+    return input.res.status(502).json({
+      error: 'MELI_SEARCH_FAILED',
+      providerStatus: response.status,
+      fallbackAttempted: true,
+    });
+  }
+
+  const payload = await response.json() as {
+    paging?: { total?: number };
+    results?: Array<Record<string, any>>;
+  };
+  const observedAt = new Date().toISOString();
+  const rows = Array.isArray(payload.results) ? payload.results : [];
+  const products = rows.flatMap((item) => {
+    const id = String(item.id || '').trim();
+    const title = String(item.title || '').trim();
+    const permalink = String(item.permalink || '').trim();
+    if (!id || !title || !permalink) return [];
+
+    const price = Number(item.price);
+    const soldQuantity = Number(item.sold_quantity);
+    const availableQuantity = Number(item.available_quantity);
+    const thumbnail = String(item.thumbnail || item.secure_thumbnail || '').replace(/^http:/, 'https:');
+    const status = String(item.status || 'active').toLowerCase();
+    return [{
+      productId: `meli:${id}`,
+      organizationId: input.organizationId,
+      marketplace: 'MELI',
+      externalId: id,
+      listingVerified: status === 'active',
+      title: { value: title, source: 'mercadolivre-site-search', observedAt },
+      url: { value: permalink, source: 'mercadolivre-site-search', observedAt },
+      ...(Number.isFinite(price) && price > 0 ? {
+        price: { value: price, source: 'mercadolivre-site-search', observedAt },
+      } : {}),
+      currency: { value: String(item.currency_id || 'BRL'), source: 'mercadolivre-site-search', observedAt },
+      ...(item.seller?.nickname ? {
+        sellerName: { value: String(item.seller.nickname), source: 'mercadolivre-site-search', observedAt },
+      } : {}),
+      ...(Number.isFinite(soldQuantity) && soldQuantity >= 0 ? {
+        soldQuantity: { value: soldQuantity, source: 'mercadolivre-site-search', observedAt },
+      } : {}),
+      ...(Number.isFinite(availableQuantity) && availableQuantity >= 0 ? {
+        availableQuantity: { value: availableQuantity, source: 'mercadolivre-site-search', observedAt },
+      } : {}),
+      availability: {
+        value: status !== 'active'
+          ? 'unavailable'
+          : Number.isFinite(availableQuantity)
+            ? (availableQuantity > 0 ? 'available' : 'unavailable')
+            : 'unknown',
+        source: 'mercadolivre-site-search',
+        observedAt,
+      },
+      ...(thumbnail ? {
+        imageUrl: { value: thumbnail, source: 'mercadolivre-site-search', observedAt },
+      } : {}),
+      assetRights: 'UNKNOWN',
+    }];
+  }).slice(0, input.limit);
+
+  input.res.setHeader('Cache-Control', 'private, no-store');
+  input.res.setHeader('X-NestAffiliate-Provider-Fallback', 'mercadolivre-site-search');
+  return input.res.json({
+    products,
+    query: input.query,
+    provider: 'MELI',
+    source: 'mercadolivre-site-search',
+    observedAt,
+    degraded: true,
+    degradedReason: input.reason,
+    meta: {
+      catalogTotal: Number(payload.paging?.total || rows.length),
+      candidates: rows.length,
+      detailed: rows.length,
+      usable: products.length,
+      minSoldQuantity: 0,
+      rejectedUnavailable: 0,
+      rejectedLowSales: 0,
+      rejectedUnverified: Math.max(0, rows.length - products.length),
+    },
+  });
+}
+
 async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
   try {
     const authHeader = String(req.headers.authorization || '');
@@ -788,7 +940,13 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       .get();
 
     if (!secretSnap.exists) {
-      return res.status(503).json({ error: 'MELI_NOT_CONNECTED' });
+      return respondWithMercadoLivreSearchFallback({
+        organizationId,
+        query,
+        limit,
+        res,
+        reason: 'MELI_NOT_CONNECTED',
+      });
     }
 
     const secretState = secretSnap.data() || {};
@@ -796,7 +954,13 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     const expiresAtMs = Date.parse(String(secretState.accessTokenExpiresAt || ''));
 
     if (!accessToken || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now() + 30_000) {
-      return res.status(503).json({ error: 'MELI_TOKEN_STALE' });
+      return respondWithMercadoLivreSearchFallback({
+        organizationId,
+        query,
+        limit,
+        res,
+        reason: 'MELI_TOKEN_STALE',
+      });
     }
 
     const MIN_SOLD_QUANTITY = 100;
@@ -809,14 +973,22 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     searchUrl.searchParams.set('limit', '20');
 
     const providerHeaders = { Authorization: `Bearer ${accessToken}` };
-    const searchResponse = await fetch(searchUrl, { headers: providerHeaders });
+    const searchResponse = await fetchMarketplaceWithRetry(
+      searchUrl,
+      { headers: providerHeaders },
+      'meli-catalog-search',
+    );
 
     if (!searchResponse.ok) {
       const providerBody = await searchResponse.text();
       console.error('[NestAffiliate/MELI] catalog search failed', searchResponse.status, providerBody.slice(0, 240));
-      return res.status(502).json({
-        error: 'MELI_SEARCH_FAILED',
-        providerStatus: searchResponse.status,
+      return respondWithMercadoLivreSearchFallback({
+        organizationId,
+        query,
+        limit,
+        res,
+        accessToken,
+        reason: `MELI_CATALOG_${searchResponse.status}`,
       });
     }
 
@@ -839,9 +1011,11 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     const detailRows = await Promise.all(
       candidates.map(async (candidate) => {
         try {
-          const detailResponse = await fetch(
+          const detailResponse = await fetchMarketplaceWithRetry(
             `https://api.mercadolibre.com/products/${encodeURIComponent(candidate.id)}`,
             { headers: providerHeaders },
+            'meli-catalog-detail',
+            3,
           );
           if (!detailResponse.ok) {
             console.warn('[NestAffiliate/MELI] catalog detail unavailable; using search candidate', candidate.id, detailResponse.status);
@@ -883,9 +1057,11 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
 
     let itemRows: Array<{ id?: string; status_code?: number; body?: Record<string, any> }> = [];
     if (winnerIds.length) {
-      const itemResponse = await fetch(
+      const itemResponse = await fetchMarketplaceWithRetry(
         `https://api.mercadolibre.com/items/bulk?ids=${encodeURIComponent(winnerIds.join(','))}&attributes=${encodeURIComponent(itemFields)}`,
         { headers: providerHeaders },
+        'meli-items-bulk',
+        3,
       );
       if (!itemResponse.ok) {
         const providerBody = await itemResponse.text();
@@ -1251,6 +1427,7 @@ async function callShopeeAffiliateOpenApi(input: {
 }) {
   const payload = JSON.stringify({
     query: input.query,
+    operationName: null,
     variables: input.variables || {},
   });
   const timestamp = String(Math.floor(Date.now() / 1000));
@@ -1259,15 +1436,20 @@ async function callShopeeAffiliateOpenApi(input: {
     .update(input.appId + timestamp + payload + input.secret)
     .digest('hex');
 
-  const response = await fetch('https://open-api.affiliate.shopee.com.br/graphql', {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      Authorization: 'SHA256 Credential=' + input.appId + ', Timestamp=' + timestamp + ', Signature=' + signature,
+  const response = await fetchMarketplaceWithRetry(
+    'https://open-api.affiliate.shopee.com.br/graphql',
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: 'SHA256 Credential=' + input.appId + ', Timestamp=' + timestamp + ', Signature=' + signature,
+      },
+      body: payload,
     },
-    body: payload,
-  });
+    'shopee-affiliate-graphql',
+    4,
+  );
 
   const raw = await response.text();
   let parsed: any = null;
@@ -1278,12 +1460,13 @@ async function callShopeeAffiliateOpenApi(input: {
   }
 
   if (!response.ok || !parsed || (Array.isArray(parsed.errors) && parsed.errors.length > 0)) {
-    const providerCode = parsed?.errors?.[0]?.extensions?.code;
     const providerMessage = String(
       parsed?.errors?.[0]?.extensions?.message ||
       parsed?.errors?.[0]?.message ||
       '',
     ).slice(0, 240);
+    const explicitProviderCode = parsed?.errors?.[0]?.extensions?.code;
+    const providerCode = explicitProviderCode ?? providerMessage.match(/\[(\d{4,6})\]/)?.[1] ?? null;
     const error: any = new Error('SHOPEE_PROVIDER_ERROR');
     error.providerStatus = response.status;
     error.providerCode = providerCode;
@@ -1296,7 +1479,7 @@ async function callShopeeAffiliateOpenApi(input: {
 
 const SHOPEE_PRODUCT_SEARCH_QUERY = [
   'query NestAffiliateShopeeProducts($keyword: String!, $page: Int!, $limit: Int!, $sortType: Int!) {',
-  '  productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType) {',
+  '  productOfferV2(keyword: $keyword, listType: 0, page: $page, limit: $limit, sortType: $sortType) {',
   '    nodes {',
   '      itemId',
   '      productName',
@@ -1365,7 +1548,7 @@ async function handleNestAffiliateShopeeCredentials(req: any, res: any) {
         secret,
         query: [
           'query NestAffiliateShopeeCredentialProbe {',
-          '  productOfferV2(page: 1, limit: 1, sortType: 1) {',
+          '  productOfferV2(listType: 0, page: 1, limit: 1, sortType: 1) {',
           '    nodes { itemId }',
           '    pageInfo { page limit hasNextPage }',
           '  }',
