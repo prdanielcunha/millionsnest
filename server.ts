@@ -75,7 +75,7 @@ import { handleNestJourneyWorkspaceProjectionRequest } from './src/server/servic
 import { handleNestAiTokenRequest, handleNestAiGuestTokenRequest, handleNestAiJwksRequest, handleNestLocalNestAiSessionTokenRequest } from './src/server/services/NestAiTokenService.js';
 import { BillingService } from './src/server/services/BillingService.js';
 import { getDefaultPermissions, CURRENT_PERMISSIONS_VERSION } from './src/lib/rbac.js';
-import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy, canManageTenantMembers, canManageTenantBilling, canManageTenantSettings } from './src/lib/permissionService.js';
+import { isCanonicalGlobalRole, isGlobalPrivilegedRole, canEnterAnyOrganization, resolveEcosystemPrivilegePolicy, canManageTenantMembers, canManageTenantBilling, canManageTenantSettings, canExtendHubTrial } from './src/lib/permissionService.js';
 import { canChangeSystemRole, isAssignableSystemRole, normalizeLegacySystemRole } from './src/lib/roleResolver.js';
 import { 
   MUSIC_SCALE_PLANS, 
@@ -8974,10 +8974,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     catch{return res.status(401).json({error:'Sessão inválida.'});}
     try {
       const actor=await db.collection('users').doc(actorUid).get();
-      if(!actor.exists||!canManageTenantBilling(actor.data()?.systemRole)||
+      if(!actor.exists||!canExtendHubTrial(actor.data()?.systemRole)||
          actor.data()?.disabled===true||
          ['suspended','disabled','inactive'].includes(String(actor.data()?.status||'')))
-        return res.status(403).json({error:'Apenas a administração global pode estender avaliações.'});
+        return res.status(403).json({error:'Somente CEO, administrador global ou suporte MillionsNest pode estender avaliações.'});
       const appId=req.body?.appId as TrialApp,organizationId=req.body?.organizationId;
       if(!['musicscale','nestlocal'].includes(appId))
         return res.status(400).json({error:'Aplicativo inválido.'});
