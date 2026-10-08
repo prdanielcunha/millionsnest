@@ -57,6 +57,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
+import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } from './src/server/services/EcosystemSessionVersionService.js';
@@ -8919,8 +8920,22 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const result = await activateNestLocalHubTrial({
         db, organizationId, ownerUid: userId, stripeHistoricalClear: true,
       });
+      // Credits are an independent, recoverable operation. A successful trial
+      // is NEVER rolled back because the free AI provider is unavailable.
+      let creditsStatus = 'queued';
+      if (process.env.NESTAI_COMMERCIAL_CREDITS_ENABLED === 'true' &&
+          process.env.NESTAI_GRANTS_SYNC_ENABLED === 'true') {
+        try {
+          const reconcile = await reconcileNestLocalTrialCredits({db,organizationId});
+          creditsStatus = reconcile.state === 'synced' || reconcile.state === 'already_synced'
+            ? 'synced' : reconcile.state;
+        } catch (error) {
+          console.warn('[NestLocal Trial] credit sync pending:', error instanceof Error ? error.message : 'error');
+          creditsStatus = 'retry_scheduled';
+        }
+      }
       return res.status(result.status === 'created' ? 201 : 200).json({
-        ok: true, appId: 'nestlocal', ...result,
+        ok: true, appId: 'nestlocal', ...result, creditsStatus,
       });
     } catch (error: any) {
       if (error instanceof HubTrialError) {
@@ -8928,6 +8943,43 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       console.error('[NestLocal Trial] activation blocked:', error?.message || 'unexpected error');
       return res.status(503).json({ error: 'Não foi possível verificar a elegibilidade com segurança. Tente novamente.' });
+    }
+  });
+
+
+  /** On-demand recovery for missed NestAI credit sync; no Stripe mutations.
+   * Intentionally global-admin-only and closed while commercial flags are off.
+   * Scheduled reconciliation with service OIDC will require a separate review. */
+  app.post('/api/v1/billing/trial/credits/reconcile', express.json(), async (req: any, res) => {
+    if (process.env.NESTAI_COMMERCIAL_CREDITS_ENABLED !== 'true' ||
+        process.env.NESTAI_GRANTS_SYNC_ENABLED !== 'true') {
+      return res.status(404).json({error:'Reconciliação de créditos não habilitada.'});
+    }
+    if (!db) return res.status(503).json({error:'Banco indisponível.'});
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({error:'Autenticação necessária.'});
+    let uid:string;
+    try {
+      uid = (await admin.auth().verifyIdToken(authHeader.slice(7))).uid;
+    } catch {
+      return res.status(401).json({error:'Sessão inválida.'});
+    }
+    try {
+      const actor = await db.collection('users').doc(uid).get();
+      if (!actor.exists || !canManageTenantBilling(actor.data()?.systemRole) ||
+          ['inactive','disabled','suspended'].includes(String(actor.data()?.status||''))) {
+        return res.status(403).json({error:'Apenas a administração global pode reconciliar créditos.'});
+      }
+      const organizationId = typeof req.body?.organizationId === 'string'
+        ? req.body.organizationId.trim() : '';
+      if (!/^[a-zA-Z0-9_-]{1,128}$/.test(organizationId)) {
+        return res.status(400).json({error:'Organização inválida.'});
+      }
+      const result = await reconcileNestLocalTrialCredits({db,organizationId});
+      return res.status(200).json({ok:true,organizationId,...result});
+    } catch (error:any) {
+      console.warn('[NestLocal Credits] reconciliation deferred:',error?.message||'error');
+      return res.status(503).json({ok:false,error:'Conciliação pendente. Tente novamente.',code:'NESTAI_GRANT_RECONCILE_PENDING'});
     }
   });
 
