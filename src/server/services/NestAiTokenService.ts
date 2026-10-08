@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import * as admin from 'firebase-admin';
+import {resolveNestLocalAiEntitlement, type NestLocalAiEntitlement} from './NestLocalAiEntitlement.js';
 import type { Request, Response } from 'express';
 import { isGlobalPrivilegedRole } from '../../lib/permissionService.js';
 import { resolveEcosystemAppAccess, type EcosystemAppId } from './EcosystemAccessResolver.js';
@@ -68,6 +69,7 @@ export function issueNestAiToken(params: {
   appId: string;
   appCheckAppId: string;
   capabilities?: string[];
+  aiEntitlement?: NestLocalAiEntitlement;
   tokenType?: 'user' | 'guest' | 'service';
   locale?: "pt-BR" | "en" | "es";
   nowSeconds?: number;
@@ -88,6 +90,7 @@ export function issueNestAiToken(params: {
     scopes: params.capabilities ?? ['ai:run', 'ai:stream'],
     tokenType: params.tokenType ?? 'user',
     appCheckAppId: params.appCheckAppId,
+    ...(params.aiEntitlement && params.appId === 'nestlocal' ? { aiEntitlement: params.aiEntitlement } : {}),
     ...(params.locale ? { locale: params.locale } : {}),
     iat: now,
     nbf: now - 5,
@@ -167,6 +170,27 @@ export async function authorizeNestAiApp(params: {
   return genericAppAccess(params);
 }
 
+async function readNestLocalAiEntitlement(
+  db: admin.firestore.Firestore,
+  organizationId: string,
+): Promise<NestLocalAiEntitlement | undefined> {
+  // Backend-only records. No client subscription, plan or trial data is trusted.
+  if (process.env.NESTAI_COMMERCIAL_CREDITS_ENABLED !== 'true') return undefined;
+  const [orgSnap, subSnap, trialSnap] = await Promise.all([
+    db.collection('organizations').doc(organizationId).get(),
+    db.collection('subscriptions').doc(organizationId).get(),
+    db.collection('nestlocal_internal_trials').doc(organizationId).get(),
+  ]);
+  const org = orgSnap.exists ? orgSnap.data() || {} : {};
+  const sub = subSnap.exists ? subSnap.data() || {} : {};
+  const entitlement = resolveNestLocalAiEntitlement({
+    organizationApp: org.apps?.nestlocal,
+    subscription: sub.apps?.nestlocal,
+    internalTrial: trialSnap.exists ? trialSnap.data() : null,
+  });
+  return entitlement ?? undefined;
+}
+
 function nestLocalSessionHash(raw: string): string {
   return crypto.createHash('sha256').update(raw).digest('hex');
 }
@@ -234,6 +258,7 @@ export async function handleNestLocalNestAiSessionTokenRequest(
       capabilities: ['ai:run', 'ai:stream'],
       tokenType: 'service',
       locale,
+      aiEntitlement: await readNestLocalAiEntitlement(db, organizationId),
     });
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
@@ -298,7 +323,11 @@ export async function handleNestAiTokenRequest(req: Request, res: Response, db: 
       }
       capabilities = ['ai:run', 'ai:stream', 'ai:admin'];
     }
-    const issued = issueNestAiToken({ uid: decoded.uid, organizationId, appId, appCheckAppId, capabilities, locale });
+    const aiEntitlement = appId === 'nestlocal'
+      ? await readNestLocalAiEntitlement(db, organizationId)
+      : undefined;
+    const issued = issueNestAiToken({ uid: decoded.uid, organizationId, appId, appCheckAppId, capabilities, locale,
+      ...(aiEntitlement ? { aiEntitlement } : {}) });
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ token: issued.token, tokenType: 'Bearer', expiresIn: issued.expiresIn });
   } catch (error) {
