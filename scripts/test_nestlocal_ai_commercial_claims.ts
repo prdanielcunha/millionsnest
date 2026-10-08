@@ -9,7 +9,7 @@ const now = Date.parse('2026-10-08T12:00:00.000Z');
 const trialStart = new Date(now - 2 * 86_400_000);
 const trialEnd = new Date(trialStart.getTime() + 7 * 86_400_000);
 const trial = {
-  appId:'nestlocal',source:'hub_internal_trial',status:'active',
+  appId:'nestlocal',source:'hub_internal_trial',status:'active',consumed:true,
   beginsAt:{toDate:()=>trialStart}, expiresAt:{toDate:()=>trialEnd},grantVersion:2,
 };
 assert.equal(isNestLocalInternalTrialActive(trial,now),true);
