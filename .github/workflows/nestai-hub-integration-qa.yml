@@ -26,6 +26,8 @@ on:
       - "server.ts"
       - "scripts/test_nestai_token_service.ts"
       - "scripts/test_nestlocal_ai_commercial_claims.ts"
+      - "scripts/test_cloudrun_deploy_env_preservation.ts"
+      - ".github/workflows/cloudrun-private-deploy.yml"
       - "scripts/test_hub_no_card_trial.ts"
       - "scripts/test_hub_trial_extensions.ts"
       - "scripts/test_hub_cross_app_trial_eligibility.ts"
@@ -57,6 +59,7 @@ jobs:
       - run: npx tsx scripts/test_nestai_token_service.ts
       - run: npx tsx scripts/test_nestlocal_ai_commercial_claims.ts
       - run: npx tsx scripts/test_hub_no_card_trial.ts
+      - run: npx tsx scripts/test_cloudrun_deploy_env_preservation.ts
       - run: npx tsx scripts/test_hub_trial_extensions.ts
       - run: npx tsx scripts/test_hub_cross_app_trial_eligibility.ts
       - run: npx tsx scripts/test_subscription_canonical_duplicate_guard.ts

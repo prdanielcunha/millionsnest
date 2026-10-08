@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const workflow = readFileSync('.github/workflows/cloudrun-private-deploy.yml', 'utf8');
+assert.match(workflow, /--update-env-vars\s+"/, 'Hub deployment must update, not replace, Cloud Run environment');
+assert.match(workflow, /--update-secrets\s+"/, 'Hub deployment must preserve unrelated Secret Manager bindings');
+assert.doesNotMatch(workflow, /--set-env-vars|--clear-env-vars|--set-secrets|--clear-secrets/);
+assert.match(workflow, /STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY=/);
+assert.match(workflow, /NODE_ENV=production/);
+assert.match(workflow, /--no-allow-unauthenticated/);
+console.log('PASS Hub Cloud Run env/secret preservation and deployed production safety keys');
