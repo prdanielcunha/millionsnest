@@ -8708,10 +8708,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
 
       // Protect internal-trial history across feature-flag rollback and checkout entrypoints.
-      if (appId === 'nestlocal' && !db) {
+      if ((appId === 'nestlocal' || appId === 'musicscale') && !db) {
         return res.status(503).json({ error: 'Não foi possível verificar o histórico de avaliação. Tente novamente.' });
       }
-      const internalTrialConsumed = appId === 'nestlocal' && db
+      const internalTrialConsumed = (appId === 'nestlocal' || appId === 'musicscale') && db
         ? await hasConsumedHubTrial(db, orgId, appId) : false;
       const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId, appId === 'nestlocal' && nestLocalTrialEnabledForOrganization(orgId));
 
@@ -9151,10 +9151,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
 
       // Protect internal-trial history across feature-flag rollback and checkout entrypoints.
-      if (appId === 'nestlocal' && !db) {
+      if ((appId === 'nestlocal' || appId === 'musicscale') && !db) {
         return res.status(503).json({ error: 'Não foi possível verificar o histórico de avaliação. Tente novamente.' });
       }
-      const internalTrialConsumed = appId === 'nestlocal' && db
+      const internalTrialConsumed = (appId === 'nestlocal' || appId === 'musicscale') && db
         ? await hasConsumedHubTrial(db, orgId, appId) : false;
       const eligibility = await resolveSubscriptionPurchaseEligibility(stripe, db, orgId, customerId, appId, appId === 'nestlocal' && nestLocalTrialEnabledForOrganization(orgId));
 
