@@ -2102,6 +2102,45 @@ service cloud.firestore {
           allow update, delete: if false;
         }
 
+        // Revenue OS 3.0: immutable business fields per imported provider statement.
+        // A user-reported CSV is never assumed to be an authenticated provider feed.
+        match /affiliateResultEvents/{eventId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantCreate(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            request.resource.data.get('eventId', '') == eventId &&
+            request.resource.data.get('source', '') == 'MANUAL_CSV_REPORTED' &&
+            request.resource.data.get('statementId', '') is string &&
+            request.resource.data.get('transactionId', '') is string;
+          allow update: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantUnchanged(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            resource.data.get('source', '') == 'MANUAL_CSV_REPORTED' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['importedAt', 'recordedAt']);
+          allow delete: if false;
+        }
+
+        // Manual external publication log; no platform API or monetization grant.
+        match /channelPublications/{publicationId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantCreate(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            request.resource.data.get('status', '') == 'USER_REPORTED' &&
+            request.resource.data.get('channel', '') == 'FACEBOOK_REELS' &&
+            request.resource.data.get('marketplace', '') == 'SHOPEE' &&
+            request.resource.data.get('eligibilityAttested', false) == true &&
+            request.resource.data.get('tagAttested', false) == true &&
+            request.resource.data.get('footageRightsAttested', false) == true;
+          allow update: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantUnchanged(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            resource.data.get('status', '') == 'USER_REPORTED' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['externalUrl', 'updatedAt']);
+          allow delete: if false;
+        }
+
         match /{collectionName}/{documentId} {
           allow read: if !(collectionName in ['providerConnections', 'providerSecretState', 'affiliateAccounts', 'pinterestAccounts', 'quotaUsage', 'systemJobs', 'auditEvents']) &&
             nestAffiliateCanRead(orgId);
