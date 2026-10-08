@@ -65,6 +65,23 @@ export async function resolveSubscriptionPurchaseEligibility(
     stripeCustomerId
   };
 
+  // A missing Stripe customer ID must never erase an already materialized
+  // app-specific paid subscription. Resolve the identity instead of issuing
+  // another Checkout that could charge the customer twice.
+  const canonicalState = String(canonicalSubscriptionStatus || '').toLowerCase().trim();
+  const canonicalPaidActive = canonicalState === 'active' || canonicalState === 'trialing';
+  const canonicalPaymentPending = ['past_due','unpaid','incomplete','paused'].includes(canonicalState);
+  if (!stripeCustomerId && (canonicalPaidActive || canonicalPaymentPending)) {
+    return {
+      ...baseResponse,
+      allowed: false,
+      repairRequired: true,
+      decision: canonicalPaidActive ? 'block_duplicate' : 'regularize_existing',
+      reason: 'canonical_subscription_customer_unverified',
+      stripeSubscriptionId: canonicalSubscriptionId || undefined,
+    };
+  }
+
   if (!stripeCustomerId) {
     return {
       ...baseResponse,
@@ -167,6 +184,21 @@ export async function resolveSubscriptionPurchaseEligibility(
       reason: pendingSub.status as any,
       subscriptionId: pendingSub.id,
       stripeSubscriptionId: pendingSub.id
+    };
+  }
+
+  // Stripe's customer query can miss an existing paid contract when a user
+  // profile points to the wrong Stripe customer. Do not infer that the
+  // subscription is gone from an empty / unrelated customer result. This
+  // check stays app-scoped, so NestLocal paid does not block MusicScale.
+  if (canonicalPaidActive || canonicalPaymentPending) {
+    return {
+      ...baseResponse,
+      allowed: false,
+      repairRequired: true,
+      decision: canonicalPaidActive ? 'block_duplicate' : 'regularize_existing',
+      reason: 'canonical_subscription_stripe_reconciliation_required',
+      stripeSubscriptionId: canonicalSubscriptionId || undefined,
     };
   }
 
