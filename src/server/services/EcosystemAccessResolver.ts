@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
 import { isNestLocalInternalTrialActive, isNestLocalInternalTrialExpired } from './NestLocalAiEntitlement.js';
+import { trialWindow } from './HubTrialExtensionService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney' | 'nestlive';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -410,6 +411,33 @@ export async function resolveEcosystemAppAccess(params: {
 
     const subRef = db.collection('subscriptions').doc(organizationId);
     const subDoc = await subRef.get();
+
+    // New, explicitly piloted MusicScale trial. Stripe-backed subscriptions
+    // continue through the legacy branch below, unchanged.
+    if (!subDoc.exists && process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED === 'true') {
+      const trialSnap = await db.collection('musicscale_internal_trials').doc(organizationId).get();
+      const window = trialWindow('musicscale',trialSnap.exists?trialSnap.data():null,Date.now(),organizationId);
+      if (window.valid) {
+        const readonly = window.expired;
+        const p = memData.appAccess?.musicscale;
+        return {
+          appId,organizationId,accessible:true,readOnly:readonly,
+          canWrite:!readonly,canUseAI:!readonly,isGlobalAccess:false,
+          accessSource:'organization_membership',systemRole,organizationRole,
+          roles:readonly?['reader']:(p?.roles||[]),
+          permissions:readonly?['songs.read','scales.read','bandScales.read']:(p?.permissions||[]),
+          scopes:readonly?{musicscale:['read']}:(p?.scopes||{}),
+          decisionState:'granted',
+          entitlement:{
+            subscriptionStatus:readonly?'internal_trial_expired':'internal_trial_active',
+            organizationAppStatus:String(orgData.apps?.musicscale?.status||''),
+            canonicalStatus:readonly?'inactive':'trialing',
+            cancellationScheduled:false,currentPeriodEndMs:window.endsAt,
+            individualAccessSource,
+          },
+        };
+      }
+    }
 
     if (!subDoc.exists) {
       return {
