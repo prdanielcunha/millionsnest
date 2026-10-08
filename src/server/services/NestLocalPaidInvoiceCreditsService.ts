@@ -28,7 +28,7 @@ export function deriveNestLocalPaidInvoiceCredit(input:{
   customerId:string;amountPaid:number;livemode:boolean}{
   const {invoice,organizationId,subscription:canonical,stripeSubscription:live}=input;
   if(!/^[A-Za-z0-9_-]{1,128}$/.test(organizationId))reject('TENANT_ID_INVALID');
-  if(!id(invoice?.id,'in')||invoice.status!=='paid'||invoice.paid!==true)
+  if(!id(invoice?.id,'in')||invoice.status!=='paid'||(invoice.paid!==undefined&&invoice.paid!==true))
     reject('INVOICE_NOT_PAID');
   if(!Number.isSafeInteger(invoice.amount_paid)||invoice.amount_paid<=0||invoice.currency!=='brl')
     reject('INVOICE_NOT_PAID_MONEY');
