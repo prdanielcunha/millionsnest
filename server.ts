@@ -60,7 +60,7 @@ import {
   parseReferenceUpload, canonicalReferencePath, canAccessStoredReference, MAX_REFERENCE_BYTES,
 } from './src/server/services/NestAffiliateReferenceMediaService.js';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
-import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization } from './src/server/services/HubNoCardTrialService.js';
+import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization, hasSearchableAuthenticatedEmail } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
 import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
@@ -9347,6 +9347,15 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         return res.status(403).json({error:'Usuário não está ativo para iniciar a avaliação.'});
       }
       const subData = subSnap.data() || {};
+      // Without a Firebase-authenticated email, enumerating Stripe customers
+      // cannot establish that an organization has no prior payment history.
+      // This is a new-trial-only fail-closed guard; existing subscriptions are untouched.
+      if (!hasSearchableAuthenticatedEmail(email)) {
+        return res.status(409).json({
+          error: 'Histórico comercial requer verificação manual.',
+          code: 'STRIPE_HISTORY_REVIEW',
+        });
+      }
       const knownCustomerId = subData.apps?.[requestedApp]?.stripeCustomerId
         || userSnap.data()?.stripeCustomerId || subData.stripeCustomerId;
       const stripe = getStripe();
