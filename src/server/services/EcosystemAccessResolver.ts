@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
+import { isNestLocalInternalTrialActive } from './NestLocalAiEntitlement.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney' | 'nestlive';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -271,18 +272,26 @@ export async function resolveEcosystemAppAccess(params: {
     const subDoc = await db.collection('subscriptions').doc(organizationId).get();
     const appSubscription = subDoc.exists ? subDoc.data()?.apps?.nestlocal : null;
     const orgAppAccess = orgData.apps?.nestlocal;
+    // Dedicated server-issued, no-card internal trial. Strictly opt-in; does not modify Stripe.
+    const internalTrialEnabled = process.env.NESTLOCAL_INTERNAL_TRIAL_ENABLED === 'true';
+    const trialDoc = internalTrialEnabled
+      ? await db.collection('nestlocal_internal_trials').doc(organizationId).get()
+      : null;
+    const internalTrialActive = internalTrialEnabled &&
+      isNestLocalInternalTrialActive(trialDoc?.exists ? trialDoc.data() : null);
+
     const subscriptionStatus = String(appSubscription?.status || '').toLowerCase();
     const organizationAppStatus = String(orgAppAccess?.status || '').toLowerCase();
     const paymentIssueStatuses = ['past_due', 'unpaid', 'incomplete', 'paused'];
     const activeStatuses = ['active', 'trialing'];
 
-    if (!appSubscription) {
+    if (!appSubscription && !internalTrialActive) {
       return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_NOT_FOUND };
     }
     if (paymentIssueStatuses.includes(subscriptionStatus)) {
       return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_PAYMENT_REQUIRED };
     }
-    if (!activeStatuses.includes(subscriptionStatus)) {
+    if (!activeStatuses.includes(subscriptionStatus) && !internalTrialActive) {
       return { ...defaultDenied, systemRole, organizationRole, denialReason: DENIAL_REASONS.SUBSCRIPTION_INACTIVE };
     }
     if (!activeStatuses.includes(organizationAppStatus)) {
