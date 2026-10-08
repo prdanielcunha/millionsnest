@@ -22,6 +22,8 @@ export function TrialManagement(){
   const allowed=canExtendHubTrial(profile);
   const [appId,setAppId]=useState<TrialApp>('musicscale');
   const [organizationId,setOrganizationId]=useState('');
+  const [searchTerm,setSearchTerm]=useState('');
+  const [searchResults,setSearchResults]=useState<Array<{id:string;name:string}>>([]);
   const [status,setStatus]=useState<TrialStatus|null>(null);
   const [days,setDays]=useState(7);
   const [reason,setReason]=useState('');
@@ -38,6 +40,15 @@ export function TrialManagement(){
     const payload=await res.json().catch(()=>({}));
     if(!res.ok)throw Error(payload.error||payload.code||'Operação não concluída.');
     return payload;
+  }
+  async function searchOrganizations(){
+    if(searchTerm.trim().length<2)return;
+    setBusy(true);setError('');setSearchResults([]);
+    try {
+      const data=await request('/api/v1/billing/trial/admin/search?term='+encodeURIComponent(searchTerm.trim()));
+      setSearchResults(Array.isArray(data.organizations)?data.organizations:[]);
+    } catch(e){setError(e instanceof Error?e.message:'Falha na pesquisa.')}
+    finally{setBusy(false)}
   }
   async function lookup(){
     if(!organizationId.trim())return;
@@ -75,6 +86,27 @@ export function TrialManagement(){
           <h1 className="text-3xl font-semibold tracking-tight">Avaliações e extensões</h1>
           <p className="text-slate-400">MusicScale: 14 dias. NestLocal: 7 dias. Apenas a equipe MillionsNest pode conceder uma extensão de até 7 dias, sem alterar o Stripe.</p>
         </header>
+        <section className="rounded-2xl border border-white/10 bg-[#101827] p-5 space-y-3">
+          <label className="block text-sm text-slate-300">Encontre a empresa ou igreja pelo nome
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}
+                onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void searchOrganizations()}}}
+                placeholder="Digite as primeiras letras do nome" autoComplete="off"
+                className="min-w-0 flex-1 rounded-xl border border-white/15 bg-[#0a1220] p-3"/>
+              <button type="button" onClick={searchOrganizations} disabled={busy||searchTerm.trim().length<2}
+                className="rounded-xl border border-blue-400/40 px-4 py-3 text-blue-200 disabled:opacity-50">
+                Pesquisar
+              </button>
+            </div>
+          </label>
+          {searchResults.length>0&&<div className="space-y-1" role="list" aria-label="Organizações encontradas">
+            {searchResults.map(item=><button type="button" key={item.id} role="listitem"
+              onClick={()=>{setOrganizationId(item.id);setStatus(null);setSearchResults([])}}
+              className="flex w-full items-center justify-between gap-2 rounded-xl border border-white/10 px-3 py-2 text-left hover:bg-white/5">
+              <span className="truncate">{item.name}</span><span className="shrink-0 text-xs text-slate-400">{item.id}</span>
+            </button>)}
+          </div>}
+        </section>
         <section className="grid gap-4 rounded-2xl border border-white/10 bg-[#101827] p-5 md:grid-cols-2">
           <label className="text-sm text-slate-300">Aplicativo
             <select value={appId} onChange={e=>{setAppId(e.target.value as TrialApp);setStatus(null);setMessage('')}}
