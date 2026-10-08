@@ -12,7 +12,7 @@ import { OperationalDiagnosticsUI } from './OperationalDiagnosticsUI.js';
 import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
 import { framerTokens } from '../packages/ui/motion.js';
 import { openEcosystemModule } from '../lib/ecosystemLauncher.js';
-import { isGlobalPrivilegedUser } from '../lib/permissionService.js';
+import { isGlobalPrivilegedUser, canExtendHubTrial } from '../lib/permissionService.js';
 import { isOrganizationLifecycleActive } from '../lib/organizationLifecycle.js';
 import { feedback } from '../packages/ui/feedback.js';
 
@@ -499,6 +499,11 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
                      <User className="w-4 h-4" /> Minha Conta
                    </Link>
                    
+                   {canExtendHubTrial(profile) && (
+                     <Link to="/admin/trials" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/5 rounded-lg transition-colors">
+                       <Shield className="w-4 h-4" /> Avaliações e extensões
+                     </Link>
+                   )}
                    {isGlobalPrivilegedUser(profile) && (
                      <>
                        <div className="h-px bg-white/5 my-1" />
