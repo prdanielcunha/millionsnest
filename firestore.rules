@@ -2177,6 +2177,820 @@ service cloud.firestore {
           allow delete: if false;
         }
 
+        // Radar & Creative Revenue 4.0 — additive, tenant-scoped, audited.
+        // Product reference bytes remain in private Storage, never Firestore.
+        match /productReferences/{referenceId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantCreate(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            !request.resource.data.keys().hasAny(['inlineBytes','rawBytes','base64','imageBytes','blob','bytes']) &&
+            request.resource.data.get('id', '') == referenceId &&
+            request.resource.data.get('productId', '') is string &&
+            request.resource.data.get('externalListingId', '') is string &&
+            request.resource.data.get('createdBy', '') == request.auth.uid &&
+            request.resource.data.get('referenceStatus', '') == 'READY_FOR_AI' &&
+            request.resource.data.get('rights', '') == 'USER_ATTESTED' &&
+            request.resource.data.get('canSendToExternalAI', false) == true &&
+            request.resource.data.get('sourceType', '') in ['USER_OWN_PHOTO','OWNER_AUTHORIZED','LICENSED_MEDIA'] &&
+            request.resource.data.get('mimeType', '') == 'image/webp' &&
+            request.resource.data.get('sha256', '').matches('^[a-f0-9]{64} ['providerConnections', 'providerSecretState', 'affiliateAccounts', 'pinterestAccounts', 'quotaUsage', 'systemJobs', 'auditEvents']) &&
+            nestAffiliateCanRead(orgId);
+          allow create: if collectionName in [
+              'boards',
+              'products',
+              'productOffers',
+              'productSnapshots',
+              'trendSignals',
+              'trendClusters',
+              'marketSignalSnapshots',
+              'opportunities',
+              'opportunityScores',
+              'campaigns',
+              'campaignVersions',
+              'creativeAssets',
+              'creativePacks',
+              'creativeConcepts',
+              'sceneProfiles',
+              'creativeTemplates',
+              'promptPackages',
+              'approvalEvents',
+              'publicationPackages',
+              'publications',
+              'learningSignals',
+              'performanceDaily',
+              'affiliateResults',
+              'userPreferences',
+              'complianceChecks'
+            ] &&
+            nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantCreate(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data);
+          allow update: if collectionName in [
+              'boards',
+              'products',
+              'productOffers',
+              'productSnapshots',
+              'trendSignals',
+              'trendClusters',
+              'marketSignalSnapshots',
+              'opportunities',
+              'opportunityScores',
+              'campaigns',
+              'campaignVersions',
+              'creativeAssets',
+              'creativePacks',
+              'creativeConcepts',
+              'sceneProfiles',
+              'creativeTemplates',
+              'promptPackages',
+              'publicationPackages',
+              'publications',
+              'learningSignals',
+              'performanceDaily',
+              'affiliateResults',
+              'userPreferences',
+              'complianceChecks'
+            ] &&
+            nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantUnchanged(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data);
+          allow delete: if collectionName in [
+              'boards',
+              'products',
+              'productOffers',
+              'productSnapshots',
+              'trendSignals',
+              'trendClusters',
+              'marketSignalSnapshots',
+              'opportunities',
+              'opportunityScores',
+              'campaigns',
+              'campaignVersions',
+              'creativeAssets',
+              'creativePacks',
+              'creativeConcepts',
+              'sceneProfiles',
+              'creativeTemplates',
+              'promptPackages',
+              'publicationPackages',
+              'publications',
+              'learningSignals',
+              'performanceDaily',
+              'affiliateResults',
+              'userPreferences',
+              'complianceChecks'
+            ] &&
+            nestAffiliateCanAdmin(orgId);
+        }
+      }
+
+      // Preserve the previous generic behavior for other product namespaces.
+      match /products/{productId}/{document=**} {
+        allow read: if productId != 'raiz_e_mesa' && productId != 'nestaffiliate' &&
+          isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
+        allow create, update, delete: if productId != 'raiz_e_mesa' && productId != 'nestaffiliate' &&
+          isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+      }
+
+      match /{app}/{document=**} {
+        // Firestore ORs overlapping allow rules. Sensitive subcollections with
+        // narrower policies must never inherit this generic tenant-wide access.
+        allow read: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
+        // NestLocal product records are server-owned. A MusicScale subscription
+        // must never grant Firestore SDK writes to an expired NestLocal tenant.
+        // Likewise, Hub entitlement grants are emitted only by the backend.
+        // Firestore ORs overlapping allows: exclude these namespaces HERE,
+        // rather than adding a separate deny match that can be overridden.
+        allow create: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+      }
+    }
+
+    match /organization_members/{id} {
+      allow read: if isAuthenticated() && (
+        id.split('_')[0] == request.auth.uid ||
+        id.split('_')[1] == request.auth.uid ||
+        checkOrgAccess(id.split('_')[1]) ||
+        checkOrgAccess(id.split('_')[0])
+      );
+      allow list: if isAuthenticated() && isSystemAdmin();
+      allow create: if isAuthenticated() && (isOrgAdmin(request.resource.data.get('organizationId', '')) || isSystemAdmin());
+      allow update: if isAuthenticated() && (
+        isSystemAdmin() || 
+        (checkOrgAccess(resource.data.get('organizationId', '')) && isOrgAdmin(resource.data.get('organizationId', '')))
+      );
+      allow delete: if isAuthenticated() && (
+        isSystemAdmin() || 
+        (checkOrgAccess(resource.data.get('organizationId', '')) && isOrgAdmin(resource.data.get('organizationId', '')))
+      );
+    }
+
+    // ==========================================
+    // 3. ASSINATURAS E CONVITES
+    // ==========================================
+    
+    match /subscriptions/{userId} {
+      allow read, list: if isAuthenticated() && (
+        checkOrgReadAccess(userId) || 
+        isSystemAdmin() ||
+        (resource != null && 'organizationId' in resource.data && checkOrgReadAccess(resource.data.organizationId)) ||
+        (resource != null && 'userId' in resource.data && resource.data.userId == request.auth.uid) ||
+        (resource == null)
+      );
+      allow write: if false; 
+    }
+
+    match /stripe_events_audit/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /invitations/{inviteId} {
+      allow read: if isAuthenticated() && ('organizationId' in resource.data && checkOrgAccess(resource.data.organizationId));
+       allow write: if isAuthenticated() && 
+                    checkMemberExists(request.resource.data.get('organizationId', '')) &&
+                    isOrgAdmin(request.resource.data.get('organizationId', '')) &&
+                    isOrgActive(request.resource.data.get('organizationId', ''));
+    }
+    
+    match /invites/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organization_id', ''));
+      allow write: if false; 
+    }
+
+    // ==========================================
+    // 4. MÓDULOS DE NEGÓCIO (APP MILLIONSNEST E OUTROS)
+    // ==========================================
+    
+    match /repertoire/{songId} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.get('organizationId', '')) && isOrgActive(request.resource.data.get('organizationId', ''));
+      allow update: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', '')) && (!('organizationId' in request.resource.data) || request.resource.data.get('organizationId', '') == resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /schedules/{scheduleId} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && checkOrgAccess(request.resource.data.get('organizationId', '')) && isOrgActive(request.resource.data.get('organizationId', ''));
+      allow update: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', '')) && (!('organizationId' in request.resource.data) || request.resource.data.get('organizationId', '') == resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /feedbacks/{feedbackId} {
+       allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+       allow create: if isAuthenticated() && (request.resource.data.get('organizationId', '') == 'none' || (checkOrgAccess(request.resource.data.get('organizationId', '')) && isOrgActive(request.resource.data.get('organizationId', ''))));
+       allow update, delete: if false;
+    }
+
+    // ==========================================
+    // 5. MÓDULOS MUSIC SCALE (ACERVO MUSIC SCALE)
+    // ==========================================
+
+    match /songs/{songId} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && hasPermission(incoming().get('organizationId', ''), 'canManageRepertoire') && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', '')) && (!('organizationId' in request.resource.data) || request.resource.data.get('organizationId', '') == resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /scales/{scaleId} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && hasPermission(incoming().get('organizationId', ''), 'canManageScales') && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageScales') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', '')) && (!('organizationId' in request.resource.data) || request.resource.data.get('organizationId', '') == resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageScales') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    // Keep response privacy compatible with MusicScale's canonical policy:
+    // a person may read only their own response; team summaries require the
+    // canonical MusicScale managed-response capability / leadership role.
+    match /scales/{scaleId}/responses/{responseId} {
+      allow read: if isAuthenticated() && (
+        isSystemAdmin() ||
+        resource.data.get('userId', '') == request.auth.uid ||
+        (
+          exists(/databases/$(database)/documents/scales/$(scaleId)) &&
+          canReadManagedScaleResponses(
+            get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', '')
+          )
+        )
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /scales/{scaleId}/responseHistory/{historyId} {
+      allow read: if isAuthenticated() && (
+        isSystemAdmin() ||
+        (
+          exists(/databases/$(database)/documents/scales/$(scaleId)) &&
+          canReadManagedScaleResponses(
+            get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', '')
+          )
+        )
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /bandScales/{scaleId} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if canWriteBandScale(incoming().get('organizationId', '')) && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if canWriteBandScale(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', '')) && (!('organizationId' in request.resource.data) || request.resource.data.get('organizationId', '') == resource.data.get('organizationId', ''));
+      allow delete: if canWriteBandScale(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /fixedBandScales/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if canWriteBandScale(incoming().get('organizationId', '')) && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if canWriteBandScale(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', '')) && (!('organizationId' in request.resource.data) || request.resource.data.get('organizationId', '') == resource.data.get('organizationId', ''));
+      allow delete: if canWriteBandScale(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /liveSessions/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && hasPermission(incoming().get('organizationId', ''), 'canManageScales') && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageScales') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', '')) && (!('organizationId' in request.resource.data) || request.resource.data.get('organizationId', '') == resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageScales') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /roles/{roleId} {
+      allow get: if isAuthenticated() && 'organizationId' in resource.data && checkOrgAccess(resource.data.get('organizationId', ''));
+      allow list: if isAuthenticated() && 'organizationId' in resource.data && (checkOrgAccess(resource.data.get('organizationId', '')) || checkMemberExists(resource.data.get('organizationId', '')) || resource.data.get('organizationId', '') == request.auth.uid);
+      allow create: if isAuthenticated() && isOrgAdmin(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && isOrgAdmin(resource.data.get('organizationId', '')) && checkOrgAccess(resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && isOrgAdmin(resource.data.get('organizationId', '')) && checkOrgAccess(resource.data.get('organizationId', ''));
+    }
+
+    match /locations/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && hasPermission(incoming().get('organizationId', ''), 'canManageRepertoire') && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /eventTypes/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && hasPermission(incoming().get('organizationId', ''), 'canManageRepertoire') && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /eventNames/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && hasPermission(incoming().get('organizationId', ''), 'canManageRepertoire') && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /tags/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && hasPermission(incoming().get('organizationId', ''), 'canManageRepertoire') && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /instruments/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && hasPermission(incoming().get('organizationId', ''), 'canManageRepertoire') && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    match /suggestions/{id} {
+      allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && hasOrgContext(incoming()) && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && hasPermission(resource.data.get('organizationId', ''), 'canManageRepertoire') && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+    }
+
+    // ==========================================
+    // MUSIC SCALE LIVE — REALTIME / COLLABORATION
+    // ==========================================
+
+    match /musicScaleLiveVenues/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConfigure(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConfigure(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConfigure(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveSystems/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConfigure(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConfigure(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConfigure(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveNodes/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConfigure(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConfigure(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConfigure(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveProfiles/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConfigure(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConfigure(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConfigure(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveSharedConfig/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConfigure(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConfigure(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConfigure(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveRoutes/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConfigure(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConfigure(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConfigure(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveSignalTopologies/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConfigure(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConfigure(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConfigure(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveScenes/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConduct(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConduct(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConduct(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveAutomations/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConfigure(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConfigure(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConfigure(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveProviderLinks/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConduct(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConduct(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConduct(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveServicePlans/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConduct(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConduct(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConduct(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveSessions/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConduct(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConduct(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConduct(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveRequests/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        incoming().get('actorId', '') == request.auth.uid &&
+        incoming().get('status', '') == 'pending' &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveNoSecretFields(incoming()) &&
+        (
+          musicScaleLiveCanConduct(resource.data.get('organizationId', '')) ||
+          (
+            resource.data.get('actorId', '') == request.auth.uid &&
+            incoming().get('actorId', '') == resource.data.get('actorId', '') &&
+            resource.data.get('status', '') == 'pending' &&
+            incoming().get('status', '') == 'rejected'
+          )
+        );
+      allow delete: if musicScaleLiveCanConduct(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLivePresence/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        incoming().get('actorId', '') == request.auth.uid &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        resource.data.get('actorId', '') == request.auth.uid &&
+        incoming().get('actorId', '') == resource.data.get('actorId', '') &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if resource.data.get('actorId', '') == request.auth.uid ||
+        musicScaleLiveCanConduct(resource.data.get('organizationId', ''));
+    }
+
+    match /musicScaleLiveEvents/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConduct(incoming().get('organizationId', '')) &&
+        incoming().get('actorId', request.auth.uid) == request.auth.uid &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update, delete: if false;
+    }
+
+    match /musicScaleLiveChangeHistory/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConduct(incoming().get('organizationId', '')) &&
+        incoming().get('actorId', '') == request.auth.uid &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update, delete: if false;
+    }
+
+    match /musicScaleLiveMediaAssets/{id} {
+      allow read: if musicScaleLiveCanRead(resource.data.get('organizationId', ''));
+      allow create: if musicScaleLiveTenantCreate(incoming()) &&
+        musicScaleLiveCanConduct(incoming().get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow update: if musicScaleLiveTenantUnchanged() &&
+        musicScaleLiveCanConduct(resource.data.get('organizationId', '')) &&
+        musicScaleLiveNoSecretFields(incoming());
+      allow delete: if musicScaleLiveCanConduct(resource.data.get('organizationId', ''));
+    }
+
+    // ==========================================
+    // 6. RECURSOS GLOBAIS
+    // ==========================================
+
+    function hasGlobalLibraryFeature() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let orgId = userDoc != null ? userDoc.data.get('organizationId', null) : null;
+      let subDoc = orgId != null ? get(/databases/$(database)/documents/subscriptions/$(orgId)) : null;
+      return subDoc != null && subDoc.data.get('features', {}).get('globalLibrary', false) == true;
+    }
+
+    match /globalSongs/{id} {
+      allow read: if isAuthenticated() && (isSystemAdmin() || hasGlobalLibraryFeature());
+      allow write: if isAuthenticated() && isSystemAdmin();
+    }
+
+    match /songSubmissions/{id} {
+      allow read: if isAuthenticated() && (isSystemAdmin() || resource.data.get('submittedBy', '') == request.auth.uid);
+      allow create: if isAuthenticated() && hasOrgContext(incoming());
+      allow update, delete: if isSystemAdmin();
+    }
+    
+    // ==========================================
+    // 7. ECOSYSTEM INFRASTRUCTURE COLLECTIONS
+    // ==========================================
+
+    function hasValidAnalyticsEnvelope() {
+      return request.resource.data.keys().hasOnly([
+        'eventType',
+        'organizationId',
+        'userId',
+        'sessionId',
+        'app',
+        'metadata',
+        'timestamp'
+      ]) &&
+      request.resource.data.keys().hasAll([
+        'eventType',
+        'organizationId',
+        'userId',
+        'sessionId',
+        'app',
+        'metadata',
+        'timestamp'
+      ]) &&
+      request.resource.data.eventType is string &&
+      request.resource.data.eventType.size() > 0 &&
+      request.resource.data.eventType.size() <= 64 &&
+      request.resource.data.organizationId is string &&
+      request.resource.data.organizationId.size() <= 128 &&
+      request.resource.data.userId is string &&
+      request.resource.data.userId.size() <= 128 &&
+      request.resource.data.sessionId is string &&
+      request.resource.data.sessionId.size() > 0 &&
+      request.resource.data.sessionId.size() <= 128 &&
+      request.resource.data.app is string &&
+      request.resource.data.app.size() > 0 &&
+      request.resource.data.app.size() <= 64 &&
+      request.resource.data.metadata is map &&
+      request.resource.data.timestamp is timestamp;
+    }
+
+    function isValidOrganizationActionOsAnalytics() {
+      let data = request.resource.data;
+      let metadata = data.metadata;
+
+      return data.eventType == 'action_os_interaction' &&
+        data.app == 'millionsnest_core' &&
+        metadata.keys().hasAll([
+          'action',
+          'lane',
+          'sourceApp'
+        ]) &&
+        metadata.keys().hasOnly([
+          'action',
+          'lane',
+          'sourceApp',
+          'signalType',
+          'priority',
+          'dismissCode'
+        ]) &&
+        metadata.action in [
+          'action_opened',
+          'action_snoozed',
+          'action_dismissed',
+          'change_reviewed',
+          'commitment_opened'
+        ] &&
+        metadata.lane in [
+          'action',
+          'change',
+          'commitment'
+        ] &&
+        metadata.sourceApp in [
+          'hub',
+          'musicscale'
+        ] &&
+        (
+          !('signalType' in metadata) ||
+          (
+            metadata.get('signalType', '') is string &&
+            metadata.get('signalType', '').size() > 0 &&
+            metadata.get('signalType', '').size() <= 80
+          )
+        ) &&
+        (
+          !('priority' in metadata) ||
+          metadata.get('priority', '') in [
+            'low',
+            'normal',
+            'high',
+            'urgent'
+          ]
+        ) &&
+        (
+          !('dismissCode' in metadata) ||
+          (
+            metadata.get('action', '') == 'action_dismissed' &&
+            metadata.get('dismissCode', '') in [
+              'not_relevant',
+              'already_handled',
+              'not_my_responsibility',
+              'too_early',
+              'no_reason'
+            ]
+          )
+        );
+    }
+
+    function isValidPublicMusicScaleAnalytics() {
+      let data = request.resource.data;
+      let isPublicIdentity =
+        data.organizationId == 'none' &&
+        data.userId == 'none' &&
+        data.app == 'musicscale';
+
+      let isLandingView =
+        data.eventType == 'page_view' &&
+        data.metadata.keys().hasOnly(['page']) &&
+        data.metadata.get('page', '') == 'sales_landing';
+
+      let isTrialPlanChoice =
+        data.eventType == 'trial_cta_clicked' &&
+        data.metadata.keys().hasOnly(['action', 'source']) &&
+        data.metadata.get('action', '') == 'choose_plan' &&
+        data.metadata.get('source', '') == 'sales_landing_primary';
+
+      let isDemoOpened =
+        data.eventType == 'app_usage' &&
+        data.metadata.keys().hasOnly(['action', 'source']) &&
+        data.metadata.get('action', '') == 'sales_demo_opened' &&
+        data.metadata.get('source', '') == 'sales_landing';
+
+      let isDemoStep =
+        data.eventType == 'app_usage' &&
+        data.metadata.keys().hasOnly(['action', 'step']) &&
+        data.metadata.get('action', '') == 'sales_demo_step_selected' &&
+        data.metadata.get('step', 0) is int &&
+        data.metadata.get('step', 0) >= 1 &&
+        data.metadata.get('step', 0) <= 5;
+
+      return isPublicIdentity && (
+        isLandingView ||
+        isTrialPlanChoice ||
+        isDemoOpened ||
+        isDemoStep
+      );
+    }
+
+    function isValidAuthenticatedAnalytics() {
+      return isAuthenticated() && (
+        request.resource.data.userId == 'none' ||
+        request.resource.data.userId == request.auth.uid
+      );
+    }
+
+    match /analytics_events/{eventId} {
+      allow create: if hasValidAnalyticsEnvelope() && (
+        isValidAuthenticatedAnalytics() ||
+        isValidPublicMusicScaleAnalytics()
+      );
+      allow read: if isSystemAdmin();
+      allow update, delete: if false;
+    }
+
+    match /system_audit_logs/{logId} {
+      allow create: if isAuthenticated(); 
+      allow read: if isSystemAdmin();
+      allow update, delete: if false;
+    }
+
+    match /audit_logs/{logId} {
+      allow create: if isAuthenticated(); 
+      allow read: if isSystemAdmin();
+      allow update, delete: if isSystemAdmin(); 
+    }
+
+    match /audits/{logId} {
+      allow create: if isAuthenticated(); 
+      allow read: if isSystemAdmin();
+      allow update, delete: if isSystemAdmin(); 
+    }
+
+    match /apps/{appId} {
+      allow read: if isAuthenticated(); 
+      allow write: if isSystemAdmin();
+    }
+
+    match /system_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isSystemAdmin();
+    }
+
+    // Commercial authority data is Admin SDK-only. These explicit rules make
+    // the invariant visible; catch-all deny also covers these paths.
+    match /musicscale_internal_trials/{organizationId} {
+      allow read, write: if false;
+    }
+    match /musicscale_trial_owners/{ownerUid} {
+      allow read, write: if false;
+    }
+    match /hub_trial_extension_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /nestlocal_internal_trials/{organizationId} {
+      allow read, write: if false;
+    }
+    match /nestlocal_trial_owners/{ownerUid} {
+      allow read, write: if false;
+    }
+    match /nestai_credit_grant_outbox/{grantKey} {
+      allow read, write: if false;
+    }
+    match /nestai_paid_invoice_grant_outbox/{grantKey} {
+      allow read, write: if false;
+    }
+
+    match /ecosystemHandoffs/{handoffId} {
+      allow read, write: if false;
+    }
+  }
+}
+) &&
+            request.resource.data.get('rightsEvidence', '').size() >= 12 &&
+            request.resource.data.get('storagePath', '').matches('^organizations/' + orgId + '/product-references/.*');
+          allow update: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantUnchanged(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            resource.data.get('referenceStatus', '') == 'READY_FOR_AI' &&
+            request.resource.data.get('referenceStatus', '') == 'REVOKED' &&
+            request.resource.data.get('canSendToExternalAI', true) == false &&
+            request.resource.data.get('revokedBy', '') == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['referenceStatus','canSendToExternalAI','revokedBy','updatedAt']);
+          allow delete: if false;
+        }
+
+        // Business traceability is append-only. Do not recompute old campaigns.
+        match /sourceCoverageRuns/{runId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantCreate(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            request.resource.data.get('runId', '') == runId &&
+            request.resource.data.get('assessed', -1) is int &&
+            request.resource.data.get('examined', -1) is int &&
+            !request.resource.data.keys().hasAny(['inlineBytes','rawBytes','blob','bytes']);
+          allow update, delete: if false;
+        }
+
+        match /opportunityAssessmentsV4/{snapshotId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantCreate(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            request.resource.data.get('version', '') == 'potential-v4.0' &&
+            request.resource.data.get('runId', '') is string &&
+            !request.resource.data.keys().hasAny(['inlineBytes','rawBytes','blob','bytes']);
+          allow update, delete: if false;
+        }
+
+        match /opportunityFeedback/{feedbackId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantCreate(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            request.resource.data.get('createdBy', '') == request.auth.uid &&
+            !request.resource.data.keys().hasAny(['inlineBytes','rawBytes','blob','bytes']);
+          allow update, delete: if false;
+        }
+
         match /{collectionName}/{documentId} {
           allow read: if !(collectionName in ['providerConnections', 'providerSecretState', 'affiliateAccounts', 'pinterestAccounts', 'quotaUsage', 'systemJobs', 'auditEvents']) &&
             nestAffiliateCanRead(orgId);

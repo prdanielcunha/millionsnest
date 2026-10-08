@@ -437,3 +437,81 @@ test('Revenue OS 3 channel publication stays user-reported with eligibility and 
   await assertFails(deleteDoc(doc(editor,path)));
   await assertSucceeds(updateDoc(doc(editor,path),{updatedAt:'2026-10-07T14:00:00.000Z'}));
 });
+
+function sampleReference(id = 'ref-example') {
+  return {
+    id,organizationId:'org-a',productId:'product-1',
+    marketplace:'MELI',externalListingId:'MLB-001',
+    sourceType:'USER_OWN_PHOTO',rights:'USER_ATTESTED',
+    referenceStatus:'READY_FOR_AI',canSendToExternalAI:true,
+    rightsEvidence:'Photo taken by owner, authorized 2026-10-08',
+    sha256:'a'.repeat(64),mimeType:'image/webp',
+    storagePath:'organizations/org-a/product-references/'+id+'.webp',
+    createdBy:'editor-a',capturedAt:'2026-10-08T12:00:00Z',
+    updatedAt:'2026-10-08T12:00:00Z',
+  };
+}
+test('V4 reference accepts authorized editor and remains scoped to its tenant',async()=>{
+  const editor=env.authenticatedContext('editor-a').firestore();
+  const viewer=env.authenticatedContext('viewer-a').firestore();
+  const other=env.authenticatedContext('editor-b').firestore();
+  const ref=doc(editor,'organizations/org-a/products/nestaffiliate/productReferences/ref-example');
+  await assertSucceeds(setDoc(ref,sampleReference()));
+  await assertSucceeds(getDoc(doc(viewer,ref.path)));
+  await assertFails(getDoc(doc(other,ref.path)));
+  await assertFails(setDoc(doc(viewer,'organizations/org-a/products/nestaffiliate/productReferences/ref-viewer'),sampleReference('ref-viewer')));
+});
+test('V4 reference rejects forged rights, bytes, tenant, and immutable identity changes',async()=>{
+  const editor=env.authenticatedContext('editor-a').firestore();
+  const location='organizations/org-a/products/nestaffiliate/productReferences/';
+  await assertFails(setDoc(doc(editor,location+'ref-bad-tenant'),{
+    ...sampleReference('ref-bad-tenant'),organizationId:'org-b',
+  }));
+  await assertFails(setDoc(doc(editor,location+'ref-bad-source'),{
+    ...sampleReference('ref-bad-source'),sourceType:'MARKETPLACE_REFERENCE',rights:'UNKNOWN',
+  }));
+  await assertFails(setDoc(doc(editor,location+'ref-bad-bytes'),{
+    ...sampleReference('ref-bad-bytes'),inlineBytes:'secret-photo',
+  }));
+  await assertFails(updateDoc(doc(editor,location+'ref-example'),{externalListingId:'MLB-CHANGED'}));
+  await assertFails(updateDoc(doc(editor,location+'ref-example'),{rights:'PLATFORM_LICENSED'}));
+});
+test('V4 revocation is one-way and cannot be rolled back by client',async()=>{
+  const editor=env.authenticatedContext('editor-a').firestore();
+  const ref=doc(editor,'organizations/org-a/products/nestaffiliate/productReferences/ref-example');
+  await assertSucceeds(updateDoc(ref,{
+    referenceStatus:'REVOKED',canSendToExternalAI:false,
+    revokedBy:'editor-a',updatedAt:'2026-10-08T15:00:00Z',
+  }));
+  await assertFails(updateDoc(ref,{referenceStatus:'READY_FOR_AI',canSendToExternalAI:true}));
+  await assertFails(deleteDoc(ref));
+});
+test('V4 source coverage is append-only and no data leaks between tenants',async()=>{
+  const editor=env.authenticatedContext('editor-a').firestore();
+  const viewer=env.authenticatedContext('viewer-a').firestore();
+  const other=env.authenticatedContext('editor-b').firestore();
+  const url='organizations/org-a/products/nestaffiliate/sourceCoverageRuns/v4-run1';
+  const ref=doc(editor,url);
+  await assertSucceeds(setDoc(ref,{
+    runId:'v4-run1',organizationId:'org-a',query:'cozinha pequena',
+    provider:'MELI',examined:105,assessed:12,report:{readyToPublish:0},
+  }));
+  await assertSucceeds(getDoc(doc(viewer,url)));
+  await assertFails(updateDoc(ref,{examined:1000}));
+  await assertFails(getDoc(doc(other,url)));
+  await assertFails(setDoc(doc(viewer,'organizations/org-a/products/nestaffiliate/sourceCoverageRuns/viewer'),{
+    runId:'viewer',organizationId:'org-a',assessed:0,examined:0,
+  }));
+});
+test('V4 opportunity assessments accept versioned research only',async()=>{
+  const editor=env.authenticatedContext('editor-a').firestore();
+  const location='organizations/org-a/products/nestaffiliate/opportunityAssessmentsV4/';
+  await assertSucceeds(setDoc(doc(editor,location+'v4-test'),{
+    organizationId:'org-a',version:'potential-v4.0',runId:'run-1',
+    potential:{lower:31,upper:82},readiness:{score:35,blockers:[]},
+    confidence:'LOW',status:'PROMISING',
+  }));
+  await assertFails(setDoc(doc(editor,location+'v4-legacy'),{
+    organizationId:'org-a',version:'1.0',runId:'run-1',
+  }));
+});
