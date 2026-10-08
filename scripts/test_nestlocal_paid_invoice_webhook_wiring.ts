@@ -47,6 +47,15 @@ await assert.rejects(syncNestLocalPaidInvoiceFromWebhook({
 await assert.rejects(syncNestLocalPaidInvoiceFromWebhook({
  ...input,reconcile:(async()=>{throw Error('PAID_CREDITS_RETRY_SCHEDULED')}) as any,
 }),/PAID_CREDITS_RETRY_SCHEDULED/);
+for(const queuedState of ['busy','retry_later']){
+  await assert.rejects(syncNestLocalPaidInvoiceFromWebhook({
+    ...input,reconcile:(async()=>({state:queuedState})) as any,
+  }),/PAID_CREDITS_RETRY_SCHEDULED/);
+}
+assert.deepEqual(await syncNestLocalPaidInvoiceFromWebhook({
+ ...input,reconcile:(async()=>({state:'already_synced',grantId:'verified'})) as any,
+}),{state:'already_synced',grantId:'verified'});
+
 // The production webhook must actually call this tested gate, not only stage it.
 const server=readFileSync('server.ts','utf8');
 const stage=server.indexOf('await stageNestLocalPaidInvoiceGrant({');
