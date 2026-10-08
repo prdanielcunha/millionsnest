@@ -18,6 +18,15 @@ export function shouldAddStripeTrial(params: {
   if (params.appId === 'nestlocal' && params.newNestLocalTrialEnabled) return false;
   return true;
 }
+/** Pilot cohort by organization; global flag alone never changes everybody's Checkout. */
+export function nestLocalTrialEnabledForOrganization(
+  organizationId: string, env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (!organizationId || organizationId.includes('/') || env.NESTLOCAL_INTERNAL_TRIAL_ENABLED !== 'true') return false;
+  if (env.NESTLOCAL_INTERNAL_TRIAL_PUBLIC_ENABLED === 'true') return true;
+  const cohort = String(env.NESTLOCAL_INTERNAL_TRIAL_PILOT_ORGS || '').split(',').map(value => value.trim()).filter(Boolean);
+  return cohort.includes(organizationId);
+}
 export async function hasConsumedHubTrial(db: Firestore, orgId: string, appId: 'nestlocal' | 'musicscale'): Promise<boolean> {
   if (appId !== 'nestlocal') return false;
   if (!orgId || orgId.includes('/')) throw new HubTrialError('INVALID_ORGANIZATION', 400);
