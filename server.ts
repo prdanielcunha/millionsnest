@@ -8964,6 +8964,34 @@ async function autoRepairSingleOrganizationUser(uid: string) {
   /** Global MillionsNest administration only: no self-service renewal and no Stripe write.
    * One extension of 1–7 calendar days per organization and app, audit immutable. */
   /** Read-only, actor-authorized lookup for the limited trial support console. */
+  /** Tenant-name lookup restricted to CEO/admin/support; no billing metadata. */
+  app.get('/api/v1/billing/trial/admin/search', async (req: any, res) => {
+    if (process.env.HUB_TRIAL_EXTENSION_ADMIN_ENABLED !== 'true') return res.status(404).json({error:'Painel indisponível.'});
+    if (!db) return res.status(503).json({error:'Banco indisponível.'});
+    const bearer=req.headers.authorization;
+    if (!bearer?.startsWith('Bearer ')) return res.status(401).json({error:'Autenticação necessária.'});
+    try {
+      const token=await admin.auth().verifyIdToken(bearer.slice(7));
+      const actor=await db.collection('users').doc(token.uid).get();
+      if (!actor.exists || !canExtendHubTrial(actor.data()?.systemRole) ||
+        actor.data()?.disabled===true ||
+        ['inactive','disabled','suspended'].includes(String(actor.data()?.status||'').toLowerCase()))
+        return res.status(403).json({error:'Acesso restrito à equipe MillionsNest.'});
+      const term=String(req.query.term||'').trim();
+      if(term.length<2 || term.length>70)return res.status(400).json({error:'Pesquise com 2 a 70 caracteres.'});
+      const snap=await db.collection('organizations').orderBy('name')
+        .startAt(term).endAt(term+'\uf8ff').limit(20).get();
+      const organizations=snap.docs.filter(d=>{
+        const data=d.data()||{};
+        return data.disabled!==true && !['deleted','archived'].includes(String(data.status||'').toLowerCase());
+      }).map(d=>({id:d.id,name:String(d.data()?.name||d.id)}));
+      return res.json({ok:true,organizations});
+    }catch(error:any){
+      console.warn('[Hub Trial Search] unavailable:',error?.message||'unexpected');
+      return res.status(503).json({error:'Não foi possível pesquisar organizações.'});
+    }
+  });
+
   app.get('/api/v1/billing/trial/admin/status', async (req: any, res) => {
     if (process.env.HUB_TRIAL_EXTENSION_ADMIN_ENABLED !== 'true') return res.status(404).json({error:'Painel indisponível.'});
     if (!db) return res.status(503).json({error:'Banco indisponível.'});
