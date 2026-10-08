@@ -6,7 +6,6 @@ import {randomUUID,createHash} from 'node:crypto';
 import {Timestamp,type Firestore} from 'firebase-admin/firestore';
 import {
   deriveNestLocalPaidInvoiceCredit,
-  type PaidCreditPolicyError,
 } from './NestLocalPaidInvoiceCreditsService.js';
 import {syncNestLocalAiCreditsFromHub} from './NestAiCreditGrantSyncService.js';
 
