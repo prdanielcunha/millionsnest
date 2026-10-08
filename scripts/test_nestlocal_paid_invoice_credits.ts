@@ -17,6 +17,27 @@ const expected=deriveNestLocalPaidInvoiceCredit({invoice,
 assert.equal(expected.intent.plan,'growth');
 assert.equal(expected.intent.sourceRef,'nestlocal:paid:'+invoiceId);
 assert.equal(expected.intent.beginsAt,new Date(start*1000).toISOString());
+const modernInvoice:any={...invoice};
+delete modernInvoice.paid;
+delete modernInvoice.subscription;
+modernInvoice.billing_reason='subscription_create';
+modernInvoice.parent={subscription_details:{subscription:subId}};
+modernInvoice.lines={has_more:false,data:[{
+  period:{start,end},
+  parent:{subscription_item_details:{subscription:subId}},
+  pricing:{price_details:{price:'price_testGrowthABC'}},
+}]};
+const modern=deriveNestLocalPaidInvoiceCredit({
+  invoice:modernInvoice,stripeSubscription:stripe,
+  subscription:canonical,organizationId:'orgA',
+});
+assert.equal(modern.invoiceId,invoiceId);
+assert.equal(modern.intent.plan,'growth');
+assert.throws(()=>deriveNestLocalPaidInvoiceCredit({
+  invoice:{...modernInvoice,paid:false},
+  stripeSubscription:stripe,subscription:canonical,organizationId:'orgA',
+}),/INVOICE_NOT_PAID/);
+
 for(const fail of [
   {...invoice,status:'open'}, {...invoice,amount_paid:0},
   {...invoice,billing_reason:'subscription_update'},
