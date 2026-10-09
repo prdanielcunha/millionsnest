@@ -2433,7 +2433,9 @@ service cloud.firestore {
     // a person may read only their own response; team summaries require the
     // canonical MusicScale managed-response capability / leadership role.
     match /scales/{scaleId}/responses/{responseId} {
-      allow read: if isAuthenticated() && (
+      allow read: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/scales/$(scaleId)) &&
+        isOrgActive(get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', '')) && (
         isSystemAdmin() ||
         resource.data.get('userId', '') == request.auth.uid ||
         (
@@ -2447,7 +2449,9 @@ service cloud.firestore {
     }
 
     match /scales/{scaleId}/responseHistory/{historyId} {
-      allow read: if isAuthenticated() && (
+      allow read: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/scales/$(scaleId)) &&
+        isOrgActive(get(/databases/$(database)/documents/scales/$(scaleId)).data.get('organizationId', '')) && (
         isSystemAdmin() ||
         (
           exists(/databases/$(database)/documents/scales/$(scaleId)) &&
@@ -2481,11 +2485,11 @@ service cloud.firestore {
     }
 
     match /roles/{roleId} {
-      allow get: if isAuthenticated() && 'organizationId' in resource.data && checkOrgAccess(resource.data.get('organizationId', ''));
-      allow list: if isAuthenticated() && 'organizationId' in resource.data && (checkOrgAccess(resource.data.get('organizationId', '')) || checkMemberExists(resource.data.get('organizationId', '')) || resource.data.get('organizationId', '') == request.auth.uid);
-      allow create: if isAuthenticated() && isOrgAdmin(incoming().get('organizationId', ''));
-      allow update: if isAuthenticated() && isOrgAdmin(resource.data.get('organizationId', '')) && checkOrgAccess(resource.data.get('organizationId', ''));
-      allow delete: if isAuthenticated() && isOrgAdmin(resource.data.get('organizationId', '')) && checkOrgAccess(resource.data.get('organizationId', ''));
+      allow get: if isAuthenticated() && 'organizationId' in resource.data && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow list: if isAuthenticated() && 'organizationId' in resource.data && (checkOrgAccess(resource.data.get('organizationId', '')) || checkMemberExists(resource.data.get('organizationId', '')) || resource.data.get('organizationId', '') == request.auth.uid) && isOrgActive(resource.data.get('organizationId', ''));
+      allow create: if isAuthenticated() && isOrgAdmin(incoming().get('organizationId', '')) && isOrgActive(incoming().get('organizationId', ''));
+      allow update: if isAuthenticated() && isOrgAdmin(resource.data.get('organizationId', '')) && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
+      allow delete: if isAuthenticated() && isOrgAdmin(resource.data.get('organizationId', '')) && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
     }
 
     match /locations/{id} {
