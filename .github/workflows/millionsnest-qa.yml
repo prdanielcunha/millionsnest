@@ -193,6 +193,12 @@ jobs:
       - name: NestLocal SaaS billing and entitlement contract
         run: npx tsx scripts/test_nestlocal_saas_billing_contract.ts
 
+      - name: NestLocal Founders live price and coupon invariants
+        run: npx tsx scripts/test_nestlocal_founders_price_contract.ts
+
+      - name: NestLocal Founders transaction and 12-month checkout rules
+        run: npx tsx scripts/test_nestlocal_founders_checkout.ts
+
       - name: Modern Stripe paid invoice schema and safe credits ledger
         run: npx tsx scripts/test_nestlocal_paid_invoice_credits.ts
 

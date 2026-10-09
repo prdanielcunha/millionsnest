@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import {eligibleNestLocalStripePrices} from '../../lib/nestLocalStripePrices.js';
 
 export interface NormalizedProduct {
   id: string; // Internal/Price ID
@@ -79,8 +80,35 @@ export class BillingService {
       }
     }
 
+    // Resolve NestLocal ONLY from authenticated Stripe price data. Missing, stale,
+    // duplicated or mismatched prices are *not* customer-facing checkout options.
+    // A Stripe failure must not affect existing MusicScale catalog behavior.
+    let verifiedNestLocalPrices: Record<string,string> = {};
+    if (!this.isMock && PRODUCT_CATALOG.some((item:any)=>item.app==='nestlocal')) {
+      try {
+        const found = await this.stripe.prices.list({
+          active: true, type: 'recurring', currency: 'brl', limit: 100,
+          expand: ['data.product'],
+        });
+        if (!found.has_more) {
+          verifiedNestLocalPrices=eligibleNestLocalStripePrices(found.data);
+        } else console.warn('[NestLocalPricing] Too many prices to verify safely; fail closed');
+      } catch (error: any) {
+        console.warn('[NestLocalPricing] Stripe verification unavailable; withholding NestLocal plans',
+          String(error?.type||'unavailable').slice(0,40));
+      }
+    }
+
     PRODUCT_CATALOG.forEach((item: any) => {
       let stripeId = process.env[item.envKey];
+      if(item.app==='nestlocal'&&!this.isMock){
+        const approved=verifiedNestLocalPrices[item.tier];
+        if(!approved || (stripeId && stripeId!==approved)){
+          console.warn('[NestLocalPricing] Plan unavailable or price ID mismatch:',item.tier);
+          return;
+        }
+        stripeId=approved;
+      }
 
       if (!stripeId) {
         for (const alias of legacyEnvAliases[item.lookupKey] || []) {

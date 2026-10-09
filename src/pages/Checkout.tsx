@@ -50,6 +50,9 @@ export default function Checkout() {
   const [checkoutAction, setCheckoutAction] = useState<{ code: string, label: string, url?: string } | null>(null);
   const [trialOffer,setTrialOffer]=useState<{available:boolean;days:number}|null>(null);
   const [trialStarting,setTrialStarting]=useState(false);
+  const [foundersOffer,setFoundersOffer]=useState<{available:boolean;remaining?:number;endsAt?:string;
+    plans?:Record<string,{regularCents:number;foundersCents:number;creditsPerMonth:number}>}|null>(null);
+  const [useFoundersOffer,setUseFoundersOffer]=useState(false);
   const checkoutApp: 'musicscale' | 'nestlocal' = new URLSearchParams(window.location.search).get('app') === 'nestlocal'
     ? 'nestlocal'
     : 'musicscale';
@@ -129,6 +132,23 @@ export default function Checkout() {
     })();
     return ()=>{cancelled=true};
   },[user,activeOrganizationId,checkoutApp]);
+
+  useEffect(()=>{
+    let cancelled=false;
+    setFoundersOffer(null);setUseFoundersOffer(false);
+    if(checkoutApp!=='nestlocal'||!user||!activeOrganizationId)return;
+    (async()=>{
+      try{
+        const token=await user.getIdToken();
+        const response=await fetch('/api/v1/billing/nestlocal/founders/offer?organizationId='+encodeURIComponent(activeOrganizationId),
+          {headers:{Authorization:'Bearer '+token},cache:'no-store'});
+        if(!response.ok)return;
+        const data=await response.json();
+        if(!cancelled&&data.available===true&&data.plans)setFoundersOffer(data);
+      }catch{/* No invisible promotion if offer verification fails. */}
+    })();
+    return ()=>{cancelled=true};
+  },[checkoutApp,user,activeOrganizationId]);
 
   const trialCopy=(()=>{
     const lang=String(i18n.language||'pt').slice(0,2);
@@ -320,7 +340,8 @@ export default function Checkout() {
           app: checkoutApp,
           planLookupKey: selectedPlanLookup,
           addonLookupKeys: selectedAddonsLookup,
-          promoCodeId: appliedCoupon ? appliedCoupon.id : undefined
+          promoCodeId: !useFoundersOffer&&appliedCoupon ? appliedCoupon.id : undefined,
+          useFoundersOffer:checkoutApp==='nestlocal'&&useFoundersOffer&&foundersOffer?.available===true
         })
       });
 
@@ -463,6 +484,31 @@ export default function Checkout() {
                     </p>
                 </div>
 
+                {checkoutApp==='nestlocal'&&foundersOffer?.available===true&&(
+                  <section aria-label="Oferta Founders NestLocal" className="rounded-[1.75rem] border border-emerald-400/30 bg-emerald-500/[.08] p-5 sm:p-6">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300">Founders · Oferta limitada real</p>
+                      <h2 className="text-xl font-semibold text-white">
+                        {String(i18n.language).startsWith('en')?'Founding customers':
+                          String(i18n.language).startsWith('es')?'Clientes fundadores':'Primeiras empresas'}
+                      </h2>
+                      <p className="text-sm text-slate-300">
+                        {String(i18n.language).startsWith('en')?'Promotional pricing for 12 months of subscription; standard pricing afterward.':
+                         String(i18n.language).startsWith('es')?'Precio promocional por 12 meses; precio habitual después.':
+                         'Valores promocionais por 12 meses de assinatura; depois, preço regular.'}
+                      </p>
+                      <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/10 p-3 text-sm text-white">
+                        <input type="checkbox" checked={useFoundersOffer} onChange={e=>{
+                          setUseFoundersOffer(e.target.checked);if(e.target.checked)setAppliedCoupon(null);
+                        }} className="h-5 w-5 accent-emerald-400"/>
+                        {String(i18n.language).startsWith('en')?'Use eligible Founders pricing':
+                         String(i18n.language).startsWith('es')?'Aplicar precio Founders elegible':
+                         'Quero usar o preço Founders, sujeito à confirmação no checkout'}
+                      </label>
+                    </div>
+                  </section>
+                )}
+
                 {trialOffer?.available && (
                   <section aria-label={trialCopy.title}
                     className="rounded-[1.75rem] border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 to-blue-500/5 p-5 sm:p-6 shadow-[0_16px_50px_rgba(0,0,0,.12)]">
@@ -572,7 +618,7 @@ export default function Checkout() {
                                {isPro && (
                                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-max z-20">
                                      <div className="bg-[#2B85EB] text-white text-[10px] font-bold px-4 py-1.5 rounded-full shadow-lg uppercase tracking-widest flex items-center gap-1.5 border border-white/10">
-                                       <Star className="w-3 h-3 text-yellow-400 fill-current" /> MAIS ESCOLHIDO
+                                       <Star className="w-3 h-3 text-yellow-400 fill-current" /> {checkoutApp==='nestlocal'?'PARA EQUIPES':'MAIS ESCOLHIDO'}
                                      </div>
                                    </div>
                                )}
@@ -590,13 +636,16 @@ export default function Checkout() {
                                <div className="mb-8 relative z-10">
                                    <div className="flex items-baseline gap-1">
                                        <span className="text-4xl font-semibold tracking-tighter text-white">
-                                           R${plan.price.toFixed(2).replace('.',',')}
+                                           R${(checkoutApp==='nestlocal'&&useFoundersOffer&&foundersOffer?.plans?.[String(plan.tier)] ? foundersOffer.plans[String(plan.tier)].foundersCents/100:plan.price).toFixed(2).replace('.',',')}
                                        </span>
                                        <span className="text-[#A0A7B5] text-sm">
                                            / {billingCycle === 'yearly' ? t('yearly_period', 'ano') : t('monthly_period', 'mês')}
                                        </span>
                                    </div>
-                                   {(isPro || checkoutApp === 'nestlocal') && (
+                                   {checkoutApp==='nestlocal'&&useFoundersOffer&&foundersOffer?.plans?.[String(plan.tier)]&&(
+                                     <p className="mt-2 text-xs text-emerald-200">12 meses de Founders · depois R$ {(foundersOffer.plans[String(plan.tier)].regularCents/100).toFixed(2).replace('.',',')}/mês · {foundersOffer.plans[String(plan.tier)].creditsPerMonth} créditos IA/mês</p>
+                                   )}
+                                   {(isPro && checkoutApp==='musicscale' || checkoutApp === 'nestlocal'&&trialOffer?.available) && (
                                        <div className="mt-2">
                                            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB] text-white rounded-md shadow-[0_0_15px_rgba(43,133,235,0.4)]">
                                              {t('pricing_free_trial', '7 dias grátis')}

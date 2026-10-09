@@ -15,6 +15,8 @@ type AuthenticatedUserRecord = {
 type Dependencies = {
   verifyIdToken?: (token: string) => Promise<{ uid: string }>;
   getUser?: (uid: string) => Promise<AuthenticatedUserRecord>;
+  getUserByEmail?: (email: string) => Promise<{ uid: string; disabled?: boolean }>;
+  expectedOwnerUid?: string;
   getFirestore?: () => Firestore;
   now?: () => number;
 };
@@ -147,6 +149,14 @@ export async function createJoinRequest(req: Request, res: Response, dependencie
         transaction.get(orgRef), transaction.get(memberRef), transaction.get(requestRef)
       ]);
       if (!orgSnap.exists) return { statusCode: 404, payload: { success: false, reasonCode: 'ORGANIZATION_NOT_FOUND' } };
+      if (dependencies.expectedOwnerUid) {
+        const orgData = orgSnap.data() || {};
+        const ownerStillMatches = ['ownerUid', 'ownerUserId', 'ownerId', 'owner_user_id']
+          .some(field => orgData[field] === dependencies.expectedOwnerUid);
+        if (!ownerStillMatches) {
+          return { statusCode: 409, payload: { success: false, reasonCode: 'OWNER_ORGANIZATION_CHANGED' } };
+        }
+      }
       if (!isOrganizationLifecycleActive(orgSnap.data() || {})) return { statusCode: 409, payload: { success: false, reasonCode: 'ORGANIZATION_INACTIVE' } };
 
       const membershipState = classifyMembership(memberSnap.data());
@@ -190,6 +200,68 @@ export async function createJoinRequest(req: Request, res: Response, dependencie
     return res.status(result.statusCode).json(result.payload);
   } catch {
     return res.status(500).json({ success: false, reasonCode: 'INTERNAL_ERROR' });
+  }
+}
+
+
+/**
+ * Resolve the uniquely owned active tenant on the Hub, never in a satellite
+ * without Firebase Auth directory IAM. This is discovery only: createJoinRequest
+ * re-checks the owner relation transactionally before writing the request.
+ */
+export async function createJoinRequestByOwnerEmail(req: Request, res: Response, dependencies: Dependencies = {}) {
+  const requesterUid = await authenticate(req, dependencies);
+  if (!requesterUid) return res.status(401).json({ success: false, reasonCode: 'UNAUTHENTICATED' });
+
+  const ownerEmail = normalizeInvitationEmail(req.body?.ownerEmail);
+  if (!ownerEmail || ownerEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) {
+    return res.status(400).json({ success: false, reasonCode: 'INVALID_OWNER_EMAIL' });
+  }
+
+  try {
+    const lookupOwner = dependencies.getUserByEmail ?? ((email: string) => getAuth().getUserByEmail(email));
+    let owner: { uid: string; disabled?: boolean };
+    try {
+      owner = await lookupOwner(ownerEmail);
+    } catch (error: any) {
+      const code = String(error?.code || '');
+      return res.status(code === 'auth/user-not-found' ? 404 : 503).json({
+        success: false,
+        reasonCode: code === 'auth/user-not-found' ? 'OWNER_ORGANIZATION_NOT_FOUND' : 'OWNER_LOOKUP_UNAVAILABLE'
+      });
+    }
+    if (!owner?.uid || !isSafeDocumentId(owner.uid) || owner.disabled) {
+      return res.status(404).json({ success: false, reasonCode: 'OWNER_ORGANIZATION_NOT_FOUND' });
+    }
+
+    const db = (dependencies.getFirestore ?? getFirestore)();
+    const candidateDocs = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+    for (const field of ['ownerUid', 'ownerUserId', 'ownerId', 'owner_user_id']) {
+      const matches = await db.collection('organizations').where(field, '==', owner.uid).get();
+      for (const doc of matches.docs) candidateDocs.set(doc.id, doc);
+    }
+    const available = Array.from(candidateDocs.values()).filter(doc => {
+      const data = doc.data() || {};
+      return isSafeDocumentId(doc.id) &&
+        isOrganizationLifecycleActive(data) &&
+        ['ownerUid', 'ownerUserId', 'ownerId', 'owner_user_id'].some(field => data[field] === owner.uid);
+    });
+    if (available.length !== 1) {
+      return res.status(available.length ? 409 : 404).json({
+        success: false,
+        reasonCode: available.length ? 'OWNER_HAS_MULTIPLE_ORGANIZATIONS' : 'OWNER_ORGANIZATION_NOT_FOUND'
+      });
+    }
+
+    // Original command remains the sole writer and independently revalidates
+    // requester Auth, organization lifecycle, active membership and capacity.
+    return createJoinRequest(
+      { headers: req.headers, body: req.body, params: { ...req.params, organizationId: available[0].id } } as unknown as Request,
+      res,
+      { ...dependencies, expectedOwnerUid: owner.uid }
+    );
+  } catch {
+    return res.status(503).json({ success: false, reasonCode: 'OWNER_LOOKUP_UNAVAILABLE' });
   }
 }
 
