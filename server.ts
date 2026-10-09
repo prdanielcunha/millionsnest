@@ -7,7 +7,7 @@ import { INVITATION_TTL_MS } from './src/server/services/InvitationCreationPlann
 import { resolveCanonicalInvitationCapacity, normalizeInvitationTemporalMs } from './src/server/services/InvitationAcceptanceServerPolicy.js';
 import { canInviteOrganizationRole } from './src/lib/organizationRoles.js';
 import { buildInvitationTargetUrl, getInvitationTargetAppName, isExpectedInvitationTargetUrl, resolveInvitationTargetAppId } from './src/lib/InvitationTargetAppPolicy.js';
-import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
+import { approveJoinRequest, createJoinRequest, createJoinRequestByOwnerEmail, rejectJoinRequest } from './src/server/services/JoinRequestCommandService.js';
 import { removeOrganizationMember } from './src/server/services/MemberRemovalCommandService.js';
 import { updateOrganizationMemberRole } from './src/server/services/OrganizationRoleCommandService.js';
 import { repairOrganizationOwnership } from './src/server/services/OrganizationOwnershipRepairService.js';
@@ -2789,6 +2789,7 @@ async function startServer() {
 
   app.post('/api/v1/invitations/accept', express.json(), (req, res) => acceptInvitation(req, res));
   app.post('/api/v1/organizations/:organizationId/join-requests', express.json({ limit: '8kb' }), (req, res) => createJoinRequest(req, res));
+  app.post('/api/v1/join-requests/by-owner-email', express.json({ limit: '8kb' }), (req, res) => createJoinRequestByOwnerEmail(req, res));
   app.get('/api/v1/organizations/:organizationId/join-requests', async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
