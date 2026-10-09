@@ -19,7 +19,8 @@ export function validateFoundersCoupon(coupon:FoundersCoupon,tier:string,product
  coupon.duration_in_months===12&&coupon.amount_off===plan.regularCents-plan.foundersCents&&
  coupon.max_redemptions===50&&coupon.metadata?.app==='nestlocal'&&
  coupon.metadata?.tier===tier&&coupon.metadata?.campaign==='founders_2026'&&
- coupon.applies_to?.products?.length===1&&coupon.applies_to.products[0]===productId;
+ coupon.metadata?.product_id===productId&&
+ (!coupon.applies_to?.products || (coupon.applies_to.products.length===1&&coupon.applies_to.products[0]===productId));
 }
 export function allowFoundersDiscount(input:{enabled:boolean;launchMs:number|null;nowMs:number;enrolled:number;
  ownerAuthorized:boolean;priorSubscription:boolean}){
