@@ -3,7 +3,7 @@
  * after pilot certification AND set a server-side flag.
  */
 import {Timestamp,type Firestore} from 'firebase-admin/firestore';
-import {allowFoundersDiscount,NESTLOCAL_FOUNDERS_COUPONS,validateFoundersCoupon} from '../../lib/nestLocalFoundersCoupon.js';
+import {allowFoundersDiscount,NESTLOCAL_FOUNDERS_COUPONS} from '../../lib/nestLocalFoundersCoupon.js';
 type Claim={status:'reserved'|'accepted';uid:string;tier:string;expiresAtMs:number;sessionId?:string};
 const CAMPAIGN_PATH='nestlocal_founders_campaign/2026';
 const LEASE_MS=24*60*60*1000;
