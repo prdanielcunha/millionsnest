@@ -1052,11 +1052,23 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     searchUrl.searchParams.set('limit', '20');
 
     const providerHeaders = { Authorization: `Bearer ${accessToken}` };
-    const searchResponse = await fetchMarketplaceWithRetry(
+    let searchResponse = await fetchMarketplaceWithRetry(
       searchUrl,
       { headers: providerHeaders },
       'meli-catalog-search',
+      2,
     );
+    if(searchResponse.status===401){
+      // A previously accepted access token may be revoked before its nominal expiry.
+      const renewed=await ensureNestAffiliateMeliToken({
+        db:dbInstance,organizationId,force:true,
+      });
+      if(renewed.token){
+        accessToken=renewed.token;
+        providerHeaders.Authorization='Bearer '+accessToken;
+        searchResponse=await fetchMarketplaceWithRetry(searchUrl,{headers:providerHeaders},'meli-catalog-search-renewed',1);
+      }
+    }
 
     if (!searchResponse.ok) {
       const providerBody = await searchResponse.text();
