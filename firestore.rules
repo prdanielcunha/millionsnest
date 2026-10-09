@@ -80,18 +80,19 @@ service cloud.firestore {
     }
 
     function isOrgActive(orgId) {
-      let subDoc = get(/databases/$(database)/documents/subscriptions/$(orgId));
-      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
-      let subData = subDoc != null ? subDoc.data : null;
-      let orgData = orgDoc != null ? orgDoc.data : null;
-      let ms = orgData != null ? orgData.get('apps', {}).get('musicscale', {}) : {};
+      let subPath = /databases/$(database)/documents/subscriptions/$(orgId);
+      let orgPath = /databases/$(database)/documents/organizations/$(orgId);
+      // New no-card grants intentionally have no Stripe subscription. Guard
+      // get() with exists() to avoid denying a valid new MusicScale workspace.
+      let subData = exists(subPath) ? get(subPath).data : {};
+      let orgData = exists(orgPath) ? get(orgPath).data : {};
+      let ms = orgData.get('apps', {}).get('musicscale', {});
       let trialScope = ms.get('trialSource', '') == 'hub_internal_trial';
-      let legacySubActive = subData != null &&
-        subData.get('status', '') in ['active', 'trialing'];
+      let legacySubActive = subData.get('status', '') in ['active', 'trialing'];
       let legacyAppActive = ms.get('status', '') in ['active', 'trialing'];
       return isSystemAdmin() ||
         (trialScope
-          ? ((subData != null && isMusicScalePaidAfterTrial(subData)) ||
+          ? (isMusicScalePaidAfterTrial(subData) ||
              musicScaleInternalTrialCanWrite(orgId))
           : (legacySubActive || legacyAppActive));
     }
