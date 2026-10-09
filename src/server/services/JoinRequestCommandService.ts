@@ -220,7 +220,16 @@ export async function createJoinRequestByOwnerEmail(req: Request, res: Response,
 
   try {
     const lookupOwner = dependencies.getUserByEmail ?? ((email: string) => getAuth().getUserByEmail(email));
-    const owner = await lookupOwner(ownerEmail);
+    let owner: { uid: string; disabled?: boolean };
+    try {
+      owner = await lookupOwner(ownerEmail);
+    } catch (error: any) {
+      const code = String(error?.code || '');
+      return res.status(code === 'auth/user-not-found' ? 404 : 503).json({
+        success: false,
+        reasonCode: code === 'auth/user-not-found' ? 'OWNER_ORGANIZATION_NOT_FOUND' : 'OWNER_LOOKUP_UNAVAILABLE'
+      });
+    }
     if (!owner?.uid || !isSafeDocumentId(owner.uid) || owner.disabled) {
       return res.status(404).json({ success: false, reasonCode: 'OWNER_ORGANIZATION_NOT_FOUND' });
     }
