@@ -74,6 +74,19 @@ jobs:
         if: steps.secrets.outputs.ready != 'true'
         run: echo "Cloud Run deploy skipped until required Secret Manager versions exist."
 
+      - name: Paid MusicScale data preflight — read-only
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GOOGLE_CLOUD_PROJECT: millionsnest
+          GCLOUD_PROJECT: millionsnest
+          FIREBASE_PROJECT_ID: millionsnest
+          MN_INTEGRITY_AUDIT_READ_ONLY: 'true'
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npx tsx scripts/audit_music_data_integrity_readonly.ts | tee /tmp/music-integrity-before.log
+          grep -q '^MUSICSCALE_AGGREGATE_READ_ONLY_AUDIT=' /tmp/music-integrity-before.log
+
       - name: Configure Docker authentication
         if: steps.secrets.outputs.ready == 'true'
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
@@ -162,13 +175,31 @@ jobs:
         if: steps.secrets.outputs.ready == 'true'
         run: npm install -g firebase-tools@15.26.0
 
-      - name: Deploy Hub Hosting and Firestore Rules
+      - name: Deploy Hub Hosting (Firestore rules managed separately)
         if: steps.secrets.outputs.ready == 'true'
         run: |
           firebase deploy \
             --project "$PROJECT_ID" \
-            --only hosting:hub,firestore:rules \
+            --only hosting:hub \
             --non-interactive
+
+      - name: Paid MusicScale data postflight — compare read-only aggregates
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GOOGLE_CLOUD_PROJECT: millionsnest
+          GCLOUD_PROJECT: millionsnest
+          FIREBASE_PROJECT_ID: millionsnest
+          MN_INTEGRITY_AUDIT_READ_ONLY: 'true'
+        run: |
+          set -euo pipefail
+          npx tsx scripts/audit_music_data_integrity_readonly.ts | tee /tmp/music-integrity-after.log
+          BEFORE="$(grep '^MUSICSCALE_AGGREGATE_READ_ONLY_AUDIT=' /tmp/music-integrity-before.log | tail -1 | cut -d= -f2- | jq -cS 'del(.generatedAt)')"
+          AFTER="$(grep '^MUSICSCALE_AGGREGATE_READ_ONLY_AUDIT=' /tmp/music-integrity-after.log | tail -1 | cut -d= -f2- | jq -cS 'del(.generatedAt)')"
+          if [ "$BEFORE" != "$AFTER" ]; then
+            echo 'MUSICSCALE_AGGREGATE_CHANGED__MANUAL_DATA_AUDIT_REQUIRED'
+            exit 1
+          fi
+          echo 'MUSICSCALE_AGGREGATE_INTEGRITY_UNCHANGED'
 
       - name: NestAffiliate reference API auth smoke
         if: steps.secrets.outputs.ready == 'true'

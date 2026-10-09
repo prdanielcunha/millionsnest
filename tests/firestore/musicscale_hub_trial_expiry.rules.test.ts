@@ -19,7 +19,7 @@ before(async()=>{
 beforeEach(async()=>{await env.clearFirestore()});
 after(async()=>{await env.cleanup()});
 
-async function seed(options:{scope?:boolean;daysLeft?:number;extended?:number;paid?:boolean;nestLocal?:boolean;invalidDays?:boolean}={}){
+async function seed(options:{scope?:boolean;daysLeft?:number;extended?:number;paid?:boolean;nestLocal?:boolean;invalidDays?:boolean;withoutStripeDoc?:boolean}={}){
  await env.withSecurityRulesDisabled(async context=>{
   const db=context.firestore();
   await setDoc(doc(db,'organizations/org-1'),{
@@ -41,7 +41,7 @@ async function seed(options:{scope?:boolean;daysLeft?:number;extended?:number;pa
       extensionEndsAt:Timestamp.fromMillis(end+options.extended*DAY)}:{})
    });
   }
-  await setDoc(doc(db,'subscriptions/org-1'), options.paid
+  if(!options.withoutStripeDoc) await setDoc(doc(db,'subscriptions/org-1'), options.paid
    ? {apps:{musicscale:{status:'active',stripeSubscriptionId:'sub_ms'}}}
    : options.nestLocal
     ? {status:'active',stripeSubscriptionId:'sub_local',apps:{nestlocal:{status:'active'}}}
@@ -58,6 +58,19 @@ test('valid no-card 14-day grant authorizes musical reads',async()=>{
  await seed({scope:true,daysLeft:12});
  for(const p of targetPaths)await assertSucceeds(get(p));
  await assertSucceeds(get('scales/scale/responses/owner'));
+});
+
+test('new no-card evaluation can read MusicScale without creating a Stripe subscription',async()=>{
+ await seed({scope:true,daysLeft:12,withoutStripeDoc:true});
+ await assertSucceeds(get('songs/music'));
+ await assertSucceeds(get('scales/scale'));
+ await assertSucceeds(get('scales/scale/responses/owner'));
+});
+
+test('an expired no-card evaluation without Stripe billing cannot read music',async()=>{
+ await seed({scope:true,daysLeft:-1,withoutStripeDoc:true});
+ await assertFails(get('songs/music'));
+ await assertFails(get('scales/scale/responses/owner'));
 });
 
 test('expired Hub grant denies music/roles/scale responses and writes',async()=>{

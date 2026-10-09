@@ -480,5 +480,12 @@ assertCondition('94. CREATE_MEMBERSHIP persiste identidade canônica na membersh
 assertCondition('95. perfil do usuário recebe identidade autenticada no aceite', endpointContent.includes('t.set(userRef') && endpointContent.includes('...authenticatedIdentity'));
 assertCondition('96. bootstrap de tenant cura identidade de perfis existentes', serviceContent.includes('bootstrapIdentityUpdates'));
 
+const acceptanceSuccessSegments = [
+  endpointContent.split("planResult.action === 'ALREADY_MEMBER'")[1]?.split("CREATE_MEMBERSHIP")[0] || '',
+  endpointContent.split("const auditRef = db.collection(\`organizations/\${orgId}/audit_logs\`)")[1] || ''
+];
+assertCondition('97. Hub returns verified UID on both successful invite acceptance branches', acceptanceSuccessSegments.every(s => s.includes('authenticatedUid: uid')));
+assertCondition('98. Hub returns current Firebase Auth email on both successful invite acceptance branches', acceptanceSuccessSegments.every(s => s.includes('authenticatedEmail: normalizedAuthenticatedEmail')));
+
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
