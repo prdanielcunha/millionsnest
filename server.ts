@@ -66,7 +66,7 @@ import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAd
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
 import {reserveNestLocalFoundersOffer,releaseFailedNestLocalFoundersReservation,markNestLocalFoundersAccepted,readNestLocalFoundersOffer} from './src/server/services/NestLocalFoundersCampaignService.js';
 import {NESTLOCAL_COMMERCIAL_V2_PROPOSED} from './src/lib/nestLocalCommercialV2.js';
-import {validateFoundersCoupon} from './src/lib/nestLocalFoundersCoupon.js';
+import {validateFoundersCoupon,NESTLOCAL_FOUNDERS_COUPONS} from './src/lib/nestLocalFoundersCoupon.js';
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
 import { syncNestLocalPaidInvoiceFromWebhook } from './src/server/services/NestLocalPaidInvoiceWebhookSync.js';
 import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
@@ -3225,6 +3225,24 @@ async function startServer() {
              event_type: event.type,
              userEmail: session.customer_details?.email || session.customer_email || (userDocSnap.exists ? userDocSnap.data()?.email : null)
           });
+
+          // Founders is counted only on a paid, active, signed checkout
+          // for the exact organization/coupon issued by the Hub. The campaign
+          // document never modifies any MusicScale subscription or membership.
+          if(session.metadata?.foundersCampaign==='2026'){
+            const tier=String(subscription.metadata?.plan||'').replace(/^nestlocal_/,'').replace(/_monthly$/,'');
+            const couponId=String(session.metadata?.foundersCouponId||'');
+            if(session.metadata?.app!=='nestlocal'||subscription.metadata?.app!=='nestlocal'||
+               subscription.metadata?.organizationId!==orgId||
+               subscription.metadata?.foundersCampaign!=='2026'||
+               subscription.metadata?.foundersCouponId!==couponId||
+               NESTLOCAL_FOUNDERS_COUPONS[tier]!==couponId||
+               session.payment_status!=='paid'||subscription.status!=='active') {
+              throw Error('FOUNDERS_STRIPE_CHECKOUT_NOT_ATTESTED');
+            }
+            await markNestLocalFoundersAccepted({db,organizationId:orgId,
+              uid:userId,tier,sessionId:session.id,couponId});
+          }
 
           await auditRef.update({ 
              status: result.skipped ? 'skipped' : 'success', 
@@ -9140,6 +9158,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       let customerId: string | undefined;
       let orgId = userId;
       let hasTrialHistory = false;
+      let foundersOwnerAuthorized = false;
 
       if (db) {
          const orgContext = await resolveUserOrganizationContext(userId);
@@ -9157,6 +9176,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          orgId = requestedOrganizationId || orgContext.primaryOrganizationId || orgContext.activeOrganizationId || (userDoc.exists ? userDoc.data()?.organizationId : null) || userId;
          
          const isOwner = orgContext.ownedOrganizations.some((org: any) => org.id === orgId);
+         foundersOwnerAuthorized=isOwner;
          const membership = orgContext.memberships.find((m: any) => m.organizationId === orgId);
          const hasBillingPerm = membership?.permissions?.['organization.billing.manage'] === true || membership?.role === 'owner' || membership?.role === 'admin';
          const systemRole = userDoc.data()?.systemRole;
@@ -9271,7 +9291,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       let foundersReservation: null|{organizationId:string;uid:string;tier:string;newlyReserved:boolean}=null;
       let foundersCouponId:string|null=null;
       if(wantsNestLocalFounders){
-        if(appId!=='nestlocal'||promoCodeId||!db||!selectedPlan?.tier||
+        if(appId!=='nestlocal'||promoCodeId||!db||!foundersOwnerAuthorized||!selectedPlan?.tier||
            eligibility.decision!=='allow_new_subscription')
           return res.status(409).json({error:'FOUNDERS_NOT_ELIGIBLE'});
         const tier=String(selectedPlan.tier);
@@ -9392,7 +9412,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const accessUntilStr = eligibility.decision === 'allow_new_subscription' ? (eligibility.accessUntil || 'no_access') : 'no_access';
       const idempotencyKey = crypto.createHash('sha256').update(
-        `unified-checkout_${orgId}_${appId}_${planLookupKey || 'none'}_${addonLookupKeys ? addonLookupKeys.join(',') : ''}_${accessUntilStr}`
+        `unified-checkout_${orgId}_${appId}_${planLookupKey || 'none'}_${addonLookupKeys ? addonLookupKeys.join(',') : ''}_${accessUntilStr}${appId==='nestlocal'?'_'+(foundersCouponId||promoCodeId||'regular'):''}`
       ).digest('hex');
 
       let session:Stripe.Checkout.Session;
