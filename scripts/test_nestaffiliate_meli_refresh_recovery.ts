@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {isMeliTokenUsable,shouldRefreshMeliToken,meliRefreshFailureDelay,ensureNestAffiliateMeliToken} from '../src/server/services/NestAffiliateMeliTokenService.ts';
-import {matchMeliResearchTerms,priorMeliResearchProduct} from '../src/server/services/NestAffiliateMeliResearchCache.ts';
+import {matchMeliResearchTerms,priorMeliResearchProduct,readMeliPriorResearch} from '../src/server/services/NestAffiliateMeliResearchCache.ts';
 import type {Firestore} from 'firebase-admin/firestore';
 
 const now=Date.UTC(2026,9,9,12,0,0);
@@ -42,4 +42,27 @@ const read=await ensureNestAffiliateMeliToken({db:db as Firestore,organizationId
  throw Error('should not be called');
 }});
 assert.equal(read.reason,'FRESH');
+// Regression: the nightly agent actually writes to opportunities and a bounded
+// dailyAgentResearchPool/current snapshot, not a made-up collection path.
+let askedPaths:string[]=[];
+const storedPool={organizationId:'org',items:[{keyword:'organizador cozinha',observedAt:new Date(now).toISOString(),product:good}]};
+const databaseNode=(path:string[]):any=>({
+ collection:(next:string)=>databaseNode([...path,next]),
+ doc:(next:string)=>databaseNode([...path,next]),
+ get:async()=>{
+   const pathname=path.join('/');
+   askedPaths.push(pathname);
+   return {data:()=>pathname.endsWith('dailyAgentResearchPool/current')?storedPool:undefined,docs:[]};
+ },
+ limit:(_n:number)=>databaseNode(path),
+});
+const previous=await readMeliPriorResearch({
+ db:databaseNode([]) as Firestore,organizationId:'org',query:'organizador cozinha',limit:5,now,
+});
+assert.equal(previous.length,1);
+assert.equal(previous[0]?.product.externalId,'MLB123');
+assert.equal(previous[0]?.product.price,undefined);
+assert.ok(askedPaths.some(x=>x.endsWith('dailyAgentResearchPool/current')));
+assert.ok(askedPaths.some(x=>x.includes('/opportunities')));
+
 console.log('NESTAFFILIATE_MELI_REFRESH_RECOVERY_TESTS_OK');
