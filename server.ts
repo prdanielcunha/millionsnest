@@ -43,6 +43,8 @@ import {
 } from './src/server/services/PublicHomeAnalyticsService.js';
 import { summarizeGrowthEvents, type GrowthAnalyticsEvent } from './src/server/services/GrowthFunnelService.js';
 import { resolveNestAffiliateRetryAfterSeconds } from './src/server/services/NestAffiliateRetryAfterPolicy.js';
+import { ensureNestAffiliateMeliToken } from './src/server/services/NestAffiliateMeliTokenService.js';
+import { readMeliPriorResearch,recordMeliLiveSearch } from './src/server/services/NestAffiliateMeliResearchCache.js';
 import { resolveLegacyMembershipCandidates } from './src/server/services/TenantBootstrapPlanner.js';
 import {
   applyEcosystemOrganizationCleanup,
@@ -721,10 +723,12 @@ async function fetchMarketplaceWithRetry(
       if (!retryable || attempt === maxAttempts) return response;
 
       const retryAfterSeconds = Number(response.headers.get('retry-after') || 0);
-      const delayMs = Math.max(
+      // Never hammer a provider during its cooldown or block a UI request for minutes.
+      if(response.status===429 && (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds>3))return response;
+      const delayMs = Math.min(3000,Math.max(
         Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : 0,
-        Math.min(6000, 500 * (2 ** (attempt - 1))),
-      );
+        Math.min(2000,500 * (2 ** (attempt - 1))),
+      ));
       console.warn('[NestAffiliate/provider] retry', {
         label,
         status: response.status,
@@ -748,6 +752,43 @@ async function fetchMarketplaceWithRetry(
   throw lastError instanceof Error ? lastError : new Error('PROVIDER_REQUEST_FAILED');
 }
 
+/**
+ * Previously observed official products only. Saved records are research candidates,
+ * not verified offers; never reuse stale price, sales, stock, commission or affiliate link.
+ */
+async function respondWithMeliPriorResearch(input:{
+  organizationId:string;query:string;limit:number;res:any;reason:string;
+  providerStatus?:number;retryAfterSeconds?:number;
+}):Promise<boolean>{
+  try{
+    const currentDb=getDb();
+    if(!currentDb)return false;
+    const prior=await readMeliPriorResearch({
+      db:currentDb,organizationId:input.organizationId,query:input.query,limit:input.limit,
+    });
+    if(!prior.length)return false;
+    const oldest=prior.map(item=>Date.parse(item.observedAt)).sort((a,b)=>a-b)[0]||Date.now();
+    if(input.retryAfterSeconds)input.res.setHeader('Retry-After',String(input.retryAfterSeconds));
+    input.res.setHeader('Cache-Control','private, no-store');
+    input.res.setHeader('X-NestAffiliate-Provider-Fallback','meli-prior-official-research');
+    input.res.json({
+      products:prior.map(item=>item.product),
+      query:input.query,provider:'MELI',source:'nestaffiliate-prior-official-observation',
+      degraded:true,degradedReason:input.reason,
+      observedAt:new Date(oldest).toISOString(),
+      meta:{catalogTotal:prior.length,candidates:prior.length,detailed:0,usable:prior.length,
+        minSoldQuantity:0,discoveryMode:true,researchOnly:true,sourceLimited:true,
+        staleObservation:true,providerStatus:input.providerStatus??null,
+        rejectedUnavailable:0,rejectedLowSales:0,rejectedUnverified:0},
+    });
+    return true;
+  }catch(err){
+    console.warn('[NestAffiliate/MELI] prior official research unavailable',
+      err instanceof Error ? err.name : 'UNKNOWN');
+    return false;
+  }
+}
+
 async function respondWithMercadoLivreSearchFallback(input: {
   organizationId: string;
   query: string;
@@ -764,14 +805,23 @@ async function respondWithMercadoLivreSearchFallback(input: {
   const headers: Record<string,string> = { Accept: 'application/json' };
   if (input.accessToken) headers.Authorization = `Bearer ${input.accessToken}`;
 
-  const response = await fetchMarketplaceWithRetry(
-    fallbackUrl,
-    { headers },
-    'meli-public-search-fallback',
-  );
+  let response:Response;
+  try{
+    response=await fetchMarketplaceWithRetry(fallbackUrl,{headers},'meli-public-search-fallback',2);
+  }catch{
+    if(await respondWithMeliPriorResearch({...input,reason:'MELI_SITE_SEARCH_NETWORK'}))return;
+    return input.res.status(503).json({error:'MELI_PROVIDER_UNAVAILABLE',fallbackAttempted:true});
+  }
   if (!response.ok) {
+    if(response.status===403 || response.status===401 || response.status>=500){
+      if(await respondWithMeliPriorResearch({
+        ...input,providerStatus:response.status,reason:'MELI_SITE_SEARCH_'+response.status,
+      }))return;
+    }
     if (response.status === 429) {
       const retryAfterSeconds = resolveNestAffiliateRetryAfterSeconds(response.headers.get('Retry-After'));
+      if(await respondWithMeliPriorResearch({...input,providerStatus:429,
+        retryAfterSeconds,reason:'MELI_PROVIDER_RATE_LIMITED'}))return;
       input.res.setHeader('Retry-After', String(retryAfterSeconds));
       input.res.setHeader('Cache-Control', 'private, no-store');
       return input.res.status(429).json({
@@ -979,18 +1029,17 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     }
 
     const secretState = secretSnap.data() || {};
-    const accessToken = String(secretState.accessToken || '');
+    let accessToken = String(secretState.accessToken || '');
     const expiresAtMs = Date.parse(String(secretState.accessTokenExpiresAt || ''));
-
-    if (!accessToken || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now() + 30_000) {
-      return respondWithMercadoLivreSearchFallback({
-        organizationId,
-        query,
-        limit,
-        res,
-        reason: 'MELI_TOKEN_STALE',
-        discoveryMode,
-      });
+    if (!accessToken || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now() + 90_000) {
+      const renewed=await ensureNestAffiliateMeliToken({db:dbInstance,organizationId});
+      if(renewed.token)accessToken=renewed.token;
+      else {
+        return respondWithMercadoLivreSearchFallback({
+          organizationId,query,limit,res,
+          reason: 'MELI_TOKEN_'+renewed.reason,discoveryMode,
+        });
+      }
     }
 
     const MIN_SOLD_QUANTITY = discoveryMode ? 0 : 100;
@@ -1003,11 +1052,23 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
     searchUrl.searchParams.set('limit', '20');
 
     const providerHeaders = { Authorization: `Bearer ${accessToken}` };
-    const searchResponse = await fetchMarketplaceWithRetry(
+    let searchResponse = await fetchMarketplaceWithRetry(
       searchUrl,
       { headers: providerHeaders },
       'meli-catalog-search',
+      2,
     );
+    if(searchResponse.status===401){
+      // A previously accepted access token may be revoked before its nominal expiry.
+      const renewed=await ensureNestAffiliateMeliToken({
+        db:dbInstance,organizationId,force:true,
+      });
+      if(renewed.token){
+        accessToken=renewed.token;
+        providerHeaders.Authorization='Bearer '+accessToken;
+        searchResponse=await fetchMarketplaceWithRetry(searchUrl,{headers:providerHeaders},'meli-catalog-search-renewed',1);
+      }
+    }
 
     if (!searchResponse.ok) {
       const providerBody = await searchResponse.text();
@@ -1294,6 +1355,13 @@ async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
       }];
     }).slice(0, limit);
 
+    // Cache only verified official API observations; never block search on a cache write.
+    if(products.length){
+      await recordMeliLiveSearch({
+        db:dbInstance,organizationId,query,
+        products,observedAt,
+      }).catch(()=>console.warn('[NestAffiliate/MELI] research cache write unavailable'));
+    }
     res.setHeader('Cache-Control', 'private, no-store');
     return res.json({
       products,

@@ -94,6 +94,9 @@ jobs:
       - name: Cloud Run runtime configuration preservation
         run: npx tsx scripts/test_cloudrun_deploy_env_preservation.ts
 
+      - name: NestAffiliate Mercado Livre OAuth expiration and last-known-data guard
+        run: npx tsx scripts/test_nestaffiliate_meli_refresh_recovery.ts
+
       - name: Hub product positioning and trust contract
         run: npx tsx scripts/test_hub_product_positioning.ts
 
