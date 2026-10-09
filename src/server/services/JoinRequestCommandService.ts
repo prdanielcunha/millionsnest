@@ -247,7 +247,7 @@ export async function createJoinRequestByOwnerEmail(req: Request, res: Response,
     // Original command remains the sole writer and independently revalidates
     // requester Auth, organization lifecycle, active membership and capacity.
     return createJoinRequest(
-      { ...req, params: { ...req.params, organizationId: available[0].id } } as Request,
+      { headers: req.headers, body: req.body, params: { ...req.params, organizationId: available[0].id } } as Request,
       res,
       { ...dependencies, expectedOwnerUid: owner.uid }
     );
