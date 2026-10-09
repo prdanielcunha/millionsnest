@@ -2,6 +2,7 @@
 // Aligned with the MillionsNest Eco-system Architecture
 
 import { isGlobalPrivilegedUser } from './permissionService.js';
+import { MUSIC_SCALE_HUB_NO_CARD_TRIAL_DAYS, MUSIC_SCALE_LEGACY_STRIPE_TRIAL_DAYS } from './musicScaleTrialPolicy.js';
 
 export type MusicScalePlan = 'starter' | 'advanced' | 'pro';
 
@@ -39,7 +40,10 @@ export interface MusicScalePlanDefinition {
   name: string;
   priceMonthly: number;
   currency: string;
+  /** @deprecated Legacy Stripe trial metadata ONLY. Never issue Hub grants from this field. */
   trialDays: number;
+  /** Canonical no-card grant duration issued and verified by the Hub. */
+  hubNoCardTrialDays: number;
   launchPrice?: boolean;
   limits: PlanLimits;
   features: PlanFeatures;
@@ -51,7 +55,8 @@ export const MUSIC_SCALE_PLANS: Record<MusicScalePlan, MusicScalePlanDefinition>
     name: 'Starter',
     priceMonthly: 19.9,
     currency: 'BRL',
-    trialDays: 7,
+    trialDays: MUSIC_SCALE_LEGACY_STRIPE_TRIAL_DAYS,
+    hubNoCardTrialDays: MUSIC_SCALE_HUB_NO_CARD_TRIAL_DAYS,
     limits: {
       users: 10,
       songs: -1,
@@ -85,7 +90,8 @@ export const MUSIC_SCALE_PLANS: Record<MusicScalePlan, MusicScalePlanDefinition>
     name: 'Advanced',
     priceMonthly: 29.9,
     currency: 'BRL',
-    trialDays: 7,
+    trialDays: MUSIC_SCALE_LEGACY_STRIPE_TRIAL_DAYS,
+    hubNoCardTrialDays: MUSIC_SCALE_HUB_NO_CARD_TRIAL_DAYS,
     limits: {
       users: 20,
       songs: -1,
@@ -120,7 +126,8 @@ export const MUSIC_SCALE_PLANS: Record<MusicScalePlan, MusicScalePlanDefinition>
     priceMonthly: 34.9,
     currency: 'BRL',
     launchPrice: true,
-    trialDays: 7,
+    trialDays: MUSIC_SCALE_LEGACY_STRIPE_TRIAL_DAYS,
+    hubNoCardTrialDays: MUSIC_SCALE_HUB_NO_CARD_TRIAL_DAYS,
     limits: {
       users: -1,
       songs: -1,
