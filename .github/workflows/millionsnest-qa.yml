@@ -91,6 +91,9 @@ jobs:
       - name: Firebase Hosting and Cloud Run migration contract
         run: npx tsx scripts/test_firebase_hosting_cloudrun_policy.ts
 
+      - name: Cloud Run runtime configuration preservation
+        run: npx tsx scripts/test_cloudrun_deploy_env_preservation.ts
+
       - name: Hub product positioning and trust contract
         run: npx tsx scripts/test_hub_product_positioning.ts
 
@@ -132,6 +135,9 @@ jobs:
 
       - name: Subscription ownership integrity
         run: npx tsx scripts/test_subscription_ownership_integrity.ts
+
+      - name: Canonical paid subscriptions cannot create duplicate Checkout
+        run: npx tsx scripts/test_subscription_canonical_duplicate_guard.ts
 
       - name: Public home conversion funnel and analytics security
         run: npx tsx scripts/test_public_home_funnel.ts
@@ -183,6 +189,12 @@ jobs:
 
       - name: NestLocal SaaS billing and entitlement contract
         run: npx tsx scripts/test_nestlocal_saas_billing_contract.ts
+
+      - name: Modern Stripe paid invoice schema and safe credits ledger
+        run: npx tsx scripts/test_nestlocal_paid_invoice_credits.ts
+
+      - name: NestLocal paid invoice credit reconciliation
+        run: npx tsx scripts/test_nestlocal_paid_invoice_reconciler.ts
 
       - name: Checkout confirmation tenant-binding contract
         run: npx tsx scripts/test_checkout_confirm_tenant_binding.ts
