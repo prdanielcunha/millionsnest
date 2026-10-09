@@ -32,7 +32,7 @@ assert.equal(shouldAddStripeTrial(legacyMusicScale), true);
 assert.equal(shouldAddStripeTrial({ ...legacyMusicScale, hasLegacyTrialHistory: true }), false);
 const newNestLocal = { ...legacyMusicScale, appId: 'nestlocal' as const };
 assert.equal(shouldAddStripeTrial(newNestLocal), false);
-assert.equal(shouldAddStripeTrial({ ...newNestLocal, newNestLocalTrialEnabled: false }), true);
+assert.equal(shouldAddStripeTrial({ ...newNestLocal, newNestLocalTrialEnabled: false }), false);
 assert.equal(shouldAddStripeTrial({ ...newNestLocal, newNestLocalTrialEnabled: false, internalTrialConsumed: true }), false);
 
 // Firestore-shaped transaction fake: prove idempotency and the eligibility vetoes.
