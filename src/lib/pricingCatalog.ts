@@ -148,11 +148,11 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     app: 'nestlocal',
     lookupKey: 'nestlocal_essential_monthly',
     name: 'NestLocal Essencial',
-    description: 'Página pública, orçamento guiado e até 100 solicitações por mês.',
+    description: 'Página pública, orçamento guiado e organização de atendimentos.',
     tier: 'essential',
     type: 'plan',
     interval: 'month',
-    priceInCents: 7900,
+    priceInCents: 5990,
     envKey: 'STRIPE_PRICE_NESTLOCAL_ESSENTIAL_MONTHLY'
   },
   {

@@ -1,4 +1,4 @@
-import { approveJoinRequest, createJoinRequest, rejectJoinRequest } from '../src/server/services/JoinRequestCommandService.js';
+import { approveJoinRequest, createJoinRequest, createJoinRequestByOwnerEmail, rejectJoinRequest } from '../src/server/services/JoinRequestCommandService.js';
 import { clearInvitationEmulator, createAssertions, invokeHandler, requireInvitationEmulator } from './helpers/p0HandlerTestHarness.js';
 
 const db = requireInvitationEmulator();
@@ -14,11 +14,17 @@ const getUser = async (uid: string) => {
   if (!identity) throw new Error('missing');
   return { email: identity.email };
 };
-const deps = { verifyIdToken, getUser, getFirestore: () => db };
+const getUserByEmail = async (email: string) => {
+  if (email === 'a-owner@example.com') return { uid: 'a-owner', disabled: false };
+  throw Object.assign(new Error('not found'), { code: 'auth/user-not-found' });
+};
+const deps = { verifyIdToken, getUser, getUserByEmail, getFirestore: () => db };
 const auth = (token: string, uid: string) => identities.set(token, { uid, email: `${uid}@example.com` });
 const params = (organizationId: string, requestId?: string) => ({ organizationId, ...(requestId ? { requestId } : {}) });
 const create = (token: string | undefined, organizationId: string, body: Record<string, unknown> = {}) =>
   invokeHandler((req, res) => createJoinRequest(req, res, deps), { bearer: token, params: params(organizationId), body });
+const createByOwnerEmail = (token: string | undefined, ownerEmail: string) =>
+  invokeHandler((req, res) => createJoinRequestByOwnerEmail(req, res, deps), { bearer: token, body: { ownerEmail } });
 const approve = (token: string | undefined, organizationId: string, requestId: string) =>
   invokeHandler((req, res) => approveJoinRequest(req, res, deps), { bearer: token, params: params(organizationId, requestId), body: { uid: 'attacker', organizationRole: 'owner', roleId: 'music' } });
 const reject = (token: string | undefined, organizationId: string, requestId: string) =>
@@ -115,6 +121,21 @@ async function run() {
   assert('approve-vs-reject has one winner', resolutionRace.filter(result => result.body.success === true).length === 1);
   assert('race never leaves active membership with rejected request', !(finalRequest.status === 'rejected' && finalMember.exists));
   assert('race emits one compatible resolution audit', raceAudits.docs.filter(doc => String(doc.data().action).startsWith('join_request.') && doc.data().action !== 'join_request.created').length === 1);
+
+  auth('owner-email-requester-token', 'owner-email-requester');
+  assert('owner-email join denies missing Firebase Bearer', (await createByOwnerEmail(undefined, 'a-owner@example.com')).statusCode === 401);
+  assert('owner-email join validates email syntax', (await createByOwnerEmail('owner-email-requester-token', 'not-an-email')).statusCode === 400);
+  assert('owner-email join does not find absent owner', (await createByOwnerEmail('owner-email-requester-token', 'unknown@example.com')).statusCode === 404);
+  const ownerJoin = await createByOwnerEmail('owner-email-requester-token', ' A-OWNER@Example.COM ');
+  assert('owner-email join creates request inside sole authorized tenant', ownerJoin.statusCode === 201 && ownerJoin.body.requestId === 'owner-email-requester');
+  assert('owner-email join does not grant immediate membership', !(await db.doc('organizations/a/members/owner-email-requester').get()).exists);
+  assert('owner-email join is idempotent', (await createByOwnerEmail('owner-email-requester-token', 'a-owner@example.com')).body.reasonCode === 'ALREADY_PENDING');
+  const ownerChanged = await invokeHandler((req, res) => createJoinRequest(req, res, { ...deps, expectedOwnerUid: 'different-owner' }), {
+    bearer: 'owner-email-requester-token', params: { organizationId: 'a' }
+  });
+  assert('owner mismatch fails inside request transaction', ownerChanged.statusCode === 409 && ownerChanged.body.reasonCode === 'OWNER_ORGANIZATION_CHANGED');
+  await db.doc('organizations/a-copy').set({ status: 'active', ownerUid: 'a-owner' });
+  assert('ambiguous owner organizations reject without guessing tenant', (await createByOwnerEmail('owner-email-requester-token', 'a-owner@example.com')).statusCode === 409);
 
   finish();
 }

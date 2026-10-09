@@ -651,6 +651,9 @@ export async function acceptInvitation(
              organizationId: orgId,
              organizationName: orgData.name,
              activeOrganizationId: orgId,
+             // Hub verified both identity and current email before committing membership.
+             authenticatedUid: uid,
+             authenticatedEmail: normalizedAuthenticatedEmail,
              membershipRole: planResult.membershipRole,
              alreadyMember: true,
              legacyTokenMigrated: false,
@@ -746,6 +749,9 @@ export async function acceptInvitation(
           organizationId: orgId,
           organizationName: orgData.name,
           activeOrganizationId: orgId,
+          // Hub verified both identity and current email before committing membership.
+          authenticatedUid: uid,
+          authenticatedEmail: normalizedAuthenticatedEmail,
           membershipRole: planResult.membershipRole,
           alreadyMember: false,
           legacyTokenMigrated: false,

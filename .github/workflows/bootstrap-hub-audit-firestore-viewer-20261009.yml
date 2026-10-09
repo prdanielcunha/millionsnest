@@ -1,0 +1,72 @@
+name: Bootstrap Hub read-only Firestore audit IAM
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - ".github/workflows/bootstrap-hub-audit-firestore-viewer-20261009.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: mn-hub-integrity-preflight-iam
+  cancel-in-progress: false
+
+jobs:
+  grant-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact production code without persisted git credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Authenticate existing MillionsNest infrastructure administrator
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Grant read-only Firestore audit role to existing deployment identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT=millionsnest
+          ROLE=roles/datastore.viewer
+          MEMBER=serviceAccount:mn-web-deployer@millionsnest.iam.gserviceaccount.com
+          if gcloud projects get-iam-policy "$PROJECT" --format=json |
+            jq -e --arg role "$ROLE" --arg member "$MEMBER" 'any(.bindings[]; .role == $role and any(.members[]; . == $member))' >/dev/null; then
+            echo "MUSICSCALE_AUDIT_READ_ONLY_ROLE_ALREADY_PRESENT"
+          else
+            gcloud projects add-iam-policy-binding "$PROJECT" \
+              --member="$MEMBER" --role="$ROLE" --condition=None --quiet >/dev/null
+            echo "MUSICSCALE_AUDIT_READ_ONLY_ROLE_GRANTED"
+          fi
+          gcloud projects get-iam-policy "$PROJECT" --format=json |
+            jq -e --arg role "$ROLE" --arg member "$MEMBER" 'any(.bindings[]; .role == $role and any(.members[]; . == $member))' >/dev/null
+          echo "MUSICSCALE_AUDIT_READ_ONLY_IAM_VERIFIED"
+
+      - name: Switch to existing web deployer identity
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Certify actual read-only MusicScale data audit under deployer identity
+        env:
+          GOOGLE_CLOUD_PROJECT: millionsnest
+          GCLOUD_PROJECT: millionsnest
+          FIREBASE_PROJECT_ID: millionsnest
+          MN_INTEGRITY_AUDIT_READ_ONLY: "true"
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npx tsx scripts/audit_music_data_integrity_readonly.ts |
+            tee /tmp/music-integrity-certification.log
+          grep -q '^MUSICSCALE_AGGREGATE_READ_ONLY_AUDIT=' /tmp/music-integrity-certification.log
+          echo "MUSICSCALE_PAID_DATA_READ_ONLY_PREFLIGHT_READY"
