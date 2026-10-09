@@ -33,7 +33,7 @@ export async function readMeliPriorResearch(input:{db:Firestore;organizationId:s
    const safe=priorMeliResearchProduct(prod,input.organizationId);
    if(!safe)return;
    const similarity=matchMeliResearchTerms(input.query,[prod.title?.value??'',queryHint].join(' '));
-   if(similarity<=0)return;
+   if(similarity<0.5)return;
    if(items.some(x=>x.product.externalId===safe.externalId))return;
    items.push({product:safe,observedAt:at,confidence:similarity});
  }
