@@ -1,6 +1,10 @@
 /** Hub-authorized trial extension policy for NestLocal and MusicScale. */
 export type TrialApp = 'musicscale' | 'nestlocal';
-export const TRIAL_BASE_DAYS: Record<TrialApp,number> = { musicscale:14, nestlocal:7 };
+import {MUSIC_SCALE_HUB_NO_CARD_TRIAL_DAYS} from '../../lib/musicScaleTrialPolicy.js';
+export const TRIAL_BASE_DAYS: Record<TrialApp,number> = {
+  musicscale:MUSIC_SCALE_HUB_NO_CARD_TRIAL_DAYS,
+  nestlocal:7,
+};
 export const MAX_TRIAL_EXTENSION_DAYS = 7;
 
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
