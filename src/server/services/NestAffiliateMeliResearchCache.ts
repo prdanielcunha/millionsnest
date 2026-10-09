@@ -41,10 +41,20 @@ export async function readMeliPriorResearch(input:{db:Firestore;organizationId:s
    for(const p of exact.products.slice(0,30))add(p,exact.observedAt||'',exact.query||'');
  }
  if(items.length<input.limit){
-   const recent=await root.collection('dailyAgentOpportunities').limit(35).get();
+   const pool=(await root.collection('dailyAgentResearchPool').doc('current').get()).data();
+   if(pool?.organizationId===input.organizationId&&Array.isArray(pool.items)){
+     for(const x of pool.items.slice(0,80))
+       add(x.product,x.observedAt||pool.observedAt||'',x.keyword||'');
+   }
+ }
+ if(items.length<input.limit){
+   // The daily agent's canonical collection is "opportunities", not a
+   // synthetic "dailyAgentOpportunities" collection.
+   const recent=await root.collection('opportunities').limit(35).get();
    for(const row of recent.docs){
      const x=row.data();
-     if(x.organizationId===input.organizationId) add(x.product,x.lastRankedAt||x.createdAt||'',x.keyword||'');
+     if(x.organizationId===input.organizationId && x.product?.marketplace==='MELI')
+       add(x.product,x.lastRankedAt||x.createdAt||'',x.keyword||'');
    }
  }
  items.sort((a,b)=>b.confidence-a.confidence||Date.parse(b.observedAt)-Date.parse(a.observedAt));
