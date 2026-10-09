@@ -220,6 +220,47 @@ async function runAllTests() {
          res.entitlement?.subscriptionStatus!=='active')
         throw Error('A legitimate paid MusicScale subscription must stay active');
     });
+    // Rollout toggles control acquisition only. Already issued grants must
+    // remain valid when active and must remain blocked after expiry.
+    process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED = 'false';
+    await runTest('MS-HUB active grant survives disabled new-acquisition flag', 'u1','org1','musicscale',db => {
+      setupInternalTrial(db,Date.now()+oneDayMs);
+    }, res => {
+      if(!res.accessible||res.entitlement?.subscriptionStatus!=='internal_trial_active')
+        throw Error('Disabling acquisition must not revoke an existing active grant');
+    });
+    await runTest('MS-HUB expired grant DENIED when acquisition disabled', 'u1','org1','musicscale',db => {
+      setupInternalTrial(db,Date.now()-oneDayMs);
+    }, res => {
+      if(res.accessible||res.entitlement?.subscriptionStatus!=='internal_trial_expired')
+        throw Error('Rollout flag must never reopen expired musical data');
+    });
+    await runTest('MS-HUB malformed/missing grant DENIED without legacy fallback', 'u1','org1','musicscale',db => {
+      setupInternalTrial(db,Date.now()-oneDayMs);
+      db.setMockData('musicscale_internal_trials/org1',{status:'active',consumed:true});
+    }, res => {
+      if(res.accessible||res.entitlement?.subscriptionStatus!=='internal_trial_invalid')
+        throw Error('Invalid grant cannot fall through to another app subscription');
+    });
+    await runTest('MS-HUB NestLocal root Stripe contract cannot override an expired MusicScale grant', 'u1','org1','musicscale',db => {
+      setupInternalTrial(db,Date.now()-oneDayMs);
+      db.setMockData('subscriptions/org1',{
+        app:'nestlocal',status:'active',stripeSubscriptionId:'sub_local_only',
+        apps:{nestlocal:{status:'active',stripeSubscriptionId:'sub_local_only'}}
+      });
+    }, res => {
+      if(res.accessible||res.entitlement?.subscriptionStatus!=='internal_trial_expired')
+        throw Error('NestLocal contract cannot unlock expired MusicScale trial');
+    });
+    await runTest('MS-HUB paid MusicScale conversion remains allowed when new grants disabled', 'u1','org1','musicscale',db => {
+      setupInternalTrial(db,Date.now()-oneDayMs);
+      db.setMockData('subscriptions/org1',{
+        apps:{musicscale:{status:'active',stripeSubscriptionId:'sub_music_valid'}}
+      });
+    }, res => {
+      if(!res.accessible||res.entitlement?.canonicalStatus!=='active')
+        throw Error('Authenticated MusicScale paid customer must be restored');
+    });
   } finally {
     if(originalMusicScaleTrialFlag===undefined)delete process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED;
     else process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED=originalMusicScaleTrialFlag;
