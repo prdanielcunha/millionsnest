@@ -131,6 +131,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     hostingTarget: 'nestjourney',
     firebaseHostingSite: 'mn-nestjourney-555464791734',
     directEntrySso: true,
+    invitationJoinPath: '/join/:organizationId',
   },
   {
     id: 'nestlive',
