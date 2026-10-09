@@ -6,7 +6,7 @@ export const NESTLOCAL_LIVE_MONTHLY_CENTS: Record<string,number> = Object.freeze
 export function validNestLocalStripePrice(price:any,tier:string):boolean {
   const expected=NESTLOCAL_LIVE_MONTHLY_CENTS[tier];
   if(!expected||!price||typeof price!=='object'||price.active!==true||
-    price.livemode!==true||price.currency!=='brl'||price.unit_amount!==expected||
+    typeof price.livemode!=='boolean'||price.currency!=='brl'||price.unit_amount!==expected||
     price.type!=='recurring'||price.recurring?.interval!=='month'||price.recurring?.interval_count!==1||
     price.recurring?.usage_type!=='licensed'||price.lookup_key!==`nestlocal_${tier}_monthly`)return false;
   const product=price.product;
