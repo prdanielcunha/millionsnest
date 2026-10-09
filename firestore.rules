@@ -2222,8 +2222,63 @@ service cloud.firestore {
           allow delete: if false;
         }
 
+        // NestAffiliate V4: additive, append-only, and tenant-specific rules.
+        match /productReferences/{referenceId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          // Only the authenticated Hub backend may create media identity records.
+          allow create: if false;
+          allow update: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantUnchanged(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            resource.data.get('referenceStatus', '') == 'READY_FOR_AI' &&
+            request.resource.data.get('referenceStatus', '') == 'REVOKED' &&
+            request.resource.data.get('canSendToExternalAI', true) == false &&
+            request.resource.data.get('revokedBy', '') == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['referenceStatus','canSendToExternalAI','revokedBy','updatedAt']);
+          allow delete: if false;
+        }
+
+        match /privateReferenceBytes/{binaryId} {
+          // Only the authenticated Cloud Run backend may read/write image bytes.
+          allow read, create, update, delete: if false;
+        }
+
+        match /sourceCoverageRuns/{runId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantCreate(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            request.resource.data.get('runId', '') == runId &&
+            request.resource.data.get('assessed', -1) is int &&
+            request.resource.data.get('examined', -1) is int &&
+            !request.resource.data.keys().hasAny(['inlineBytes','rawBytes','blob','bytes']);
+          allow update, delete: if false;
+        }
+
+        match /opportunityAssessmentsV4/{snapshotId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantCreate(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            request.resource.data.get('version', '') == 'potential-v4.0' &&
+            request.resource.data.get('runId', '') is string &&
+            !request.resource.data.keys().hasAny(['inlineBytes','rawBytes','blob','bytes']);
+          allow update, delete: if false;
+        }
+
+        match /opportunityFeedback/{feedbackId} {
+          allow read: if nestAffiliateCanRead(orgId);
+          allow create: if nestAffiliateCanEdit(orgId) &&
+            nestAffiliateTenantCreate(orgId) &&
+            nestAffiliateNoSecretFields(request.resource.data) &&
+            request.resource.data.get('createdBy', '') == request.auth.uid &&
+            !request.resource.data.keys().hasAny(['inlineBytes','rawBytes','blob','bytes']);
+          allow update, delete: if false;
+        }
+
         match /{collectionName}/{documentId} {
-          allow read: if !(collectionName in ['providerConnections', 'providerSecretState', 'affiliateAccounts', 'pinterestAccounts', 'quotaUsage', 'systemJobs', 'auditEvents']) &&
+          allow read: if !(collectionName in ['providerConnections', 'providerSecretState', 'affiliateAccounts', 'pinterestAccounts', 'quotaUsage', 'systemJobs', 'auditEvents', 'privateReferenceBytes']) &&
             nestAffiliateCanRead(orgId);
           allow create: if collectionName in [
               'boards',
