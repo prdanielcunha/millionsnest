@@ -64,6 +64,8 @@ import {
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization, hasSearchableAuthenticatedEmail } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
+import {reserveNestLocalFoundersOffer,releaseFailedNestLocalFoundersReservation,markNestLocalFoundersAccepted} from './src/server/services/NestLocalFoundersCampaignService.js';
+import {validateFoundersCoupon} from './src/lib/nestLocalFoundersCoupon.js';
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
 import { syncNestLocalPaidInvoiceFromWebhook } from './src/server/services/NestLocalPaidInvoiceWebhookSync.js';
 import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
@@ -9035,6 +9037,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       
       const { planLookupKey, addonLookupKeys, promoCodeId } = req.body;
+      const wantsNestLocalFounders = req.body?.useFoundersOffer === true;
       const userId = decodedToken.uid;
       const email = decodedToken.email || req.body.email;
 
@@ -9234,6 +9237,41 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }
       }
 
+      // Promotional checkout is opt-in and fails closed: never silently charge
+      // the full regular price when the user selected Founders.
+      let foundersReservation: null|{organizationId:string;uid:string;tier:string;newlyReserved:boolean}=null;
+      let foundersCouponId:string|null=null;
+      if(wantsNestLocalFounders){
+        if(appId!=='nestlocal'||promoCodeId||!db||!selectedPlan?.tier||
+           eligibility.decision!=='allow_new_subscription')
+          return res.status(409).json({error:'FOUNDERS_NOT_ELIGIBLE'});
+        const tier=String(selectedPlan.tier);
+        if(!['essential','growth','pro'].includes(tier))
+          return res.status(400).json({error:'FOUNDERS_PLAN_INVALID'});
+        try{
+          const reservation=await reserveNestLocalFoundersOffer({
+            db,organizationId:orgId,uid:userId,tier:tier as 'essential'|'growth'|'pro'});
+          if(!reservation.ok)return res.status(409).json({error:'FOUNDERS_NOT_AVAILABLE'});
+          foundersReservation={organizationId:orgId,uid:userId,tier,newlyReserved:reservation.reason==='reserved'};
+          const price=await stripe.prices.retrieve(line_items[0].price,{expand:['product']});
+          const coupon=await stripe.coupons.retrieve(reservation.couponId);
+          if(!validateFoundersCoupon(coupon as any,tier,
+              typeof price.product==='object'?price.product.id:String(price.product),price.livemode)||
+             price.active!==true||price.currency!=='brl'||price.recurring?.interval!=='month'||
+             price.metadata?.app!=='nestlocal'||price.metadata?.tier!==tier){
+            if(foundersReservation.newlyReserved)
+              await releaseFailedNestLocalFoundersReservation({db,organizationId:orgId,uid:userId,tier});
+            return res.status(409).json({error:'FOUNDERS_PRICE_MISMATCH'});
+          }
+          foundersCouponId=reservation.couponId;
+        }catch(error){
+          if(foundersReservation?.newlyReserved)
+            await releaseFailedNestLocalFoundersReservation({db,organizationId:orgId,uid:userId,tier}).catch(()=>{});
+          console.error('[NestLocalFoundersCheckout]',(error as any)?.code||'UNAVAILABLE');
+          return res.status(503).json({error:'FOUNDERS_TEMPORARILY_UNAVAILABLE'});
+        }
+      }
+
       // We only pass subscription data if there's at least one recurring item. Check prices.
       let hasRecurring = false;
       const sessionArgs: any = {
@@ -9244,7 +9282,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/checkout?app=${appId}&plan=${encodeURIComponent(planLookupKey)}`,
       };
 
-      if (promoCodeId) {
+      if (foundersCouponId) {
+        sessionArgs.discounts = [{ coupon: foundersCouponId }];
+        sessionArgs.allow_promotion_codes = undefined;
+      } else if (promoCodeId) {
         sessionArgs.discounts = [{ promotion_code: promoCodeId }];
         sessionArgs.allow_promotion_codes = undefined;
       } else {
@@ -9273,7 +9314,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             plan: planLookupKey || 'unknown',
             app: appId,
             productId: planLookupKey || 'unknown',
-            source: 'millionsnest_site'
+            source: 'millionsnest_site',
+            ...(foundersCouponId?{foundersCampaign:'2026',foundersCouponId}:{}),
           }
         };
 
@@ -9309,6 +9351,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         app: appId,
         appId,
         source: 'millionsnest_site',
+        ...(foundersCouponId?{foundersCampaign:'2026',foundersCouponId}:{}),
         addons: addonLookupKeys ? addonLookupKeys.join(',') : ''
       };
 
@@ -9323,7 +9366,15 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         `unified-checkout_${orgId}_${appId}_${planLookupKey || 'none'}_${addonLookupKeys ? addonLookupKeys.join(',') : ''}_${accessUntilStr}`
       ).digest('hex');
 
-      const session = await stripe.checkout.sessions.create(sessionArgs, { idempotencyKey });
+      let session:Stripe.Checkout.Session;
+      try{
+        session=await stripe.checkout.sessions.create(sessionArgs, { idempotencyKey });
+      }catch(error){
+        if(foundersReservation?.newlyReserved)
+          await releaseFailedNestLocalFoundersReservation({
+            db,organizationId:orgId,uid:userId,tier:foundersReservation.tier}).catch(()=>{});
+        throw error;
+      }
 
       console.log(`[Unified Checkout] Session created successfully for user ${userId}`);
       res.json({ url: session.url });
