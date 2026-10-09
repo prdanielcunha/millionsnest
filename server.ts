@@ -64,6 +64,9 @@ import {
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization, hasSearchableAuthenticatedEmail } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
+import {reserveNestLocalFoundersOffer,releaseFailedNestLocalFoundersReservation,markNestLocalFoundersAccepted,readNestLocalFoundersOffer} from './src/server/services/NestLocalFoundersCampaignService.js';
+import {NESTLOCAL_COMMERCIAL_V2_PROPOSED} from './src/lib/nestLocalCommercialV2.js';
+import {validateFoundersCoupon,NESTLOCAL_FOUNDERS_COUPONS} from './src/lib/nestLocalFoundersCoupon.js';
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
 import { syncNestLocalPaidInvoiceFromWebhook } from './src/server/services/NestLocalPaidInvoiceWebhookSync.js';
 import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
@@ -3222,6 +3225,24 @@ async function startServer() {
              event_type: event.type,
              userEmail: session.customer_details?.email || session.customer_email || (userDocSnap.exists ? userDocSnap.data()?.email : null)
           });
+
+          // Founders is counted only on a paid, active, signed checkout
+          // for the exact organization/coupon issued by the Hub. The campaign
+          // document never modifies any MusicScale subscription or membership.
+          if(session.metadata?.foundersCampaign==='2026'){
+            const tier=String(subscription.metadata?.plan||'').replace(/^nestlocal_/,'').replace(/_monthly$/,'');
+            const couponId=String(session.metadata?.foundersCouponId||'');
+            if(session.metadata?.app!=='nestlocal'||subscription.metadata?.app!=='nestlocal'||
+               subscription.metadata?.organizationId!==orgId||
+               subscription.metadata?.foundersCampaign!=='2026'||
+               subscription.metadata?.foundersCouponId!==couponId||
+               NESTLOCAL_FOUNDERS_COUPONS[tier]!==couponId||
+               session.payment_status!=='paid'||subscription.status!=='active') {
+              throw Error('FOUNDERS_STRIPE_CHECKOUT_NOT_ATTESTED');
+            }
+            await markNestLocalFoundersAccepted({db,organizationId:orgId,
+              uid:userId,tier,sessionId:session.id,couponId});
+          }
 
           await auditRef.update({ 
              status: result.skipped ? 'skipped' : 'success', 
@@ -9022,6 +9043,34 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
+  // Server-certified offer visibility; the Checkout POST still enforces
+  // the actual transactional limit and verifies the live Stripe coupon.
+  app.get('/api/v1/billing/nestlocal/founders/offer',async(req:any,res)=>{
+    res.setHeader('Cache-Control','private, no-store');
+    try{
+      const auth=String(req.headers.authorization||'');
+      if(!auth.startsWith('Bearer '))return res.status(401).json({error:'UNAUTHORIZED'});
+      const token=await admin.auth().verifyIdToken(auth.slice(7));
+      const orgId=String(req.query.organizationId||'');
+      if(!/^[A-Za-z0-9_-]{1,128}$/.test(orgId)||!db)return res.status(400).json({error:'INVALID_ORGANIZATION'});
+      const context=await resolveUserOrganizationContext(token.uid);
+      if(!context.ownedOrganizations.some((org:any)=>org.id===orgId))
+        return res.status(403).json({error:'FOUNDERS_REQUIRES_OWNER'});
+      const sub=await db.collection('subscriptions').doc(orgId).get();
+      const history=sub.data()?.apps?.nestlocal;
+      if(history?.stripeSubscriptionId||['active','past_due','canceled','trialing'].includes(String(history?.status||'')))
+        return res.json({available:false,reason:'existing_subscription'});
+      const offer=await readNestLocalFoundersOffer({db,organizationId:orgId,uid:token.uid});
+      const catalog=await getBillingService().getProducts();
+      const validPlans=catalog.plans.filter(p=>p.app==='nestlocal'&&!p.id.startsWith('mock_'));
+      if(validPlans.length!==3)return res.json({available:false,reason:'catalog_not_certified'});
+      return res.json({...offer,plans:NESTLOCAL_COMMERCIAL_V2_PROPOSED});
+    }catch(error){
+      console.warn('[NESTLOCAL_FOUNDERS_OFFER]',(error as any)?.code||'UNAVAILABLE');
+      return res.status(503).json({available:false,error:'FOUNDERS_OFFER_UNAVAILABLE'});
+    }
+  });
+
   app.post('/api/v1/billing/unified-checkout', async (req: any, res) => {
     try {
       const authHeader = req.headers.authorization;
@@ -9035,6 +9084,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       
       const { planLookupKey, addonLookupKeys, promoCodeId } = req.body;
+      const wantsNestLocalFounders = req.body?.useFoundersOffer === true;
       const userId = decodedToken.uid;
       const email = decodedToken.email || req.body.email;
 
@@ -9108,6 +9158,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       let customerId: string | undefined;
       let orgId = userId;
       let hasTrialHistory = false;
+      let foundersOwnerAuthorized = false;
 
       if (db) {
          const orgContext = await resolveUserOrganizationContext(userId);
@@ -9125,6 +9176,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
          orgId = requestedOrganizationId || orgContext.primaryOrganizationId || orgContext.activeOrganizationId || (userDoc.exists ? userDoc.data()?.organizationId : null) || userId;
          
          const isOwner = orgContext.ownedOrganizations.some((org: any) => org.id === orgId);
+         foundersOwnerAuthorized=isOwner;
          const membership = orgContext.memberships.find((m: any) => m.organizationId === orgId);
          const hasBillingPerm = membership?.permissions?.['organization.billing.manage'] === true || membership?.role === 'owner' || membership?.role === 'admin';
          const systemRole = userDoc.data()?.systemRole;
@@ -9234,6 +9286,41 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         }
       }
 
+      // Promotional checkout is opt-in and fails closed: never silently charge
+      // the full regular price when the user selected Founders.
+      let foundersReservation: null|{organizationId:string;uid:string;tier:string;newlyReserved:boolean}=null;
+      let foundersCouponId:string|null=null;
+      if(wantsNestLocalFounders){
+        if(appId!=='nestlocal'||promoCodeId||!db||!foundersOwnerAuthorized||!selectedPlan?.tier||
+           eligibility.decision!=='allow_new_subscription')
+          return res.status(409).json({error:'FOUNDERS_NOT_ELIGIBLE'});
+        const tier=String(selectedPlan.tier);
+        if(!['essential','growth','pro'].includes(tier))
+          return res.status(400).json({error:'FOUNDERS_PLAN_INVALID'});
+        try{
+          const reservation=await reserveNestLocalFoundersOffer({
+            db,organizationId:orgId,uid:userId,tier:tier as 'essential'|'growth'|'pro'});
+          if(!reservation.ok)return res.status(409).json({error:'FOUNDERS_NOT_AVAILABLE'});
+          foundersReservation={organizationId:orgId,uid:userId,tier,newlyReserved:reservation.reason==='reserved'};
+          const price=await stripe.prices.retrieve(line_items[0].price,{expand:['product']});
+          const coupon=await stripe.coupons.retrieve(reservation.couponId);
+          if(!validateFoundersCoupon(coupon as any,tier,
+              typeof price.product==='object'?price.product.id:String(price.product),price.livemode)||
+             price.active!==true||price.currency!=='brl'||price.recurring?.interval!=='month'||
+             price.metadata?.app!=='nestlocal'||price.metadata?.tier!==tier){
+            if(foundersReservation.newlyReserved)
+              await releaseFailedNestLocalFoundersReservation({db,organizationId:orgId,uid:userId,tier});
+            return res.status(409).json({error:'FOUNDERS_PRICE_MISMATCH'});
+          }
+          foundersCouponId=reservation.couponId;
+        }catch(error){
+          if(foundersReservation?.newlyReserved)
+            await releaseFailedNestLocalFoundersReservation({db,organizationId:orgId,uid:userId,tier}).catch(()=>{});
+          console.error('[NestLocalFoundersCheckout]',(error as any)?.code||'UNAVAILABLE');
+          return res.status(503).json({error:'FOUNDERS_TEMPORARILY_UNAVAILABLE'});
+        }
+      }
+
       // We only pass subscription data if there's at least one recurring item. Check prices.
       let hasRecurring = false;
       const sessionArgs: any = {
@@ -9244,7 +9331,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/checkout?app=${appId}&plan=${encodeURIComponent(planLookupKey)}`,
       };
 
-      if (promoCodeId) {
+      if (foundersCouponId) {
+        sessionArgs.discounts = [{ coupon: foundersCouponId }];
+        sessionArgs.allow_promotion_codes = undefined;
+      } else if (promoCodeId) {
         sessionArgs.discounts = [{ promotion_code: promoCodeId }];
         sessionArgs.allow_promotion_codes = undefined;
       } else {
@@ -9273,7 +9363,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             plan: planLookupKey || 'unknown',
             app: appId,
             productId: planLookupKey || 'unknown',
-            source: 'millionsnest_site'
+            source: 'millionsnest_site',
+            ...(foundersCouponId?{foundersCampaign:'2026',foundersCouponId}:{}),
           }
         };
 
@@ -9309,6 +9400,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         app: appId,
         appId,
         source: 'millionsnest_site',
+        ...(foundersCouponId?{foundersCampaign:'2026',foundersCouponId}:{}),
         addons: addonLookupKeys ? addonLookupKeys.join(',') : ''
       };
 
@@ -9320,10 +9412,18 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const accessUntilStr = eligibility.decision === 'allow_new_subscription' ? (eligibility.accessUntil || 'no_access') : 'no_access';
       const idempotencyKey = crypto.createHash('sha256').update(
-        `unified-checkout_${orgId}_${appId}_${planLookupKey || 'none'}_${addonLookupKeys ? addonLookupKeys.join(',') : ''}_${accessUntilStr}`
+        `unified-checkout_${orgId}_${appId}_${planLookupKey || 'none'}_${addonLookupKeys ? addonLookupKeys.join(',') : ''}_${accessUntilStr}${appId==='nestlocal'?'_'+(foundersCouponId||promoCodeId||'regular'):''}`
       ).digest('hex');
 
-      const session = await stripe.checkout.sessions.create(sessionArgs, { idempotencyKey });
+      let session:Stripe.Checkout.Session;
+      try{
+        session=await stripe.checkout.sessions.create(sessionArgs, { idempotencyKey });
+      }catch(error){
+        if(foundersReservation?.newlyReserved)
+          await releaseFailedNestLocalFoundersReservation({
+            db,organizationId:orgId,uid:userId,tier:foundersReservation.tier}).catch(()=>{});
+        throw error;
+      }
 
       console.log(`[Unified Checkout] Session created successfully for user ${userId}`);
       res.json({ url: session.url });

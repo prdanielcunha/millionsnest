@@ -36,7 +36,8 @@ export function shouldAddStripeTrial(params: {
   newMusicScaleTrialEnabled?: boolean;
 }): boolean {
   if (params.hasLegacyTrialHistory || params.internalTrialConsumed) return false;
-  if (params.appId === 'nestlocal' && params.newNestLocalTrialEnabled) return false;
+  // NestLocal 2.0: only the Hub can issue the 7-day no-card trial. Stripe never creates a second trial.
+  if (params.appId === 'nestlocal') return false;
   if (params.appId === 'musicscale' && params.newMusicScaleTrialEnabled) return false;
   return true;
 }
