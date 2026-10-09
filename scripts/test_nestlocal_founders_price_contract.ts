@@ -28,9 +28,11 @@ for(const tier of ['essential','growth','pro'] as const){
  assert.equal(validNestLocalStripePrice(original,tier),true);
  const coupon={id:NESTLOCAL_FOUNDERS_COUPONS[tier],amount_off:plan.regularCents-plan.foundersCents,
   currency:'brl',duration:'repeating',duration_in_months:12,valid:true,livemode:true,
-  max_redemptions:50,metadata:{app:'nestlocal',campaign:'founders_2026',tier},
+  max_redemptions:50,metadata:{app:'nestlocal',campaign:'founders_2026',tier,product_id:original.product.id},
   applies_to:{products:[original.product.id]}};
  assert.equal(validateFoundersCoupon(coupon,tier,original.product.id,true),true);
+ assert.equal(validateFoundersCoupon({...coupon,applies_to:undefined},tier,original.product.id,true),true,'Stripe coupon GET may omit applies_to despite product restriction');
+ assert.equal(validateFoundersCoupon({...coupon,metadata:{...coupon.metadata,product_id:'prod_wrong'}},tier,original.product.id,true),false);
  assert.equal(validateFoundersCoupon({...coupon,amount_off:10},tier,original.product.id,true),false);
  assert.equal(validateFoundersCoupon({...coupon,duration_in_months:13},tier,original.product.id,true),false);
  assert.equal(validateFoundersCoupon({...coupon,applies_to:{products:['prod_musicscale']}},tier,original.product.id,true),false);
