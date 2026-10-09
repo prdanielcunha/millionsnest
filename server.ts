@@ -64,7 +64,8 @@ import {
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
 import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization, hasSearchableAuthenticatedEmail } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
-import {reserveNestLocalFoundersOffer,releaseFailedNestLocalFoundersReservation,markNestLocalFoundersAccepted} from './src/server/services/NestLocalFoundersCampaignService.js';
+import {reserveNestLocalFoundersOffer,releaseFailedNestLocalFoundersReservation,markNestLocalFoundersAccepted,readNestLocalFoundersOffer} from './src/server/services/NestLocalFoundersCampaignService.js';
+import {NESTLOCAL_COMMERCIAL_V2_PROPOSED} from './src/lib/nestLocalCommercialV2.js';
 import {validateFoundersCoupon} from './src/lib/nestLocalFoundersCoupon.js';
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
 import { syncNestLocalPaidInvoiceFromWebhook } from './src/server/services/NestLocalPaidInvoiceWebhookSync.js';
@@ -9021,6 +9022,34 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     } catch (err: any) {
       console.error(err);
       return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Server-certified offer visibility; the Checkout POST still enforces
+  // the actual transactional limit and verifies the live Stripe coupon.
+  app.get('/api/v1/billing/nestlocal/founders/offer',async(req:any,res)=>{
+    res.setHeader('Cache-Control','private, no-store');
+    try{
+      const auth=String(req.headers.authorization||'');
+      if(!auth.startsWith('Bearer '))return res.status(401).json({error:'UNAUTHORIZED'});
+      const token=await admin.auth().verifyIdToken(auth.slice(7));
+      const orgId=String(req.query.organizationId||'');
+      if(!/^[A-Za-z0-9_-]{1,128}$/.test(orgId)||!db)return res.status(400).json({error:'INVALID_ORGANIZATION'});
+      const context=await resolveUserOrganizationContext(token.uid);
+      if(!context.ownedOrganizations.some((org:any)=>org.id===orgId))
+        return res.status(403).json({error:'FOUNDERS_REQUIRES_OWNER'});
+      const sub=await db.collection('subscriptions').doc(orgId).get();
+      const history=sub.data()?.apps?.nestlocal;
+      if(history?.stripeSubscriptionId||['active','past_due','canceled','trialing'].includes(String(history?.status||'')))
+        return res.json({available:false,reason:'existing_subscription'});
+      const offer=await readNestLocalFoundersOffer({db,organizationId:orgId,uid:token.uid});
+      const catalog=await getBillingService().getProducts();
+      const validPlans=catalog.plans.filter(p=>p.app==='nestlocal'&&!p.id.startsWith('mock_'));
+      if(validPlans.length!==3)return res.json({available:false,reason:'catalog_not_certified'});
+      return res.json({...offer,plans:NESTLOCAL_COMMERCIAL_V2_PROPOSED});
+    }catch(error){
+      console.warn('[NESTLOCAL_FOUNDERS_OFFER]',(error as any)?.code||'UNAVAILABLE');
+      return res.status(503).json({available:false,error:'FOUNDERS_OFFER_UNAVAILABLE'});
     }
   });
 
