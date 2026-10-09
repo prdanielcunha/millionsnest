@@ -12,6 +12,21 @@ function moment(x:any):number|null{return Number.isSafeInteger(x)?x:typeof x?.to
 export function founderClaimCount(claims:Record<string,Claim>,nowMs:number){
  return Object.values(claims||{}).filter(x=>x?.status==='accepted'||(x?.status==='reserved'&&x.expiresAtMs>nowMs)).length;
 }
+export async function readNestLocalFoundersOffer(input:{db:Firestore;organizationId:string;uid:string;env?:NodeJS.ProcessEnv;nowMs?:number}){
+ const now=input.nowMs??Date.now(),env=input.env??process.env;
+ if(env.NESTLOCAL_FOUNDERS_ENABLED!=='true'||!goodId(input.organizationId)||!goodId(input.uid))
+  return {available:false,reason:'campaign_disabled'};
+ const campaign=await input.db.doc(CAMPAIGN_PATH).get(),data=campaign.data()||{};
+ if(data.enabled!==true)return {available:false,reason:'campaign_not_started'};
+ const claim=(data.claims||{})[input.organizationId] as Claim|undefined;
+ if(claim?.status==='accepted')return {available:false,reason:'already_founder'};
+ if(claim?.status==='reserved'&&claim.expiresAtMs>now&&claim.uid!==input.uid)
+  return {available:false,reason:'reservation_conflict'};
+ const decision=allowFoundersDiscount({enabled:true,launchMs:moment(data.startedAt),nowMs:now,
+   enrolled:founderClaimCount(data.claims||{},now),ownerAuthorized:true,priorSubscription:false});
+ return {available:decision.allowed||claim?.status==='reserved'&&claim.expiresAtMs>now,
+   reason:decision.reason,endsAt:decision.endsAt,remaining:decision.remaining};
+}
 export async function reserveNestLocalFoundersOffer(input:{db:Firestore;organizationId:string;uid:string;tier:'essential'|'growth'|'pro';nowMs?:number;env?:NodeJS.ProcessEnv}){
  const env=input.env||process.env,now=input.nowMs??Date.now();
  if(env.NESTLOCAL_FOUNDERS_ENABLED!=='true')return {ok:false,reason:'campaign_disabled'} as const;
