@@ -5,7 +5,7 @@ import {reserveNestLocalFoundersOffer,markNestLocalFoundersAccepted,
 type Data=Record<string,any>;
 class FakeFirestore{
  docs=new Map<string,Data>();
- doc(path:string){return {path};}
+ doc(path:string){return {path,get:async()=>({exists:this.docs.has(path),data:()=>this.docs.get(path)})};}
  async runTransaction<T>(execute:(tx:any)=>Promise<T>):Promise<T>{
   const writes:Function[]=[];
   const tx={
