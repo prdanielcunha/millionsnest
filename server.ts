@@ -44,6 +44,7 @@ import {
 import { summarizeGrowthEvents, type GrowthAnalyticsEvent } from './src/server/services/GrowthFunnelService.js';
 import { resolveNestAffiliateRetryAfterSeconds } from './src/server/services/NestAffiliateRetryAfterPolicy.js';
 import { ensureNestAffiliateMeliToken } from './src/server/services/NestAffiliateMeliTokenService.js';
+import {safeMeliLink,resolveMeliLink,itemIdFromMeliUrl,officialMeliItem} from './src/server/services/NestAffiliateSmartLinkService.js';
 import { readMeliPriorResearch,recordMeliLiveSearch } from './src/server/services/NestAffiliateMeliResearchCache.js';
 import { resolveLegacyMembershipCandidates } from './src/server/services/TenantBootstrapPlanner.js';
 import {
@@ -930,6 +931,66 @@ async function respondWithMercadoLivreSearchFallback(input: {
       rejectedUnverified: Math.max(0, rows.length - products.length),
     },
   });
+}
+
+
+async function handleNestAffiliateMeliResolve(req:any,res:any){
+  const authorization=String(req.headers.authorization || '');
+  if(!authorization.startsWith('Bearer '))return res.status(401).json({error:'UNAUTHENTICATED'});
+  let uid:string;
+  try{uid=(await admin.auth().verifyIdToken(authorization.slice(7))).uid;}
+  catch{return res.status(401).json({error:'INVALID_TOKEN'});}
+  const organizationId=String(req.body?.organizationId || '').trim();
+  const inputUrl=String(req.body?.url || '').trim();
+  if(!organizationId || organizationId.length>256 || organizationId.includes('/') ||
+     inputUrl.length>1200 || !safeMeliLink(inputUrl))
+    return res.status(400).json({error:'INVALID_REQUEST'});
+  const firestore=getDb();
+  if(!firestore)return res.status(503).json({error:'DATABASE_UNAVAILABLE'});
+  const [user,org,member]=await Promise.all([
+    firestore.collection('users').doc(uid).get(),
+    firestore.collection('organizations').doc(organizationId).get(),
+    firestore.collection('organizations').doc(organizationId).collection('members').doc(uid).get(),
+  ]);
+  if(!org.exists)return res.status(404).json({error:'ORGANIZATION_NOT_FOUND'});
+  const actor=user.data() || {}, organization=org.data() || {}, membership=member.data() || {};
+  const global=isGlobalPrivilegedRole(String(actor.systemRole || actor.globalRole || '').toLowerCase());
+  const owner=[organization.ownerUid,organization.ownerId,organization.ownerUserId,organization.owner_user_id].includes(uid);
+  const memberActive=member.exists && ['active','ativo'].includes(String(membership.status || 'active').toLowerCase())
+    && ['owner','admin','editor','viewer'].includes(String(membership.role || membership.organizationRole || '').toLowerCase());
+  if(!global && !owner && !memberActive)return res.status(403).json({error:'FORBIDDEN'});
+  const access=organization.apps?.nestaffiliate;
+  const enabled=access===true || access?.enabled===true ||
+    ['active','trialing'].includes(String(access?.status || '').toLowerCase());
+  if(!global && !enabled)return res.status(403).json({error:'NESTAFFILIATE_NOT_ENABLED'});
+  res.setHeader('Cache-Control','private, no-store');
+  let canonical:string;
+  try{canonical=await resolveMeliLink(inputUrl);}
+  catch{return res.json({status:'UNRESOLVED',reason:'SHORTLINK_NOT_RESOLVED'});}
+  const itemId=itemIdFromMeliUrl(canonical);
+  if(!itemId)return res.json({status:'UNRESOLVED',canonicalUrl:canonical,reason:'LISTING_ID_UNKNOWN'});
+  try{
+    const renewed=await ensureNestAffiliateMeliToken({db:firestore,organizationId});
+    const response=await fetch('https://api.mercadolibre.com/items/'+encodeURIComponent(itemId),{
+      headers:{Accept:'application/json',...(renewed.token?{Authorization:'Bearer '+renewed.token}:{})},
+      signal:AbortSignal.timeout(9500),
+    });
+    if(!response.ok)return res.json({status:'SOURCE_LIMITED',canonicalUrl:canonical});
+    const item=officialMeliItem(await response.json(),itemId);
+    if(!item)return res.json({status:'UNRESOLVED',canonicalUrl:canonical,reason:'ITEM_MISMATCH'});
+    const observedAt=new Date().toISOString(),source='mercadolivre-items-api';
+    const value=<T,>(v:T)=>({value:v,source,observedAt});
+    const product={
+      organizationId,productId:'meli:'+item.id,externalId:item.id,marketplace:'MELI',
+      title:value(item.title),url:value(item.url),currency:value(item.currency),
+      availability:value(item.availability),listingVerified:true,assetRights:'UNKNOWN',
+      ...(item.price!==undefined?{price:value(item.price)}:{}),
+      ...(item.imageUrl?{imageUrl:value(item.imageUrl)}:{}),
+      ...(item.soldQuantity!==undefined?{soldQuantity:value(item.soldQuantity)}:{}),
+      ...(item.availableQuantity!==undefined?{availableQuantity:value(item.availableQuantity)}:{}),
+    };
+    return res.json({status:'RESOLVED',canonicalUrl:item.url,product,observedAt});
+  }catch{return res.json({status:'SOURCE_LIMITED',canonicalUrl:canonical});}
 }
 
 async function handleNestAffiliateMercadoLivreSearch(req: any, res: any) {
@@ -2058,6 +2119,7 @@ async function startServer() {
   app.post('/api/v1/nestaffiliate/reference-media', express.json({limit:'12mb'}), handleNestAffiliateReferenceUpload);
   app.get('/api/v1/nestaffiliate/reference-media', handleNestAffiliateReferenceDownload);
   app.get('/api/v1/nestaffiliate/mercadolivre/search', handleNestAffiliateMercadoLivreSearch);
+  app.post('/api/v1/nestaffiliate/mercadolivre/resolve', express.json({limit:'4kb'}), handleNestAffiliateMeliResolve);
   app.get('/api/v1/nestaffiliate/shopee/status', handleNestAffiliateShopeeStatus);
   app.post('/api/v1/nestaffiliate/shopee/credentials', express.json({ limit: '8kb' }), handleNestAffiliateShopeeCredentials);
   app.get('/api/v1/nestaffiliate/shopee/search', handleNestAffiliateShopeeSearch);
