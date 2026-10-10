@@ -2046,6 +2046,9 @@ async function handleNestAffiliateShopeeSearch(req: any, res: any) {
         marketplace: 'SHOPEE',
         externalId: itemId,
         listingVerified: true,
+        ...( /^\\d+$/.test(String(node.shopId||'')) ? {
+          shopId: {value:String(node.shopId),source:'shopee-affiliate-open-api',observedAt},
+        } : {} ),
         title: { value: title, source: 'shopee-affiliate-open-api', observedAt },
         url: { value: productLink, source: 'shopee-affiliate-open-api', observedAt },
         ...(offerLink ? {
