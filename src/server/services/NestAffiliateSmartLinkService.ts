@@ -54,8 +54,22 @@ export async function resolveMeliLanding(value:string,request:typeof fetch=fetch
   if(!current)throw new Error('INVALID_MARKETPLACE_LINK');
   let title:string|undefined,imageUrl:string|undefined;
   for(let hop=0;hop<6;hop++){
-    if(current.hostname!=='meli.la'&&(itemIdFromMeliUrl(current.toString())||catalogIdFromMeliUrl(current.toString())))
+    if(current.hostname!=='meli.la'&&(itemIdFromMeliUrl(current.toString())||catalogIdFromMeliUrl(current.toString()))){
+      // A real item may be 403 from the public API while its public OG title
+      // remains readable. Do not confuse these facts with a verified offer.
+      if(!title){
+        try{
+          const response=await request(current.toString(),{method:'GET',redirect:'manual',
+            headers:{accept:'text/html','user-agent':'Mozilla/5.0 (compatible; NestAffiliate/1.0)'},
+            signal:AbortSignal.timeout(5000)});
+          if(response.ok){
+            const metadata=parseMeliPublicMetadata(await boundedHtml(response),current.toString());
+            title=metadata.title;imageUrl=metadata.imageUrl;
+          }
+        }catch{}
+      }
       return {canonicalUrl:current.toString(),...(title?{title}:{}),...(imageUrl?{imageUrl}:{})};
+    }
     let next:URL|null=null;
     for(const method of ['HEAD','GET'] as const){
       let response:Response;
