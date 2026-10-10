@@ -2046,6 +2046,9 @@ async function handleNestAffiliateShopeeSearch(req: any, res: any) {
         marketplace: 'SHOPEE',
         externalId: itemId,
         listingVerified: true,
+        ...(/^\d+$/.test(String(node.shopId||'')) ? {
+          shopId: {value:String(node.shopId),source:'shopee-affiliate-open-api',observedAt},
+        } : {}),
         title: { value: title, source: 'shopee-affiliate-open-api', observedAt },
         url: { value: productLink, source: 'shopee-affiliate-open-api', observedAt },
         ...(offerLink ? {
@@ -3544,9 +3547,10 @@ async function startServer() {
                       organizationId:orgId,invoiceId:(event.data.object as any).id,
                       state:paidGrant.state,
                     });
-                    // Full grant only after fresh Stripe invoice + subscription
-                    // checks, canonical org association and idempotent outbox.
-                    // The three commercial flags remain OFF by default.
+                    // Stripe signature and canonical subscription were checked
+                    // above. Re-fetch fresh Stripe objects before any grant.
+                    // All commercial flags default OFF; failure propagates a
+                    // retryable 5xx while the immutable outbox keeps its state.
                     const invoiceId=String((event.data.object as any).id||'');
                     const settled=await syncNestLocalPaidInvoiceFromWebhook({
                       db,invoiceId,organizationId:orgId,stripe:getStripe(),
@@ -9625,9 +9629,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         return res.status(403).json({error:'Usuário não está ativo para iniciar a avaliação.'});
       }
       const subData = subSnap.data() || {};
-      // Without a Firebase-authenticated email, enumerating Stripe customers
-      // cannot establish that an organization has no prior payment history.
-      // This is a new-trial-only fail-closed guard; existing subscriptions are untouched.
+      // The authenticated Firebase email is required to enumerate historical
+      // Stripe customers; an empty search must never certify a new trial.
       if (!hasSearchableAuthenticatedEmail(email)) {
         return res.status(409).json({
           error: 'Histórico comercial requer verificação manual.',
