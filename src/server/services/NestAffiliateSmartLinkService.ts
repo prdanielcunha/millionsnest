@@ -1,15 +1,17 @@
 /** Read only official Mercado Livre listing facts from allowlisted links. */
-const HOSTS = new Set(['meli.la','mercadolivre.com.br','www.mercadolivre.com.br','mercadolibre.com.br','www.mercadolibre.com.br']);
+const OFFICIAL_DOMAINS=['mercadolivre.com.br','mercadolibre.com.br','mercadolibre.com'];
+function ownedMeliHost(host:string){return host==='meli.la'||OFFICIAL_DOMAINS.some(domain=>host===domain||host.endsWith('.'+domain));}
 export function safeMeliLink(value:string): URL | null {
   try {
     const u=new URL(value);
     if(u.protocol!=='https:' || u.username || u.password || u.port || u.hostname.endsWith('.')) return null;
-    return HOSTS.has(u.hostname.toLowerCase()) ? u : null;
+    return ownedMeliHost(u.hostname.toLowerCase()) ? u : null;
   }catch {return null;}
 }
 export function itemIdFromMeliUrl(value:string):string|null{
   const u=safeMeliLink(value);
   if(!u)return null;
+  if(/\/p\/MLB[0-9]{7,14}/i.test(u.pathname))return null;
   const m=u.pathname.match(/(?:^|[\/_-])MLB[-_]?([0-9]{7,14})(?:$|[\/_-])/i);
   return m?'MLB'+m[1]:null;
 }
@@ -44,4 +46,20 @@ export function officialMeliItem(payload:unknown,itemId:string) {
     ...(typeof x.thumbnail==='string' && /^https?:\/\/[^/]*mlstatic\.com\//i.test(x.thumbnail)
       ?{imageUrl:x.thumbnail.replace(/^http:/,'https:')}:{}),
   };
+}
+
+export function catalogIdFromMeliUrl(value:string):string|null {
+  const u=safeMeliLink(value);
+  if(!u)return null;
+  const m=u.pathname.match(/\/p\/(MLB[0-9]{7,14})(?:\/|$)/i);
+  return m?m[1]!.toUpperCase():null;
+}
+export function officialMeliCatalog(payload:unknown,catalogId:string){
+  if(!payload||typeof payload!=='object')return null;
+  const p=payload as Record<string,unknown>;
+  if(p.id!==catalogId || typeof p.name!=='string' || p.name.trim().length<5)return null;
+  const pictures=Array.isArray(p.pictures)?p.pictures as Array<Record<string,unknown>>:[];
+  const candidate=String(pictures[0]?.secure_url||pictures[0]?.url||'');
+  const imageUrl=/^https:\/\/[^/]*mlstatic\.com\//i.test(candidate)?candidate:undefined;
+  return {id:catalogId,title:p.name.trim(),...(imageUrl?{imageUrl}:{})};
 }
