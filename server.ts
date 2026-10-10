@@ -45,6 +45,7 @@ import { summarizeGrowthEvents, type GrowthAnalyticsEvent } from './src/server/s
 import { resolveNestAffiliateRetryAfterSeconds } from './src/server/services/NestAffiliateRetryAfterPolicy.js';
 import { ensureNestAffiliateMeliToken } from './src/server/services/NestAffiliateMeliTokenService.js';
 import {safeMeliLink,resolveMeliLanding,itemIdFromMeliUrl,officialMeliItem,catalogIdFromMeliUrl,officialMeliCatalog} from './src/server/services/NestAffiliateSmartLinkService.js';
+import {safeShopeeUrl,parseShopeeListingId,shopeeTitleHint,resolveShopeeSharedUrl} from './src/server/services/NestAffiliateShopeeLinkService.js';
 import { readMeliPriorResearch,recordMeliLiveSearch } from './src/server/services/NestAffiliateMeliResearchCache.js';
 import { resolveLegacyMembershipCandidates } from './src/server/services/TenantBootstrapPlanner.js';
 import {
@@ -1865,6 +1866,31 @@ const SHOPEE_PRODUCT_SEARCH_QUERY = [
   '}',
 ].join('\n');
 
+
+async function handleNestAffiliateShopeeResolve(req:any,res:any){
+ try{
+  const context=await resolveNestAffiliateShopeeContext(req,res);
+  if(!context)return;
+  const original=String(req.body?.url||'').trim();
+  if(original.length>1200||!safeShopeeUrl(original))return res.status(400).json({status:'UNRESOLVED',reason:'SHOPEE_INVALID_LINK'});
+  res.setHeader('Cache-Control','private,no-store');
+  let canonical:string;
+  try{canonical=await resolveShopeeSharedUrl(original);}
+  catch(error){
+   const reason=error instanceof Error?error.message:'SHOPEE_SHORTLINK_UNAVAILABLE';
+   return res.json({status:'SOURCE_LIMITED',reason});
+  }
+  const ref=parseShopeeListingId(canonical);
+  return res.json({
+   status:ref?'IDENTIFIED_URL':'LINK_ONLY',
+   canonicalUrl:canonical,
+   ...(ref?{shopId:ref.shopId,itemId:ref.itemId}:{}),
+   ...(shopeeTitleHint(canonical)?{titleHint:shopeeTitleHint(canonical)}:{}),
+   listingVerified:false,affiliateVerified:false,
+  });
+ }catch{return res.status(503).json({status:'SOURCE_LIMITED',reason:'SHOPEE_LINK_SERVICE_UNAVAILABLE'});}
+}
+
 async function handleNestAffiliateShopeeStatus(req: any, res: any) {
   try {
     const context = await resolveNestAffiliateShopeeContext(req, res);
@@ -2159,6 +2185,7 @@ async function startServer() {
   app.get('/api/v1/nestaffiliate/reference-media', handleNestAffiliateReferenceDownload);
   app.get('/api/v1/nestaffiliate/mercadolivre/search', handleNestAffiliateMercadoLivreSearch);
   app.post('/api/v1/nestaffiliate/mercadolivre/resolve', express.json({limit:'4kb'}), handleNestAffiliateMeliResolve);
+  app.post('/api/v1/nestaffiliate/shopee/resolve', express.json({limit:'4kb'}), handleNestAffiliateShopeeResolve);
   app.get('/api/v1/nestaffiliate/shopee/status', handleNestAffiliateShopeeStatus);
   app.post('/api/v1/nestaffiliate/shopee/credentials', express.json({ limit: '8kb' }), handleNestAffiliateShopeeCredentials);
   app.get('/api/v1/nestaffiliate/shopee/search', handleNestAffiliateShopeeSearch);
