@@ -8,7 +8,7 @@ test('GET resolves an affiliate link after HEAD 405',async()=>{
     {location:'https://produto.mercadolivre.com.br/MLB-1234567890'}});};
  assert.equal((await resolveMeliLanding('https://meli.la/2GDhhKL',mocked as typeof fetch)).canonicalUrl,
    'https://produto.mercadolivre.com.br/MLB-1234567890');
- assert.deepEqual(calls,['HEAD','GET']);
+ assert.deepEqual(calls,['HEAD','GET','GET']); // Final public product metadata is also checked
 });
 test('public page metadata survives shortlink GET 200',async()=>{
  const html='<meta property="og:title" content="Cadeira Rosa &amp; Cinza">'+
