@@ -97,6 +97,9 @@ jobs:
       - name: NestAffiliate Mercado Livre OAuth expiration and last-known-data guard
         run: npx tsx scripts/test_nestaffiliate_meli_refresh_recovery.ts
 
+      - name: NestAffiliate short-link HEAD/GET and metadata fallback
+        run: npx tsx --test scripts/test_nestaffiliate_shortlink_fallback.ts
+
       - name: Hub product positioning and trust contract
         run: npx tsx scripts/test_hub_product_positioning.ts
 

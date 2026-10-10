@@ -15,21 +15,91 @@ export function itemIdFromMeliUrl(value:string):string|null{
   const m=u.pathname.match(/(?:^|[\/_-])MLB[-_]?([0-9]{7,14})(?:$|[\/_-])/i);
   return m?'MLB'+m[1]:null;
 }
-export async function resolveMeliLink(value:string,request:typeof fetch=fetch):Promise<string>{
+
+type MeliLanding = {canonicalUrl:string;title?:string;imageUrl?:string};
+export function parseMeliPublicMetadata(html:string,base:string){
+  const find=(name:string)=>{
+    const tags=html.match(/<meta\b[^>]{0,1500}>/gi)||[];
+    for(const tag of tags){
+      if(!new RegExp('(?:name|property)\\s*=\\s*["\\x27]'+name+'["\\x27]','i').test(tag))continue;
+      const value=tag.match(/\bcontent\s*=\s*(?:"([^"]{0,1000})"|'([^']{0,1000})')/i);
+      if(value)return (value[1]||value[2]||'').trim().replace(/&amp;/gi,'&').replace(/&quot;/gi,'"');
+    }
+    return '';
+  };
+  const candidate=find('og:url');
+  const parsed=candidate?safeMeliLink(new URL(candidate,base).toString()):null;
+  const title=(find('og:title')||html.match(/<title>\s*([^<]{4,220})<\/title>/i)?.[1]||'')
+    .replace(/\s+/g,' ').trim().slice(0,180);
+  const validTitle=title.length>=8&&!/^(mercado livre|mercadolibre|mercado libre|access denied|acesso negado|just a moment)(\s*[-|].*)?$/i.test(title);
+  const img=find('og:image');let imageUrl:string|undefined;
+  try{
+    const u=new URL(img);
+    if(u.protocol==='https:'&&!u.port&&(u.hostname==='mlstatic.com'||u.hostname.endsWith('.mlstatic.com')))imageUrl=u.toString();
+  }catch{}
+  return {...(parsed?{canonicalUrl:parsed.toString()}:{}),
+    ...(validTitle?{title}:{}),...(imageUrl?{imageUrl}:{})};
+}
+async function boundedHtml(response:Response):Promise<string>{
+  if(!/text\/html/i.test(response.headers.get('content-type')||''))return '';
+  const reader=response.body?.getReader();if(!reader)return '';
+  const dec=new TextDecoder();let total=0,body='';
+  try{while(total<96_000){const {value,done}=await reader.read();if(done)break;
+    const bytes=value.slice(0,96_000-total);total+=bytes.byteLength;body+=dec.decode(bytes,{stream:true});
+  }}finally{await reader.cancel().catch(()=>undefined);}
+  return body;
+}
+export async function resolveMeliLanding(value:string,request:typeof fetch=fetch):Promise<MeliLanding>{
   let current=safeMeliLink(value);
   if(!current)throw new Error('INVALID_MARKETPLACE_LINK');
-  for(let i=0;i<4;i++){
-    if(current.hostname.toLowerCase()!=='meli.la')return current.toString();
-    const response=await request(current.toString(),{
-      method:'HEAD',redirect:'manual',signal:AbortSignal.timeout(6000),
-    });
-    if(![301,302,303,307,308].includes(response.status))throw new Error('SHORTLINK_UNRESOLVED');
-    const next=response.headers.get('location');
+  let title:string|undefined,imageUrl:string|undefined;
+  for(let hop=0;hop<6;hop++){
+    if(current.hostname!=='meli.la'&&(itemIdFromMeliUrl(current.toString())||catalogIdFromMeliUrl(current.toString()))){
+      // A real item may be 403 from the public API while its public OG title
+      // remains readable. Do not confuse these facts with a verified offer.
+      if(!title){
+        try{
+          const response=await request(current.toString(),{method:'GET',redirect:'manual',
+            headers:{accept:'text/html','user-agent':'Mozilla/5.0 (compatible; NestAffiliate/1.0)'},
+            signal:AbortSignal.timeout(5000)});
+          if(response.ok){
+            const metadata=parseMeliPublicMetadata(await boundedHtml(response),current.toString());
+            title=metadata.title;imageUrl=metadata.imageUrl;
+          }
+        }catch{}
+      }
+      return {canonicalUrl:current.toString(),...(title?{title}:{}),...(imageUrl?{imageUrl}:{})};
+    }
+    let next:URL|null=null;
+    for(const method of ['HEAD','GET'] as const){
+      let response:Response;
+      try{
+        response=await request(current.toString(),{method,redirect:'manual',
+          headers:{accept:'text/html','user-agent':'Mozilla/5.0 (compatible; NestAffiliate/1.0)'},
+          signal:AbortSignal.timeout(6000)});
+      }catch{continue;}
+      const location=response.headers.get('location');
+      if([301,302,303,307,308].includes(response.status)&&location){
+        next=safeMeliLink(new URL(location,current).toString());
+        if(!next)throw new Error('UNSAFE_MARKETPLACE_REDIRECT');
+        break;
+      }
+      if(method==='GET'&&response.ok){
+        const metadata=parseMeliPublicMetadata(await boundedHtml(response),current.toString());
+        title=metadata.title||title;imageUrl=metadata.imageUrl||imageUrl;
+        if(metadata.canonicalUrl&&metadata.canonicalUrl!==current.toString()){
+          next=safeMeliLink(metadata.canonicalUrl);if(next)break;
+        }
+        if(title)return {canonicalUrl:current.toString(),title,...(imageUrl?{imageUrl}:{})};
+      }
+    }
     if(!next)throw new Error('SHORTLINK_UNRESOLVED');
-    current=safeMeliLink(new URL(next,current.toString()).toString());
-    if(!current)throw new Error('UNEXPECTED_REDIRECT_HOST');
+    current=next;
   }
   throw new Error('SHORTLINK_TOO_MANY_REDIRECTS');
+}
+export async function resolveMeliLink(value:string,request:typeof fetch=fetch):Promise<string>{
+  return (await resolveMeliLanding(value,request)).canonicalUrl;
 }
 export function officialMeliItem(payload:unknown,itemId:string) {
   if(!payload || typeof payload!=='object')return null;
