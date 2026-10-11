@@ -142,6 +142,61 @@ service cloud.firestore {
       );
     }
 
+    // MusicScale reusable medleys use the same active organization authority
+    // as scale writes. Read access also permits active non-managing members.
+    // A documented owner without a membership is allowed only when the
+    // organization's canonical owner field matches the authenticated UID.
+    function isUnregisteredMedleyOrgOwner(orgId) {
+      let orgPath = /databases/$(database)/documents/organizations/$(orgId);
+      return getMemberPermissions(orgId) == null &&
+        exists(orgPath) &&
+        (
+          get(orgPath).data.get('ownerUid', '') == request.auth.uid ||
+          get(orgPath).data.get('ownerId', '') == request.auth.uid ||
+          get(orgPath).data.get('owner_user_id', '') == request.auth.uid ||
+          get(orgPath).data.get('ownerUserId', '') == request.auth.uid
+        );
+    }
+
+    function canReadMedleyTemplates(orgId) {
+      let member = getMemberPermissions(orgId);
+      return isAuthenticated() &&
+        isOrganizationLifecycleActive(orgId) &&
+        isOrgActive(orgId) &&
+        (
+          isSystemAdmin() ||
+          isUnregisteredMedleyOrgOwner(orgId) ||
+          (member != null && member.get('status', '') in ['active', 'ativo'])
+        );
+    }
+
+    function canManageMedleyTemplates(orgId) {
+      let member = getMemberPermissions(orgId);
+      let permissions = member != null ? member.get('permissions', {}) : {};
+      return canReadMedleyTemplates(orgId) &&
+        (
+          isSystemAdmin() ||
+          isUnregisteredMedleyOrgOwner(orgId) ||
+          (
+            member != null &&
+            member.get('status', '') in ['active', 'ativo'] &&
+            (
+              member.get('organizationRole', '') in [
+                'owner', 'Owner', 'admin', 'Admin', 'leader',
+                'worship_leader', 'Lider', 'Líder', 'pastor', 'Pastor',
+                'minister', 'Minister', 'ministro', 'Ministro'
+              ] ||
+              member.get('role', '') in [
+                'owner', 'Owner', 'admin', 'Admin', 'leader',
+                'worship_leader', 'Lider', 'Líder', 'pastor', 'Pastor',
+                'minister', 'Minister', 'ministro', 'Ministro'
+              ] ||
+              (permissions is map && permissions.get('canManageScales', false) == true)
+            )
+          )
+        );
+    }
+
     function canReadManagedScaleResponses(orgId) {
       let memberData = getMemberPermissions(orgId);
       let role = memberData != null
@@ -2424,6 +2479,24 @@ service cloud.firestore {
     // ==========================================
     // 5. MÓDULOS MUSIC SCALE (ACERVO MUSIC SCALE)
     // ==========================================
+
+    // Templates are separate from published scales; they must stay
+    // organization-scoped and may never be reassigned across tenants.
+    match /medleyTemplates/{templateId} {
+      allow read: if canReadMedleyTemplates(resource.data.get('organizationId', ''));
+      allow create: if canManageMedleyTemplates(incoming().get('organizationId', '')) &&
+        incoming().get('name', '') is string &&
+        incoming().get('name', '').size() > 0 &&
+        incoming().get('name', '').size() <= 120 &&
+        incoming().get('arrangement', null) is map;
+      allow update: if canManageMedleyTemplates(resource.data.get('organizationId', '')) &&
+        request.resource.data.get('organizationId', '') == resource.data.get('organizationId', '') &&
+        request.resource.data.get('name', '') is string &&
+        request.resource.data.get('name', '').size() > 0 &&
+        request.resource.data.get('name', '').size() <= 120 &&
+        request.resource.data.get('arrangement', null) is map;
+      allow delete: if canManageMedleyTemplates(resource.data.get('organizationId', ''));
+    }
 
     match /songs/{songId} {
       allow read: if isAuthenticated() && checkOrgAccess(resource.data.get('organizationId', '')) && isOrgActive(resource.data.get('organizationId', ''));
