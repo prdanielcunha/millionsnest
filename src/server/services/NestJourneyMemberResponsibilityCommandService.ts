@@ -312,4 +312,5 @@ export async function updateNestJourneyMemberResponsibility(
 export {
   actorCanManageJourneyResponsibilities,
   isActiveMembership,
+  projectedJourneyPermissions,
 };
