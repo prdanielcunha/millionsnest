@@ -226,6 +226,9 @@ jobs:
       - name: Internal billing operations authorization
         run: npx tsx scripts/test_internal_billing_route_authorization.ts
 
+      - name: NestJourney multi-front team assignment boundaries
+        run: npx tsx scripts/test_nestjourney_service_team.ts
+
       - name: Firestore Rules emulator tests
         run: >-
           npx firebase emulators:exec
