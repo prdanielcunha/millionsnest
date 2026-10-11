@@ -231,6 +231,8 @@ jobs:
 
       - name: NestJourney multi-front team assignment boundaries
         run: npx tsx scripts/test_nestjourney_service_team.ts
+      - name: NestJourney support requests and role boundaries
+        run: npx tsx scripts/test_nestjourney_support_assignments.ts
 
       - name: Firestore Rules emulator tests
         run: >-
