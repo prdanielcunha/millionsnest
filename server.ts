@@ -2882,6 +2882,9 @@ async function startServer() {
           ...(targetAppId ? { targetAppId } : {}),
           ...(targetAppId === 'nestjourney' && typeof inviteData.nestJourneyResponsibility === 'string'
             ? { nestJourneyResponsibility: inviteData.nestJourneyResponsibility }
+            : {}),
+          ...(targetAppId === 'nestjourney' && inviteData.nestJourneyTeam
+            ? { nestJourneyTeam: inviteData.nestJourneyTeam }
             : {})
         });
 
@@ -2916,6 +2919,9 @@ async function startServer() {
               ...(targetAppId ? { targetAppId } : {}),
               ...(targetAppId === 'nestjourney' && typeof inviteData.nestJourneyResponsibility === 'string'
                 ? { nestJourneyResponsibility: inviteData.nestJourneyResponsibility }
+                : {}),
+              ...(targetAppId === 'nestjourney' && inviteData.nestJourneyTeam
+                ? { nestJourneyTeam: inviteData.nestJourneyTeam }
                 : {})
             }
           }
