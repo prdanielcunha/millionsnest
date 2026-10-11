@@ -15,6 +15,7 @@ import {
   projectedJourneyPermissions,
   type NestJourneyResponsibility,
 } from './NestJourneyMemberResponsibilityCommandService.js';
+import { parseJourneyServiceTeam, journeyResponsibilityForTeam } from './NestJourneyServiceTeam.js';
 
 
 
@@ -537,6 +538,10 @@ export async function acceptInvitation(
       const inviteData = inviteDoc.data();
       const orgId = requestedOrganizationId;
 
+      const nestJourneyTeam = inviteData.nestJourneyTeam === undefined ? null : parseJourneyServiceTeam(inviteData.nestJourneyTeam);
+      if (inviteData.nestJourneyTeam !== undefined && (inviteData.targetAppId !== 'nestjourney' || !nestJourneyTeam)) {
+        return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
+      }
       const rawNestJourneyResponsibility = inviteData.nestJourneyResponsibility;
       const normalizedNestJourneyResponsibility =
         inviteData.targetAppId === 'nestjourney' && typeof rawNestJourneyResponsibility === 'string'
@@ -553,6 +558,9 @@ export async function acceptInvitation(
         normalizedNestJourneyResponsibility && NESTJOURNEY_RESPONSIBILITIES.has(normalizedNestJourneyResponsibility)
           ? normalizedNestJourneyResponsibility
           : null;
+      if (nestJourneyTeam && nestJourneyResponsibility !== journeyResponsibilityForTeam(nestJourneyTeam)) {
+        return { status: 409, data: { success: false, reasonCode: 'INVITE_STATE_INCONSISTENT' } };
+      }
 
       if (Object.prototype.hasOwnProperty.call(inviteData, 'organizationId')) {
         if (typeof inviteData.organizationId !== 'string' || inviteData.organizationId !== orgId) {
@@ -716,6 +724,7 @@ export async function acceptInvitation(
         ...(nestJourneyResponsibility
           ? {
               journeyRole: nestJourneyResponsibility,
+              ...(nestJourneyTeam ? { nestJourneyTeam } : {}),
               permissions: projectedJourneyPermissions(nestJourneyResponsibility),
               permissionsVersion: CURRENT_PERMISSIONS_VERSION,
             }
@@ -736,6 +745,7 @@ export async function acceptInvitation(
         ...(nestJourneyResponsibility
           ? {
               journeyRole: nestJourneyResponsibility,
+              ...(nestJourneyTeam ? { nestJourneyTeam } : {}),
               permissions: projectedJourneyPermissions(nestJourneyResponsibility),
               permissionsVersion: CURRENT_PERMISSIONS_VERSION,
             }
@@ -783,6 +793,7 @@ export async function acceptInvitation(
         invitationId: inviteDoc.id,
         membershipRole: planResult.membershipRole,
         nestJourneyResponsibility: nestJourneyResponsibility || null,
+        ...(nestJourneyTeam ? { nestJourneyTeam } : {}),
         previousUseCount: previousUseCount,
         newUseCount: nextUseCount,
         timestamp: FieldValue.serverTimestamp()
