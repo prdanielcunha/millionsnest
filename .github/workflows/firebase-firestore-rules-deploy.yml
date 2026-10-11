@@ -94,48 +94,55 @@ jobs:
 
       - name: Deploy and verify canonical Firestore rules
         shell: bash
+        timeout-minutes: 9
         run: |
           set -euo pipefail
+          echo "Deploying only shared Firestore Security Rules via Firebase CLI."
+          # Use the tested canonical rules source, not a generated/minimal ruleset.
+          test -s firestore.rules
+          grep -Fq 'match /medleyTemplates/{templateId}' firestore.rules
+          grep -Fq 'function canWriteBandScale(orgId)' firestore.rules
+          grep -Fq 'function nestAffiliateProductEnabled(orgId)' firestore.rules
+
+          deployed=false
+          for attempt in 1 2 3; do
+            echo "FIREBASE_CLI_RULES_DEPLOY_ATTEMPT=$attempt"
+            if npx firebase deploy --only firestore:rules \
+              --config firebase.rules-test.json \
+              --project millionsnest --non-interactive; then
+              deployed=true
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then sleep "$((attempt * 10))"; fi
+          done
+          if [ "$deployed" != true ]; then
+            echo "::error::Firebase CLI could not publish canonical Firestore rules."
+            exit 1
+          fi
+
           ACCESS_TOKEN="$(gcloud auth print-access-token)"
-
-          jq -Rs '{
-            source: {
-              files: [{
-                name: "firestore.rules",
-                content: .
-              }]
-            }
-          }' firestore.rules >/tmp/ruleset-create.json
-
-          RULESET="$(curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 45 -X POST             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/ruleset-create.json             "https://firebaserules.googleapis.com/v1/projects/millionsnest/rulesets")"
-
-          RULESET_NAME="$(jq -r '.name // empty' <<<"$RULESET")"
-          test -n "$RULESET_NAME"
-          echo "RULESET_CREATED=$RULESET_NAME"
-
-          jq -n --arg name "projects/millionsnest/releases/cloud.firestore" --arg ruleset "$RULESET_NAME" '{
-            release: {
-              name: $name,
-              rulesetName: $ruleset
-            },
-            updateMask: "rulesetName"
-          }' >/tmp/release-update.json
-
-          curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 45 -X PATCH             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/release-update.json             "https://firebaserules.googleapis.com/v1/projects/millionsnest/releases/cloud.firestore"             >/tmp/release-result.json
-
-          ACTIVE_RULESET="$(jq -r '.rulesetName // empty' /tmp/release-result.json)"
-          test "$ACTIVE_RULESET" = "$RULESET_NAME"
-
-          VERIFY="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 45             -H "Authorization: Bearer $ACCESS_TOKEN"             "https://firebaserules.googleapis.com/v1/$RULESET_NAME")"
-          SOURCE="$(jq -r '.source.files[]?.content // empty' <<<"$VERIFY")"
-
-          grep -Fq 'function canWriteBandScale(orgId)' <<<"$SOURCE"
-          grep -Fq 'function canManageMedleyTemplates(orgId)' <<<"$SOURCE"
-          grep -Fq 'match /medleyTemplates/{templateId}' <<<"$SOURCE"
-          grep -Fq 'function nestAffiliateProductEnabled(orgId)' <<<"$SOURCE"
-          grep -Fq "productId != 'raiz_e_mesa' && productId != 'nestaffiliate'" <<<"$SOURCE"
-          grep -Fq 'match /products/nestaffiliate' <<<"$SOURCE"
-          grep -Fq "'performanceDaily'" <<<"$SOURCE"
-          grep -Fq "'affiliateResults'" <<<"$SOURCE"
-
-          echo "MILLIONSNEST_FIRESTORE_RULES_DEPLOY_OK ruleset=$RULESET_NAME"
+          BASE_URL="https://firebaserules.googleapis.com/v1/projects/millionsnest"
+          echo "Verifying the live cloud.firestore release against the source SHA256."
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              "$BASE_URL/releases/cloud.firestore" > /tmp/firestore-release.json; then
+              RULESET_NAME="$(jq -r '.rulesetName // empty' /tmp/firestore-release.json)"
+              if [ -n "$RULESET_NAME" ] && \
+                curl --fail-with-body --silent --show-error \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \
+                  "https://firebaserules.googleapis.com/v1/$RULESET_NAME" > /tmp/firestore-ruleset.json; then
+                jq -j -r '.source.files[] | select(.name == "firestore.rules") | .content' \
+                  /tmp/firestore-ruleset.json > /tmp/firestore-live.rules
+                if cmp -s firestore.rules /tmp/firestore-live.rules; then
+                  echo "MILLIONSNEST_FIRESTORE_RULES_DEPLOY_OK ruleset=$RULESET_NAME"
+                  echo "MUSIC_SCALE_MEDLEY_TEMPLATES_LIVE_OK"
+                  exit 0
+                fi
+                echo "::warning::Ruleset returned, but live source differs from canonical rules."
+              fi
+            fi
+            sleep "$((attempt * 5))"
+          done
+          echo "::error::Firebase CLI ran, but the live Firebase Rules release could not be verified."
+          exit 1
