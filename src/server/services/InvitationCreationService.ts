@@ -100,6 +100,12 @@ export async function createInvitation(
       return res.status(400).json({ success: false, reasonCode: 'INVALID_INVITE_ROLE' });
     }
 
+    // Ministerial availability must never silently make a helper an organization
+    // manager/admin, which would also change permissions in other MillionsNest apps.
+    if (nestJourneyTeam && nestJourneyTeam.teamRole !== 'leader' && role !== 'member' && role !== 'viewer') {
+      return res.status(400).json({ success: false, reasonCode: 'NESTJOURNEY_ORGANIZATION_ROLE_CONFLICT' });
+    }
+
     let normalizedEmail: string | null = null;
     if (inviteMode === 'email') {
       if (typeof email !== 'string') {
