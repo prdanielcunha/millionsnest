@@ -5,7 +5,10 @@ import { canSupportInFront, canAdvanceSupportTask } from '../src/server/services
 const support = parseJourneyServiceTeam({primaryArea:'support',teamRole:'auxiliary',supportAreas:[]});
 const limited = parseJourneyServiceTeam({primaryArea:'support',teamRole:'integrant',supportAreas:['presence','table']});
 const leader = parseJourneyServiceTeam({primaryArea:'table',teamRole:'leader',supportAreas:['house']});
-assert.ok(support && limited && leader);
+const teamMember = parseJourneyServiceTeam({primaryArea:'table',teamRole:'integrant',supportAreas:[]});
+assert.ok(support && limited && leader && teamMember);
+assert.equal(canSupportInFront(teamMember,'table'),true);
+assert.equal(canSupportInFront(teamMember,'care'),false);
 assert.equal(canSupportInFront(support,'care'),true);
 assert.equal(canSupportInFront(limited,'care'),false);
 assert.equal(canSupportInFront(limited,'presence'),true);
