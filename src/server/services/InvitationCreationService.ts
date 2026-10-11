@@ -231,12 +231,15 @@ export async function createInvitation(
       // MusicScale billing capacity here would block churches that use
       // NestJourney independently and would couple one app's user limit to
       // another app's onboarding.
-      let capacityInput: InvitationCreationInput['capacity'] =
-        isGlobalAdmin || targetAppId === 'nestjourney'
-          ? { resolved: true, mode: 'unlimited' }
-          : { resolved: false };
+      let capacityInput: InvitationCreationInput['capacity'] = isGlobalAdmin
+        ? { resolved: true, mode: 'unlimited' }
+        : { resolved: false };
+      if (targetAppId === 'nestjourney') {
+        capacityInput = { resolved: true, mode: 'unlimited' };
+      }
 
-      if (!isGlobalAdmin && targetAppId !== 'nestjourney') {
+      if (!isGlobalAdmin) {
+        if (targetAppId !== 'nestjourney') {
         const appSubscription = subData.apps?.musicscale || null;
         const capacityResult = resolveCanonicalInvitationCapacity({
           organizationId,
@@ -276,6 +279,7 @@ export async function createInvitation(
                 maxMembers: capacityResult.capacity.maxMembers! 
               };
            }
+        }
         }
       }
 
