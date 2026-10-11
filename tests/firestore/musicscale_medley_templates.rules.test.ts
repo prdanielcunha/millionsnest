@@ -26,13 +26,13 @@ async function seedMember(
   permissions: Record<string, boolean> = {},
   legacy = false,
 ) {
-  await env.withSecurityRulesDisabled(async ({ firestore }) => {
+  await env.withSecurityRulesDisabled(async context => {
     const path = legacy ? `organization_members/${uid}_org-a` : `organizations/org-a/members/${uid}`;
-    await setDoc(doc(firestore(), path), {
+    await setDoc(doc(context.firestore(), path), {
       uid, userId: uid, organizationId: 'org-a',
       role, organizationRole, status, permissions,
     });
-    await setDoc(doc(firestore(), `users/${uid}`), { systemRole: 'user' });
+    await setDoc(doc(context.firestore(), `users/${uid}`), { systemRole: 'user' });
   });
 }
 
@@ -47,8 +47,8 @@ before(async () => {
 after(async () => { await env.cleanup(); });
 beforeEach(async () => {
   await env.clearFirestore();
-  await env.withSecurityRulesDisabled(async ({ firestore }) => {
-    const db = firestore();
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
     await setDoc(doc(db, 'organizations/org-a'), {
       ownerUid: 'owner-without-membership',
       status: 'active', apps: { musicscale: { status: 'active' } },
@@ -124,8 +124,8 @@ test('suspended membership, other tenants, anonymous users and organization tran
 
 test('suspended organization cannot accept writes or reads even from active leaders', async () => {
   await seedMember('leader', 'leader');
-  await env.withSecurityRulesDisabled(async ({ firestore }) => {
-    await updateDoc(doc(firestore(), 'organizations/org-a'), { status: 'suspended' });
+  await env.withSecurityRulesDisabled(async context => {
+    await updateDoc(doc(context.firestore(), 'organizations/org-a'), { status: 'suspended' });
   });
   await assertFails(setDoc(doc(memberDb('leader'), 'medleyTemplates', 'frozen'), template()));
 });
