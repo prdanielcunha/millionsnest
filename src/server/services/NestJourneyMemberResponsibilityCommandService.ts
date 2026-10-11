@@ -3,6 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, Firestore, getFirestore } from 'firebase-admin/firestore';
 import { canManageTenantMembers } from '../../lib/permissionService.js';
 import { CURRENT_PERMISSIONS_VERSION } from '../../lib/rbac.js';
+import { parseJourneyServiceTeam, journeyResponsibilityForTeam } from './NestJourneyServiceTeam.js';
 
 type Dependencies = {
   verifyIdToken?: (token: string) => Promise<{ uid: string }>;
@@ -176,7 +177,15 @@ export async function updateNestJourneyMemberResponsibility(
     return res.status(400).json({ success: false, reasonCode: 'INVALID_REQUEST_PATH' });
   }
 
+  const teamProvided = req.body?.nestJourneyTeam !== undefined;
+  const nestJourneyTeam = teamProvided ? parseJourneyServiceTeam(req.body.nestJourneyTeam) : null;
+  if (teamProvided && !nestJourneyTeam) {
+    return res.status(400).json({ success: false, reasonCode: 'INVALID_NESTJOURNEY_TEAM' });
+  }
   const responsibility = normalize(req.body?.responsibility) as NestJourneyResponsibility;
+  if (nestJourneyTeam && journeyResponsibilityForTeam(nestJourneyTeam) !== responsibility) {
+    return res.status(400).json({ success: false, reasonCode: 'NESTJOURNEY_ROLE_CONFLICT' });
+  }
   if (!NESTJOURNEY_RESPONSIBILITIES.has(responsibility)) {
     return res.status(400).json({ success: false, reasonCode: 'INVALID_RESPONSIBILITY' });
   }
@@ -240,7 +249,8 @@ export async function updateNestJourneyMemberResponsibility(
       const projectionAlreadyCurrent = JOURNEY_PERMISSION_KEYS.every(
         key => previousPermissions[key] === projectedPermissions[key],
       );
-      if (previousResponsibility === responsibility && projectionAlreadyCurrent) {
+      const teamAlreadyCurrent = !teamProvided || JSON.stringify(targetData.nestJourneyTeam || null) === JSON.stringify(nestJourneyTeam);
+      if (previousResponsibility === responsibility && projectionAlreadyCurrent && teamAlreadyCurrent) {
         return {
           success: true as const,
           reasonCode: 'ALREADY_SET',
@@ -250,6 +260,7 @@ export async function updateNestJourneyMemberResponsibility(
       }
       const patch = {
         journeyRole: responsibility,
+        ...(nestJourneyTeam ? { nestJourneyTeam } : {}),
         permissions,
         permissionsVersion: CURRENT_PERMISSIONS_VERSION,
         updatedAt: FieldValue.serverTimestamp(),
@@ -276,6 +287,7 @@ export async function updateNestJourneyMemberResponsibility(
         organizationId,
         previousResponsibility,
         responsibility,
+        ...(nestJourneyTeam ? { nestJourneyTeam } : {}),
         timestamp: FieldValue.serverTimestamp(),
       });
 
