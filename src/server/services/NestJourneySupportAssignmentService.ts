@@ -22,8 +22,11 @@ function canLead(actor:Actor, area:Front) {
   return actor.administrator || actor.leaderFront === area;
 }
 export function canSupportInFront(team:JourneyServiceTeam|null, area:Front) {
-  return Boolean(team && (team.supportAreas.includes(area) ||
-    (team.primaryArea === 'support' && team.supportAreas.length === 0)));
+  return Boolean(team && (
+    (team.primaryArea === area && team.teamRole !== 'leader') ||
+    team.supportAreas.includes(area) ||
+    (team.primaryArea === 'support' && team.supportAreas.length === 0)
+  ));
 }
 export function canAdvanceSupportTask(from:AssignmentStatus, to:AssignmentStatus, actorIsAssignee:boolean, actorIsManager:boolean) {
   if (to === 'accepted') return from === 'offered' && actorIsAssignee;
