@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { parseJourneyServiceTeam } from '../src/server/services/NestJourneyServiceTeam.js';
+import { canSupportInFront, canAdvanceSupportTask } from '../src/server/services/NestJourneySupportAssignmentService.js';
+
+const support = parseJourneyServiceTeam({primaryArea:'support',teamRole:'auxiliary',supportAreas:[]});
+const limited = parseJourneyServiceTeam({primaryArea:'support',teamRole:'integrant',supportAreas:['presence','table']});
+const leader = parseJourneyServiceTeam({primaryArea:'table',teamRole:'leader',supportAreas:['house']});
+assert.ok(support && limited && leader);
+assert.equal(canSupportInFront(support,'care'),true);
+assert.equal(canSupportInFront(limited,'care'),false);
+assert.equal(canSupportInFront(limited,'presence'),true);
+assert.equal(canSupportInFront(leader,'table'),false);
+assert.equal(canSupportInFront(leader,'house'),true);
+assert.equal(canAdvanceSupportTask('offered','accepted',false,true),false);
+assert.equal(canAdvanceSupportTask('offered','accepted',true,false),true);
+assert.equal(canAdvanceSupportTask('offered','completed',true,false),false);
+assert.equal(canAdvanceSupportTask('accepted','completed',true,false),true);
+assert.equal(canAdvanceSupportTask('completed','cancelled',false,true),false);
+assert.equal(canAdvanceSupportTask('offered','cancelled',false,true),true);
+console.log('NestJourney support assignments: access and state transitions validated.');
