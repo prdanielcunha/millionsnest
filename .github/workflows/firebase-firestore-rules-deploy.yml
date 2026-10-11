@@ -9,6 +9,7 @@ on:
       - "firebase.rules-test.json"
       - "tests/firestore/nestjourney.rules.test.ts"
       - "tests/firestore/musicscale_live.rules.test.ts"
+      - "tests/firestore/musicscale_medley_templates.rules.test.ts"
       - "scripts/test_shared_band_rules.ts"
       - "tests/firestore/nestaffiliate.rules.test.ts"
       - ".github/workflows/firebase-firestore-rules-deploy.yml"
@@ -67,6 +68,14 @@ jobs:
           --project demo-millionsnest-musicscale-live-release
           "npx tsx --test --test-concurrency=1 tests/firestore/musicscale_live.rules.test.ts"
 
+      - name: Certify MusicScale medley template ownership and tenant boundaries
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-millionsnest-musicscale-medley-release
+          "npx tsx --test --test-concurrency=1 tests/firestore/musicscale_medley_templates.rules.test.ts"
+
       - name: Certify MusicScale band-scale write authorization
         run: >-
           npx firebase emulators:exec
@@ -121,6 +130,8 @@ jobs:
           SOURCE="$(jq -r '.source.files[]?.content // empty' <<<"$VERIFY")"
 
           grep -Fq 'function canWriteBandScale(orgId)' <<<"$SOURCE"
+          grep -Fq 'function canManageMedleyTemplates(orgId)' <<<"$SOURCE"
+          grep -Fq 'match /medleyTemplates/{templateId}' <<<"$SOURCE"
           grep -Fq 'function nestAffiliateProductEnabled(orgId)' <<<"$SOURCE"
           grep -Fq "productId != 'raiz_e_mesa' && productId != 'nestaffiliate'" <<<"$SOURCE"
           grep -Fq 'match /products/nestaffiliate' <<<"$SOURCE"
