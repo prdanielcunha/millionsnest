@@ -33,7 +33,7 @@ function seed(db: MockDb, role='care') {
   };
   db.docs['organizations/org1/products/raiz_e_mesa/people/person1'] = {
     organizationId: 'org1', congregationId: 'camp1', name: 'João da Silva', phone: '5543999999999',
-    consent: true, privateNote: 'must not leak',
+    consent: true, consentRevokedAt:null, contactStatus:'pending', preferredContactChannel:'whatsapp', privateNote: 'must not leak',
   };
 }
 async function execute(db: MockDb, query={organizationId:'org1',followupId:'first-contact-care1'}, access:any={accessible:true,isGlobalAccess:false,organizationRole:'care'}) {
@@ -92,4 +92,32 @@ async function execute(db: MockDb, query={organizationId:'org1',followupId:'firs
   assert.equal(res.statusCode,403);
   assert.equal(res.body.code,'NESTJOURNEY_ACCESS_DENIED');
 }
+{
+  const db=new MockDb(); seed(db);
+  db.docs['organizations/org1/products/raiz_e_mesa/people/person1'].preferredContactChannel='phone';
+  const res=await execute(db);
+  assert.equal(res.statusCode,409,'phone-only consent must not authorize WhatsApp');
+}
+{
+  const db=new MockDb(); seed(db);
+  db.docs['organizations/org1/products/raiz_e_mesa/people/person1'].consentRevokedAt='2026-10-12T18:00:00Z';
+  const res=await execute(db);
+  assert.equal(res.statusCode,409,'revoked-at timestamp must block even if consent boolean is stale');
+}
+{
+  const db=new MockDb(); seed(db);
+  db.docs['organizations/org1/products/raiz_e_mesa/people/person1'].contactStatus='closed';
+  const res=await execute(db);
+  assert.equal(res.statusCode,409,'closed contact status blocks new WhatsApp draft');
+}
+{
+  const db=new MockDb(); seed(db);
+  delete db.docs['organizations/org1/members/user1'];
+  const res=await execute(db,{organizationId:'org1',followupId:'first-contact-care1'},{
+    accessible:true,isGlobalAccess:true,organizationRole:'admin',
+  });
+  assert.equal(res.statusCode,403,'global support privilege alone is insufficient');
+  assert.equal(res.body.code,'CHURCH_MEMBERSHIP_REQUIRED');
+}
+
 console.log('NestJourney -> Connect follow-up context contract: OK');
