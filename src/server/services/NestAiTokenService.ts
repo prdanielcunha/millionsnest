@@ -278,7 +278,7 @@ export async function handleNestLocalNestAiSessionTokenRequest(
  * Never read top-level app_id/sub: those fields belong to the nested token.
  * Never accept a caller-supplied identifier instead of a verified response.
  */
-export function verifiedAppCheckId(verified: { appId?: unknown }): string {
+export function verifiedAppCheckId(verified: { appId?: unknown; token?: unknown }): string {
   const appId = typeof verified.appId === 'string' ? verified.appId.trim() : '';
   if (!appId) throw new Error('APP_CHECK_APP_ID_MISSING');
   return appId;
