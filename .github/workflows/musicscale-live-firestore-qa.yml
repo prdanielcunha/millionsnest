@@ -7,6 +7,7 @@ on:
       - "firestore.rules"
       - "firebase.rules-test.json"
       - "tests/firestore/musicscale_live.rules.test.ts"
+      - "tests/firestore/musicscale_global_curation.rules.test.ts"
       - ".github/workflows/musicscale-live-firestore-qa.yml"
   push:
     branches: [main]
@@ -53,4 +54,4 @@ jobs:
           --config firebase.rules-test.json
           --only firestore
           --project demo-millionsnest-musicscale-live-rules
-          "npx tsx --test --test-concurrency=1 tests/firestore/musicscale_live.rules.test.ts"
+          "npx tsx --test --test-concurrency=1 tests/firestore/musicscale_live.rules.test.ts tests/firestore/musicscale_global_curation.rules.test.ts"
