@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict';
 import * as crypto from 'node:crypto';
-import { authorizeNestAiApp, getNestAiJwks, issueNestAiToken } from '../src/server/services/NestAiTokenService.js';
+import { authorizeNestAiApp, getNestAiJwks, issueNestAiToken, verifiedAppCheckId } from '../src/server/services/NestAiTokenService.js';
 
 function decodeJson(value: string): any {
   return JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
@@ -103,4 +103,18 @@ assert.equal(await checkHub('privileged', 'global'), true);
 assert.equal(await checkHub('ordinary', 'global'), false);
 assert.equal(await checkHub('privileged', 'other'), false);
 assert.equal(await checkHub('privileged', 'global', 'unknown'), false);
+// P0 regression: Firebase Admin verifyToken() returns { appId, token }, not
+// a flat DecodedAppCheckToken. Flat-only consumers rejected authentic tokens.
+const registeredFirebaseAppId = '1:555464791734:web:6f916a69f26e74b9767817';
+assert.equal(verifiedAppCheckId({
+  appId: registeredFirebaseAppId,
+  token: { app_id: registeredFirebaseAppId, sub: registeredFirebaseAppId },
+}), registeredFirebaseAppId);
+assert.equal(verifiedAppCheckId({ appId: '  ' + registeredFirebaseAppId + '  ' }), registeredFirebaseAppId);
+assert.throws(() => verifiedAppCheckId({ app_id: registeredFirebaseAppId, sub: registeredFirebaseAppId } as any),
+  /APP_CHECK_APP_ID_MISSING/);
+assert.throws(() => verifiedAppCheckId({ appId: '' }), /APP_CHECK_APP_ID_MISSING/);
+assert.throws(() => verifiedAppCheckId({ appId: 123 }), /APP_CHECK_APP_ID_MISSING/);
+console.log('NESTAI_HUB_APPCHECK_VERIFIED_APP_ID_OK');
+
 console.log('NESTAI_HUB_TOKEN_SERVICE_OK');
