@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, getDoc, getDocs, collection, setDoc } from 'firebase/firestore';
 
-const projectId = 'demo-millionsnest-musicscale-global-curation';
+const projectId = 'demo-millionsnest-musicscale-live-rules';
 const [host, port] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8180').split(':');
 let env: RulesTestEnvironment;
 
