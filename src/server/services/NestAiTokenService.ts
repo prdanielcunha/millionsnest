@@ -274,6 +274,16 @@ export async function handleNestLocalNestAiSessionTokenRequest(
   }
 }
 
+/** Firebase Admin verifies the signature and returns an envelope containing appId.
+ * Never read top-level app_id/sub: those fields belong to the nested token.
+ * Never accept a caller-supplied identifier instead of a verified response.
+ */
+export function verifiedAppCheckId(verified: { appId?: unknown }): string {
+  const appId = typeof verified.appId === 'string' ? verified.appId.trim() : '';
+  if (!appId) throw new Error('APP_CHECK_APP_ID_MISSING');
+  return appId;
+}
+
 export async function handleNestAiTokenRequest(req: Request, res: Response, db: admin.firestore.Firestore): Promise<Response> {
   const authHeader = String(req.headers.authorization || '');
   if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'UNAUTHENTICATED' });
@@ -295,11 +305,16 @@ export async function handleNestAiTokenRequest(req: Request, res: Response, db: 
 
   let appCheckAppId = '';
   try {
-    const appCheckClaims = await admin.appCheck().verifyToken(appCheckHeader) as unknown as Record<string, unknown>;
-    appCheckAppId = String(appCheckClaims.app_id || appCheckClaims.sub || '').trim();
-    if (!appCheckAppId) return res.status(401).json({ error: 'APP_CHECK_APP_ID_MISSING' });
-  } catch {
-    return res.status(401).json({ error: 'APP_CHECK_INVALID' });
+    // Firebase Admin verifyToken() returns { appId, token }, not flat JWT claims.
+    // The former flat claim lookup rejected every valid token with APP_ID_MISSING.
+    const verified = await admin.appCheck().verifyToken(appCheckHeader);
+    appCheckAppId = verifiedAppCheckId(verified);
+  } catch (error) {
+    return res.status(401).json({
+      error: error instanceof Error && error.message === 'APP_CHECK_APP_ID_MISSING'
+        ? 'APP_CHECK_APP_ID_MISSING'
+        : 'APP_CHECK_INVALID',
+    });
   }
   if (!organizationId || organizationId.length > 256 || organizationId.includes('/') || !KNOWN_APPS.has(appId)) {
     return res.status(400).json({ error: 'INVALID_REQUEST' });
@@ -344,10 +359,8 @@ function normalizeLocale(value: unknown): 'pt-BR' | 'en' | 'es' {
 async function verifiedAppCheckAppId(req: Request): Promise<string> {
   const appCheckHeader = String(req.headers['x-firebase-appcheck'] || '');
   if (!appCheckHeader) throw new Error('APP_CHECK_REQUIRED');
-  const claims = await admin.appCheck().verifyToken(appCheckHeader) as unknown as Record<string, unknown>;
-  const appId = String(claims.app_id || claims.sub || '').trim();
-  if (!appId) throw new Error('APP_CHECK_APP_ID_MISSING');
-  return appId;
+  const verified = await admin.appCheck().verifyToken(appCheckHeader);
+  return verifiedAppCheckId(verified);
 }
 
 export async function handleNestAiGuestTokenRequest(req: Request, res: Response): Promise<Response> {
