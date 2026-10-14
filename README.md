@@ -118,3 +118,5 @@ As variáveis dividem-se logicamente em:
 
 ---
 *Gerado por processo de auditoria técnica para continuidade, segurança e manutenção fluida do ecossistema.*
+
+Connect session-context includes separate canonical access projections for MusicScale, NestLocal, NestFinance and NestJourney. Additional app resolver failures remain denied and do not grant access or replace billing/membership authority. Domain apps still independently authorize each data request.

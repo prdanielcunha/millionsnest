@@ -324,9 +324,9 @@ export async function handleConnectSessionContextRequest(
       ? authorizedOrganizations.find(o => o.id === activeOrganizationIdResolved) || null
       : null;
 
-    let appAccessResponse: { musicscale: ConnectSessionAppAccess; nestlocal: ConnectSessionAppAccess } | null = null;
+    let appAccessResponse: { musicscale: ConnectSessionAppAccess; nestlocal: ConnectSessionAppAccess; nestfinance: ConnectSessionAppAccess; nestjourney: ConnectSessionAppAccess } | null = null;
     if (activeOrganizationIdResolved) {
-      const [musicScaleAccessResult, nestLocalAccessResult] = await Promise.all([
+      const [musicScaleAccessResult, nestLocalAccessResult, financeAccessResult, journeyAccessResult] = await Promise.all([
         resolveEcosystemAppAccess({
           uid,
           organizationId: activeOrganizationIdResolved,
@@ -338,7 +338,9 @@ export async function handleConnectSessionContextRequest(
           organizationId: activeOrganizationIdResolved,
           appId: 'nestlocal',
           db
-        })
+        }),
+        resolveEcosystemAppAccess({ uid, organizationId: activeOrganizationIdResolved, appId: 'nestfinance', db }).catch(() => null),
+        resolveEcosystemAppAccess({ uid, organizationId: activeOrganizationIdResolved, appId: 'nestjourney', db }).catch(() => null),
       ]);
 
       const musicScaleCatalogState = mapCanonicalDecisionToCatalogState(
@@ -356,7 +358,21 @@ export async function handleConnectSessionContextRequest(
         undefined
       );
 
+      const projectAdditionalApp = (appId: 'nestfinance' | 'nestjourney', result: typeof financeAccessResult): ConnectSessionAppAccess => ({
+        appId,
+        organizationId: activeOrganizationIdResolved!,
+        accessible: result?.accessible === true,
+        isGlobalAccess: result?.isGlobalAccess === true,
+        accessSource: result?.accessSource || 'none',
+        decisionState: result?.accessible === true ? 'granted' : 'denied',
+        denialReason: result ? result.denialReason || null : 'CANONICAL_APP_ACCESS_UNAVAILABLE',
+        catalogState: mapCanonicalDecisionToCatalogState(result?.accessible === true, result?.isGlobalAccess === true, result?.denialReason, undefined, undefined),
+        entitlement: null,
+      });
+
       appAccessResponse = {
+        nestfinance: projectAdditionalApp('nestfinance', financeAccessResult),
+        nestjourney: projectAdditionalApp('nestjourney', journeyAccessResult),
         musicscale: {
           appId: 'musicscale',
           organizationId: activeOrganizationIdResolved,

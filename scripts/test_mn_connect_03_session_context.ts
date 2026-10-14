@@ -831,6 +831,30 @@ async function main() {
     assertEqual(res.body.appAccess.nestlocal.decisionState, 'granted', 'nestlocal granted');
   });
 
+  add("NestFinance e NestJourney publicam decisões separadas no tenant ativo.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1', status: 'active' });
+    db.setDoc('organizations/org1', { name: 'Org 1', apps: { nestjourney: { status: 'active' } } });
+    db.setDoc('organizations/org1/members/user123', { role: 'member', appAccess: { nestjourney: { enabled: true } } });
+    const res = mockRes();
+    await handleConnectSessionContextRequest(mockReq({ authorization: 'Bearer valid' }), res, deps);
+    assertEqual(res.statusCode, 200, 'status');
+    assertEqual(res.body.appAccess.nestfinance.appId, 'nestfinance', 'finance app');
+    assertEqual(res.body.appAccess.nestfinance.organizationId, 'org1', 'finance tenant');
+    assertEqual(res.body.appAccess.nestfinance.accessible, false, 'finance remains denied by its canonical development/entitlement policy');
+    assertEqual(res.body.appAccess.nestjourney.appId, 'nestjourney', 'journey app');
+    assertEqual(res.body.appAccess.nestjourney.organizationId, 'org1', 'journey tenant');
+    assertEqual(res.body.appAccess.nestjourney.accessible, true, 'journey canonical access');
+  });
+  add("Revogação NestJourney não é substituída por acesso de outro app.", async () => {
+    db.setDoc('users/user123', { activeOrganizationId: 'org1', status: 'active' });
+    db.setDoc('organizations/org1', { name: 'Org 1', apps: { nestjourney: { status: 'active' } } });
+    db.setDoc('organizations/org1/members/user123', { role: 'member', appAccess: { nestjourney: { enabled: false } } });
+    const res = mockRes();
+    await handleConnectSessionContextRequest(mockReq({ authorization: 'Bearer valid' }), res, deps);
+    assertEqual(res.body.appAccess.nestjourney.accessible, false, 'journey revoked');
+    assertEqual(res.body.appAccess.nestjourney.decisionState, 'denied', 'journey denied');
+  });
+
   for (const [name, fn] of tests) {
     reset();
     await runScenario(name, fn);
