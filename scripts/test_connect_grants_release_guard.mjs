@@ -19,6 +19,7 @@ for(const query of queries){
  const fingerprint=value=>execFileSync('jq',['-Sc',query],{input:JSON.stringify(value),encoding:'utf8'});
  const imageOnly=structuredClone(original);imageOnly.spec.template.spec.containers[0].image='synthetic-after';imageOnly.spec.template.metadata.annotations['client.knative.dev/user-image']='after';imageOnly.metadata.annotations['run.googleapis.com/operation-id']='after';
  assert.equal(fingerprint(imageOnly),fingerprint(original),'image/provider metadata may change');
+ const reordered=structuredClone(imageOnly);reordered.spec.template.spec.containers[0].env.reverse();assert.equal(fingerprint(reordered),fingerprint(original),'environment ordering is not a configuration change');
  for(const change of [v=>v.spec.template.spec.containers[0].env[0].value='changed',v=>v.spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.key='2',v=>v.spec.template.spec.serviceAccountName='other',v=>v.spec.template.metadata.annotations['autoscaling.knative.dev/maxScale']='9',v=>v.metadata.annotations['run.googleapis.com/ingress']='internal',v=>v.metadata.labels.app='other']){
   const altered=structuredClone(imageOnly);change(altered);assert.notEqual(fingerprint(altered),fingerprint(original),'billing, credentials, identity, scaling, ingress and labels must remain invariant');
  }
