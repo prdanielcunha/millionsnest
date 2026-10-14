@@ -2811,8 +2811,25 @@ service cloud.firestore {
     }
 
     match /globalSongs/{id} {
-      allow read: if isAuthenticated() && (isSystemAdmin() || hasGlobalLibraryFeature());
+      allow read: if isAuthenticated() && (isSystemAdmin() || isEcosystemSupport() || hasGlobalLibraryFeature());
       allow write: if isAuthenticated() && isSystemAdmin();
+    }
+
+    // MusicScale global curation is NOT tenant-scoped. Only canonical
+    // MillionsNest administrators and ecosystem support can review the
+    // global queue, regardless of currently selected organization.
+    match /globalLibraryCandidates/{candidateId} {
+      allow read: if isAuthenticated() && (isSystemAdmin() || isEcosystemSupport());
+      allow write: if false; // trusted Firebase Admin SDK operations only
+      match /{subcollection}/{itemId} {
+        allow read: if isAuthenticated() && (isSystemAdmin() || isEcosystemSupport());
+        allow write: if false;
+      }
+    }
+
+    match /songDiscoveryInbox/{inboxId} {
+      allow read: if isAuthenticated() && (isSystemAdmin() || isEcosystemSupport());
+      allow write: if false;
     }
 
     match /songSubmissions/{id} {
