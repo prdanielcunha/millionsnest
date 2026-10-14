@@ -63,7 +63,10 @@ jobs:
           jq -e '.status.traffic | map(select(.percent == 100 and .revisionName != null)) | length == 1' /tmp/hub-before.json >/dev/null
           PREVIOUS="$(jq -r '.status.traffic[] | select(.percent == 100) | .revisionName' /tmp/hub-before.json)"
           echo "PREVIOUS_HUB_REVISION=$PREVIOUS" >> "$GITHUB_ENV"
-          jq -S '{runtime:(.spec.template.spec | .containers[0] |= del(.image)),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del(.["run.googleapis.com/operation-id"],.["run.googleapis.com/urls"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["serving.knative.dev/creator"],.["serving.knative.dev/lastModifier"])),templateAnnotations:(.spec.template.metadata.annotations | del(.["client.knative.dev/user-image"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["run.googleapis.com/operation-id"]))}' /tmp/hub-before.json > /tmp/hub-config-before.json
+          TAG_TARGETS="$(jq -r '[.status.traffic[] | select(.tag != null and .revisionName != null) | (.tag+"="+.revisionName)] | sort | join(",")' /tmp/hub-before.json)"
+          if [ -n "$TAG_TARGETS" ]; then [[ "$TAG_TARGETS" =~ ^[a-z0-9-]+=[a-z0-9-]+(,[a-z0-9-]+=[a-z0-9-]+)*$ ]]; fi
+          echo "PREVIOUS_HUB_TAG_TARGETS=$TAG_TARGETS" >> "$GITHUB_ENV"
+          jq -S '{runtime:(.spec.template.spec | .containers[0] |= (del(.image) | .env = ((.env // []) | sort_by(.name)))),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del(.["run.googleapis.com/operation-id"],.["run.googleapis.com/urls"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["serving.knative.dev/creator"],.["serving.knative.dev/lastModifier"])),templateAnnotations:(.spec.template.metadata.annotations | del(.["client.knative.dev/user-image"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["run.googleapis.com/operation-id"]))}' /tmp/hub-before.json > /tmp/hub-config-before.json
           gcloud run services get-iam-policy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json | jq -S . > /tmp/hub-iam-before.json
           ACCESS_TOKEN="$(gcloud auth print-access-token)"
           echo "::add-mask::$ACCESS_TOKEN"
@@ -98,13 +101,21 @@ jobs:
         run: |
           set -euo pipefail
           echo "EXPECTED_HUB_REVISION=${SERVICE}-cg${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          if [ -n "$PREVIOUS_HUB_TAG_TARGETS" ]; then
+            gcloud run services update-traffic "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --update-tags="$PREVIOUS_HUB_TAG_TARGETS" --quiet
+          fi
           gcloud run services update "$SERVICE" --project "$PROJECT_ID" --region "$REGION" \
             --image "$IMAGE" --revision-suffix "cg${GITHUB_RUN_ID}" --no-traffic --quiet
           gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json > /tmp/hub-after.json
-          jq -S '{runtime:(.spec.template.spec | .containers[0] |= del(.image)),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del(.["run.googleapis.com/operation-id"],.["run.googleapis.com/urls"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["serving.knative.dev/creator"],.["serving.knative.dev/lastModifier"])),templateAnnotations:(.spec.template.metadata.annotations | del(.["client.knative.dev/user-image"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["run.googleapis.com/operation-id"]))}' /tmp/hub-after.json > /tmp/hub-config-after.json
-          cmp --silent /tmp/hub-config-before.json /tmp/hub-config-after.json
+          jq -S '{runtime:(.spec.template.spec | .containers[0] |= (del(.image) | .env = ((.env // []) | sort_by(.name)))),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del(.["run.googleapis.com/operation-id"],.["run.googleapis.com/urls"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["serving.knative.dev/creator"],.["serving.knative.dev/lastModifier"])),templateAnnotations:(.spec.template.metadata.annotations | del(.["client.knative.dev/user-image"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["run.googleapis.com/operation-id"]))}' /tmp/hub-after.json > /tmp/hub-config-after.json
+          if ! cmp --silent /tmp/hub-config-before.json /tmp/hub-config-after.json; then
+            node --input-type=module -e "import fs from 'node:fs';const a=JSON.parse(fs.readFileSync('/tmp/hub-config-before.json')),b=JSON.parse(fs.readFileSync('/tmp/hub-config-after.json'));const changed=[];function walk(x,y,p=''){if(JSON.stringify(x)===JSON.stringify(y))return;if(x&&y&&typeof x==='object'&&typeof y==='object'){for(const k of new Set([...Object.keys(x),...Object.keys(y)]))walk(x[k],y[k],p+'.'+k);}else changed.push(p);}walk(a,b);console.log('HUB_CONFIG_DIFFERENT_PATHS='+JSON.stringify(changed.slice(0,50)))"
+            exit 1
+          fi
           gcloud run services get-iam-policy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json | jq -S . > /tmp/hub-iam-after.json
           cmp --silent /tmp/hub-iam-before.json /tmp/hub-iam-after.json
+          AFTER_TAG_TARGETS="$(jq -r '[.status.traffic[] | select(.tag != null and .revisionName != null) | (.tag+"="+.revisionName)] | sort | join(",")' /tmp/hub-after.json)"
+          test "$AFTER_TAG_TARGETS" = "$PREVIOUS_HUB_TAG_TARGETS"
           echo HUB_RUNTIME_CONFIGURATION_AND_IAM_UNCHANGED
       - name: Verify exact digest and route reviewed revision
         shell: bash
@@ -120,6 +131,7 @@ jobs:
           set -euo pipefail
           npm run build
           npm install -g firebase-tools@15.26.0
+          echo "HUB_HOSTING_RELEASE_STARTED=true" >> "$GITHUB_ENV"
           firebase deploy --project "$PROJECT_ID" --only hosting:hub --non-interactive
       - name: Canonical authentication, catalog and configuration postflight
         shell: bash
@@ -134,7 +146,7 @@ jobs:
           curl --fail --silent --show-error --max-time 30 'https://www.millionsnest.com/api/v1/billing/products' | jq -S . > /tmp/hub-products-after.json
           cmp --silent /tmp/hub-products-before.json /tmp/hub-products-after.json
           gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json > /tmp/hub-final.json
-          jq -S '{runtime:(.spec.template.spec | .containers[0] |= del(.image)),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del(.["run.googleapis.com/operation-id"],.["run.googleapis.com/urls"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["serving.knative.dev/creator"],.["serving.knative.dev/lastModifier"])),templateAnnotations:(.spec.template.metadata.annotations | del(.["client.knative.dev/user-image"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["run.googleapis.com/operation-id"]))}' /tmp/hub-final.json > /tmp/hub-config-final.json
+          jq -S '{runtime:(.spec.template.spec | .containers[0] |= (del(.image) | .env = ((.env // []) | sort_by(.name)))),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del(.["run.googleapis.com/operation-id"],.["run.googleapis.com/urls"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["serving.knative.dev/creator"],.["serving.knative.dev/lastModifier"])),templateAnnotations:(.spec.template.metadata.annotations | del(.["client.knative.dev/user-image"],.["run.googleapis.com/client-name"],.["run.googleapis.com/client-version"],.["run.googleapis.com/operation-id"]))}' /tmp/hub-final.json > /tmp/hub-config-final.json
           cmp --silent /tmp/hub-config-before.json /tmp/hub-config-final.json
           gcloud run services get-iam-policy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json | jq -S . > /tmp/hub-iam-final.json
           cmp --silent /tmp/hub-iam-before.json /tmp/hub-iam-final.json
@@ -145,11 +157,11 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${PREVIOUS_HUB_REVISION:-}" ]; then
-            gcloud run services update-traffic "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --to-revisions="$PREVIOUS_HUB_REVISION=100" --quiet
+            TAG_ARGS=()
+            if [ -n "${PREVIOUS_HUB_TAG_TARGETS:-}" ]; then TAG_ARGS+=(--update-tags="$PREVIOUS_HUB_TAG_TARGETS"); fi
+            gcloud run services update-traffic "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --to-revisions="$PREVIOUS_HUB_REVISION=100" "${TAG_ARGS[@]}" --quiet
           fi
-          if [ -n "${PREVIOUS_HUB_HOSTING_VERSION:-}" ]; then
+          if [ "${HUB_HOSTING_RELEASE_STARTED:-false}" = true ] && [ -n "${PREVIOUS_HUB_HOSTING_VERSION:-}" ]; then
             [[ "$PREVIOUS_HUB_HOSTING_VERSION" =~ ^sites/mn-hub-555464791734/versions/[a-zA-Z0-9_-]+$ ]]
-            ACCESS_TOKEN="$(gcloud auth print-access-token)"
-            echo "::add-mask::$ACCESS_TOKEN"
-            curl --fail --silent --show-error --max-time 30 -X POST               -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json'               -d '{"message":"Hub guarded Connect release rollback"}'               "https://firebasehosting.googleapis.com/v1beta1/sites/mn-hub-555464791734/releases?versionName=$PREVIOUS_HUB_HOSTING_VERSION" >/dev/null
+            firebase hosting:clone "mn-hub-555464791734@${PREVIOUS_HUB_HOSTING_VERSION##*/}" 'mn-hub-555464791734:live' --project "$PROJECT_ID" --non-interactive
           fi
