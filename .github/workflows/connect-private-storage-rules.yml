@@ -1,0 +1,53 @@
+name: Connect Published Private Storage Rules Gate
+on:
+  push:
+    branches: [production]
+    paths:
+      - .github/workflows/connect-private-storage-rules.yml
+      - tests/firestore/connect_private_storage.test.ts
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  actual-published-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --no-audit --no-fund
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - name: Read exact published Rules source; never modify live rules or data
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          echo "::add-mask::$ACCESS_TOKEN"
+          curl --fail --silent --show-error --max-time 20 -H "Authorization: Bearer $ACCESS_TOKEN" \
+            https://firebaserules.googleapis.com/v1/projects/millionsnest/releases/cloud.firestore > /tmp/connect-live-release.json
+          RULESET="$(python3 -c "import json;print(json.load(open('/tmp/connect-live-release.json'))['rulesetName'])")"
+          [[ "$RULESET" =~ ^projects/millionsnest/rulesets/[a-zA-Z0-9-]+$ ]]
+          curl --fail --silent --show-error --max-time 20 -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://firebaserules.googleapis.com/v1/$RULESET" > /tmp/connect-live-ruleset.json
+          python3 - <<'PY'
+          import json,hashlib
+          d=json.load(open('/tmp/connect-live-ruleset.json'))
+          files=d['source']['files'];assert len(files)==1
+          source=files[0]['content'];open('/tmp/connect-live.rules','w').write(source)
+          print('CONNECT_PUBLISHED_RULES_SHA256='+hashlib.sha256(source.encode()).hexdigest())
+          json.dump({'firestore':{'rules':'/tmp/connect-live.rules'},'emulators':{'firestore':{'host':'127.0.0.1','port':8180},'ui':{'enabled':False},'singleProjectMode':True}},open('firebase.connect-rules-test.json','w'))
+          PY
+          rm /tmp/connect-live-release.json /tmp/connect-live-ruleset.json
+      - name: Prove private collections denied to browser roles using published rules in emulator
+        env:
+          CONNECT_LIVE_RULES_FILE: /tmp/connect-live.rules
+        run: npx -y firebase-tools@15.33.0 emulators:exec --project demo-connect-private-store --config firebase.connect-rules-test.json --only firestore "node --import tsx tests/firestore/connect_private_storage.test.ts"
