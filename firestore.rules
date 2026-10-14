@@ -2823,8 +2823,24 @@ service cloud.firestore {
     }
 
     match /globalSongs/{id} {
-      allow read: if isAuthenticated() && (isSystemAdmin() || hasGlobalLibraryFeature());
+      allow read: if isAuthenticated() && (isSystemAdmin() || isEcosystemSupport() || hasGlobalLibraryFeature());
       allow write: if isAuthenticated() && isSystemAdmin();
+    }
+
+    // Only canonical MillionsNest global staff may inspect MusicScale curation.
+    // Organization owners and their administrators never gain ecosystem-wide access.
+    match /globalLibraryCandidates/{candidateId} {
+      allow read: if isAuthenticated() && (isSystemAdmin() || isEcosystemSupport());
+      allow write: if false;
+      match /{subcollection}/{itemId} {
+        allow read: if isAuthenticated() && (isSystemAdmin() || isEcosystemSupport());
+        allow write: if false;
+      }
+    }
+
+    match /songDiscoveryInbox/{inboxId} {
+      allow read: if isAuthenticated() && (isSystemAdmin() || isEcosystemSupport());
+      allow write: if false;
     }
 
     match /songSubmissions/{id} {

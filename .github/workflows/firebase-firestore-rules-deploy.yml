@@ -9,6 +9,7 @@ on:
       - "firebase.rules-test.json"
       - "tests/firestore/nestjourney.rules.test.ts"
       - "tests/firestore/musicscale_live.rules.test.ts"
+      - "tests/firestore/musicscale_global_curation.rules.test.ts"
       - "tests/firestore/musicscale_medley_templates.rules.test.ts"
       - "scripts/test_shared_band_rules.ts"
       - "tests/firestore/nestaffiliate.rules.test.ts"
@@ -66,7 +67,7 @@ jobs:
           --config firebase.rules-test.json
           --only firestore
           --project demo-millionsnest-musicscale-live-release
-          "npx tsx --test --test-concurrency=1 tests/firestore/musicscale_live.rules.test.ts"
+          "npx tsx --test --test-concurrency=1 tests/firestore/musicscale_live.rules.test.ts tests/firestore/musicscale_global_curation.rules.test.ts"
 
       - name: Certify MusicScale medley template ownership and tenant boundaries
         run: >-
