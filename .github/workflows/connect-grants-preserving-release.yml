@@ -63,7 +63,7 @@ jobs:
           jq -e '.status.traffic | map(select(.percent == 100 and .revisionName != null)) | length == 1' /tmp/hub-before.json >/dev/null
           PREVIOUS="$(jq -r '.status.traffic[] | select(.percent == 100) | .revisionName' /tmp/hub-before.json)"
           echo "PREVIOUS_HUB_REVISION=$PREVIOUS" >> "$GITHUB_ENV"
-          jq -S '.spec.template.spec | .containers[0] |= del(.image)' /tmp/hub-before.json > /tmp/hub-config-before.json
+          jq -S '{runtime:(.spec.template.spec | .containers[0] |= del(.image)),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del("run.googleapis.com/operation-id","run.googleapis.com/urls","run.googleapis.com/client-name","run.googleapis.com/client-version","serving.knative.dev/creator","serving.knative.dev/lastModifier")),templateAnnotations:(.spec.template.metadata.annotations | del("client.knative.dev/user-image","run.googleapis.com/client-name","run.googleapis.com/client-version","run.googleapis.com/operation-id"))}' /tmp/hub-before.json > /tmp/hub-config-before.json
           gcloud run services get-iam-policy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json | jq -S . > /tmp/hub-iam-before.json
           ACCESS_TOKEN="$(gcloud auth print-access-token)"
           echo "::add-mask::$ACCESS_TOKEN"
@@ -101,7 +101,7 @@ jobs:
           gcloud run services update "$SERVICE" --project "$PROJECT_ID" --region "$REGION" \
             --image "$IMAGE" --revision-suffix "cg${GITHUB_RUN_ID}" --no-traffic --quiet
           gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json > /tmp/hub-after.json
-          jq -S '.spec.template.spec | .containers[0] |= del(.image)' /tmp/hub-after.json > /tmp/hub-config-after.json
+          jq -S '{runtime:(.spec.template.spec | .containers[0] |= del(.image)),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del("run.googleapis.com/operation-id","run.googleapis.com/urls","run.googleapis.com/client-name","run.googleapis.com/client-version","serving.knative.dev/creator","serving.knative.dev/lastModifier")),templateAnnotations:(.spec.template.metadata.annotations | del("client.knative.dev/user-image","run.googleapis.com/client-name","run.googleapis.com/client-version","run.googleapis.com/operation-id"))}' /tmp/hub-after.json > /tmp/hub-config-after.json
           cmp --silent /tmp/hub-config-before.json /tmp/hub-config-after.json
           gcloud run services get-iam-policy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json | jq -S . > /tmp/hub-iam-after.json
           cmp --silent /tmp/hub-iam-before.json /tmp/hub-iam-after.json
@@ -134,7 +134,7 @@ jobs:
           curl --fail --silent --show-error --max-time 30 'https://www.millionsnest.com/api/v1/billing/products' | jq -S . > /tmp/hub-products-after.json
           cmp --silent /tmp/hub-products-before.json /tmp/hub-products-after.json
           gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json > /tmp/hub-final.json
-          jq -S '.spec.template.spec | .containers[0] |= del(.image)' /tmp/hub-final.json > /tmp/hub-config-final.json
+          jq -S '{runtime:(.spec.template.spec | .containers[0] |= del(.image)),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del("run.googleapis.com/operation-id","run.googleapis.com/urls","run.googleapis.com/client-name","run.googleapis.com/client-version","serving.knative.dev/creator","serving.knative.dev/lastModifier")),templateAnnotations:(.spec.template.metadata.annotations | del("client.knative.dev/user-image","run.googleapis.com/client-name","run.googleapis.com/client-version","run.googleapis.com/operation-id"))}' /tmp/hub-final.json > /tmp/hub-config-final.json
           cmp --silent /tmp/hub-config-before.json /tmp/hub-config-final.json
           gcloud run services get-iam-policy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json | jq -S . > /tmp/hub-iam-final.json
           cmp --silent /tmp/hub-iam-before.json /tmp/hub-iam-final.json
