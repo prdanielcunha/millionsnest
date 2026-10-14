@@ -1,0 +1,53 @@
+name: Connect Empty-Collection Retention Bootstrap
+on:
+  push:
+    branches: [production]
+    paths: [.github/workflows/connect-retention-bootstrap.yml]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: connect-retention-bootstrap
+  cancel-in-progress: false
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+      - name: Prove all six collection groups empty before any metadata mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          echo "::add-mask::$ACCESS_TOKEN"
+          for collection in connectPushDevices connectPushDeliveries connectPushReadStates connectProductRoutes connectAutomationJobs connectAutomationBudgets; do
+            python3 - "$collection" <<'PY' > /tmp/connect-count-request.json
+          import json,sys
+          print(json.dumps({'structuredAggregationQuery':{'structuredQuery':{'from':[{'collectionId':sys.argv[1],'allDescendants':True}]},'aggregations':[{'alias':'documents','count':{}}]}}))
+          PY
+            curl --fail --silent --show-error --max-time 20 -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
+              --data-binary @/tmp/connect-count-request.json 'https://firestore.googleapis.com/v1/projects/millionsnest/databases/(default)/documents:runAggregationQuery' > /tmp/connect-count-response.json
+            python3 - "$collection" <<'PY'
+          import json,sys
+          d=json.load(open('/tmp/connect-count-response.json'))
+          results=[r['result']['aggregateFields']['documents']['integerValue'] for r in d if 'result' in r]
+          assert len(results)==1 and int(results[0])==0, 'Existing data blocks retention bootstrap; no deletion authorized'
+          print('CONNECT_RETENTION_EMPTY_GROUP='+sys.argv[1])
+          PY
+          done
+          rm /tmp/connect-count-request.json /tmp/connect-count-response.json
+          echo CONNECT_RETENTION_ALL_SIX_GROUPS_EMPTY_CONFIRMED
+      - name: Configure only expiresAt TTL metadata without deleting any document
+        run: |
+          set -euo pipefail
+          for collection in connectPushDevices connectPushDeliveries connectPushReadStates connectProductRoutes connectAutomationJobs connectAutomationBudgets; do
+            gcloud firestore fields ttls update expiresAt --project millionsnest --database='(default)' \
+              --collection-group="$collection" --enable-ttl --async --quiet >/dev/null
+            echo "CONNECT_RETENTION_ENABLE_REQUESTED=$collection"
+          done
+          echo CONNECT_RETENTION_ACTIVATION_STILL_REQUIRES_ACTIVE_STATE
