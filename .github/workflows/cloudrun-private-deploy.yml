@@ -43,6 +43,8 @@ env:
 
 jobs:
   deploy:
+    # Scoped Connect grants use the config-preserving publisher with identical WIF.
+    if: ${{ !contains(github.event.head_commit.message, '[connect-grants-preserve-config]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

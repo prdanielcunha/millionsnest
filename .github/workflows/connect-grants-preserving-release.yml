@@ -1,0 +1,155 @@
+name: Connect Grants Preserving Release
+on:
+  push:
+    branches: [production]
+    paths:
+      - 'src/lib/connectSessionContext.ts'
+      - 'src/server/services/ConnectSessionContextService.ts'
+      - '.github/workflows/connect-grants-preserving-release.yml'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: millionsnest-cloudrun-private
+  cancel-in-progress: false
+env:
+  PROJECT_ID: millionsnest
+  REGION: us-central1
+  REGISTRY: millionsnest-web
+  SERVICE: millionsnest-api
+  IMAGE: us-central1-docker.pkg.dev/millionsnest/millionsnest-web/millionsnest-api:${{ github.sha }}
+  VITE_FIREBASE_API_KEY: AIzaSyAhXY8TV8qoXz8Pd2u5jFHUTVssZmi3kMs
+  VITE_FIREBASE_AUTH_DOMAIN: millionsnest.firebaseapp.com
+  VITE_FIREBASE_PROJECT_ID: millionsnest
+  VITE_FIREBASE_STORAGE_BUCKET: millionsnest.firebasestorage.app
+  VITE_FIREBASE_MESSAGING_SENDER_ID: "555464791734"
+  VITE_FIREBASE_APP_ID: "1:555464791734:web:3059e8ac2b8089a1767817"
+  VITE_APP_URL: https://www.millionsnest.com
+  VITE_MUSICSCALE_APP_URL: https://musicscale.millionsnest.com/start
+  VITE_NESTFINANCE_LAUNCH_ENABLED: "true"
+
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/production' && contains(github.event.head_commit.message, '[connect-grants-preserve-config]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - name: Refuse unreviewed source or wider release scope
+        env:
+          RELEASE_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          node scripts/test_connect_grants_release_guard.mjs
+          node scripts/connect_grants_release_guard.mjs
+          npm ci --no-audit --no-fund
+          node --import tsx scripts/test_mn_connect_03_session_context.ts
+          npm run lint
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - name: Capture runtime configuration, traffic, IAM, Hosting and public catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json > /tmp/hub-before.json
+          jq -e '.status.traffic | map(select(.percent == 100 and .revisionName != null)) | length == 1' /tmp/hub-before.json >/dev/null
+          PREVIOUS="$(jq -r '.status.traffic[] | select(.percent == 100) | .revisionName' /tmp/hub-before.json)"
+          echo "PREVIOUS_HUB_REVISION=$PREVIOUS" >> "$GITHUB_ENV"
+          jq -S '{runtime:(.spec.template.spec | .containers[0] |= del(.image)),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del("run.googleapis.com/operation-id","run.googleapis.com/urls","run.googleapis.com/client-name","run.googleapis.com/client-version","serving.knative.dev/creator","serving.knative.dev/lastModifier")),templateAnnotations:(.spec.template.metadata.annotations | del("client.knative.dev/user-image","run.googleapis.com/client-name","run.googleapis.com/client-version","run.googleapis.com/operation-id"))}' /tmp/hub-before.json > /tmp/hub-config-before.json
+          gcloud run services get-iam-policy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json | jq -S . > /tmp/hub-iam-before.json
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          echo "::add-mask::$ACCESS_TOKEN"
+          curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $ACCESS_TOKEN"             'https://firebasehosting.googleapis.com/v1beta1/sites/mn-hub-555464791734/releases?pageSize=1' > /tmp/hub-hosting-before.json
+          VERSION="$(jq -er '.releases[0].version.name' /tmp/hub-hosting-before.json)"
+          [[ "$VERSION" =~ ^sites/mn-hub-555464791734/versions/[a-zA-Z0-9_-]+$ ]]
+          echo "PREVIOUS_HUB_HOSTING_VERSION=$VERSION" >> "$GITHUB_ENV"
+          curl --fail --silent --show-error --max-time 30 'https://www.millionsnest.com/api/v1/billing/products' | jq -S . > /tmp/hub-products-before.json
+          jq -e '.plans | type == "array"' /tmp/hub-products-before.json >/dev/null
+          echo HUB_CONNECT_RELEASE_ROLLBACK_CAPTURED
+      - name: Build and publish reviewed image
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+          docker build \
+            --build-arg VITE_FIREBASE_API_KEY="$VITE_FIREBASE_API_KEY" \
+            --build-arg VITE_FIREBASE_AUTH_DOMAIN="$VITE_FIREBASE_AUTH_DOMAIN" \
+            --build-arg VITE_FIREBASE_PROJECT_ID="$VITE_FIREBASE_PROJECT_ID" \
+            --build-arg VITE_FIREBASE_STORAGE_BUCKET="$VITE_FIREBASE_STORAGE_BUCKET" \
+            --build-arg VITE_FIREBASE_MESSAGING_SENDER_ID="$VITE_FIREBASE_MESSAGING_SENDER_ID" \
+            --build-arg VITE_FIREBASE_APP_ID="$VITE_FIREBASE_APP_ID" \
+            --build-arg VITE_APP_URL="$VITE_APP_URL" \
+            --build-arg VITE_MUSICSCALE_APP_URL="$VITE_MUSICSCALE_APP_URL" \
+            --build-arg VITE_NESTFINANCE_LAUNCH_ENABLED="$VITE_NESTFINANCE_LAUNCH_ENABLED"             -t "$IMAGE" .
+          docker push "$IMAGE"
+          DIGEST="$(gcloud artifacts docker images describe "$IMAGE" --project "$PROJECT_ID" --format='value(image_summary.digest)')"
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "EXPECTED_HUB_IMAGE_DIGEST=$DIGEST" >> "$GITHUB_ENV"
+      - name: Update image only without changing environment, secret bindings or invokers
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EXPECTED_HUB_REVISION=${SERVICE}-cg${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          gcloud run services update "$SERVICE" --project "$PROJECT_ID" --region "$REGION" \
+            --image "$IMAGE" --revision-suffix "cg${GITHUB_RUN_ID}" --no-traffic --quiet
+          gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json > /tmp/hub-after.json
+          jq -S '{runtime:(.spec.template.spec | .containers[0] |= del(.image)),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del("run.googleapis.com/operation-id","run.googleapis.com/urls","run.googleapis.com/client-name","run.googleapis.com/client-version","serving.knative.dev/creator","serving.knative.dev/lastModifier")),templateAnnotations:(.spec.template.metadata.annotations | del("client.knative.dev/user-image","run.googleapis.com/client-name","run.googleapis.com/client-version","run.googleapis.com/operation-id"))}' /tmp/hub-after.json > /tmp/hub-config-after.json
+          cmp --silent /tmp/hub-config-before.json /tmp/hub-config-after.json
+          gcloud run services get-iam-policy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json | jq -S . > /tmp/hub-iam-after.json
+          cmp --silent /tmp/hub-iam-before.json /tmp/hub-iam-after.json
+          echo HUB_RUNTIME_CONFIGURATION_AND_IAM_UNCHANGED
+      - name: Verify exact digest and route reviewed revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run revisions describe "$EXPECTED_HUB_REVISION" --project "$PROJECT_ID" --region "$REGION" --format=json > /tmp/hub-revision.json
+          node --input-type=module -e "import fs from 'node:fs';const r=JSON.parse(fs.readFileSync('/tmp/hub-revision.json'));if(r.metadata.name!==process.env.EXPECTED_HUB_REVISION||!r.status.imageDigest?.endsWith(process.env.EXPECTED_HUB_IMAGE_DIGEST)||!r.status.conditions?.some(x=>x.type==='Ready'&&x.status==='True'))process.exit(1)"
+          gcloud run services update-traffic "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --to-revisions="$EXPECTED_HUB_REVISION=100" --quiet
+          echo "HUB_CONNECT_EXACT_IMAGE_RELEASE_SHA=$GITHUB_SHA"
+      - name: Publish unchanged Hub frontend against the reviewed API
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build
+          npm install -g firebase-tools@15.26.0
+          firebase deploy --project "$PROJECT_ID" --only hosting:hub --non-interactive
+      - name: Canonical authentication, catalog and configuration postflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          for PATHNAME in '/api/ecosystem/connect/session-context' '/api/ecosystem/connect/nestjourney/followup-context?organizationId=release-smoke&followupId=release-smoke'; do
+            STATUS="$(curl --silent --show-error --max-time 30 -o /tmp/hub-auth.json -w '%{http_code}' "https://www.millionsnest.com$PATHNAME")"
+            test "$STATUS" = '401'
+          done
+          curl --fail --silent --show-error --max-time 30 'https://www.millionsnest.com/' -o /tmp/hub-root.html
+          grep -Eiq '<!doctype html|<html' /tmp/hub-root.html
+          curl --fail --silent --show-error --max-time 30 'https://www.millionsnest.com/api/v1/billing/products' | jq -S . > /tmp/hub-products-after.json
+          cmp --silent /tmp/hub-products-before.json /tmp/hub-products-after.json
+          gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json > /tmp/hub-final.json
+          jq -S '{runtime:(.spec.template.spec | .containers[0] |= del(.image)),serviceLabels:.metadata.labels,templateLabels:.spec.template.metadata.labels,serviceAnnotations:(.metadata.annotations | del("run.googleapis.com/operation-id","run.googleapis.com/urls","run.googleapis.com/client-name","run.googleapis.com/client-version","serving.knative.dev/creator","serving.knative.dev/lastModifier")),templateAnnotations:(.spec.template.metadata.annotations | del("client.knative.dev/user-image","run.googleapis.com/client-name","run.googleapis.com/client-version","run.googleapis.com/operation-id"))}' /tmp/hub-final.json > /tmp/hub-config-final.json
+          cmp --silent /tmp/hub-config-before.json /tmp/hub-config-final.json
+          gcloud run services get-iam-policy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json | jq -S . > /tmp/hub-iam-final.json
+          cmp --silent /tmp/hub-iam-before.json /tmp/hub-iam-final.json
+          echo HUB_CONNECT_GRANTS_RELEASE_OK
+      - name: Restore previous serving revision and Hosting on failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${PREVIOUS_HUB_REVISION:-}" ]; then
+            gcloud run services update-traffic "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --to-revisions="$PREVIOUS_HUB_REVISION=100" --quiet
+          fi
+          if [ -n "${PREVIOUS_HUB_HOSTING_VERSION:-}" ]; then
+            [[ "$PREVIOUS_HUB_HOSTING_VERSION" =~ ^sites/mn-hub-555464791734/versions/[a-zA-Z0-9_-]+$ ]]
+            ACCESS_TOKEN="$(gcloud auth print-access-token)"
+            echo "::add-mask::$ACCESS_TOKEN"
+            curl --fail --silent --show-error --max-time 30 -X POST               -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json'               -d '{"message":"Hub guarded Connect release rollback"}'               "https://firebasehosting.googleapis.com/v1beta1/sites/mn-hub-555464791734/releases?versionName=$PREVIOUS_HUB_HOSTING_VERSION" >/dev/null
+          fi
