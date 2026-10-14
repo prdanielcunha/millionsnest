@@ -27,7 +27,7 @@ export interface MusicScaleEntitlement {
 }
 
 export interface ConnectSessionAppAccess {
-  appId: "musicscale" | "nestlocal";
+  appId: "musicscale" | "nestlocal" | "nestfinance" | "nestjourney";
   organizationId: string;
   accessible: boolean;
   isGlobalAccess: boolean;
@@ -50,5 +50,7 @@ export interface ConnectSessionContextResponse {
   appAccess: {
     musicscale: ConnectSessionAppAccess;
     nestlocal?: ConnectSessionAppAccess;
+    nestfinance?: ConnectSessionAppAccess;
+    nestjourney?: ConnectSessionAppAccess;
   } | null;
 }
