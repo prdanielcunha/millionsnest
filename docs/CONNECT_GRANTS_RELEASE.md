@@ -1,0 +1,7 @@
+# Scoped canonical Connect grants release
+
+Publishes only the already reviewed #347 optional NestFinance/NestJourney app decisions using the unchanged canonical resolver. App development/entitlement/revocation decisions stay authoritative; adding a projection does not grant access or enable a product.
+
+A production merge titled with `[connect-grants-preserve-config]` selects the narrow publisher. Ordinary releases retain their existing workflow. The narrow publisher refuses unexpected changed paths and source hashes different from the reviewed implementation, uses existing WIF/deployer/runtime, updates only the image and verifies complete runtime spec (excluding image) plus IAM are unchanged. It never reads or rotates secret values, reapplies billing prices, changes invokers or writes business data. It captures exact previous traffic and Hosting version before rollout and restores both on failure. The Hosting build uses existing production configuration and rules remain independently managed.
+
+Required evidence: full repository CI before promotion; canonical session-context tests and guard negative tests; exact image digest/Ready revision, unchanged spec/IAM, canonical protected-route 401, unchanged public billing catalog, Hosting smoke. None proves a real signed-in user's app entitlement. The separate NestJourney follow-up consent contract #341 and domain APIs remain independent prerequisites.
