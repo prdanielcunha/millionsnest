@@ -166,7 +166,7 @@ export default {
     faq_q6: "Is MusicScale a financial or church-management system?",
     faq_a6: "No. MusicScale is focused on worship ministry. Other ecosystem needs are handled by separate MillionsNest products.",
     faq_q7: "Can I try it before paying?",
-    faq_a7: "Yes. Starter, Advanced, and Pro each include a 7-day trial. Choose the plan in the pricing section and the trial will follow that plan's exact features and limits; during the Pro trial, the Live Library allows up to 20 imports. Cancel before the trial ends to avoid a charge.",
+    faq_a7: "Yes. Starter, Advanced, and Pro each include a 7-day trial. Choose the plan in the pricing section and the trial will follow that plan's exact features and limits; during the Pro trial, the Live Library allows up to 20 imports. The evaluation runs in the app without a card or automatic charges. Purchase the paid subscription separately through Stripe, without another trial.",
     faq_q8: "Does each musician or vocalist need to pay a subscription?",
     faq_a8: "No. Billing belongs to the organization, not each person. The church or ministry chooses a plan and invites the people included in that plan limit. Everyone uses their own login without paying another subscription. Pro includes unlimited people.",
     pricing_tag: "Plans & Pricing",

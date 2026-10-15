@@ -175,7 +175,7 @@ export default {
     faq_q6: "¿MusicScale es un sistema financiero o administrativo?",
     faq_a6: "No. MusicScale está enfocado en el ministerio de alabanza. Otras necesidades del ecosistema son atendidas por productos separados de MillionsNest.",
     faq_q7: "¿Puedo probar antes de pagar?",
-    faq_a7: "Sí. Starter, Advanced y Pro incluyen 7 días de prueba. Elige el plan en la sección de precios y la prueba seguirá exactamente los recursos y límites de esa opción; durante la prueba Pro, la Biblioteca Viva permite hasta 20 importaciones. Cancela antes de que termine el período para evitar el cobro.",
+    faq_a7: "Sí. Starter, Advanced y Pro incluyen 7 días de prueba. Elige el plan en la sección de precios y la prueba seguirá exactamente los recursos y límites de esa opción; durante la prueba Pro, la Biblioteca Viva permite hasta 20 importaciones. La evaluación se realiza en la aplicación, sin tarjeta ni cobros automáticos. La suscripción de pago se contrata por separado en Stripe, sin otra prueba.",
     faq_q8: "¿Cada músico o vocalista necesita pagar una suscripción?",
     faq_a8: "No. El cobro es de la organización, no de cada persona. La iglesia o ministerio elige un plan e invita a las personas incluidas en ese límite. Cada integrante usa su propio acceso sin pagar otra suscripción. En Pro, la cantidad de personas es ilimitada.",
     pricing_tag: "Planes y Precios",
