@@ -129,6 +129,16 @@ jobs:
         if: steps.secrets.outputs.ready == 'true'
         run: docker push "$IMAGE"
 
+      - name: Capture serving Hub revision before deploy
+        if: steps.secrets.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json > /tmp/hub-before.json
+          PREVIOUS_HUB_REVISION="$(node -e "const x=require('/tmp/hub-before.json');const t=x.status?.traffic?.find(t=>Number(t.percent)===100&&t.revisionName);if(!t)process.exit(1);process.stdout.write(t.revisionName)")"
+          echo "PREVIOUS_HUB_REVISION=$PREVIOUS_HUB_REVISION" >> "$GITHUB_ENV"
+          echo "HUB_ROLLBACK_REVISION=$PREVIOUS_HUB_REVISION"
+
       - name: Deploy private Cloud Run revision
         if: steps.secrets.outputs.ready == 'true'
         shell: bash
@@ -152,9 +162,21 @@ jobs:
 
       - name: Verify Cloud Run readiness
         if: steps.secrets.outputs.ready == 'true'
+        shell: bash
         run: |
+          set -euo pipefail
           gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" \
-            --format='table(metadata.name,status.url,status.conditions[0].type,status.conditions[0].status)'
+            --format=json > /tmp/hub-after.json
+          node - <<'NODE'
+          const x=require('/tmp/hub-after.json');
+          const status=x.status||{};
+          const ready=status.conditions?.some(c=>c.type==='Ready'&&c.status==='True');
+          const revision=status.latestReadyRevisionName;
+          const target=status.traffic?.find(t=>Number(t.percent)===100&&t.revisionName===revision);
+          if(!ready||!revision||revision!==status.latestCreatedRevisionName||!target||x.spec?.template?.spec?.containers?.[0]?.image!==process.env.IMAGE)process.exit(1);
+          console.log('HUB_EXACT_SERVING_IMAGE_SHA_OK='+process.env.GITHUB_SHA);
+          console.log('HUB_EXACT_SERVING_REVISION='+revision);
+          NODE
 
       - name: Allow Firebase Hosting invocation
         if: steps.secrets.outputs.ready == 'true'
@@ -237,3 +259,15 @@ jobs:
             -o /tmp/products.json
 
           node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/products.json','utf8'));if(!x||!Array.isArray(x.plans))process.exit(1);console.log('MILLIONSNEST_PRODUCTION_RELEASE_OK',x.plans.length);"
+
+          STATUS="$(curl --silent --show-error --max-time 20 --output /tmp/hub-journey-auth.json --write-out '%{http_code}' 'https://www.millionsnest.com/api/ecosystem/connect/nestjourney/followup-context?organizationId=release-smoke&followupId=release-smoke')"
+          test "$STATUS" = 401
+          echo HUB_JOURNEY_CONTACT_AUTHORITY_OK
+
+      - name: Restore previous Hub traffic on release failure
+        if: failure() && env.PREVIOUS_HUB_REVISION != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud run services update-traffic "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --to-revisions="$PREVIOUS_HUB_REVISION=100" --quiet
+          echo HUB_PREVIOUS_TRAFFIC_RESTORED
