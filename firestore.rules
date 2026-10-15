@@ -2447,14 +2447,16 @@ service cloud.firestore {
       match /{app}/{document=**} {
         // Firestore ORs overlapping allow rules. Sensitive subcollections with
         // narrower policies must never inherit this generic tenant-wide access.
-        allow read: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
+        // Connect agent configuration is server-owned, including for owners
+        // and global administrators; its API revalidates Hub manage authority.
+        allow read: if app != 'connectAgentProfiles' && app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
         // NestLocal product records are server-owned. A MusicScale subscription
         // must never grant Firestore SDK writes to an expired NestLocal tenant.
         // Likewise, Hub entitlement grants are emitted only by the backend.
         // Firestore ORs overlapping allows: exclude these namespaces HERE,
         // rather than adding a separate deny match that can be overridden.
-        allow create: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if app != 'connectAgentProfiles' && app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if app != 'connectAgentProfiles' && app != 'products' && app != 'join_requests' && app != 'actionCenterUsers' && app != 'actionCenter' && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 
