@@ -118,3 +118,5 @@ As variáveis dividem-se logicamente em:
 
 ---
 *Gerado por processo de auditoria técnica para continuidade, segurança e manutenção fluida do ecossistema.*
+
+Connect agent settings at `organizations/{orgId}/connectAgentProfiles/{product}` are server-owned. Browser SDK reads, queries and writes are denied even for tenant owners and global administrators; the Connect API must revalidate Hub management authority. The canonical Rules deploy certifies this boundary before publication, then the Published Private Storage Rules Gate tests the actual published source using synthetic emulator data only. This reserves storage safely; it does not activate editable agents or automations.
