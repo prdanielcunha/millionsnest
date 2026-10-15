@@ -7,10 +7,6 @@ on:
       - tests/firestore/connect_private_storage.test.ts
       - .github/workflows/connect-private-storage-rules.yml
       - .github/workflows/firebase-firestore-rules-deploy.yml
-  workflow_run:
-    workflows: [Firebase Firestore Rules Deploy]
-    types: [completed]
-    branches: [production]
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,13 +32,15 @@ jobs:
       - name: Prove candidate Rules with active tenants and denied browser roles
         run: npx firebase emulators:exec --project demo-connect-private-store --config firebase.rules-test.json --only firestore "node --import tsx tests/firestore/connect_private_storage.test.ts"
   actual-published-rules:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    # Existing WIF trust is production-only. Automatic published-source proof
+    # runs inside the canonical production release; this is a manual recheck.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
