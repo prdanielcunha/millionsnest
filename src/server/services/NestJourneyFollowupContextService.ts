@@ -105,11 +105,16 @@ export async function handleNestJourneyFollowupContextRequest(
   const organization = orgDoc.data() || {};
   const membership = memberDoc.exists ? (memberDoc.data() || {}) : {};
   const followup = followupDoc.data() || {};
-  const role = clean(membership.organizationRole || membership.role || appAccess.organizationRole);
-  const permissions = membership.permissions;
-  const global = appAccess.isGlobalAccess === true;
-  const canManageCare = global || CARE_ROLES.has(role) || booleanPermission(permissions, 'canManageCare');
-  const broad = global || BROAD_ROLES.has(role);
+  const isChurchOwner=clean(organization.ownerUid || organization.ownerId)===uid;
+  const memberActive=memberDoc.exists && ['active','ativo'].includes(clean(membership.status||'active'));
+  if(!isChurchOwner&&!memberActive){
+    return res.status(403).json({success:false,code:'CHURCH_MEMBERSHIP_REQUIRED'});
+  }
+  const role = isChurchOwner?'owner':clean(membership.organizationRole || membership.role);
+  const permissions = memberActive?membership.permissions:{};
+  const canManageCare=isChurchOwner||CARE_ROLES.has(role)||
+    (memberActive && booleanPermission(permissions,'canManageCare'));
+  const broad=isChurchOwner||BROAD_ROLES.has(role);
   const congregationIds = stringList(membership.congregationIds);
   const congregationId = clean(followup.congregationId);
 
@@ -163,6 +168,9 @@ export async function handleNestJourneyFollowupContextRequest(
     clean(person.organizationId) !== organizationId ||
     clean(person.congregationId) !== congregationId ||
     person.consent !== true ||
+    person.consentRevokedAt != null ||
+    person.contactStatus === 'closed' ||
+    clean(person.preferredContactChannel) !== 'whatsapp' ||
     !phone ||
     !personName
   ) {
