@@ -1,3 +1,5 @@
+// Shared MillionsNest rules authority: MusicScale, NestJourney, NestFinance, NestAffiliate and Connect.
+// No authorization change in this release; restores the complete canonical shared ruleset.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
