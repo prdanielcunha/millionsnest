@@ -12,18 +12,21 @@ assert(workflow.indexOf('Capture serving Hub revision before deploy') < workflow
 assert.match(workflow, /if: failure\(\) && env\.PREVIOUS_HUB_REVISION != ''/);
 assert.match(workflow, /--to-revisions="\$PREVIOUS_HUB_REVISION=100"/);
 assert.match(workflow, /echo HUB_JOURNEY_CONTACT_AUTHORITY_OK/);
+assert.match(workflow, /--revision-suffix "r\$\{GITHUB_RUN_ID\}"/);
+assert.match(workflow, /--no-traffic/);
+assert.match(workflow, /--to-revisions="\$EXPECTED_HUB_REVISION=100"/);
 const guard = workflow.match(/node - <<'NODE'\n([\s\S]*?)\n\s+NODE/);
 assert(guard, 'actual serving image/traffic guard must be present');
 function verify(fixture: any) {
   runInNewContext(guard[1], {
     require: () => fixture,
-    process: { env: { IMAGE: 'registry/hub:release-sha', GITHUB_SHA: 'release-sha' }, exit: () => { throw new Error('RELEASE_REJECTED'); } },
+    process: { env: { IMAGE: 'registry/hub:release-sha', GITHUB_SHA: 'release-sha', SERVICE: 'hub', GITHUB_RUN_ID: '123' }, exit: () => { throw new Error('RELEASE_REJECTED'); } },
     console: { log() {} },
   });
 }
 const serving = {
   spec: { template: { spec: { containers: [{ image: 'registry/hub:release-sha' }] } } },
-  status: { conditions: [{ type: 'Ready', status: 'True' }], latestReadyRevisionName: 'revision-new', latestCreatedRevisionName: 'revision-new', traffic: [{ revisionName: 'revision-new', percent: 100 }] },
+  status: { conditions: [{ type: 'Ready', status: 'True' }], latestReadyRevisionName: 'hub-r123', latestCreatedRevisionName: 'hub-r123', traffic: [{ revisionName: 'hub-r123', percent: 100 }] },
 };
 assert.doesNotThrow(() => verify(serving));
 for (const mutate of [

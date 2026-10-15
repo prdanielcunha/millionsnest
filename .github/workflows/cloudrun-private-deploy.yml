@@ -147,6 +147,8 @@ jobs:
             --project "$PROJECT_ID" \
             --region "$REGION" \
             --image "$IMAGE" \
+            --revision-suffix "r${GITHUB_RUN_ID}" \
+            --no-traffic \
             --service-account "mn-hub-runtime@millionsnest.iam.gserviceaccount.com" \
             --port 8080 \
             --cpu 1 \
@@ -159,6 +161,26 @@ jobs:
             --update-env-vars "FIREBASE_PROJECT_ID=millionsnest,FIREBASE_STORAGE_BUCKET=millionsnest.firebasestorage.app,NESTAFFILIATE_REFERENCE_MEDIA_ENABLED=true,NODE_ENV=production,VITE_APP_URL=https://www.millionsnest.com,NESTFINANCE_APP_URL=https://nestfinance.millionsnest.com,NESTFINANCE_HANDOFF_ENABLED=true,MUSICSCALE_DEFAULT_CURRENCY=brl,MUSICSCALE_PRO_ACTIVE_PRICE=launch,STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY=price_1TURaNPmDx20joKa3MDtwOro,STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY=price_1TYR1sPmDx20joKaJZGdyzgE,STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY=price_1Tdb8LPmDx20joKaBoD4IR9T,STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY=price_1Tdb8LPmDx20joKayRHKzW2k,STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY=price_1TYXhCPmDx20joKamBd9nkti,STRIPE_PRICE_MUSICSCALE_PRO_YEARLY=price_1TYXitPmDx20joKaJMTXffLZ,STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY=price_1TYXhCPmDx20joKamBd9nkti,STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY=price_1TYXitPmDx20joKaJMTXffLZ,STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY=price_1TdpfnPmDx20joKakj9v2zVu,STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY=price_1TdphzPmDx20joKaL9S4FkYZ,STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM=price_1TYXkVPmDx20joKa2LwXB2ei,STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS=price_1TYXl9PmDx20joKaYs0DrfQt,STRIPE_PRICE_MUSICSCALE_WORSHIP_100=price_1TYXorPmDx20joKaBZyaIfOQ,STRIPE_PRICE_MUSICSCALE_PACK_10=price_1TYXvlPmDx20joKatAGawTgL" \
             --update-secrets "STRIPE_SECRET_KEY=millionsnest-stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=millionsnest-stripe-webhook-secret:latest,NESTAI_SIGNING_PRIVATE_JWK=millionsnest-nestai-signing-private-jwk:latest" \
             --quiet
+
+      - name: Route traffic to exact new Hub revision
+        if: steps.secrets.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED_HUB_REVISION="${SERVICE}-r${GITHUB_RUN_ID}"
+          READY=false
+          for attempt in {1..30}; do
+            if gcloud run revisions describe "$EXPECTED_HUB_REVISION" --project "$PROJECT_ID" --region "$REGION" --format=json > /tmp/hub-revision.json; then
+              if node -e "const x=require('/tmp/hub-revision.json');if(!x.status?.conditions?.some(c=>c.type==='Ready'&&c.status==='True'))process.exit(1)"; then
+                READY=true
+                break
+              fi
+            fi
+            sleep 2
+          done
+          test "$READY" = true
+          gcloud run services update-traffic "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --to-revisions="$EXPECTED_HUB_REVISION=100" --quiet
+          echo "HUB_EXACT_TRAFFIC_ROUTED=$EXPECTED_HUB_REVISION"
 
       - name: Verify Cloud Run readiness
         if: steps.secrets.outputs.ready == 'true'
@@ -173,7 +195,7 @@ jobs:
           const ready=status.conditions?.some(c=>c.type==='Ready'&&c.status==='True');
           const revision=status.latestReadyRevisionName;
           const target=status.traffic?.find(t=>Number(t.percent)===100&&t.revisionName===revision);
-          if(!ready||!revision||revision!==status.latestCreatedRevisionName||!target||x.spec?.template?.spec?.containers?.[0]?.image!==process.env.IMAGE)process.exit(1);
+          if(!ready||revision!==process.env.SERVICE+'-r'+process.env.GITHUB_RUN_ID||revision!==status.latestCreatedRevisionName||!target||x.spec?.template?.spec?.containers?.[0]?.image!==process.env.IMAGE)process.exit(1);
           console.log('HUB_EXACT_SERVING_IMAGE_SHA_OK='+process.env.GITHUB_SHA);
           console.log('HUB_EXACT_SERVING_REVISION='+revision);
           NODE
