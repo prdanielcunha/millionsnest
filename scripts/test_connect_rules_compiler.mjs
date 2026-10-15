@@ -21,6 +21,10 @@ const unavailable = fixture([200, 503, 503]); await assert.rejects(() => verifyC
 assert(unavailable.reports.includes('CONNECT_RULES_BASELINE_COMPILER_HTTP=503')); assert(unavailable.reports.includes('CONNECT_RULES_CANDIDATE_COMPILER_HTTP=503'));
 await assert.rejects(() => verifyConnectRulesCompiler(fixture([200, 200, 503])), /COMPARISON_FAILED/);
 assert.equal(await verifyConnectRulesCompiler(fixture([200, 503, 200])), true, 'a validated repair may compile when the previously published large baseline does not');
+const identical = { ...fixture([200, 200]), candidate: 'synthetic-baseline' };
+assert.equal(await verifyConnectRulesCompiler(identical), true);
+assert.equal(identical.requests.length, 4, 'byte-identical successfully compiled baseline is not compiled twice');
+assert(identical.reports.includes('CONNECT_RULES_CANDIDATE_IDENTICAL_VALIDATED_BASELINE=true'));
 await assert.rejects(() => verifyConnectRulesCompiler(fixture([503, 200, 200])), /COMPARISON_FAILED/);
 await assert.rejects(() => verifyConnectRulesCompiler(fixture([200, 200], true)), /BASELINE_INVALID/);
 await assert.rejects(() => verifyConnectRulesCompiler({ ...fixture(), token: 'line\nbreak' }), /INPUT_INVALID/);
