@@ -2,6 +2,7 @@
 import {Timestamp,type Firestore} from 'firebase-admin/firestore';
 import {DAY_MS,TRIAL_BASE_DAYS,trialWindow} from './HubTrialExtensionService.js';
 import {HubTrialError} from './HubNoCardTrialService.js';
+import {ECOSYSTEM_TRIAL_POLICY_VERSION} from '../../lib/ecosystemTrialPolicy.js';
 export const MUSICSCALE_TRIAL_MS=TRIAL_BASE_DAYS.musicscale*DAY_MS;
 /** Existing NestLocal subscription must not use up a MusicScale evaluation.
  * Legacy MusicScale contracts live in the root of the subscription document.
@@ -73,7 +74,7 @@ export async function activateMusicScaleHubTrial(params:{
     const beginning=Timestamp.fromMillis(now),end=Timestamp.fromMillis(now+MUSICSCALE_TRIAL_MS);
     tx.create(trialRef,{appId:'musicscale',organizationId,ownerUid,
       source:'hub_internal_trial',status:'active',revoked:false,consumed:true,
-      grantVersion:2,beginsAt:beginning,expiresAt:end,createdAt:beginning});
+      grantVersion:ECOSYSTEM_TRIAL_POLICY_VERSION,beginsAt:beginning,expiresAt:end,createdAt:beginning});
     tx.create(ownerRef,{appId:'musicscale',organizationId,trialRef:trialRef.path,createdAt:beginning});
     tx.set(entitlementRef,{schemaVersion:3,appId:'musicscale',source:'hub_internal_trial',
       accessState:'internal_trial_active',trialStartedAt:beginning,

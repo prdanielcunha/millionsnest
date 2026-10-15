@@ -1,3 +1,4 @@
+import {ECOSYSTEM_TRIAL_POLICY_VERSION} from './src/lib/ecosystemTrialPolicy.js';
 import express from 'express';
 import { bootstrapUserContext, acceptInvitation, setActiveOrganization } from './src/server/services/TenantContextMutationService.js';
 import { createInvitation } from "./src/server/services/InvitationCreationService.js";
@@ -68,14 +69,14 @@ import {
   parseReferenceUpload, canonicalReferencePath, canAccessStoredReference, MAX_REFERENCE_BYTES,
 } from './src/server/services/NestAffiliateReferenceMediaService.js';
 import { resolveSubscriptionPurchaseEligibility } from './src/server/services/SubscriptionEligibility.js';
-import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, shouldAddStripeTrial, nestLocalTrialEnabledForOrganization, hasSearchableAuthenticatedEmail } from './src/server/services/HubNoCardTrialService.js';
+import { activateNestLocalHubTrial, hasConsumedHubTrial, HubTrialError, nestLocalTrialEnabledForOrganization, hasSearchableAuthenticatedEmail } from './src/server/services/HubNoCardTrialService.js';
 import { reconcileNestLocalTrialCredits } from './src/server/services/NestLocalTrialCreditOutboxService.js';
 import {reserveNestLocalFoundersOffer,releaseFailedNestLocalFoundersReservation,markNestLocalFoundersAccepted,readNestLocalFoundersOffer} from './src/server/services/NestLocalFoundersCampaignService.js';
 import {NESTLOCAL_COMMERCIAL_V2_PROPOSED} from './src/lib/nestLocalCommercialV2.js';
 import {validateFoundersCoupon,NESTLOCAL_FOUNDERS_COUPONS} from './src/lib/nestLocalFoundersCoupon.js';
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
 import { syncNestLocalPaidInvoiceFromWebhook } from './src/server/services/NestLocalPaidInvoiceWebhookSync.js';
-import { extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
+import { TRIAL_BASE_DAYS, extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
 import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization, hasPriorMusicScaleSubscription } from './src/server/services/MusicScaleNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
@@ -9525,21 +9526,12 @@ async function autoRepairSingleOrganizationUser(uid: string) {
             ...(foundersCouponId?{foundersCampaign:'2026',foundersCouponId}:{}),
           }
         };
-
-        if (shouldAddStripeTrial({
-          appId,
-          hasLegacyTrialHistory: hasTrialHistory,
-          internalTrialConsumed,
-          newNestLocalTrialEnabled: nestLocalTrialEnabledForOrganization(orgId),
-          newMusicScaleTrialEnabled: musicScaleTrialEnabledForOrganization(orgId),
-        })) {
-          sessionArgs.subscription_data.trial_period_days = 7;
-        }
+        // No new Stripe trial: evaluation is issued separately by the Hub.
 
         if (eligibility.decision === 'allow_new_subscription' && eligibility.hasResidualAccess && eligibility.accessUntil) {
           const endMs = new Date(eligibility.accessUntil).getTime();
           if (endMs > Date.now()) {
-            // Overwrite any 7-day trial with the exact residual access date
+            // Preserve an already-paid residual period; this is not a new evaluation.
             sessionArgs.subscription_data.trial_end = Math.floor(endMs / 1000);
             sessionArgs.subscription_data.trial_period_days = undefined;
           }
@@ -9570,7 +9562,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const accessUntilStr = eligibility.decision === 'allow_new_subscription' ? (eligibility.accessUntil || 'no_access') : 'no_access';
       const idempotencyKey = crypto.createHash('sha256').update(
-        `unified-checkout_${orgId}_${appId}_${planLookupKey || 'none'}_${addonLookupKeys ? addonLookupKeys.join(',') : ''}_${accessUntilStr}${appId==='nestlocal'?'_'+(foundersCouponId||promoCodeId||'regular'):''}`
+        `unified-checkout_policy${ECOSYSTEM_TRIAL_POLICY_VERSION}_${orgId}_${appId}_${planLookupKey || 'none'}_${addonLookupKeys ? addonLookupKeys.join(',') : ''}_${accessUntilStr}${appId==='nestlocal'?'_'+(foundersCouponId||promoCodeId||'regular'):''}`
       ).digest('hex');
 
       let session:Stripe.Checkout.Session;
@@ -9630,7 +9622,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         ['active','trialing','expired','canceled','past_due','unpaid'].includes(String(previousApp.status||'')));
       const available=!blockedUser&&!blockedOrg&&!trialDoc.exists&&!priorSubscription&&!existingApp;
       return res.json({available:!!available,appId,organizationId,
-        days:appId==='musicscale'?14:7,requiresCard:false,
+        days:TRIAL_BASE_DAYS[appId],requiresCard:false,
         message:available?'Disponível após verificação do histórico Stripe.':'Avaliação indisponível para esta organização.'});
     }catch(error:any){
       console.warn('[Trial Offer] query blocked:',error?.message||'unexpected');
@@ -10098,16 +10090,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         success_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}&app=${appId}`,
         cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:3000'}/checkout?app=${appId}&plan=${encodeURIComponent(lookupKey)}`,
       };
-
-      if (shouldAddStripeTrial({
-        appId,
-        hasLegacyTrialHistory: hasTrialHistory,
-        internalTrialConsumed,
-        newNestLocalTrialEnabled: nestLocalTrialEnabledForOrganization(orgId),
-          newMusicScaleTrialEnabled: musicScaleTrialEnabledForOrganization(orgId),
-      }) && sessionArgs.subscription_data) {
-        sessionArgs.subscription_data.trial_period_days = 7;
-      }
+      // No new Stripe trial: evaluation is issued separately by the Hub.
 
       if (eligibility.decision === 'allow_new_subscription' && eligibility.hasResidualAccess && eligibility.accessUntil && sessionArgs.subscription_data) {
         const endMs = new Date(eligibility.accessUntil).getTime();
@@ -10125,7 +10108,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
 
       const accessUntilStr = eligibility.decision === 'allow_new_subscription' ? (eligibility.accessUntil || 'no_access') : 'no_access';
       const idempotencyKey = crypto.createHash('sha256').update(
-        `checkout_${orgId}_${appId}_${lookupKey}_${accessUntilStr}`
+        `checkout_policy${ECOSYSTEM_TRIAL_POLICY_VERSION}_${orgId}_${appId}_${lookupKey}_${accessUntilStr}`
       ).digest('hex');
 
       const session = await stripe.checkout.sessions.create(sessionArgs, { idempotencyKey });

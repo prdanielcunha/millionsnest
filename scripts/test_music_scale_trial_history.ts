@@ -9,7 +9,7 @@ const required = [
   "materializedStatuses.has(priorStatus)",
   "eligibility.reason === 'previous_subscription_expired'",
   "hasTrialHistory = true; // A prior MusicScale subscription exists, so no second trial.",
-  "sessionArgs.subscription_data.trial_period_days = 7",
+  "No new Stripe trial: evaluation is issued separately by the Hub.",
 ];
 
 for (const token of required) {
@@ -19,6 +19,7 @@ for (const token of required) {
 }
 
 const forbidden = [
+  "sessionArgs.subscription_data.trial_period_days = 7",
   "eligibility.reason === 'previous_subscription_canceled'",
   "eligibility.reason === 'previous_subscription_terminal'",
 ];
@@ -29,4 +30,4 @@ for (const token of forbidden) {
   }
 }
 
-console.log('PASS: MusicScale checkout grants the 7-day trial only when the organization has no prior materialized subscription history.');
+console.log('PASS: MusicScale checkout never starts a new Stripe trial and preserves prior subscription protections.');

@@ -1,6 +1,9 @@
 /** Hub-authorized trial extension policy for NestLocal and MusicScale. */
 export type TrialApp = 'musicscale' | 'nestlocal';
-export const TRIAL_BASE_DAYS: Record<TrialApp,number> = { musicscale:14, nestlocal:7 };
+import {ECOSYSTEM_TRIAL_DAYS,isSupportedHubTrialDuration} from '../../lib/ecosystemTrialPolicy.js';
+export const TRIAL_BASE_DAYS: Record<TrialApp,number> = {
+  musicscale:ECOSYSTEM_TRIAL_DAYS, nestlocal:ECOSYSTEM_TRIAL_DAYS,
+};
 export const MAX_TRIAL_EXTENSION_DAYS = 7;
 
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
@@ -29,7 +32,8 @@ export function trialWindow(app:TrialApp,data:any,now=Date.now(),orgId='') {
       !Number.isSafeInteger(data.grantVersion)||data.grantVersion<2||
       (orgId&&data.organizationId!==orgId))return invalid;
   const start=toMs(data.beginsAt),base=toMs(data.expiresAt);
-  if(start===null||base===null||base-start!==TRIAL_BASE_DAYS[app]*DAY_MS)return invalid;
+  if(start===null||base===null||!Number.isFinite(start)||!Number.isFinite(base)||
+      !isSupportedHubTrialDuration(app,base-start,data.grantVersion))return invalid;
   let end=base;
   if(data.extensionCount===1){
     const days=data.extensionDays,actual=toMs(data.extensionEndsAt);
