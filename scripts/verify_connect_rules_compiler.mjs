@@ -18,16 +18,17 @@ export async function verifyConnectRulesCompiler({ token, candidate, fetchImpl =
   const files = ruleset.source?.files;
   if (!Array.isArray(files) || files.length !== 1 || files[0].name !== 'firestore.rules' || typeof files[0].content !== 'string') throw new Error('RULES_COMPILER_BASELINE_INVALID');
   let failed = false;
-  for (const [label, source] of [['BASELINE', files[0].content], ['CANDIDATE', candidate]]) {
+  const control = "rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if false; } } }";
+  for (const [label, source] of [['CONTROL', control], ['BASELINE', files[0].content], ['CANDIDATE', candidate]]) {
     report(`CONNECT_RULES_${label}_SHA256=${createHash('sha256').update(source).digest('hex')}`);
     const response = await fetchImpl(`${base}/projects/millionsnest:test`, { method: 'POST', headers, redirect: 'error', signal: AbortSignal.timeout(30000), body: JSON.stringify({ source: { files: [{ name: 'firestore.rules', content: source }] } }) });
     report(`CONNECT_RULES_${label}_COMPILER_HTTP=${response.status}`);
-    if (!response.ok) { failed = true; continue; }
+    if (!response.ok) { if (label !== 'BASELINE') failed = true; continue; }
     const result = await response.json();
     if (result.issues !== undefined && !Array.isArray(result.issues)) throw new Error('RULES_COMPILER_RESPONSE_INVALID');
     const errors = (result.issues ?? []).filter(issue => issue?.severity === 'ERROR').length;
     report(`CONNECT_RULES_${label}_COMPILER_ERRORS=${errors}`);
-    if (errors > 0) failed = true;
+    if (errors > 0 && label !== 'BASELINE') failed = true;
   }
   if (failed) throw new Error('RULES_COMPILER_COMPARISON_FAILED');
   return true;

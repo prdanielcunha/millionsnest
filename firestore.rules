@@ -1835,6 +1835,72 @@ service cloud.firestore {
       // context. Clients may append valid self-attributed events, but analytics
       // are not a tenant-wide data feed for ordinary members.
       match /analytics/{eventId} {
+        function isValidOrganizationActionOsAnalytics() {
+          let data = request.resource.data;
+          let metadata = data.metadata;
+
+          return data.eventType == 'action_os_interaction' &&
+            data.app == 'millionsnest_core' &&
+            metadata.keys().hasAll([
+              'action',
+              'lane',
+              'sourceApp'
+            ]) &&
+            metadata.keys().hasOnly([
+              'action',
+              'lane',
+              'sourceApp',
+              'signalType',
+              'priority',
+              'dismissCode'
+            ]) &&
+            metadata.action in [
+              'action_opened',
+              'action_snoozed',
+              'action_dismissed',
+              'change_reviewed',
+              'commitment_opened'
+            ] &&
+            metadata.lane in [
+              'action',
+              'change',
+              'commitment'
+            ] &&
+            metadata.sourceApp in [
+              'hub',
+              'musicscale'
+            ] &&
+            (
+              !('signalType' in metadata) ||
+              (
+                metadata.get('signalType', '') is string &&
+                metadata.get('signalType', '').size() > 0 &&
+                metadata.get('signalType', '').size() <= 80
+              )
+            ) &&
+            (
+              !('priority' in metadata) ||
+              metadata.get('priority', '') in [
+                'low',
+                'normal',
+                'high',
+                'urgent'
+              ]
+            ) &&
+            (
+              !('dismissCode' in metadata) ||
+              (
+                metadata.get('action', '') == 'action_dismissed' &&
+                metadata.get('dismissCode', '') in [
+                  'not_relevant',
+                  'already_handled',
+                  'not_my_responsibility',
+                  'too_early',
+                  'no_reason'
+                ]
+              )
+            );
+        }
         allow create: if isAuthenticated() &&
           checkOrgAccess(orgId) &&
           isOrganizationLifecycleActive(orgId) &&
@@ -2950,121 +3016,56 @@ service cloud.firestore {
       request.resource.data.timestamp is timestamp;
     }
 
-    function isValidOrganizationActionOsAnalytics() {
-      let data = request.resource.data;
-      let metadata = data.metadata;
 
-      return data.eventType == 'action_os_interaction' &&
-        data.app == 'millionsnest_core' &&
-        metadata.keys().hasAll([
-          'action',
-          'lane',
-          'sourceApp'
-        ]) &&
-        metadata.keys().hasOnly([
-          'action',
-          'lane',
-          'sourceApp',
-          'signalType',
-          'priority',
-          'dismissCode'
-        ]) &&
-        metadata.action in [
-          'action_opened',
-          'action_snoozed',
-          'action_dismissed',
-          'change_reviewed',
-          'commitment_opened'
-        ] &&
-        metadata.lane in [
-          'action',
-          'change',
-          'commitment'
-        ] &&
-        metadata.sourceApp in [
-          'hub',
-          'musicscale'
-        ] &&
-        (
-          !('signalType' in metadata) ||
-          (
-            metadata.get('signalType', '') is string &&
-            metadata.get('signalType', '').size() > 0 &&
-            metadata.get('signalType', '').size() <= 80
-          )
-        ) &&
-        (
-          !('priority' in metadata) ||
-          metadata.get('priority', '') in [
-            'low',
-            'normal',
-            'high',
-            'urgent'
-          ]
-        ) &&
-        (
-          !('dismissCode' in metadata) ||
-          (
-            metadata.get('action', '') == 'action_dismissed' &&
-            metadata.get('dismissCode', '') in [
-              'not_relevant',
-              'already_handled',
-              'not_my_responsibility',
-              'too_early',
-              'no_reason'
-            ]
-          )
-        );
-    }
 
-    function isValidPublicMusicScaleAnalytics() {
-      let data = request.resource.data;
-      let isPublicIdentity =
-        data.organizationId == 'none' &&
-        data.userId == 'none' &&
-        data.app == 'musicscale';
-
-      let isLandingView =
-        data.eventType == 'page_view' &&
-        data.metadata.keys().hasOnly(['page']) &&
-        data.metadata.get('page', '') == 'sales_landing';
-
-      let isTrialPlanChoice =
-        data.eventType == 'trial_cta_clicked' &&
-        data.metadata.keys().hasOnly(['action', 'source']) &&
-        data.metadata.get('action', '') == 'choose_plan' &&
-        data.metadata.get('source', '') == 'sales_landing_primary';
-
-      let isDemoOpened =
-        data.eventType == 'app_usage' &&
-        data.metadata.keys().hasOnly(['action', 'source']) &&
-        data.metadata.get('action', '') == 'sales_demo_opened' &&
-        data.metadata.get('source', '') == 'sales_landing';
-
-      let isDemoStep =
-        data.eventType == 'app_usage' &&
-        data.metadata.keys().hasOnly(['action', 'step']) &&
-        data.metadata.get('action', '') == 'sales_demo_step_selected' &&
-        data.metadata.get('step', 0) is int &&
-        data.metadata.get('step', 0) >= 1 &&
-        data.metadata.get('step', 0) <= 5;
-
-      return isPublicIdentity && (
-        isLandingView ||
-        isTrialPlanChoice ||
-        isDemoOpened ||
-        isDemoStep
-      );
-    }
-
-    function isValidAuthenticatedAnalytics() {
-      return isAuthenticated() && (
-        request.resource.data.userId == 'none' ||
-        request.resource.data.userId == request.auth.uid
-      );
-    }
 
     match /analytics_events/{eventId} {
+      function isValidPublicMusicScaleAnalytics() {
+        let data = request.resource.data;
+        let isPublicIdentity =
+          data.organizationId == 'none' &&
+          data.userId == 'none' &&
+          data.app == 'musicscale';
+
+        let isLandingView =
+          data.eventType == 'page_view' &&
+          data.metadata.keys().hasOnly(['page']) &&
+          data.metadata.get('page', '') == 'sales_landing';
+
+        let isTrialPlanChoice =
+          data.eventType == 'trial_cta_clicked' &&
+          data.metadata.keys().hasOnly(['action', 'source']) &&
+          data.metadata.get('action', '') == 'choose_plan' &&
+          data.metadata.get('source', '') == 'sales_landing_primary';
+
+        let isDemoOpened =
+          data.eventType == 'app_usage' &&
+          data.metadata.keys().hasOnly(['action', 'source']) &&
+          data.metadata.get('action', '') == 'sales_demo_opened' &&
+          data.metadata.get('source', '') == 'sales_landing';
+
+        let isDemoStep =
+          data.eventType == 'app_usage' &&
+          data.metadata.keys().hasOnly(['action', 'step']) &&
+          data.metadata.get('action', '') == 'sales_demo_step_selected' &&
+          data.metadata.get('step', 0) is int &&
+          data.metadata.get('step', 0) >= 1 &&
+          data.metadata.get('step', 0) <= 5;
+
+        return isPublicIdentity && (
+          isLandingView ||
+          isTrialPlanChoice ||
+          isDemoOpened ||
+          isDemoStep
+        );
+      }
+
+      function isValidAuthenticatedAnalytics() {
+        return isAuthenticated() && (
+          request.resource.data.userId == 'none' ||
+          request.resource.data.userId == request.auth.uid
+        );
+      }
       allow create: if hasValidAnalyticsEnvelope() && (
         isValidAuthenticatedAnalytics() ||
         isValidPublicMusicScaleAnalytics()
