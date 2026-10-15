@@ -13,6 +13,7 @@ on:
       - "tests/firestore/musicscale_medley_templates.rules.test.ts"
       - "scripts/test_shared_band_rules.ts"
       - "tests/firestore/nestaffiliate.rules.test.ts"
+      - "tests/firestore/connect_private_storage.test.ts"
       - ".github/workflows/firebase-firestore-rules-deploy.yml"
   workflow_dispatch:
 
@@ -60,6 +61,14 @@ jobs:
           --only firestore
           --project demo-millionsnest-nestjourney-release
           "npx tsx --test --test-concurrency=1 tests/firestore/nestjourney.rules.test.ts"
+
+      - name: Certify Connect server-owned storage and agent configuration
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-connect-private-store
+          "node --import tsx tests/firestore/connect_private_storage.test.ts"
 
       - name: Certify MusicScale Live Firestore boundary
         run: >-
