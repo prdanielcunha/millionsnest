@@ -14,6 +14,19 @@ export function hasPriorMusicScaleSubscription(record:any):boolean {
     record.app==='musicscale' || record.status || record.plan);
 }
 
+/** Only verified MusicScale Stripe contracts can lift an existing Hub trial.
+ * Do not confuse this with hasPriorMusicScaleSubscription: that deliberately
+ * detects ambiguous commercial history to STOP new-trial eligibility.
+ */
+export function hasActiveStripeMusicScaleContract(record:any):boolean {
+  if(!record || typeof record!=='object')return false;
+  const valid=(data:any)=>data && typeof data==='object' &&
+    ['active','trialing'].includes(String(data.status||'').trim().toLowerCase()) &&
+    typeof data.stripeSubscriptionId==='string' && data.stripeSubscriptionId.trim().length>0;
+  if(valid(record.apps?.musicscale))return true;
+  return record.app==='musicscale' && valid(record);
+}
+
 export function musicScaleTrialEnabledForOrganization(id:string,env:NodeJS.ProcessEnv=process.env) {
   if(!/^[A-Za-z0-9_-]{1,128}$/.test(id)||env.MUSICSCALE_INTERNAL_TRIAL_ENABLED!=='true')return false;
   if(env.MUSICSCALE_INTERNAL_TRIAL_PUBLIC_ENABLED==='true')return true;
