@@ -142,7 +142,7 @@ export const PRODUCT_CATALOG: CatalogProduct[] = [
     envKey: 'STRIPE_PRICE_MUSICSCALE_PACK_10'
   },
 
-  // NestLocal — planos mensais por negócio. O trial é aplicado pelo checkout
+  // NestLocal — planos mensais por negócio. Avaliação sem cartão é emitida pelo Hub
   // central uma única vez por organização e por aplicativo.
   {
     app: 'nestlocal',

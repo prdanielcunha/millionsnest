@@ -1,7 +1,8 @@
 /** Server-only, no-card NestLocal trial. Never creates Stripe billing records or changes MusicScale. */
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
-export const HUB_TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+import {ECOSYSTEM_TRIAL_MS} from '../../lib/ecosystemTrialPolicy.js';
+export const HUB_TRIAL_DURATION_MS = ECOSYSTEM_TRIAL_MS;
 /** Stable, non-PII key shared by issuance, outbox reconciliation, and NestAI. */
 export function nestLocalTrialOutboxIdentity(organizationId: string): {
   documentId: string; sourceRef: string;
@@ -27,19 +28,17 @@ export class HubTrialError extends Error {
 export function hasSearchableAuthenticatedEmail(email: unknown): email is string {
   return typeof email === 'string' && email.trim().length > 0 && email.includes('@');
 }
-/** A used Hub trial disqualifies a second Stripe trial, even after flag rollback. */
-export function shouldAddStripeTrial(params: {
-  appId: 'nestlocal' | 'musicscale';
+/** Hub-only evaluation for all apps. Flags/history cannot re-enable Stripe trials.
+ * Keep this API for callers outside the Hub during coordinated deployment.
+ */
+export function shouldAddStripeTrial(_params: {
+  appId: string;
   hasLegacyTrialHistory: boolean;
   internalTrialConsumed: boolean;
   newNestLocalTrialEnabled: boolean;
   newMusicScaleTrialEnabled?: boolean;
 }): boolean {
-  if (params.hasLegacyTrialHistory || params.internalTrialConsumed) return false;
-  // NestLocal 2.0: only the Hub can issue the 7-day no-card trial. Stripe never creates a second trial.
-  if (params.appId === 'nestlocal') return false;
-  if (params.appId === 'musicscale' && params.newMusicScaleTrialEnabled) return false;
-  return true;
+  return false;
 }
 /** Pilot cohort by organization; global flag alone never changes everybody's Checkout. */
 export function nestLocalTrialEnabledForOrganization(

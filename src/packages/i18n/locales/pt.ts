@@ -681,7 +681,7 @@ export default {
     loading_sub: "Carregando sua assinatura...",
     back: "Voltar ao Dashboard",
     title: "Evolua com o plano ideal para você.",
-    subtitle: "Acesso total às ferramentas MusicScale. Teste por 7 dias grátis, cancele quando quiser com 1 clique no painel.",
+    subtitle: "Experimente sem cartão por 7 dias, quando elegível. Ao assinar, escolha seu plano e conclua o pagamento pelo Stripe.",
     monthly: "Mensal",
     yearly: "Anual",
     recommended: "Recomendado",
@@ -698,11 +698,11 @@ export default {
     apply: "Aplicar",
     charge_today: "Cobrança Hoje (Módulos Opcionais)",
     regular_sub: "Assinatura Regular",
-    starts_after_trial: "Inicia após o período de 7 dias grátis.",
+    starts_after_trial: "A assinatura começa com o pagamento; não há nova avaliação no Stripe.",
     savings: "Você economiza",
-    cta: "Iniciar Teste de 7 Dias",
+    cta: "Continuar para pagamento seguro",
     encrypted: "Transação segura processada pela Stripe",
-    cancel_info: "Cancele a qualquer momento antes do trial acabar e não seja cobrado.",
+    cancel_info: "A avaliação sem cartão não gera cobrança automática. A assinatura é contratada separadamente.",
     loading: "Carregando catálogo premium...",
     monthly_period: "mês",
     yearly_period: "ano",
@@ -710,7 +710,7 @@ export default {
     error_plan: "Por favor, selecione um plano principal.",
     purchase_journey: {
       kicker: "Da assinatura ao primeiro uso",
-      subtitle: "Escolha o plano da sua organização, conclua o pagamento com segurança e comece pelo caminho guiado.",
+      subtitle: "Experimente sem cartão por 7 dias, quando elegível. Ao assinar, escolha seu plano e conclua o pagamento pelo Stripe.",
       recurring_note: "Cobrança recorrente conforme o ciclo e o plano escolhidos.",
       choose_title: "1. Escolha o plano",
       choose_desc: "Selecione o plano da sua organização. A equipe usa o mesmo acesso contratado.",
@@ -719,7 +719,7 @@ export default {
       open_title: "3. Abra e comece",
       open_desc: "Após a ativação, você volta ao MillionsNest com acesso direto ao aplicativo e aos primeiros passos.",
       cta: "Continuar para pagamento seguro",
-      trial_note: "Organizações elegíveis recebem 7 dias de teste. Se esta organização já utilizou o período de teste, a assinatura segue diretamente conforme o plano escolhido."
+      trial_note: "A avaliação gratuita dura 7 dias no aplicativo, sem cartão. Ao continuar para o Stripe, você contrata o plano pago, sem nova avaliação."
     },
     activation: {
       loading_title: "Ativando sua assinatura",
