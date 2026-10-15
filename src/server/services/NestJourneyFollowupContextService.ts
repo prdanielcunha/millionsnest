@@ -105,11 +105,19 @@ export async function handleNestJourneyFollowupContextRequest(
   const organization = orgDoc.data() || {};
   const membership = memberDoc.exists ? (memberDoc.data() || {}) : {};
   const followup = followupDoc.data() || {};
-  const role = clean(membership.organizationRole || membership.role || appAccess.organizationRole);
-  const permissions = membership.permissions;
-  const global = appAccess.isGlobalAccess === true;
-  const canManageCare = global || CARE_ROLES.has(role) || booleanPermission(permissions, 'canManageCare');
-  const broad = global || BROAD_ROLES.has(role);
+  // SaaS support access is not a church's authorization to contact a person.
+  // Use the canonical church owner or an active church membership, never a
+  // global/app-access role as fallback for a role-less member.
+  const isChurchOwner = clean(organization.ownerUid || organization.ownerId) === uid;
+  const activeMembership = memberDoc.exists &&
+    ['active', 'ativo'].includes(clean(membership.status || 'active'));
+  if (!isChurchOwner && !activeMembership) {
+    return res.status(403).json({ success: false, code: 'CHURCH_MEMBERSHIP_REQUIRED' });
+  }
+  const role = isChurchOwner ? 'owner' : clean(membership.organizationRole || membership.role);
+  const permissions = activeMembership ? membership.permissions : {};
+  const canManageCare = isChurchOwner || CARE_ROLES.has(role) || booleanPermission(permissions, 'canManageCare');
+  const broad = isChurchOwner || BROAD_ROLES.has(role);
   const congregationIds = stringList(membership.congregationIds);
   const congregationId = clean(followup.congregationId);
 
@@ -163,6 +171,9 @@ export async function handleNestJourneyFollowupContextRequest(
     clean(person.organizationId) !== organizationId ||
     clean(person.congregationId) !== congregationId ||
     person.consent !== true ||
+    person.consentRevokedAt != null ||
+    person.contactStatus === 'closed' ||
+    clean(person.preferredContactChannel) !== 'whatsapp' ||
     !phone ||
     !personName
   ) {
@@ -178,6 +189,7 @@ export async function handleNestJourneyFollowupContextRequest(
 
   return res.status(200).json({
     success: true,
+    consentContract: 'whatsapp_explicit_v1',
     organization: {
       id: organizationId,
       name: clean(organization.name) || 'Igreja',

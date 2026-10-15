@@ -119,4 +119,8 @@ As variáveis dividem-se logicamente em:
 ---
 *Gerado por processo de auditoria técnica para continuidade, segurança e manutenção fluida do ecossistema.*
 
+Connect session-context includes separate canonical access projections for MusicScale, NestLocal, NestFinance and NestJourney. Additional app resolver failures remain denied and do not grant access or replace billing/membership authority. Domain apps still independently authorize each data request.
+
+NestJourney first-contact context returns `consentContract=whatsapp_explicit_v1` only for an assigned, actionable follow-up with current WhatsApp consent, no revocation/closure and matching church/congregation/source records. Global SaaS access cannot substitute for church membership/care authority; canonical church ownership remains supported. Connect rechecks this proof immediately before template dispatch. This does not activate paid templates or automatic follow-ups.
+
 Connect agent settings at `organizations/{orgId}/connectAgentProfiles/{product}` are server-owned. Browser SDK reads, queries and writes are denied even for tenant owners and global administrators; the Connect API must revalidate Hub management authority. The canonical Rules deploy certifies this boundary before publication and tests the actual published source inside the same production-authenticated job using synthetic emulator data only. The separate Published Private Storage Rules Gate also reads/tests the actual release on production pushes to its workflow/test and supports manual production rechecks, without recompiling/publishing Rules or expanding WIF trust. This reserves storage safely; it does not activate editable agents or automations.
