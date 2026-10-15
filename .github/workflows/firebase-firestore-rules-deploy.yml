@@ -13,6 +13,9 @@ on:
       - "tests/firestore/musicscale_medley_templates.rules.test.ts"
       - "scripts/test_shared_band_rules.ts"
       - "tests/firestore/nestaffiliate.rules.test.ts"
+      - "tests/firestore/connect_private_storage.test.ts"
+      - "scripts/verify_connect_rules_compiler.mjs"
+      - "scripts/test_connect_rules_compiler.mjs"
       - ".github/workflows/firebase-firestore-rules-deploy.yml"
   workflow_dispatch:
 
@@ -53,6 +56,16 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Compare actual published and candidate cloud compilation without mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/test_connect_rules_compiler.mjs
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          echo "::add-mask::$ACCESS_TOKEN"
+          printf '%s' "$ACCESS_TOKEN" | node scripts/verify_connect_rules_compiler.mjs
+          unset ACCESS_TOKEN
+
       - name: Certify NestJourney Firestore boundary
         run: >-
           npx firebase emulators:exec
@@ -60,6 +73,14 @@ jobs:
           --only firestore
           --project demo-millionsnest-nestjourney-release
           "npx tsx --test --test-concurrency=1 tests/firestore/nestjourney.rules.test.ts"
+
+      - name: Certify Connect server-owned storage and agent configuration
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-connect-private-store
+          "node --import tsx tests/firestore/connect_private_storage.test.ts"
 
       - name: Certify MusicScale Live Firestore boundary
         run: >-
@@ -147,3 +168,15 @@ jobs:
           done
           echo "::error::Firebase CLI ran, but the live Firebase Rules release could not be verified."
           exit 1
+
+      - name: Prove actual published Connect private storage in the production identity
+        env:
+          CONNECT_LIVE_RULES_FILE: /tmp/firestore-live.rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$CONNECT_LIVE_RULES_FILE"
+          cmp -s firestore.rules "$CONNECT_LIVE_RULES_FILE"
+          node -e "const fs=require('fs'),c=require('crypto');console.log('CONNECT_PUBLISHED_RULES_SHA256='+c.createHash('sha256').update(fs.readFileSync(process.env.CONNECT_LIVE_RULES_FILE)).digest('hex'))"
+          npx firebase emulators:exec --project demo-connect-private-store --config firebase.rules-test.json --only firestore "node --import tsx tests/firestore/connect_private_storage.test.ts"
+          echo CONNECT_ACTUAL_PUBLISHED_PRIVATE_STORAGE_PROOF_OK

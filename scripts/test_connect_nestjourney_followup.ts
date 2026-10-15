@@ -33,7 +33,7 @@ function seed(db: MockDb, role='care') {
   };
   db.docs['organizations/org1/products/raiz_e_mesa/people/person1'] = {
     organizationId: 'org1', congregationId: 'camp1', name: 'João da Silva', phone: '5543999999999',
-    consent: true, consentRevokedAt:null, contactStatus:'pending', preferredContactChannel:'whatsapp', privateNote: 'must not leak',
+    consent: true, consentRevokedAt: null, contactStatus: 'pending', preferredContactChannel: 'whatsapp', privateNote: 'must not leak',
   };
 }
 async function execute(db: MockDb, query={organizationId:'org1',followupId:'first-contact-care1'}, access:any={accessible:true,isGlobalAccess:false,organizationRole:'care'}) {
@@ -93,32 +93,38 @@ async function execute(db: MockDb, query={organizationId:'org1',followupId:'firs
   assert.equal(res.statusCode,403);
   assert.equal(res.body.code,'NESTJOURNEY_ACCESS_DENIED');
 }
-{
-  const db=new MockDb(); seed(db);
-  db.docs['organizations/org1/products/raiz_e_mesa/people/person1'].preferredContactChannel='phone';
+for (const patch of [
+  { preferredContactChannel: 'phone' }, { preferredContactChannel: undefined },
+  { consentRevokedAt: '2026-10-15T08:00:00Z' }, { contactStatus: 'closed' },
+  { organizationId: 'org-other' }, { congregationId: 'other-camp' },
+]) {
+  const db=new MockDb();seed(db);
+  Object.assign(db.docs['organizations/org1/products/raiz_e_mesa/people/person1'],patch);
   const res=await execute(db);
-  assert.equal(res.statusCode,409,'phone-only consent must not authorize WhatsApp');
+  assert.equal(res.statusCode,409);
+  assert.equal(res.body.consentContract,undefined);
+  assert.equal(res.body.person,undefined,'denial discloses no person details');
+}
+for (const membership of [undefined,{role:'care',status:'inactive'}, {status:'active',permissions:{}}]) {
+  const db=new MockDb();seed(db);
+  db.docs['organizations/org1/members/user1']=membership;
+  const res=await execute(db,undefined,{accessible:true,isGlobalAccess:true,organizationRole:'admin'});
+  assert.equal(res.statusCode,403,'global app access cannot replace active church care authority');
+  assert.equal(res.body.person,undefined);
 }
 {
-  const db=new MockDb(); seed(db);
-  db.docs['organizations/org1/products/raiz_e_mesa/people/person1'].consentRevokedAt='2026-10-12T18:00:00Z';
-  const res=await execute(db);
-  assert.equal(res.statusCode,409,'revoked-at timestamp must block even if consent boolean is stale');
-}
-{
-  const db=new MockDb(); seed(db);
-  db.docs['organizations/org1/products/raiz_e_mesa/people/person1'].contactStatus='closed';
-  const res=await execute(db);
-  assert.equal(res.statusCode,409,'closed contact status blocks new WhatsApp draft');
-}
-{
-  const db=new MockDb(); seed(db);
+  const db=new MockDb();seed(db);
+  db.docs['organizations/org1'].ownerUid='user1';
   delete db.docs['organizations/org1/members/user1'];
-  const res=await execute(db,{organizationId:'org1',followupId:'first-contact-care1'},{
-    accessible:true,isGlobalAccess:true,organizationRole:'admin',
-  });
-  assert.equal(res.statusCode,403,'global support privilege alone is insufficient');
-  assert.equal(res.body.code,'CHURCH_MEMBERSHIP_REQUIRED');
+  assert.equal((await execute(db)).statusCode,200,'canonical church owner still requires assigned followup');
+  db.docs['organizations/org1/products/raiz_e_mesa/followups/first-contact-care1'].ownerRef='other';
+  assert.equal((await execute(db)).statusCode,403,'church owner cannot impersonate assigned caregiver');
 }
-
-console.log('NestJourney -> Connect follow-up context contract: OK');
+{
+  const db=new MockDb();seed(db,'member');
+  db.docs['organizations/org1/members/user1'].permissions={canManageCare:true};
+  assert.equal((await execute(db)).statusCode,200,'active scoped capability remains supported');
+  db.docs['organizations/org1/members/user1'].congregationIds=['different-camp'];
+  assert.equal((await execute(db)).statusCode,403,'capability does not bypass congregation scope');
+}
+console.log('NestJourney -> Connect follow-up context contract: explicit consent, revocation, church membership, assigned owner and tenant isolation OK');
