@@ -15,6 +15,12 @@ assert.match(workflow, /echo HUB_JOURNEY_CONTACT_AUTHORITY_OK/);
 assert.match(workflow, /--revision-suffix "r\$\{GITHUB_RUN_ID\}"/);
 assert.match(workflow, /--no-traffic/);
 assert.match(workflow, /--to-revisions="\$EXPECTED_HUB_REVISION=100"/);
+assert.match(workflow, /actions: read/);
+assert(workflow.indexOf('Require matching shared Rules publication before new trial issuance') <
+  workflow.indexOf('Route traffic to exact new Hub revision'));
+assert.match(workflow, /\.head_sha == \$sha/);
+assert.match(workflow, /completed:success/);
+assert.match(workflow, /HUB_SHARED_RULES_PUBLICATION_TIMEOUT__OLD_TRAFFIC_PRESERVED/);
 const guard = workflow.match(/node - <<'NODE'\n([\s\S]*?)\n\s+NODE/);
 assert(guard, 'actual serving image/traffic guard must be present');
 function verify(fixture: any) {

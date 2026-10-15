@@ -25,6 +25,8 @@ A constante `src/lib/ecosystemTrialPolicy.ts` é o padrão para produtos atuais 
 3. Publicar emissor Hub de sete dias e checkout sem novo trial Stripe após os leitores estarem prontos.
 4. Conferir QA, deploy e inventário agregado somente leitura. Preservar as flags já configuradas; ativar oferta pública apenas com leitores/Rules certificados.
 
+O deploy Hub cria a revisão sem tráfego. Quando o commit altera Rules, o tráfego só é promovido após o workflow canônico de Rules do mesmo SHA concluir com sucesso; falha ou timeout preserva a revisão anterior. Isso impede emitir grants novos antes da publicação das regras compatíveis.
+
 ## Verificação
 
 `test_ecosystem_seven_day_trial.ts` cobre duração, criação/repetição/vencimento, extensão, prevenção de avaliação no Stripe em todos os apps, idempotência dos checkouts e zero writes em contas pagas/legadas. Os testes existentes verificam resolução de assinatura, handoff, RBAC, contas inativas e isolamento por organização. As suítes Firestore de ambos os repositórios verificam sete dias, compatibilidade de 14 dias, prazo adulterado, cliente pago e tentativa de outro tenant.
