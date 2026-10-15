@@ -51,6 +51,7 @@ async function execute(db: MockDb, query={organizationId:'org1',followupId:'firs
   const db=new MockDb(); seed(db);
   const res=await execute(db);
   assert.equal(res.statusCode,200);
+  assert.equal(res.body.consentContract,'whatsapp_explicit_v1');
   assert.equal(res.body.person.name,'João da Silva');
   assert.equal(res.body.person.phone,'5543999999999');
   assert.equal(res.body.followup.careRequestId,'care1');
