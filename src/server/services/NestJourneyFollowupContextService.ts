@@ -190,6 +190,7 @@ export async function handleNestJourneyFollowupContextRequest(
 
   return res.status(200).json({
     success: true,
+    consentContract: 'whatsapp_explicit_v1',
     organization: {
       id: organizationId,
       name: clean(organization.name) || 'Igreja',
