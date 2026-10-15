@@ -413,1229 +413,70 @@ service cloud.firestore {
     // NestJourney / Raiz e Mesa compatibility gate.
     // Product identity is nestjourney; storage remains products/raiz_e_mesa
     // during the incremental migration.
-    function journeyOwner(orgId) {
-      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
-      return isAuthenticated() && orgDoc != null && (
-        orgDoc.data.get('ownerUid', '') == request.auth.uid ||
-        orgDoc.data.get('ownerId', '') == request.auth.uid ||
-        orgDoc.data.get('owner_user_id', '') == request.auth.uid ||
-        orgDoc.data.get('ownerUserId', '') == request.auth.uid
-      );
-    }
 
-    function journeyMemberActive(orgId) {
-      let memberData = getMemberPermissions(orgId);
-      return isAuthenticated() &&
-        memberData != null &&
-        memberData.get('status', 'active') in ['active', 'ativo'];
-    }
 
-    function journeyProductEnabled(orgId) {
-      let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
-      let apps = orgDoc != null ? orgDoc.data.get('apps', {}) : {};
-      let nestJourney = apps is map ? apps.get('nestjourney', {}) : {};
-      let legacyJourney = apps is map ? apps.get('raiz_e_mesa', {}) : {};
-      return isSystemAdmin() || (
-        orgDoc != null &&
-        (
-          (nestJourney is map && nestJourney.get('status', '') in ['active', 'trialing']) ||
-          (legacyJourney is map && legacyJourney.get('status', '') in ['active', 'trialing'])
-        )
-      );
-    }
 
-    function journeyHasMembership(orgId) {
-      return journeyProductEnabled(orgId) &&
-        (journeyMemberActive(orgId) || journeyOwner(orgId) || isSystemAdmin());
-    }
 
-    function journeyRole(orgId) {
-      let memberData = getMemberPermissions(orgId);
-      return journeyMemberActive(orgId)
-        ? memberData.get('organizationRole', memberData.get('role', ''))
-        : (journeyOwner(orgId) ? 'owner' : '');
-    }
 
-    function journeyRoleAllowed(orgId, allowed) {
-      return journeyHasMembership(orgId) &&
-        (isSystemAdmin() || journeyRole(orgId) in allowed);
-    }
 
-    function journeyHasPermission(orgId, permission) {
-      let memberData = getMemberPermissions(orgId);
-      let permissions = memberData != null ? memberData.get('permissions', {}) : {};
-      return journeyRoleAllowed(orgId, ['owner', 'admin']) ||
-        (
-          journeyMemberActive(orgId) &&
-          permissions is map &&
-          permissions.get(permission, false) == true
-        );
-    }
 
-    function journeyIsOrgAdmin(orgId) {
-      return isSystemAdmin() ||
-        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'data_admin']);
-    }
 
-    function journeyCanManagePresence(orgId) {
-      return isSystemAdmin() ||
-        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator']) ||
-        journeyHasPermission(orgId, 'canManagePresence');
-    }
-    function journeyCanManageMesa(orgId) {
-      return isSystemAdmin() ||
-        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator', 'mesa', 'table_host']) ||
-        journeyHasPermission(orgId, 'canManageMesa') ||
-        journeyHasPermission(orgId, 'canManagePresence');
-    }
-    function journeyCanManageMesaInScope(orgId, congregationId) {
-      let memberData = getMemberPermissions(orgId);
-      let active = isAuthenticated() &&
-        memberData != null &&
-        memberData.get('status', 'active') in ['active', 'ativo'];
-      let roleName = active
-        ? memberData.get('organizationRole', memberData.get('role', ''))
-        : '';
-      let permissions = active ? memberData.get('permissions', {}) : {};
-      let congregationIds = active ? memberData.get('congregationIds', []) : [];
-      let privileged = isSystemAdmin() || journeyOwner(orgId);
-      let broad = roleName in ['owner', 'admin', 'pastor'] || (permissions is map && permissions.get('canCoordinateJourney', false) == true);
-      let capable = privileged || (
-        active && (
-          roleName in ['owner', 'admin', 'pastor', 'coordinator', 'mesa', 'table_host'] ||
-          (
-            permissions is map &&
-            (
-              permissions.get('canManageMesa', false) == true ||
-              permissions.get('canManagePresence', false) == true
-            )
-          )
-        )
-      );
-      let inScope = privileged || broad || (
-        active &&
-        congregationId is string &&
-        congregationIds is list &&
-        congregationId in congregationIds
-      );
-      return journeyProductEnabled(orgId) && capable && inScope;
-    }
-    function journeyCanManagePresenceInScope(orgId, congregationId) {
-      let memberData = getMemberPermissions(orgId);
-      let active = isAuthenticated() &&
-        memberData != null &&
-        memberData.get('status', 'active') in ['active', 'ativo'];
-      let roleName = active
-        ? memberData.get('organizationRole', memberData.get('role', ''))
-        : '';
-      let permissions = active ? memberData.get('permissions', {}) : {};
-      let congregationIds = active ? memberData.get('congregationIds', []) : [];
-      let privileged = isSystemAdmin() || journeyOwner(orgId);
-      let broad = roleName in ['owner', 'admin', 'pastor'];
-      let capable = privileged || (
-        active && (
-          roleName in ['owner', 'admin', 'pastor', 'coordinator'] ||
-          (permissions is map && permissions.get('canManagePresence', false) == true)
-        )
-      );
-      let inScope = privileged || broad || (
-        active &&
-        congregationId is string &&
-        congregationIds is list &&
-        congregationId in congregationIds
-      );
-      return journeyProductEnabled(orgId) && capable && inScope;
-    }
 
-    function journeyCanManagePeople(orgId) {
-      return journeyIsOrgAdmin(orgId) ||
-        journeyHasPermission(orgId, 'canManagePeople');
-    }
 
-    function journeyCanManageCare(orgId) {
-      return isSystemAdmin() ||
-        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'care']) ||
-        journeyHasPermission(orgId, 'canManageCare');
-    }
 
-    function journeyCanManagePastoral(orgId) {
-      let memberData = getMemberPermissions(orgId);
-      let permissions = memberData != null ? memberData.get('permissions', {}) : {};
-      return isSystemAdmin() ||
-        journeyOwner(orgId) ||
-        journeyRoleAllowed(orgId, ['owner', 'pastor']) ||
-        (
-          journeyMemberActive(orgId) &&
-          permissions is map &&
-          permissions.get('canManagePastoral', false) == true
-        );
-    }
 
-    function journeyCanManageGroups(orgId) {
-      return isSystemAdmin() ||
-        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'group_leader']) ||
-        journeyHasPermission(orgId, 'canManageGroups');
-    }
 
-    function journeyCanManageGroupRoster(orgId, groupId) {
-      let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
-      let memberData = getMemberPermissions(orgId);
-      let active = isAuthenticated() &&
-        memberData != null &&
-        memberData.get('status', 'active') in ['active', 'ativo'];
-      let roleName = active
-        ? memberData.get('organizationRole', memberData.get('role', ''))
-        : '';
-      let permissions = active ? memberData.get('permissions', {}) : {};
-      let ids = active ? memberData.get('congregationIds', []) : [];
-      let privileged = isSystemAdmin() || journeyOwner(orgId);
-      let broad = roleName in ['owner', 'admin', 'pastor'];
-      return exists(groupPath) &&
-        journeyProductEnabled(orgId) &&
-        (
-          privileged ||
-          (
-            active &&
-            ids is list &&
-            get(groupPath).data.get('congregationId', '') in ids &&
-            (
-              broad ||
-              (
-                (
-                  roleName == 'group_leader' ||
-                  (permissions is map && permissions.get('canManageGroups', false) == true)
-                ) &&
-                (
-                  get(groupPath).data.get('leaderId', '') == request.auth.uid ||
-                  get(groupPath).data.get('createdBy', '') == request.auth.uid
-                )
-              )
-            )
-          )
-        );
-    }
 
-    function journeyCanCreateGroupEntryRequest(orgId, groupId) {
-      let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
-      let memberData = getMemberPermissions(orgId);
-      let active = isAuthenticated() &&
-        memberData != null &&
-        memberData.get('status', 'active') in ['active', 'ativo'];
-      let roleName = active
-        ? memberData.get('organizationRole', memberData.get('role', ''))
-        : '';
-      let ids = active ? memberData.get('congregationIds', []) : [];
-      let privileged = isSystemAdmin() || journeyOwner(orgId);
-      return exists(groupPath) &&
-        journeyProductEnabled(orgId) &&
-        (
-          privileged ||
-          (
-            active &&
-            ids is list &&
-            get(groupPath).data.get('congregationId', '') in ids &&
-            roleName in ['owner', 'admin', 'pastor']
-          )
-        );
-    }
 
-    function journeyCanOperateDiscipleship(orgId, congregationId, disciplerId) {
-      let memberData = getMemberPermissions(orgId);
-      let active = isAuthenticated() &&
-        memberData != null &&
-        memberData.get('status', 'active') in ['active', 'ativo'];
-      let roleName = active
-        ? memberData.get('organizationRole', memberData.get('role', ''))
-        : '';
-      let permissions = active ? memberData.get('permissions', {}) : {};
-      let privileged = isSystemAdmin() || journeyOwner(orgId);
-      let broad = privileged
-        || roleName in ['owner', 'admin', 'pastor']
-        || (permissions is map && permissions.get('canCoordinateJourney', false) == true);
-      return journeyProductEnabled(orgId)
-        && (
-          broad
-          || (
-            active
-            && congregationId is string
-            && congregationId in memberData.get('congregationIds', [])
-            && disciplerId == request.auth.uid
-            && (
-              roleName == 'discipler'
-              || (
-                permissions is map
-                && permissions.get('canManageDiscipleship', false) == true
-              )
-            )
-          )
-        );
-    }
 
-    function journeyCanManageImplementation(orgId) {
-      return isSystemAdmin() ||
-        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator']) ||
-        journeyHasPermission(orgId, 'canManageImplementation');
-    }
 
-    function journeyCanViewGovernance(orgId) {
-      return isSystemAdmin() ||
-        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'data_admin']) ||
-        journeyHasPermission(orgId, 'canViewGovernance');
-    }
 
-    function journeyCanManagePrivacy(orgId) {
-      return isSystemAdmin() ||
-        journeyRoleAllowed(orgId, ['owner', 'admin', 'data_admin']) ||
-        journeyHasPermission(orgId, 'canManagePrivacy');
-    }
 
-    function journeyAssignedToCongregation(orgId, congregationId) {
-      let memberData = getMemberPermissions(orgId);
-      let ids = memberData != null ? memberData.get('congregationIds', []) : [];
-      return journeyMemberActive(orgId) &&
-        congregationId is string &&
-        ids is list &&
-        congregationId in ids;
-    }
 
-    function journeyCanAccessCongregation(orgId, congregationId) {
-      return journeyProductEnabled(orgId) &&
-        (journeyIsOrgAdmin(orgId) || journeyAssignedToCongregation(orgId, congregationId));
-    }
 
-    function journeyCanCreateCareInScope(orgId, congregationId, source) {
-      let memberData = getMemberPermissions(orgId);
-      let active = isAuthenticated() &&
-        memberData != null &&
-        memberData.get('status', 'active') in ['active', 'ativo'];
-      let roleName = active
-        ? memberData.get('organizationRole', memberData.get('role', ''))
-        : '';
-      let permissions = active ? memberData.get('permissions', {}) : {};
-      let privileged = isSystemAdmin() || journeyOwner(orgId);
-      let inScope = privileged || (
-        active && (
-          roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
-          (
-            congregationId is string &&
-            congregationId in memberData.get('congregationIds', [])
-          )
-        )
-      );
-      let careCapability = privileged || (
-        active && (
-          roleName in ['owner', 'admin', 'pastor', 'care'] ||
-          (permissions is map && permissions.get('canManageCare', false) == true)
-        )
-      );
-      let peopleCapability = privileged || (
-        active && (
-          roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
-          (permissions is map && permissions.get('canManagePeople', false) == true)
-        )
-      );
-      return journeyProductEnabled(orgId) &&
-        inScope &&
-        (
-          (source == 'manual' && careCapability) ||
-          (source == 'visitor_registration' && peopleCapability)
-        );
-    }
 
     // Follow-up runtime keeps authorization in one bounded helper so read/create/update
     // do not compose the generic Journey gates repeatedly and exhaust Firestore's
     // expression budget.
-    function journeyCanAccessFollowup(orgId, congregationId, ownerRef) {
-      let memberData = getMemberPermissions(orgId);
-      let active = isAuthenticated() &&
-        memberData != null &&
-        memberData.get('status', 'active') in ['active', 'ativo'];
-      let roleName = active
-        ? memberData.get('organizationRole', memberData.get('role', ''))
-        : '';
-      let permissions = active ? memberData.get('permissions', {}) : {};
-      let ids = active ? memberData.get('congregationIds', []) : [];
-      let privileged = isSystemAdmin() || journeyOwner(orgId);
-      let broad = privileged || (
-        active && roleName in ['owner', 'admin', 'pastor', 'data_admin']
-      );
-      let careCapability = privileged || (
-        active &&
-        (
-          roleName in ['owner', 'admin', 'pastor', 'care'] ||
-          (permissions is map && permissions.get('canManageCare', false) == true)
-        )
-      );
-      let inScope = privileged || (
-        active &&
-        (
-          roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
-          (ids is list && congregationId is string && congregationId in ids)
-        )
-      );
-      return journeyProductEnabled(orgId) &&
-        careCapability &&
-        inScope &&
-        (broad || ownerRef == request.auth.uid);
-    }
 
-    function journeyTenantCreate(orgId) {
-      return request.resource.data.get('organizationId', '') == orgId;
-    }
 
-    function journeyTenantUnchanged(orgId) {
-      return resource.data.get('organizationId', '') == orgId &&
-        request.resource.data.get('organizationId', '') == orgId;
-    }
 
-    function journeyCongregationUnchanged() {
-      return request.resource.data.get('congregationId', '') ==
-        resource.data.get('congregationId', '');
-    }
 
-    function journeyValidPresenceSessionCreate(orgId) {
-      return journeyTenantCreate(orgId) &&
-        request.resource.data.get('congregationId', '') is string &&
-        request.resource.data.get('createdBy', '') == request.auth.uid &&
-        request.resource.data.get('openedAt', null) == request.time &&
-        request.resource.data.get('status', '') == 'open' &&
-        request.resource.data.get('expectedPeopleCount', -1) is number &&
-        request.resource.data.get('expectedPeopleCount', -1) >= 0 &&
-        request.resource.data.get('minimumCoveragePercent', -1) is number &&
-        request.resource.data.get('minimumCoveragePercent', -1) >= 0 &&
-        request.resource.data.get('minimumCoveragePercent', -1) <= 100;
-    }
 
-    function journeyValidPresenceCheckCreate(orgId) {
-      let sessionId = request.resource.data.get('sessionId', '');
-      let congregationId = request.resource.data.get('congregationId', '');
-      let personId = request.resource.data.get('personId', '');
-      let source = request.resource.data.get('source', '');
-      let correctedFromCheckId = request.resource.data.get('correctedFromCheckId', '');
-      let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
-      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
-      let correctionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceChecks/$(correctedFromCheckId);
-      return journeyTenantCreate(orgId) &&
-        request.resource.data.get('actorId', '') == request.auth.uid &&
-        request.resource.data.get('recordedAt', null) == request.time &&
-        request.resource.data.get('state', '') in ['present_confirmed', 'absent_confirmed', 'unverified'] &&
-        (
-          (
-            source == 'human_check' &&
-            correctedFromCheckId == '' &&
-            exists(sessionPath) &&
-            get(sessionPath).data.get('congregationId', '') == congregationId &&
-            get(sessionPath).data.get('status', '') == 'open' &&
-            exists(personPath) &&
-            get(personPath).data.get('congregationId', '') == congregationId
-          )
-          ||
-          (
-            source == 'retroactive_human_correction' &&
-            correctedFromCheckId != '' &&
-            request.resource.data.get('state', '') != 'unverified' &&
-            exists(sessionPath) &&
-            get(sessionPath).data.get('congregationId', '') == congregationId &&
-            get(sessionPath).data.get('status', '') == 'open' &&
-            exists(correctionPath) &&
-            get(correctionPath).data.get('congregationId', '') == congregationId &&
-            get(correctionPath).data.get('sessionId', '') == sessionId &&
-            get(correctionPath).data.get('personId', '') == personId &&
-            get(correctionPath).data.get('state', '') != request.resource.data.get('state', '')
-          )
-        );
-    }
 
-    function journeyPersonBondEmptyOnCreate() {
-      return request.resource.data.get('bondHostRef', '') == '' &&
-        request.resource.data.get('bondAssignedAt', null) == null &&
-        request.resource.data.get('bondAssignedBy', '') == '';
-    }
 
-    function journeyPersonBondUnchanged() {
-      return request.resource.data.get('bondHostRef', '') == resource.data.get('bondHostRef', '') &&
-        request.resource.data.get('bondAssignedAt', null) == resource.data.get('bondAssignedAt', null) &&
-        request.resource.data.get('bondAssignedBy', '') == resource.data.get('bondAssignedBy', '');
-    }
 
-    function journeyCanManageSettings(orgId) {
-      return isSystemAdmin() ||
-        journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor']);
-    }
 
-    function journeyValidModuleLabels(orgId) {
-      let labels = request.resource.data.get('labels', {});
-      return request.resource.data.get('organizationId', '') == orgId &&
-        labels is map &&
-        labels.keys().hasOnly(['presence', 'table', 'care', 'groups', 'discipleship']) &&
-        labels.get('presence', '') is string && labels.get('presence', '').size() <= 48 &&
-        labels.get('table', '') is string && labels.get('table', '').size() <= 48 &&
-        labels.get('care', '') is string && labels.get('care', '').size() <= 48 &&
-        labels.get('groups', '') is string && labels.get('groups', '').size() <= 48 &&
-        labels.get('discipleship', '') is string && labels.get('discipleship', '').size() <= 48 &&
-        request.resource.data.get('updatedAt', null) == request.time &&
-        request.resource.data.get('updatedBy', '') == request.auth.uid &&
-        request.resource.data.keys().hasOnly([
-          'organizationId', 'labels', 'updatedAt', 'updatedBy'
-        ]);
-    }
 
-    function journeyValidMesaParticipationCreate(orgId, recordId) {
-      let sessionId = request.resource.data.get('sessionId', '');
-      let congregationId = request.resource.data.get('congregationId', '');
-      let personId = request.resource.data.get('personId', '');
-      let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
-      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
-      return journeyTenantCreate(orgId) &&
-        recordId == sessionId + '__' + personId &&
-        congregationId is string &&
-        sessionId is string &&
-        personId is string &&
-        request.resource.data.get('status', '') in ['invited', 'joined'] &&
-        request.resource.data.get('bondHostRef', '') is string &&
-        request.resource.data.get('bondHostRef', '').size() > 0 &&
-        request.resource.data.get('updatedAt', null) == request.time &&
-        request.resource.data.get('updatedBy', '') == request.auth.uid &&
-        request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'sessionId', 'personId',
-          'status', 'bondHostRef', 'updatedAt', 'updatedBy'
-        ]) &&
-        exists(sessionPath) &&
-        get(sessionPath).data.get('congregationId', '') == congregationId &&
-        get(sessionPath).data.get('status', '') == 'open' &&
-        exists(personPath) &&
-        get(personPath).data.get('congregationId', '') == congregationId;
-    }
 
-    function journeyValidMesaParticipationUpdate(orgId) {
-      return journeyTenantUnchanged(orgId) &&
-        journeyCongregationUnchanged() &&
-        request.resource.data.get('sessionId', '') == resource.data.get('sessionId', '') &&
-        request.resource.data.get('personId', '') == resource.data.get('personId', '') &&
-        request.resource.data.get('status', '') in ['invited', 'joined'] &&
-        request.resource.data.get('bondHostRef', '') == resource.data.get('bondHostRef', '') &&
-        request.resource.data.get('updatedAt', null) == request.time &&
-        request.resource.data.get('updatedBy', '') == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'updatedAt', 'updatedBy'
-        ]);
-    }
 
-    function journeyValidMesaPreparationCreate(orgId, preparationId) {
-      let congregationId = request.resource.data.get('congregationId', '');
-      let sessionId = request.resource.data.get('sessionId', '');
-      let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
-      let items = request.resource.data.get('items', {});
-      let owners = request.resource.data.get('owners', {});
-      let allReady = items.get('environment', false) &&
-        items.get('hosts', false) &&
-        items.get('hospitality', false) &&
-        items.get('supplies', false);
-      return request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'sessionId', 'status',
-          'items', 'owners', 'updatedAt', 'updatedBy'
-        ]) &&
-        journeyTenantCreate(orgId) &&
-        preparationId == sessionId &&
-        congregationId is string && congregationId.size() > 0 &&
-        sessionId is string && sessionId.size() > 0 &&
-        items is map &&
-        owners is map &&
-        items.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
-        owners.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
-        items.get('environment', false) is bool &&
-        items.get('hosts', false) is bool &&
-        items.get('hospitality', false) is bool &&
-        items.get('supplies', false) is bool &&
-        owners.get('environment', '') == (items.get('environment', false) ? request.auth.uid : '') &&
-        owners.get('hosts', '') == (items.get('hosts', false) ? request.auth.uid : '') &&
-        owners.get('hospitality', '') == (items.get('hospitality', false) ? request.auth.uid : '') &&
-        owners.get('supplies', '') == (items.get('supplies', false) ? request.auth.uid : '') &&
-        request.resource.data.get('status', '') == (allReady ? 'ready' : 'preparing') &&
-        request.resource.data.get('updatedAt', null) == request.time &&
-        request.resource.data.get('updatedBy', '') == request.auth.uid &&
-        journeyCanManageMesaInScope(orgId, congregationId) &&
-        exists(sessionPath) &&
-        get(sessionPath).data.get('congregationId', '') == congregationId &&
-        get(sessionPath).data.get('status', '') == 'open';
-    }
 
-    function journeyValidMesaPreparationUpdate(orgId) {
-      let congregationId = resource.data.get('congregationId', '');
-      let sessionId = resource.data.get('sessionId', '');
-      let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
-      let items = request.resource.data.get('items', {});
-      let owners = request.resource.data.get('owners', {});
-      let oldItems = resource.data.get('items', {});
-      let oldOwners = resource.data.get('owners', {});
-      let allReady = items.get('environment', false) &&
-        items.get('hosts', false) &&
-        items.get('hospitality', false) &&
-        items.get('supplies', false);
-      return journeyTenantUnchanged(orgId) &&
-        journeyCongregationUnchanged() &&
-        request.resource.data.get('sessionId', '') == sessionId &&
-        request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'sessionId', 'status',
-          'items', 'owners', 'updatedAt', 'updatedBy'
-        ]) &&
-        items is map &&
-        owners is map &&
-        items.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
-        owners.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
-        items.get('environment', false) is bool &&
-        items.get('hosts', false) is bool &&
-        items.get('hospitality', false) is bool &&
-        items.get('supplies', false) is bool &&
-        owners.get('environment', '') == (
-          items.get('environment', false) == oldItems.get('environment', false)
-            ? oldOwners.get('environment', '')
-            : (items.get('environment', false) ? request.auth.uid : '')
-        ) &&
-        owners.get('hosts', '') == (
-          items.get('hosts', false) == oldItems.get('hosts', false)
-            ? oldOwners.get('hosts', '')
-            : (items.get('hosts', false) ? request.auth.uid : '')
-        ) &&
-        owners.get('hospitality', '') == (
-          items.get('hospitality', false) == oldItems.get('hospitality', false)
-            ? oldOwners.get('hospitality', '')
-            : (items.get('hospitality', false) ? request.auth.uid : '')
-        ) &&
-        owners.get('supplies', '') == (
-          items.get('supplies', false) == oldItems.get('supplies', false)
-            ? oldOwners.get('supplies', '')
-            : (items.get('supplies', false) ? request.auth.uid : '')
-        ) &&
-        request.resource.data.get('status', '') == (allReady ? 'ready' : 'preparing') &&
-        request.resource.data.get('updatedAt', null) == request.time &&
-        request.resource.data.get('updatedBy', '') == request.auth.uid &&
-        journeyCanManageMesa(orgId) &&
-        exists(sessionPath) &&
-        get(sessionPath).data.get('congregationId', '') == congregationId &&
-        get(sessionPath).data.get('status', '') == 'open';
-    }
 
-    function journeyValidCareRequestCreate(orgId) {
-      let source = request.resource.data.get('source', '');
-      let ownerRef = request.resource.data.get('ownerRef', '');
-      let summary = request.resource.data.get('summary', '');
-      return journeyTenantCreate(orgId) &&
-        request.resource.data.get('congregationId', '') is string &&
-        request.resource.data.get('personId', '') is string &&
-        request.resource.data.get('careType', '') in ['first_contact', 'prayer', 'pastoral_contact', 'group_interest', 'absence_check', 'operational_followup'] &&
-        source in ['manual', 'visitor_registration'] &&
-        request.resource.data.get('status', '') == 'open' &&
-        request.resource.data.get('requestedAt', null) == request.time &&
-        request.resource.data.get('requestedBy', '') == request.auth.uid &&
-        request.resource.data.get('promiseHours', 0) is number &&
-        request.resource.data.get('promiseHours', 0) >= 1 &&
-        request.resource.data.get('promiseHours', 0) <= 168 &&
-        request.resource.data.get('dueAt', null) is timestamp &&
-        request.resource.data.get('dueAt', null) > request.time &&
-        request.resource.data.get('dueAt', null) <= request.time + duration.value(168, 'h') &&
-        ownerRef is string &&
-        summary is string &&
-        summary.size() <= 160 &&
-        (
-          (source == 'manual' &&
-            ownerRef == request.auth.uid &&
-            request.resource.data.get('assignedAt', null) == request.time &&
-            request.resource.data.get('assignedBy', '') == request.auth.uid)
-          ||
-          (source == 'visitor_registration' &&
-            ownerRef == '' &&
-            request.resource.data.get('assignedAt', null) == null &&
-            request.resource.data.get('assignedBy', '') == '')
-        );
-    }
 
-    function journeyValidCareClaim(orgId) {
-      return resource.data.get('status', '') == 'open' &&
-        resource.data.get('ownerRef', '') == '' &&
-        journeyTenantUnchanged(orgId) &&
-        journeyCongregationUnchanged() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerRef', 'assignedAt', 'assignedBy']) &&
-        request.resource.data.get('ownerRef', '') == request.auth.uid &&
-        request.resource.data.get('assignedAt', null) == request.time &&
-        request.resource.data.get('assignedBy', '') == request.auth.uid;
-    }
 
-    function journeyValidCareResolve(orgId) {
-      let note = request.resource.data.get('resolutionNote', '');
-      return resource.data.get('status', '') == 'open' &&
-        (resource.data.get('ownerRef', '') == request.auth.uid || journeyIsOrgAdmin(orgId)) &&
-        journeyTenantUnchanged(orgId) &&
-        journeyCongregationUnchanged() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedAt', 'resolvedBy', 'resolutionCode', 'resolutionNote']) &&
-        request.resource.data.get('status', '') == 'resolved' &&
-        request.resource.data.get('resolvedAt', null) == request.time &&
-        request.resource.data.get('resolvedBy', '') == request.auth.uid &&
-        request.resource.data.get('resolutionCode', '') in ['contact_completed', 'pastoral_handoff', 'declined_contact', 'invalid_contact', 'closed_no_response', 'other_resolved'] &&
-        note is string &&
-        note.size() <= 160;
-    }
 
-    function journeyValidPrivacyRequestCreate(orgId) {
-      let congregationId = request.resource.data.get('congregationId', '');
-      let personId = request.resource.data.get('personId', '');
-      let requestType = request.resource.data.get('requestType', '');
-      let targetField = request.resource.data.get('targetField', '');
-      let proposedValue = request.resource.data.get('proposedValue', '');
-      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
-      return journeyTenantCreate(orgId) &&
-        congregationId is string &&
-        personId is string &&
-        requestType in ['correction', 'consent_revocation', 'deletion_review', 'retention_review'] &&
-        request.resource.data.get('status', '') == 'open' &&
-        request.resource.data.get('requestedAt', null) == request.time &&
-        request.resource.data.get('requestedBy', '') == request.auth.uid &&
-        exists(personPath) &&
-        get(personPath).data.get('congregationId', '') == congregationId &&
-        (
-          (
-            requestType == 'correction' &&
-            targetField in ['name', 'phone', 'firstVisit'] &&
-            proposedValue is string &&
-            proposedValue.size() > 0 &&
-            proposedValue.size() <= 120
-          ) ||
-          (
-            requestType != 'correction' &&
-            targetField == '' &&
-            proposedValue == ''
-          )
-        );
-    }
 
-    function journeyValidPastoralHandoffCreate(orgId, handoffId) {
-      let sourceCareRequestId = request.resource.data.get('sourceCareRequestId', '');
-      let source = getAfter(/databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(sourceCareRequestId)).data;
-      return request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'personId', 'sourceCareRequestId',
-          'status', 'requestedAt', 'requestedBy', 'resolvedAt', 'resolvedBy'
-        ]) &&
-        request.resource.data.get('organizationId', '') == orgId &&
-        sourceCareRequestId == handoffId &&
-        request.resource.data.get('status', '') == 'open' &&
-        request.resource.data.get('requestedAt', null) == request.time &&
-        request.resource.data.get('requestedBy', '') == request.auth.uid &&
-        request.resource.data.get('resolvedAt', null) == null &&
-        request.resource.data.get('resolvedBy', '') == '' &&
-        source.get('organizationId', '') == orgId &&
-        source.get('congregationId', '') == request.resource.data.get('congregationId', '') &&
-        source.get('personId', '') == request.resource.data.get('personId', '') &&
-        source.get('status', '') == 'resolved' &&
-        source.get('resolutionCode', '') == 'pastoral_handoff' &&
-        source.get('resolvedBy', '') == request.auth.uid;
-    }
 
-    function journeyValidPastoralHandoffResolve(orgId) {
-      return journeyTenantUnchanged(orgId) &&
-        journeyCongregationUnchanged() &&
-        resource.data.get('status', '') == 'open' &&
-        request.resource.data.get('personId', '') == resource.data.get('personId', '') &&
-        request.resource.data.get('sourceCareRequestId', '') == resource.data.get('sourceCareRequestId', '') &&
-        request.resource.data.get('requestedAt', null) == resource.data.get('requestedAt', null) &&
-        request.resource.data.get('requestedBy', '') == resource.data.get('requestedBy', '') &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedAt', 'resolvedBy']) &&
-        request.resource.data.get('status', '') == 'resolved' &&
-        request.resource.data.get('resolvedAt', null) == request.time &&
-        request.resource.data.get('resolvedBy', '') == request.auth.uid;
-    }
 
-    function journeyValidFollowupCreate(orgId, followupId) {
-      let careRequestId = request.resource.data.get('careRequestId', '');
-      let personId = request.resource.data.get('personId', '');
-      let carePath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(careRequestId);
-      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
-      let careData = get(carePath).data;
-      let personData = get(personPath).data;
-      return request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'personId', 'careRequestId', 'kind',
-          'status', 'ownerRef', 'dueAt', 'createdAt', 'createdBy',
-          'completedAt', 'completedBy', 'outcomeCode', 'nextActionCode'
-        ]) &&
-        request.resource.data.get('organizationId', '') == orgId &&
-        followupId == 'first-contact-' + careRequestId &&
-        request.resource.data.get('kind', '') == 'first_contact' &&
-        request.resource.data.get('status', '') == 'pending' &&
-        request.resource.data.get('ownerRef', '') == request.auth.uid &&
-        request.resource.data.get('createdAt', null) == request.time &&
-        request.resource.data.get('createdBy', '') == request.auth.uid &&
-        request.resource.data.get('completedAt', null) == null &&
-        request.resource.data.get('completedBy', '') == '' &&
-        request.resource.data.get('outcomeCode', '') == '' &&
-        request.resource.data.get('nextActionCode', '') == '' &&
-        careData.get('status', '') == 'open' &&
-        careData.get('careType', '') == 'first_contact' &&
-        careData.get('ownerRef', '') == request.auth.uid &&
-        careData.get('personId', '') == personId &&
-        careData.get('congregationId', '') == request.resource.data.get('congregationId', '') &&
-        request.resource.data.get('dueAt', null) == careData.get('dueAt', null) &&
-        personData.get('congregationId', '') == request.resource.data.get('congregationId', '') &&
-        personData.get('consent', false) == true &&
-        personData.get('phone', '') is string &&
-        personData.get('phone', '').size() > 0;
-    }
 
-    function journeyValidFollowupOutcomePair(outcomeCode, nextActionCode) {
-      return
-        (outcomeCode == 'responded' && nextActionCode == 'none') ||
-        (outcomeCode == 'prayer_requested' && nextActionCode == 'care_prayer') ||
-        (outcomeCode == 'group_interest' && nextActionCode == 'group_entry') ||
-        (outcomeCode == 'declined_contact' && nextActionCode == 'none') ||
-        (outcomeCode == 'invalid_contact' && nextActionCode == 'data_correction') ||
-        (outcomeCode == 'no_response' && nextActionCode == 'manual_review');
-    }
 
-    function journeyValidFollowupCareResolution(outcomeCode, resolutionCode) {
-      return
-        (outcomeCode in ['responded', 'prayer_requested', 'group_interest'] && resolutionCode == 'contact_completed') ||
-        (outcomeCode == 'declined_contact' && resolutionCode == 'declined_contact') ||
-        (outcomeCode == 'invalid_contact' && resolutionCode == 'invalid_contact') ||
-        (outcomeCode == 'no_response' && resolutionCode == 'closed_no_response');
-    }
 
-    function journeyValidFollowupComplete(orgId) {
-      let careRequestId = resource.data.get('careRequestId', '');
-      let carePath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(careRequestId);
-      let careData = getAfter(carePath).data;
-      let outcomeCode = request.resource.data.get('outcomeCode', '');
-      let nextActionCode = request.resource.data.get('nextActionCode', '');
-      return resource.data.get('status', '') == 'pending' &&
-        resource.data.get('ownerRef', '') == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'completedAt', 'completedBy', 'outcomeCode', 'nextActionCode'
-        ]) &&
-        request.resource.data.get('status', '') == 'completed' &&
-        request.resource.data.get('completedAt', null) == request.time &&
-        request.resource.data.get('completedBy', '') == request.auth.uid &&
-        journeyValidFollowupOutcomePair(outcomeCode, nextActionCode) &&
-        careData.get('status', '') == 'resolved' &&
-        careData.get('resolvedAt', null) == request.time &&
-        careData.get('resolvedBy', '') == request.auth.uid &&
-        journeyValidFollowupCareResolution(outcomeCode, careData.get('resolutionCode', ''));
-    }
 
-    function journeyValidCareResolvedFactDocument(orgId, factId) {
-      let payload = request.resource.data.get('payload', {});
-      let careRequestId = payload.get('careRequestId', '');
-      let personId = payload.get('personId', '');
-      let carePath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(careRequestId);
-      let careData = getAfter(carePath).data;
-      return request.resource.data.get('organizationId', '') == orgId &&
-        request.resource.data.get('eventId', '') == factId &&
-        request.resource.data.get('eventType', '') == 'CARE_RESOLVED' &&
-        request.resource.data.get('actorId', '') == request.auth.uid &&
-        request.resource.data.get('sourceApp', '') == 'nestjourney' &&
-        request.resource.data.get('version', 0) == 1 &&
-        request.resource.data.get('recordedAt', null) == request.time &&
-        request.resource.data.get('occurredAt', null) == request.time &&
-        request.resource.data.get('sensitivity', '') == 'confidential' &&
-        factId == 'care-resolved-' + careRequestId &&
-        careData.get('status', '') == 'resolved' &&
-        careData.get('resolvedAt', null) == request.time &&
-        careData.get('resolvedBy', '') == request.auth.uid &&
-        careData.get('personId', '') == personId &&
-        careData.get('careType', '') == payload.get('careType', '') &&
-        careData.get('resolutionCode', '') == payload.get('resolutionCode', '') &&
-        request.resource.data.get('subjectRef', '') == 'person:' + personId &&
-        request.resource.data.get('evidenceRef', '') == 'careRequest:' + careRequestId &&
-        request.resource.data.get('scope', '') == 'congregation:' + careData.get('congregationId', '');
-    }
 
-    function journeyValidFollowupCanonicalFact(orgId, factId, eventType, payload) {
-      let followupId = payload.get('followupId', '');
-      let careRequestId = payload.get('careRequestId', '');
-      let personId = payload.get('personId', '');
-      let followupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/followups/$(followupId);
-      let followupData = getAfter(followupPath).data;
-      return followupData.get('personId', '') == personId &&
-        followupData.get('careRequestId', '') == careRequestId &&
-        request.resource.data.get('subjectRef', '') == 'person:' + personId &&
-        request.resource.data.get('evidenceRef', '') == 'followup:' + followupId &&
-        request.resource.data.get('scope', '') == 'congregation:' + followupData.get('congregationId', '') &&
-        (
-          (
-            eventType == 'FOLLOWUP_CREATED' &&
-            factId == 'followup-created-' + followupId &&
-            followupData.get('status', '') == 'pending' &&
-            followupData.get('createdAt', null) == request.time &&
-            followupData.get('createdBy', '') == request.auth.uid
-          ) ||
-          (
-            eventType == 'FOLLOWUP_COMPLETED' &&
-            factId == 'followup-completed-' + followupId &&
-            followupData.get('status', '') == 'completed' &&
-            followupData.get('completedAt', null) == request.time &&
-            followupData.get('completedBy', '') == request.auth.uid &&
-            followupData.get('outcomeCode', '') == payload.get('outcomeCode', '') &&
-            followupData.get('nextActionCode', '') == payload.get('nextActionCode', '')
-          )
-        );
-    }
 
-    function journeyValidFollowupFactDocument(orgId, factId) {
-      let eventType = request.resource.data.get('eventType', '');
-      let payload = request.resource.data.get('payload', {});
-      return request.resource.data.get('organizationId', '') == orgId &&
-        request.resource.data.get('eventId', '') == factId &&
-        request.resource.data.get('actorId', '') == request.auth.uid &&
-        request.resource.data.get('sourceApp', '') == 'nestjourney' &&
-        request.resource.data.get('version', 0) == 1 &&
-        request.resource.data.get('recordedAt', null) == request.time &&
-        request.resource.data.get('occurredAt', null) == request.time &&
-        request.resource.data.get('subjectRef', '') is string &&
-        request.resource.data.get('scope', '') is string &&
-        request.resource.data.get('evidenceRef', '') is string &&
-        request.resource.data.get('evidenceRef', '').size() > 0 &&
-        request.resource.data.get('sensitivity', '') == 'confidential' &&
-        eventType in ['FOLLOWUP_CREATED', 'FOLLOWUP_COMPLETED'] &&
-        journeyValidFollowupCanonicalFact(orgId, factId, eventType, payload);
-    }
 
-    function journeyValidImplementationKey(key) {
-      return key is string &&
-        key.matches('^(prep[.][1-7]|week[.]1[.](practice|teach[.][1-4])|week[.]2[.](practice|teach[.][1-5])|week[.]3[.](practice|teach[.][1-4])|week[.]4[.](practice|teach[.][1-5])|week[.]5[.](practice|teach[.][1-5])|week[.]6[.](practice|teach[.][1-4])|week[.]7[.](practice|teach[.][1-5]))$');
-    }
 
-    function journeyValidImplementationCycleCreate(orgId) {
-      return journeyTenantCreate(orgId) &&
-        request.resource.data.get('congregationId', '') is string &&
-        request.resource.data.get('playbookId', '') == 'raiz_e_mesa_2026' &&
-        request.resource.data.get('status', '') == 'active' &&
-        request.resource.data.get('startedAt', null) == request.time &&
-        request.resource.data.get('createdAt', null) == request.time &&
-        request.resource.data.get('createdBy', '') == request.auth.uid;
-    }
 
-    function journeyValidGroupState() {
-      let capacity = request.resource.data.get('capacity', 0);
-      let participants = request.resource.data.get('participants', 0);
-      return capacity is number &&
-        participants is number &&
-        capacity >= 1 &&
-        capacity <= 100 &&
-        participants >= 0 &&
-        participants <= capacity;
-    }
 
-    function journeyValidGroupEntryRequestCreate(orgId) {
-      let groupId = request.resource.data.get('groupId', '');
-      let personId = request.resource.data.get('personId', '');
-      let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
-      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
-      return request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'groupId', 'personId', 'personName',
-          'status', 'requestedAt', 'requestedBy', 'resolvedAt', 'resolvedBy'
-        ]) &&
-        request.resource.data.get('organizationId', '') == orgId &&
-        groupId is string &&
-        groupId.size() > 0 &&
-        personId is string &&
-        personId.size() > 0 &&
-        request.resource.data.get('personName', '') is string &&
-        request.resource.data.get('personName', '').size() > 0 &&
-        request.resource.data.get('status', '') == 'pending' &&
-        request.resource.data.get('requestedAt', null) == request.time &&
-        request.resource.data.get('requestedBy', '') == request.auth.uid &&
-        request.resource.data.get('resolvedAt', null) == null &&
-        request.resource.data.get('resolvedBy', '') == '' &&
-        journeyCanCreateGroupEntryRequest(orgId, groupId) &&
-        exists(groupPath) &&
-        exists(personPath) &&
-        get(groupPath).data.get('congregationId', '') ==
-          request.resource.data.get('congregationId', '') &&
-        get(personPath).data.get('congregationId', '') ==
-          request.resource.data.get('congregationId', '');
-    }
 
-    function journeyValidGroupEntryRequestUpdate(orgId) {
-      let groupId = resource.data.get('groupId', '');
-      let personId = resource.data.get('personId', '');
-      let nextStatus = request.resource.data.get('status', '');
-      let membershipPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groupMemberships/$(groupId + '__' + personId);
-      return request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'groupId', 'personId', 'personName',
-          'status', 'requestedAt', 'requestedBy', 'resolvedAt', 'resolvedBy'
-        ]) &&
-        resource.data.get('organizationId', '') == orgId &&
-        request.resource.data.get('organizationId', '') == orgId &&
-        request.resource.data.get('organizationId', '') ==
-          resource.data.get('organizationId', '') &&
-        request.resource.data.get('congregationId', '') ==
-          resource.data.get('congregationId', '') &&
-        request.resource.data.get('groupId', '') == groupId &&
-        request.resource.data.get('personId', '') == personId &&
-        request.resource.data.get('personName', '') ==
-          resource.data.get('personName', '') &&
-        request.resource.data.get('requestedAt', null) ==
-          resource.data.get('requestedAt', null) &&
-        request.resource.data.get('requestedBy', '') ==
-          resource.data.get('requestedBy', '') &&
-        resource.data.get('status', '') == 'pending' &&
-        nextStatus in ['accepted', 'declined'] &&
-        request.resource.data.get('resolvedAt', null) == request.time &&
-        request.resource.data.get('resolvedBy', '') == request.auth.uid &&
-        journeyCanManageGroupRoster(orgId, groupId) &&
-        (
-          nextStatus == 'declined' ||
-          (
-            existsAfter(membershipPath) &&
-            getAfter(membershipPath).data.get('status', '') == 'active'
-          )
-        );
-    }
 
-    function journeyValidGroupMembershipCreate(orgId, membershipId) {
-      let groupId = request.resource.data.get('groupId', '');
-      let personId = request.resource.data.get('personId', '');
-      let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
-      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
-      return request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'groupId', 'personId', 'personName',
-          'status', 'joinedAt', 'joinedBy', 'leftAt', 'leftBy'
-        ]) &&
-        request.resource.data.get('organizationId', '') == orgId &&
-        groupId is string &&
-        groupId.size() > 0 &&
-        personId is string &&
-        personId.size() > 0 &&
-        membershipId == groupId + '__' + personId &&
-        request.resource.data.get('status', '') == 'active' &&
-        request.resource.data.get('joinedAt', null) == request.time &&
-        request.resource.data.get('joinedBy', '') == request.auth.uid &&
-        request.resource.data.get('leftAt', null) == null &&
-        request.resource.data.get('leftBy', '') == '' &&
-        journeyCanManageGroupRoster(orgId, groupId) &&
-        exists(groupPath) &&
-        exists(personPath) &&
-        get(groupPath).data.get('congregationId', '') ==
-          request.resource.data.get('congregationId', '') &&
-        get(personPath).data.get('congregationId', '') ==
-          request.resource.data.get('congregationId', '');
-    }
 
-    function journeyValidGroupMembershipUpdate(orgId) {
-      let groupId = resource.data.get('groupId', '');
-      let nextStatus = request.resource.data.get('status', '');
-      let previousStatus = resource.data.get('status', '');
-      return request.resource.data.get('organizationId', '') == orgId &&
-        request.resource.data.get('organizationId', '') ==
-          resource.data.get('organizationId', '') &&
-        request.resource.data.get('congregationId', '') ==
-          resource.data.get('congregationId', '') &&
-        request.resource.data.get('groupId', '') == groupId &&
-        request.resource.data.get('personId', '') ==
-          resource.data.get('personId', '') &&
-        request.resource.data.get('personName', '') ==
-          resource.data.get('personName', '') &&
-        journeyCanManageGroupRoster(orgId, groupId) &&
-        (
-          (
-            previousStatus == 'active' &&
-            nextStatus == 'left' &&
-            request.resource.data.get('joinedAt', null) ==
-              resource.data.get('joinedAt', null) &&
-            request.resource.data.get('joinedBy', '') ==
-              resource.data.get('joinedBy', '') &&
-            request.resource.data.get('leftAt', null) == request.time &&
-            request.resource.data.get('leftBy', '') == request.auth.uid
-          ) ||
-          (
-            previousStatus == 'left' &&
-            nextStatus == 'active' &&
-            request.resource.data.get('joinedAt', null) == request.time &&
-            request.resource.data.get('joinedBy', '') == request.auth.uid &&
-            request.resource.data.get('leftAt', null) == null &&
-            request.resource.data.get('leftBy', '') == ''
-          )
-        );
-    }
 
-    function journeyValidGroupMeetingCreate(orgId) {
-      let groupId = request.resource.data.get('groupId', '');
-      let congregationId = request.resource.data.get('congregationId', '');
-      let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
-      return request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'groupId', 'status',
-          'startedAt', 'createdBy', 'endedAt', 'closedBy'
-        ]) &&
-        journeyTenantCreate(orgId) &&
-        groupId is string &&
-        groupId.size() > 0 &&
-        congregationId is string &&
-        congregationId.size() > 0 &&
-        request.resource.data.get('status', '') == 'open' &&
-        request.resource.data.get('startedAt', null) == request.time &&
-        request.resource.data.get('createdBy', '') == request.auth.uid &&
-        request.resource.data.get('endedAt', null) == null &&
-        request.resource.data.get('closedBy', '') == '' &&
-        journeyCanManageGroupRoster(orgId, groupId) &&
-        exists(groupPath) &&
-        get(groupPath).data.get('congregationId', '') == congregationId;
-    }
 
-    function journeyValidGroupMeetingClose(orgId) {
-      let groupId = resource.data.get('groupId', '');
-      return journeyTenantUnchanged(orgId) &&
-        journeyCongregationUnchanged() &&
-        request.resource.data.get('groupId', '') == groupId &&
-        request.resource.data.get('startedAt', null) == resource.data.get('startedAt', null) &&
-        request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '') &&
-        resource.data.get('status', '') == 'open' &&
-        request.resource.data.get('status', '') == 'closed' &&
-        request.resource.data.get('endedAt', null) == request.time &&
-        request.resource.data.get('closedBy', '') == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'endedAt', 'closedBy'
-        ]) &&
-        journeyCanManageGroupRoster(orgId, groupId);
-    }
 
-    function journeyValidGroupAttendanceCreate(orgId, attendanceId) {
-      let groupId = request.resource.data.get('groupId', '');
-      let meetingId = request.resource.data.get('meetingId', '');
-      let personId = request.resource.data.get('personId', '');
-      let congregationId = request.resource.data.get('congregationId', '');
-      let meetingPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groupMeetings/$(meetingId);
-      let membershipPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groupMemberships/$(groupId + '__' + personId);
-      return request.resource.data.keys().hasOnly([
-          'organizationId', 'congregationId', 'groupId', 'meetingId',
-          'personId', 'status', 'recordedAt', 'recordedBy'
-        ]) &&
-        journeyTenantCreate(orgId) &&
-        attendanceId == meetingId + '__' + personId &&
-        groupId is string && groupId.size() > 0 &&
-        meetingId is string && meetingId.size() > 0 &&
-        personId is string && personId.size() > 0 &&
-        congregationId is string && congregationId.size() > 0 &&
-        request.resource.data.get('status', '') == 'present_confirmed' &&
-        request.resource.data.get('recordedAt', null) == request.time &&
-        request.resource.data.get('recordedBy', '') == request.auth.uid &&
-        journeyCanManageGroupRoster(orgId, groupId) &&
-        exists(meetingPath) &&
-        get(meetingPath).data.get('groupId', '') == groupId &&
-        get(meetingPath).data.get('congregationId', '') == congregationId &&
-        get(meetingPath).data.get('status', '') == 'open' &&
-        exists(membershipPath) &&
-        get(membershipPath).data.get('groupId', '') == groupId &&
-        get(membershipPath).data.get('personId', '') == personId &&
-        get(membershipPath).data.get('congregationId', '') == congregationId &&
-        get(membershipPath).data.get('status', '') == 'active';
-    }
 
-    function journeyValidDiscipleshipCreate() {
-      return request.resource.data.get('personId', '') is string &&
-        request.resource.data.get('personId', '').size() > 0 &&
-        request.resource.data.get('disciplerId', '') is string &&
-        request.resource.data.get('disciplerId', '').size() > 0 &&
-        request.resource.data.get('meeting', 0) == 1 &&
-        request.resource.data.get('status', '') == 'active';
-    }
 
-    function journeyValidDiscipleshipUpdate() {
-      let meeting = request.resource.data.get('meeting', 0);
-      let previousMeeting = resource.data.get('meeting', 0);
-      let status = request.resource.data.get('status', '');
-      return request.resource.data.get('personId', '') == resource.data.get('personId', '') &&
-        meeting is number &&
-        previousMeeting is number &&
-        meeting >= previousMeeting &&
-        meeting <= previousMeeting + 1 &&
-        meeting >= 1 &&
-        meeting <= 7 &&
-        status in ['active', 'paused', 'completed'] &&
-        (status != 'completed' || meeting == 7);
-    }
 
-    function journeyValidCanonicalFact(orgId, factId) {
-      let eventType = request.resource.data.get('eventType', '');
-      let payload = request.resource.data.get('payload', {});
-      let personId = payload.get('personId', '');
-      let sessionId = payload.get('sessionId', '');
-      let checkId = payload.get('checkId', '');
-      let careRequestId = payload.get('careRequestId', '');
-      let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
-      let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
-      let checkPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceChecks/$(checkId);
-      let carePath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(careRequestId);
-      return journeyTenantCreate(orgId) &&
-        request.resource.data.get('eventId', '') == factId &&
-        request.resource.data.get('actorId', '') == request.auth.uid &&
-        request.resource.data.get('sourceApp', '') == 'nestjourney' &&
-        request.resource.data.get('version', 0) == 1 &&
-        request.resource.data.get('recordedAt', null) == request.time &&
-        request.resource.data.get('occurredAt', null) == request.time &&
-        request.resource.data.get('subjectRef', '') is string &&
-        request.resource.data.get('scope', '') is string &&
-        request.resource.data.get('evidenceRef', '') is string &&
-        request.resource.data.get('evidenceRef', '').size() > 0 &&
-        request.resource.data.get('sensitivity', '') in ['public', 'internal', 'confidential', 'restricted'] &&
-        eventType in [
-          'VISITOR_REGISTERED', 'PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED', 'PRESENCE_CORRECTED',
-          'CARE_REQUESTED', 'CARE_ASSIGNED'
-        ] &&
-        (
-          (eventType == 'VISITOR_REGISTERED' &&
-            personId is string &&
-            request.resource.data.get('subjectRef', '') == 'person:' + personId &&
-            request.resource.data.get('evidenceRef', '') == 'person:' + personId &&
-            existsAfter(personPath) &&
-            request.resource.data.get('scope', '') == 'congregation:' + getAfter(personPath).data.get('congregationId', ''))
-          ||
-          (eventType == 'PRESENCE_SESSION_OPENED' &&
-            sessionId is string &&
-            request.resource.data.get('subjectRef', '') == 'presenceSession:' + sessionId &&
-            request.resource.data.get('evidenceRef', '') == 'presenceSession:' + sessionId &&
-            existsAfter(sessionPath) &&
-            request.resource.data.get('scope', '') == 'congregation:' + getAfter(sessionPath).data.get('congregationId', ''))
-          ||
-          (eventType in ['PRESENCE_CONFIRMED', 'PRESENCE_CORRECTED'] &&
-            checkId is string &&
-            request.resource.data.get('evidenceRef', '') == 'presenceCheck:' + checkId &&
-            existsAfter(checkPath) &&
-            getAfter(checkPath).data.get('state', '') != 'unverified' &&
-            (
-              (eventType == 'PRESENCE_CONFIRMED' && getAfter(checkPath).data.get('source', '') == 'human_check')
-              ||
-              (eventType == 'PRESENCE_CORRECTED' && getAfter(checkPath).data.get('source', '') == 'retroactive_human_correction')
-            ) &&
-            request.resource.data.get('subjectRef', '') == 'person:' + getAfter(checkPath).data.get('personId', '') &&
-            request.resource.data.get('scope', '') == 'congregation:' + getAfter(checkPath).data.get('congregationId', ''))
-          ||
-          (eventType == 'CARE_REQUESTED' &&
-            careRequestId is string &&
-            careRequestId.size() > 0 &&
-            factId == 'care-requested-' + careRequestId &&
-            existsAfter(carePath) &&
-            getAfter(carePath).data.get('requestedAt', null) == request.time &&
-            getAfter(carePath).data.get('requestedBy', '') == request.auth.uid &&
-            getAfter(carePath).data.get('personId', '') == personId &&
-            getAfter(carePath).data.get('careType', '') == payload.get('careType', '') &&
-            getAfter(carePath).data.get('source', '') == payload.get('source', '') &&
-            request.resource.data.get('subjectRef', '') == 'person:' + personId &&
-            request.resource.data.get('evidenceRef', '') == 'careRequest:' + careRequestId &&
-            request.resource.data.get('scope', '') == 'congregation:' + getAfter(carePath).data.get('congregationId', ''))
-          ||
-          (eventType == 'CARE_ASSIGNED' &&
-            careRequestId is string &&
-            careRequestId.size() > 0 &&
-            factId == 'care-assigned-' + careRequestId &&
-            existsAfter(carePath) &&
-            getAfter(carePath).data.get('ownerRef', '') == request.auth.uid &&
-            getAfter(carePath).data.get('assignedAt', null) == request.time &&
-            getAfter(carePath).data.get('assignedBy', '') == request.auth.uid &&
-            getAfter(carePath).data.get('personId', '') == personId &&
-            getAfter(carePath).data.get('careType', '') == payload.get('careType', '') &&
-            payload.get('ownerRef', '') == request.auth.uid &&
-            request.resource.data.get('subjectRef', '') == 'person:' + personId &&
-            request.resource.data.get('evidenceRef', '') == 'careRequest:' + careRequestId &&
-            request.resource.data.get('scope', '') == 'congregation:' + getAfter(carePath).data.get('congregationId', ''))
-
-        );
-    }
 
     // ==========================================
     // 1. DADOS DOS USUÁRIOS    // ==========================================
@@ -1696,18 +537,18 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isSystemAdmin();
       allow update: if isAuthenticated() && (
         isSystemAdmin() ||
-        resource.data.get('ownerUid', '') == request.auth.uid || 
-        resource.data.get('ownerId', '') == request.auth.uid || 
-        resource.data.get('owner_user_id', '') == request.auth.uid || 
+        resource.data.get('ownerUid', '') == request.auth.uid ||
+        resource.data.get('ownerId', '') == request.auth.uid ||
+        resource.data.get('owner_user_id', '') == request.auth.uid ||
         (checkMemberExists(orgId) && isOrgOwner(orgId))
       ) && nestLocalCommercialProjectionUnchanged() &&
         musicScaleTrialProjectionProtected();
-      allow delete: if false; 
+      allow delete: if false;
 
       // ---------------------------------------------------------------------------------
       // MULTI-TENANT ISOLATION (NOVA ESTRUTURA)
       // ---------------------------------------------------------------------------------
-      
+
       match /monthly_usage/{monthStr} {
         allow read: if isAuthenticated() && checkOrgAccess(orgId);
         allow write: if false;
@@ -1874,6 +715,1229 @@ service cloud.firestore {
       // NestJourney is intentionally carved out of the generic product wildcard.
       // Firestore ORs overlapping allows, so products must be excluded below.
       match /products/raiz_e_mesa {
+        function journeyOwner(orgId) {
+          let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
+          return isAuthenticated() && orgDoc != null && (
+            orgDoc.data.get('ownerUid', '') == request.auth.uid ||
+            orgDoc.data.get('ownerId', '') == request.auth.uid ||
+            orgDoc.data.get('owner_user_id', '') == request.auth.uid ||
+            orgDoc.data.get('ownerUserId', '') == request.auth.uid
+          );
+        }
+
+        function journeyMemberActive(orgId) {
+          let memberData = getMemberPermissions(orgId);
+          return isAuthenticated() &&
+            memberData != null &&
+            memberData.get('status', 'active') in ['active', 'ativo'];
+        }
+
+        function journeyProductEnabled(orgId) {
+          let orgDoc = get(/databases/$(database)/documents/organizations/$(orgId));
+          let apps = orgDoc != null ? orgDoc.data.get('apps', {}) : {};
+          let nestJourney = apps is map ? apps.get('nestjourney', {}) : {};
+          let legacyJourney = apps is map ? apps.get('raiz_e_mesa', {}) : {};
+          return isSystemAdmin() || (
+            orgDoc != null &&
+            (
+              (nestJourney is map && nestJourney.get('status', '') in ['active', 'trialing']) ||
+              (legacyJourney is map && legacyJourney.get('status', '') in ['active', 'trialing'])
+            )
+          );
+        }
+
+        function journeyHasMembership(orgId) {
+          return journeyProductEnabled(orgId) &&
+            (journeyMemberActive(orgId) || journeyOwner(orgId) || isSystemAdmin());
+        }
+
+        function journeyRole(orgId) {
+          let memberData = getMemberPermissions(orgId);
+          return journeyMemberActive(orgId)
+            ? memberData.get('organizationRole', memberData.get('role', ''))
+            : (journeyOwner(orgId) ? 'owner' : '');
+        }
+
+        function journeyRoleAllowed(orgId, allowed) {
+          return journeyHasMembership(orgId) &&
+            (isSystemAdmin() || journeyRole(orgId) in allowed);
+        }
+
+        function journeyHasPermission(orgId, permission) {
+          let memberData = getMemberPermissions(orgId);
+          let permissions = memberData != null ? memberData.get('permissions', {}) : {};
+          return journeyRoleAllowed(orgId, ['owner', 'admin']) ||
+            (
+              journeyMemberActive(orgId) &&
+              permissions is map &&
+              permissions.get(permission, false) == true
+            );
+        }
+
+        function journeyIsOrgAdmin(orgId) {
+          return isSystemAdmin() ||
+            journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'data_admin']);
+        }
+
+        function journeyCanManagePresence(orgId) {
+          return isSystemAdmin() ||
+            journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator']) ||
+            journeyHasPermission(orgId, 'canManagePresence');
+        }
+
+        function journeyCanManageMesa(orgId) {
+          return isSystemAdmin() ||
+            journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator', 'mesa', 'table_host']) ||
+            journeyHasPermission(orgId, 'canManageMesa') ||
+            journeyHasPermission(orgId, 'canManagePresence');
+        }
+
+        function journeyCanManageMesaInScope(orgId, congregationId) {
+          let memberData = getMemberPermissions(orgId);
+          let active = isAuthenticated() &&
+            memberData != null &&
+            memberData.get('status', 'active') in ['active', 'ativo'];
+          let roleName = active
+            ? memberData.get('organizationRole', memberData.get('role', ''))
+            : '';
+          let permissions = active ? memberData.get('permissions', {}) : {};
+          let congregationIds = active ? memberData.get('congregationIds', []) : [];
+          let privileged = isSystemAdmin() || journeyOwner(orgId);
+          let broad = roleName in ['owner', 'admin', 'pastor'] || (permissions is map && permissions.get('canCoordinateJourney', false) == true);
+          let capable = privileged || (
+            active && (
+              roleName in ['owner', 'admin', 'pastor', 'coordinator', 'mesa', 'table_host'] ||
+              (
+                permissions is map &&
+                (
+                  permissions.get('canManageMesa', false) == true ||
+                  permissions.get('canManagePresence', false) == true
+                )
+              )
+            )
+          );
+          let inScope = privileged || broad || (
+            active &&
+            congregationId is string &&
+            congregationIds is list &&
+            congregationId in congregationIds
+          );
+          return journeyProductEnabled(orgId) && capable && inScope;
+        }
+
+        function journeyCanManagePresenceInScope(orgId, congregationId) {
+          let memberData = getMemberPermissions(orgId);
+          let active = isAuthenticated() &&
+            memberData != null &&
+            memberData.get('status', 'active') in ['active', 'ativo'];
+          let roleName = active
+            ? memberData.get('organizationRole', memberData.get('role', ''))
+            : '';
+          let permissions = active ? memberData.get('permissions', {}) : {};
+          let congregationIds = active ? memberData.get('congregationIds', []) : [];
+          let privileged = isSystemAdmin() || journeyOwner(orgId);
+          let broad = roleName in ['owner', 'admin', 'pastor'];
+          let capable = privileged || (
+            active && (
+              roleName in ['owner', 'admin', 'pastor', 'coordinator'] ||
+              (permissions is map && permissions.get('canManagePresence', false) == true)
+            )
+          );
+          let inScope = privileged || broad || (
+            active &&
+            congregationId is string &&
+            congregationIds is list &&
+            congregationId in congregationIds
+          );
+          return journeyProductEnabled(orgId) && capable && inScope;
+        }
+
+        function journeyCanManagePeople(orgId) {
+          return journeyIsOrgAdmin(orgId) ||
+            journeyHasPermission(orgId, 'canManagePeople');
+        }
+
+        function journeyCanManageCare(orgId) {
+          return isSystemAdmin() ||
+            journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'care']) ||
+            journeyHasPermission(orgId, 'canManageCare');
+        }
+
+        function journeyCanManagePastoral(orgId) {
+          let memberData = getMemberPermissions(orgId);
+          let permissions = memberData != null ? memberData.get('permissions', {}) : {};
+          return isSystemAdmin() ||
+            journeyOwner(orgId) ||
+            journeyRoleAllowed(orgId, ['owner', 'pastor']) ||
+            (
+              journeyMemberActive(orgId) &&
+              permissions is map &&
+              permissions.get('canManagePastoral', false) == true
+            );
+        }
+
+        function journeyCanManageGroups(orgId) {
+          return isSystemAdmin() ||
+            journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'group_leader']) ||
+            journeyHasPermission(orgId, 'canManageGroups');
+        }
+
+        function journeyCanManageGroupRoster(orgId, groupId) {
+          let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
+          let memberData = getMemberPermissions(orgId);
+          let active = isAuthenticated() &&
+            memberData != null &&
+            memberData.get('status', 'active') in ['active', 'ativo'];
+          let roleName = active
+            ? memberData.get('organizationRole', memberData.get('role', ''))
+            : '';
+          let permissions = active ? memberData.get('permissions', {}) : {};
+          let ids = active ? memberData.get('congregationIds', []) : [];
+          let privileged = isSystemAdmin() || journeyOwner(orgId);
+          let broad = roleName in ['owner', 'admin', 'pastor'];
+          return exists(groupPath) &&
+            journeyProductEnabled(orgId) &&
+            (
+              privileged ||
+              (
+                active &&
+                ids is list &&
+                get(groupPath).data.get('congregationId', '') in ids &&
+                (
+                  broad ||
+                  (
+                    (
+                      roleName == 'group_leader' ||
+                      (permissions is map && permissions.get('canManageGroups', false) == true)
+                    ) &&
+                    (
+                      get(groupPath).data.get('leaderId', '') == request.auth.uid ||
+                      get(groupPath).data.get('createdBy', '') == request.auth.uid
+                    )
+                  )
+                )
+              )
+            );
+        }
+
+        function journeyCanCreateGroupEntryRequest(orgId, groupId) {
+          let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
+          let memberData = getMemberPermissions(orgId);
+          let active = isAuthenticated() &&
+            memberData != null &&
+            memberData.get('status', 'active') in ['active', 'ativo'];
+          let roleName = active
+            ? memberData.get('organizationRole', memberData.get('role', ''))
+            : '';
+          let ids = active ? memberData.get('congregationIds', []) : [];
+          let privileged = isSystemAdmin() || journeyOwner(orgId);
+          return exists(groupPath) &&
+            journeyProductEnabled(orgId) &&
+            (
+              privileged ||
+              (
+                active &&
+                ids is list &&
+                get(groupPath).data.get('congregationId', '') in ids &&
+                roleName in ['owner', 'admin', 'pastor']
+              )
+            );
+        }
+
+        function journeyCanOperateDiscipleship(orgId, congregationId, disciplerId) {
+          let memberData = getMemberPermissions(orgId);
+          let active = isAuthenticated() &&
+            memberData != null &&
+            memberData.get('status', 'active') in ['active', 'ativo'];
+          let roleName = active
+            ? memberData.get('organizationRole', memberData.get('role', ''))
+            : '';
+          let permissions = active ? memberData.get('permissions', {}) : {};
+          let privileged = isSystemAdmin() || journeyOwner(orgId);
+          let broad = privileged
+            || roleName in ['owner', 'admin', 'pastor']
+            || (permissions is map && permissions.get('canCoordinateJourney', false) == true);
+          return journeyProductEnabled(orgId)
+            && (
+              broad
+              || (
+                active
+                && congregationId is string
+                && congregationId in memberData.get('congregationIds', [])
+                && disciplerId == request.auth.uid
+                && (
+                  roleName == 'discipler'
+                  || (
+                    permissions is map
+                    && permissions.get('canManageDiscipleship', false) == true
+                  )
+                )
+              )
+            );
+        }
+
+        function journeyCanManageImplementation(orgId) {
+          return isSystemAdmin() ||
+            journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator']) ||
+            journeyHasPermission(orgId, 'canManageImplementation');
+        }
+
+        function journeyCanViewGovernance(orgId) {
+          return isSystemAdmin() ||
+            journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'data_admin']) ||
+            journeyHasPermission(orgId, 'canViewGovernance');
+        }
+
+        function journeyCanManagePrivacy(orgId) {
+          return isSystemAdmin() ||
+            journeyRoleAllowed(orgId, ['owner', 'admin', 'data_admin']) ||
+            journeyHasPermission(orgId, 'canManagePrivacy');
+        }
+
+        function journeyAssignedToCongregation(orgId, congregationId) {
+          let memberData = getMemberPermissions(orgId);
+          let ids = memberData != null ? memberData.get('congregationIds', []) : [];
+          return journeyMemberActive(orgId) &&
+            congregationId is string &&
+            ids is list &&
+            congregationId in ids;
+        }
+
+        function journeyCanAccessCongregation(orgId, congregationId) {
+          return journeyProductEnabled(orgId) &&
+            (journeyIsOrgAdmin(orgId) || journeyAssignedToCongregation(orgId, congregationId));
+        }
+
+        function journeyCanCreateCareInScope(orgId, congregationId, source) {
+          let memberData = getMemberPermissions(orgId);
+          let active = isAuthenticated() &&
+            memberData != null &&
+            memberData.get('status', 'active') in ['active', 'ativo'];
+          let roleName = active
+            ? memberData.get('organizationRole', memberData.get('role', ''))
+            : '';
+          let permissions = active ? memberData.get('permissions', {}) : {};
+          let privileged = isSystemAdmin() || journeyOwner(orgId);
+          let inScope = privileged || (
+            active && (
+              roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
+              (
+                congregationId is string &&
+                congregationId in memberData.get('congregationIds', [])
+              )
+            )
+          );
+          let careCapability = privileged || (
+            active && (
+              roleName in ['owner', 'admin', 'pastor', 'care'] ||
+              (permissions is map && permissions.get('canManageCare', false) == true)
+            )
+          );
+          let peopleCapability = privileged || (
+            active && (
+              roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
+              (permissions is map && permissions.get('canManagePeople', false) == true)
+            )
+          );
+          return journeyProductEnabled(orgId) &&
+            inScope &&
+            (
+              (source == 'manual' && careCapability) ||
+              (source == 'visitor_registration' && peopleCapability)
+            );
+        }
+
+        function journeyCanAccessFollowup(orgId, congregationId, ownerRef) {
+          let memberData = getMemberPermissions(orgId);
+          let active = isAuthenticated() &&
+            memberData != null &&
+            memberData.get('status', 'active') in ['active', 'ativo'];
+          let roleName = active
+            ? memberData.get('organizationRole', memberData.get('role', ''))
+            : '';
+          let permissions = active ? memberData.get('permissions', {}) : {};
+          let ids = active ? memberData.get('congregationIds', []) : [];
+          let privileged = isSystemAdmin() || journeyOwner(orgId);
+          let broad = privileged || (
+            active && roleName in ['owner', 'admin', 'pastor', 'data_admin']
+          );
+          let careCapability = privileged || (
+            active &&
+            (
+              roleName in ['owner', 'admin', 'pastor', 'care'] ||
+              (permissions is map && permissions.get('canManageCare', false) == true)
+            )
+          );
+          let inScope = privileged || (
+            active &&
+            (
+              roleName in ['owner', 'admin', 'pastor', 'data_admin'] ||
+              (ids is list && congregationId is string && congregationId in ids)
+            )
+          );
+          return journeyProductEnabled(orgId) &&
+            careCapability &&
+            inScope &&
+            (broad || ownerRef == request.auth.uid);
+        }
+
+        function journeyTenantCreate(orgId) {
+          return request.resource.data.get('organizationId', '') == orgId;
+        }
+
+        function journeyTenantUnchanged(orgId) {
+          return resource.data.get('organizationId', '') == orgId &&
+            request.resource.data.get('organizationId', '') == orgId;
+        }
+
+        function journeyCongregationUnchanged() {
+          return request.resource.data.get('congregationId', '') ==
+            resource.data.get('congregationId', '');
+        }
+
+        function journeyValidPresenceSessionCreate(orgId) {
+          return journeyTenantCreate(orgId) &&
+            request.resource.data.get('congregationId', '') is string &&
+            request.resource.data.get('createdBy', '') == request.auth.uid &&
+            request.resource.data.get('openedAt', null) == request.time &&
+            request.resource.data.get('status', '') == 'open' &&
+            request.resource.data.get('expectedPeopleCount', -1) is number &&
+            request.resource.data.get('expectedPeopleCount', -1) >= 0 &&
+            request.resource.data.get('minimumCoveragePercent', -1) is number &&
+            request.resource.data.get('minimumCoveragePercent', -1) >= 0 &&
+            request.resource.data.get('minimumCoveragePercent', -1) <= 100;
+        }
+
+        function journeyValidPresenceCheckCreate(orgId) {
+          let sessionId = request.resource.data.get('sessionId', '');
+          let congregationId = request.resource.data.get('congregationId', '');
+          let personId = request.resource.data.get('personId', '');
+          let source = request.resource.data.get('source', '');
+          let correctedFromCheckId = request.resource.data.get('correctedFromCheckId', '');
+          let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
+          let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+          let correctionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceChecks/$(correctedFromCheckId);
+          return journeyTenantCreate(orgId) &&
+            request.resource.data.get('actorId', '') == request.auth.uid &&
+            request.resource.data.get('recordedAt', null) == request.time &&
+            request.resource.data.get('state', '') in ['present_confirmed', 'absent_confirmed', 'unverified'] &&
+            (
+              (
+                source == 'human_check' &&
+                correctedFromCheckId == '' &&
+                exists(sessionPath) &&
+                get(sessionPath).data.get('congregationId', '') == congregationId &&
+                get(sessionPath).data.get('status', '') == 'open' &&
+                exists(personPath) &&
+                get(personPath).data.get('congregationId', '') == congregationId
+              )
+              ||
+              (
+                source == 'retroactive_human_correction' &&
+                correctedFromCheckId != '' &&
+                request.resource.data.get('state', '') != 'unverified' &&
+                exists(sessionPath) &&
+                get(sessionPath).data.get('congregationId', '') == congregationId &&
+                get(sessionPath).data.get('status', '') == 'open' &&
+                exists(correctionPath) &&
+                get(correctionPath).data.get('congregationId', '') == congregationId &&
+                get(correctionPath).data.get('sessionId', '') == sessionId &&
+                get(correctionPath).data.get('personId', '') == personId &&
+                get(correctionPath).data.get('state', '') != request.resource.data.get('state', '')
+              )
+            );
+        }
+
+        function journeyPersonBondEmptyOnCreate() {
+          return request.resource.data.get('bondHostRef', '') == '' &&
+            request.resource.data.get('bondAssignedAt', null) == null &&
+            request.resource.data.get('bondAssignedBy', '') == '';
+        }
+
+        function journeyPersonBondUnchanged() {
+          return request.resource.data.get('bondHostRef', '') == resource.data.get('bondHostRef', '') &&
+            request.resource.data.get('bondAssignedAt', null) == resource.data.get('bondAssignedAt', null) &&
+            request.resource.data.get('bondAssignedBy', '') == resource.data.get('bondAssignedBy', '');
+        }
+
+        function journeyCanManageSettings(orgId) {
+          return isSystemAdmin() ||
+            journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor']);
+        }
+
+        function journeyValidModuleLabels(orgId) {
+          let labels = request.resource.data.get('labels', {});
+          return request.resource.data.get('organizationId', '') == orgId &&
+            labels is map &&
+            labels.keys().hasOnly(['presence', 'table', 'care', 'groups', 'discipleship']) &&
+            labels.get('presence', '') is string && labels.get('presence', '').size() <= 48 &&
+            labels.get('table', '') is string && labels.get('table', '').size() <= 48 &&
+            labels.get('care', '') is string && labels.get('care', '').size() <= 48 &&
+            labels.get('groups', '') is string && labels.get('groups', '').size() <= 48 &&
+            labels.get('discipleship', '') is string && labels.get('discipleship', '').size() <= 48 &&
+            request.resource.data.get('updatedAt', null) == request.time &&
+            request.resource.data.get('updatedBy', '') == request.auth.uid &&
+            request.resource.data.keys().hasOnly([
+              'organizationId', 'labels', 'updatedAt', 'updatedBy'
+            ]);
+        }
+
+        function journeyValidMesaParticipationCreate(orgId, recordId) {
+          let sessionId = request.resource.data.get('sessionId', '');
+          let congregationId = request.resource.data.get('congregationId', '');
+          let personId = request.resource.data.get('personId', '');
+          let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
+          let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+          return journeyTenantCreate(orgId) &&
+            recordId == sessionId + '__' + personId &&
+            congregationId is string &&
+            sessionId is string &&
+            personId is string &&
+            request.resource.data.get('status', '') in ['invited', 'joined'] &&
+            request.resource.data.get('bondHostRef', '') is string &&
+            request.resource.data.get('bondHostRef', '').size() > 0 &&
+            request.resource.data.get('updatedAt', null) == request.time &&
+            request.resource.data.get('updatedBy', '') == request.auth.uid &&
+            request.resource.data.keys().hasOnly([
+              'organizationId', 'congregationId', 'sessionId', 'personId',
+              'status', 'bondHostRef', 'updatedAt', 'updatedBy'
+            ]) &&
+            exists(sessionPath) &&
+            get(sessionPath).data.get('congregationId', '') == congregationId &&
+            get(sessionPath).data.get('status', '') == 'open' &&
+            exists(personPath) &&
+            get(personPath).data.get('congregationId', '') == congregationId;
+        }
+
+        function journeyValidMesaParticipationUpdate(orgId) {
+          return journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            request.resource.data.get('sessionId', '') == resource.data.get('sessionId', '') &&
+            request.resource.data.get('personId', '') == resource.data.get('personId', '') &&
+            request.resource.data.get('status', '') in ['invited', 'joined'] &&
+            request.resource.data.get('bondHostRef', '') == resource.data.get('bondHostRef', '') &&
+            request.resource.data.get('updatedAt', null) == request.time &&
+            request.resource.data.get('updatedBy', '') == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'updatedAt', 'updatedBy'
+            ]);
+        }
+
+        function journeyValidMesaPreparationCreate(orgId, preparationId) {
+          let congregationId = request.resource.data.get('congregationId', '');
+          let sessionId = request.resource.data.get('sessionId', '');
+          let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
+          let items = request.resource.data.get('items', {});
+          let owners = request.resource.data.get('owners', {});
+          let allReady = items.get('environment', false) &&
+            items.get('hosts', false) &&
+            items.get('hospitality', false) &&
+            items.get('supplies', false);
+          return request.resource.data.keys().hasOnly([
+              'organizationId', 'congregationId', 'sessionId', 'status',
+              'items', 'owners', 'updatedAt', 'updatedBy'
+            ]) &&
+            journeyTenantCreate(orgId) &&
+            preparationId == sessionId &&
+            congregationId is string && congregationId.size() > 0 &&
+            sessionId is string && sessionId.size() > 0 &&
+            items is map &&
+            owners is map &&
+            items.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
+            owners.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
+            items.get('environment', false) is bool &&
+            items.get('hosts', false) is bool &&
+            items.get('hospitality', false) is bool &&
+            items.get('supplies', false) is bool &&
+            owners.get('environment', '') == (items.get('environment', false) ? request.auth.uid : '') &&
+            owners.get('hosts', '') == (items.get('hosts', false) ? request.auth.uid : '') &&
+            owners.get('hospitality', '') == (items.get('hospitality', false) ? request.auth.uid : '') &&
+            owners.get('supplies', '') == (items.get('supplies', false) ? request.auth.uid : '') &&
+            request.resource.data.get('status', '') == (allReady ? 'ready' : 'preparing') &&
+            request.resource.data.get('updatedAt', null) == request.time &&
+            request.resource.data.get('updatedBy', '') == request.auth.uid &&
+            journeyCanManageMesaInScope(orgId, congregationId) &&
+            exists(sessionPath) &&
+            get(sessionPath).data.get('congregationId', '') == congregationId &&
+            get(sessionPath).data.get('status', '') == 'open';
+        }
+
+        function journeyValidMesaPreparationUpdate(orgId) {
+          let congregationId = resource.data.get('congregationId', '');
+          let sessionId = resource.data.get('sessionId', '');
+          let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
+          let items = request.resource.data.get('items', {});
+          let owners = request.resource.data.get('owners', {});
+          let oldItems = resource.data.get('items', {});
+          let oldOwners = resource.data.get('owners', {});
+          let allReady = items.get('environment', false) &&
+            items.get('hosts', false) &&
+            items.get('hospitality', false) &&
+            items.get('supplies', false);
+          return journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            request.resource.data.get('sessionId', '') == sessionId &&
+            request.resource.data.keys().hasOnly([
+              'organizationId', 'congregationId', 'sessionId', 'status',
+              'items', 'owners', 'updatedAt', 'updatedBy'
+            ]) &&
+            items is map &&
+            owners is map &&
+            items.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
+            owners.keys().hasOnly(['environment', 'hosts', 'hospitality', 'supplies']) &&
+            items.get('environment', false) is bool &&
+            items.get('hosts', false) is bool &&
+            items.get('hospitality', false) is bool &&
+            items.get('supplies', false) is bool &&
+            owners.get('environment', '') == (
+              items.get('environment', false) == oldItems.get('environment', false)
+                ? oldOwners.get('environment', '')
+                : (items.get('environment', false) ? request.auth.uid : '')
+            ) &&
+            owners.get('hosts', '') == (
+              items.get('hosts', false) == oldItems.get('hosts', false)
+                ? oldOwners.get('hosts', '')
+                : (items.get('hosts', false) ? request.auth.uid : '')
+            ) &&
+            owners.get('hospitality', '') == (
+              items.get('hospitality', false) == oldItems.get('hospitality', false)
+                ? oldOwners.get('hospitality', '')
+                : (items.get('hospitality', false) ? request.auth.uid : '')
+            ) &&
+            owners.get('supplies', '') == (
+              items.get('supplies', false) == oldItems.get('supplies', false)
+                ? oldOwners.get('supplies', '')
+                : (items.get('supplies', false) ? request.auth.uid : '')
+            ) &&
+            request.resource.data.get('status', '') == (allReady ? 'ready' : 'preparing') &&
+            request.resource.data.get('updatedAt', null) == request.time &&
+            request.resource.data.get('updatedBy', '') == request.auth.uid &&
+            journeyCanManageMesa(orgId) &&
+            exists(sessionPath) &&
+            get(sessionPath).data.get('congregationId', '') == congregationId &&
+            get(sessionPath).data.get('status', '') == 'open';
+        }
+
+        function journeyValidCareRequestCreate(orgId) {
+          let source = request.resource.data.get('source', '');
+          let ownerRef = request.resource.data.get('ownerRef', '');
+          let summary = request.resource.data.get('summary', '');
+          return journeyTenantCreate(orgId) &&
+            request.resource.data.get('congregationId', '') is string &&
+            request.resource.data.get('personId', '') is string &&
+            request.resource.data.get('careType', '') in ['first_contact', 'prayer', 'pastoral_contact', 'group_interest', 'absence_check', 'operational_followup'] &&
+            source in ['manual', 'visitor_registration'] &&
+            request.resource.data.get('status', '') == 'open' &&
+            request.resource.data.get('requestedAt', null) == request.time &&
+            request.resource.data.get('requestedBy', '') == request.auth.uid &&
+            request.resource.data.get('promiseHours', 0) is number &&
+            request.resource.data.get('promiseHours', 0) >= 1 &&
+            request.resource.data.get('promiseHours', 0) <= 168 &&
+            request.resource.data.get('dueAt', null) is timestamp &&
+            request.resource.data.get('dueAt', null) > request.time &&
+            request.resource.data.get('dueAt', null) <= request.time + duration.value(168, 'h') &&
+            ownerRef is string &&
+            summary is string &&
+            summary.size() <= 160 &&
+            (
+              (source == 'manual' &&
+                ownerRef == request.auth.uid &&
+                request.resource.data.get('assignedAt', null) == request.time &&
+                request.resource.data.get('assignedBy', '') == request.auth.uid)
+              ||
+              (source == 'visitor_registration' &&
+                ownerRef == '' &&
+                request.resource.data.get('assignedAt', null) == null &&
+                request.resource.data.get('assignedBy', '') == '')
+            );
+        }
+
+        function journeyValidCareClaim(orgId) {
+          return resource.data.get('status', '') == 'open' &&
+            resource.data.get('ownerRef', '') == '' &&
+            journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerRef', 'assignedAt', 'assignedBy']) &&
+            request.resource.data.get('ownerRef', '') == request.auth.uid &&
+            request.resource.data.get('assignedAt', null) == request.time &&
+            request.resource.data.get('assignedBy', '') == request.auth.uid;
+        }
+
+        function journeyValidCareResolve(orgId) {
+          let note = request.resource.data.get('resolutionNote', '');
+          return resource.data.get('status', '') == 'open' &&
+            (resource.data.get('ownerRef', '') == request.auth.uid || journeyIsOrgAdmin(orgId)) &&
+            journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedAt', 'resolvedBy', 'resolutionCode', 'resolutionNote']) &&
+            request.resource.data.get('status', '') == 'resolved' &&
+            request.resource.data.get('resolvedAt', null) == request.time &&
+            request.resource.data.get('resolvedBy', '') == request.auth.uid &&
+            request.resource.data.get('resolutionCode', '') in ['contact_completed', 'pastoral_handoff', 'declined_contact', 'invalid_contact', 'closed_no_response', 'other_resolved'] &&
+            note is string &&
+            note.size() <= 160;
+        }
+
+        function journeyValidPrivacyRequestCreate(orgId) {
+          let congregationId = request.resource.data.get('congregationId', '');
+          let personId = request.resource.data.get('personId', '');
+          let requestType = request.resource.data.get('requestType', '');
+          let targetField = request.resource.data.get('targetField', '');
+          let proposedValue = request.resource.data.get('proposedValue', '');
+          let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+          return journeyTenantCreate(orgId) &&
+            congregationId is string &&
+            personId is string &&
+            requestType in ['correction', 'consent_revocation', 'deletion_review', 'retention_review'] &&
+            request.resource.data.get('status', '') == 'open' &&
+            request.resource.data.get('requestedAt', null) == request.time &&
+            request.resource.data.get('requestedBy', '') == request.auth.uid &&
+            exists(personPath) &&
+            get(personPath).data.get('congregationId', '') == congregationId &&
+            (
+              (
+                requestType == 'correction' &&
+                targetField in ['name', 'phone', 'firstVisit'] &&
+                proposedValue is string &&
+                proposedValue.size() > 0 &&
+                proposedValue.size() <= 120
+              ) ||
+              (
+                requestType != 'correction' &&
+                targetField == '' &&
+                proposedValue == ''
+              )
+            );
+        }
+
+        function journeyValidPastoralHandoffCreate(orgId, handoffId) {
+          let sourceCareRequestId = request.resource.data.get('sourceCareRequestId', '');
+          let source = getAfter(/databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(sourceCareRequestId)).data;
+          return request.resource.data.keys().hasOnly([
+              'organizationId', 'congregationId', 'personId', 'sourceCareRequestId',
+              'status', 'requestedAt', 'requestedBy', 'resolvedAt', 'resolvedBy'
+            ]) &&
+            request.resource.data.get('organizationId', '') == orgId &&
+            sourceCareRequestId == handoffId &&
+            request.resource.data.get('status', '') == 'open' &&
+            request.resource.data.get('requestedAt', null) == request.time &&
+            request.resource.data.get('requestedBy', '') == request.auth.uid &&
+            request.resource.data.get('resolvedAt', null) == null &&
+            request.resource.data.get('resolvedBy', '') == '' &&
+            source.get('organizationId', '') == orgId &&
+            source.get('congregationId', '') == request.resource.data.get('congregationId', '') &&
+            source.get('personId', '') == request.resource.data.get('personId', '') &&
+            source.get('status', '') == 'resolved' &&
+            source.get('resolutionCode', '') == 'pastoral_handoff' &&
+            source.get('resolvedBy', '') == request.auth.uid;
+        }
+
+        function journeyValidPastoralHandoffResolve(orgId) {
+          return journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            resource.data.get('status', '') == 'open' &&
+            request.resource.data.get('personId', '') == resource.data.get('personId', '') &&
+            request.resource.data.get('sourceCareRequestId', '') == resource.data.get('sourceCareRequestId', '') &&
+            request.resource.data.get('requestedAt', null) == resource.data.get('requestedAt', null) &&
+            request.resource.data.get('requestedBy', '') == resource.data.get('requestedBy', '') &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedAt', 'resolvedBy']) &&
+            request.resource.data.get('status', '') == 'resolved' &&
+            request.resource.data.get('resolvedAt', null) == request.time &&
+            request.resource.data.get('resolvedBy', '') == request.auth.uid;
+        }
+
+        function journeyValidFollowupCreate(orgId, followupId) {
+          let careRequestId = request.resource.data.get('careRequestId', '');
+          let personId = request.resource.data.get('personId', '');
+          let carePath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(careRequestId);
+          let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+          let careData = get(carePath).data;
+          let personData = get(personPath).data;
+          return request.resource.data.keys().hasOnly([
+              'organizationId', 'congregationId', 'personId', 'careRequestId', 'kind',
+              'status', 'ownerRef', 'dueAt', 'createdAt', 'createdBy',
+              'completedAt', 'completedBy', 'outcomeCode', 'nextActionCode'
+            ]) &&
+            request.resource.data.get('organizationId', '') == orgId &&
+            followupId == 'first-contact-' + careRequestId &&
+            request.resource.data.get('kind', '') == 'first_contact' &&
+            request.resource.data.get('status', '') == 'pending' &&
+            request.resource.data.get('ownerRef', '') == request.auth.uid &&
+            request.resource.data.get('createdAt', null) == request.time &&
+            request.resource.data.get('createdBy', '') == request.auth.uid &&
+            request.resource.data.get('completedAt', null) == null &&
+            request.resource.data.get('completedBy', '') == '' &&
+            request.resource.data.get('outcomeCode', '') == '' &&
+            request.resource.data.get('nextActionCode', '') == '' &&
+            careData.get('status', '') == 'open' &&
+            careData.get('careType', '') == 'first_contact' &&
+            careData.get('ownerRef', '') == request.auth.uid &&
+            careData.get('personId', '') == personId &&
+            careData.get('congregationId', '') == request.resource.data.get('congregationId', '') &&
+            request.resource.data.get('dueAt', null) == careData.get('dueAt', null) &&
+            personData.get('congregationId', '') == request.resource.data.get('congregationId', '') &&
+            personData.get('consent', false) == true &&
+            personData.get('phone', '') is string &&
+            personData.get('phone', '').size() > 0;
+        }
+
+        function journeyValidFollowupOutcomePair(outcomeCode, nextActionCode) {
+          return
+            (outcomeCode == 'responded' && nextActionCode == 'none') ||
+            (outcomeCode == 'prayer_requested' && nextActionCode == 'care_prayer') ||
+            (outcomeCode == 'group_interest' && nextActionCode == 'group_entry') ||
+            (outcomeCode == 'declined_contact' && nextActionCode == 'none') ||
+            (outcomeCode == 'invalid_contact' && nextActionCode == 'data_correction') ||
+            (outcomeCode == 'no_response' && nextActionCode == 'manual_review');
+        }
+
+        function journeyValidFollowupCareResolution(outcomeCode, resolutionCode) {
+          return
+            (outcomeCode in ['responded', 'prayer_requested', 'group_interest'] && resolutionCode == 'contact_completed') ||
+            (outcomeCode == 'declined_contact' && resolutionCode == 'declined_contact') ||
+            (outcomeCode == 'invalid_contact' && resolutionCode == 'invalid_contact') ||
+            (outcomeCode == 'no_response' && resolutionCode == 'closed_no_response');
+        }
+
+        function journeyValidFollowupComplete(orgId) {
+          let careRequestId = resource.data.get('careRequestId', '');
+          let carePath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(careRequestId);
+          let careData = getAfter(carePath).data;
+          let outcomeCode = request.resource.data.get('outcomeCode', '');
+          let nextActionCode = request.resource.data.get('nextActionCode', '');
+          return resource.data.get('status', '') == 'pending' &&
+            resource.data.get('ownerRef', '') == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'completedAt', 'completedBy', 'outcomeCode', 'nextActionCode'
+            ]) &&
+            request.resource.data.get('status', '') == 'completed' &&
+            request.resource.data.get('completedAt', null) == request.time &&
+            request.resource.data.get('completedBy', '') == request.auth.uid &&
+            journeyValidFollowupOutcomePair(outcomeCode, nextActionCode) &&
+            careData.get('status', '') == 'resolved' &&
+            careData.get('resolvedAt', null) == request.time &&
+            careData.get('resolvedBy', '') == request.auth.uid &&
+            journeyValidFollowupCareResolution(outcomeCode, careData.get('resolutionCode', ''));
+        }
+
+        function journeyValidCareResolvedFactDocument(orgId, factId) {
+          let payload = request.resource.data.get('payload', {});
+          let careRequestId = payload.get('careRequestId', '');
+          let personId = payload.get('personId', '');
+          let carePath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(careRequestId);
+          let careData = getAfter(carePath).data;
+          return request.resource.data.get('organizationId', '') == orgId &&
+            request.resource.data.get('eventId', '') == factId &&
+            request.resource.data.get('eventType', '') == 'CARE_RESOLVED' &&
+            request.resource.data.get('actorId', '') == request.auth.uid &&
+            request.resource.data.get('sourceApp', '') == 'nestjourney' &&
+            request.resource.data.get('version', 0) == 1 &&
+            request.resource.data.get('recordedAt', null) == request.time &&
+            request.resource.data.get('occurredAt', null) == request.time &&
+            request.resource.data.get('sensitivity', '') == 'confidential' &&
+            factId == 'care-resolved-' + careRequestId &&
+            careData.get('status', '') == 'resolved' &&
+            careData.get('resolvedAt', null) == request.time &&
+            careData.get('resolvedBy', '') == request.auth.uid &&
+            careData.get('personId', '') == personId &&
+            careData.get('careType', '') == payload.get('careType', '') &&
+            careData.get('resolutionCode', '') == payload.get('resolutionCode', '') &&
+            request.resource.data.get('subjectRef', '') == 'person:' + personId &&
+            request.resource.data.get('evidenceRef', '') == 'careRequest:' + careRequestId &&
+            request.resource.data.get('scope', '') == 'congregation:' + careData.get('congregationId', '');
+        }
+
+        function journeyValidFollowupCanonicalFact(orgId, factId, eventType, payload) {
+          let followupId = payload.get('followupId', '');
+          let careRequestId = payload.get('careRequestId', '');
+          let personId = payload.get('personId', '');
+          let followupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/followups/$(followupId);
+          let followupData = getAfter(followupPath).data;
+          return followupData.get('personId', '') == personId &&
+            followupData.get('careRequestId', '') == careRequestId &&
+            request.resource.data.get('subjectRef', '') == 'person:' + personId &&
+            request.resource.data.get('evidenceRef', '') == 'followup:' + followupId &&
+            request.resource.data.get('scope', '') == 'congregation:' + followupData.get('congregationId', '') &&
+            (
+              (
+                eventType == 'FOLLOWUP_CREATED' &&
+                factId == 'followup-created-' + followupId &&
+                followupData.get('status', '') == 'pending' &&
+                followupData.get('createdAt', null) == request.time &&
+                followupData.get('createdBy', '') == request.auth.uid
+              ) ||
+              (
+                eventType == 'FOLLOWUP_COMPLETED' &&
+                factId == 'followup-completed-' + followupId &&
+                followupData.get('status', '') == 'completed' &&
+                followupData.get('completedAt', null) == request.time &&
+                followupData.get('completedBy', '') == request.auth.uid &&
+                followupData.get('outcomeCode', '') == payload.get('outcomeCode', '') &&
+                followupData.get('nextActionCode', '') == payload.get('nextActionCode', '')
+              )
+            );
+        }
+
+        function journeyValidFollowupFactDocument(orgId, factId) {
+          let eventType = request.resource.data.get('eventType', '');
+          let payload = request.resource.data.get('payload', {});
+          return request.resource.data.get('organizationId', '') == orgId &&
+            request.resource.data.get('eventId', '') == factId &&
+            request.resource.data.get('actorId', '') == request.auth.uid &&
+            request.resource.data.get('sourceApp', '') == 'nestjourney' &&
+            request.resource.data.get('version', 0) == 1 &&
+            request.resource.data.get('recordedAt', null) == request.time &&
+            request.resource.data.get('occurredAt', null) == request.time &&
+            request.resource.data.get('subjectRef', '') is string &&
+            request.resource.data.get('scope', '') is string &&
+            request.resource.data.get('evidenceRef', '') is string &&
+            request.resource.data.get('evidenceRef', '').size() > 0 &&
+            request.resource.data.get('sensitivity', '') == 'confidential' &&
+            eventType in ['FOLLOWUP_CREATED', 'FOLLOWUP_COMPLETED'] &&
+            journeyValidFollowupCanonicalFact(orgId, factId, eventType, payload);
+        }
+
+        function journeyValidImplementationKey(key) {
+          return key is string &&
+            key.matches('^(prep[.][1-7]|week[.]1[.](practice|teach[.][1-4])|week[.]2[.](practice|teach[.][1-5])|week[.]3[.](practice|teach[.][1-4])|week[.]4[.](practice|teach[.][1-5])|week[.]5[.](practice|teach[.][1-5])|week[.]6[.](practice|teach[.][1-4])|week[.]7[.](practice|teach[.][1-5]))$');
+        }
+
+        function journeyValidImplementationCycleCreate(orgId) {
+          return journeyTenantCreate(orgId) &&
+            request.resource.data.get('congregationId', '') is string &&
+            request.resource.data.get('playbookId', '') == 'raiz_e_mesa_2026' &&
+            request.resource.data.get('status', '') == 'active' &&
+            request.resource.data.get('startedAt', null) == request.time &&
+            request.resource.data.get('createdAt', null) == request.time &&
+            request.resource.data.get('createdBy', '') == request.auth.uid;
+        }
+
+        function journeyValidGroupState() {
+          let capacity = request.resource.data.get('capacity', 0);
+          let participants = request.resource.data.get('participants', 0);
+          return capacity is number &&
+            participants is number &&
+            capacity >= 1 &&
+            capacity <= 100 &&
+            participants >= 0 &&
+            participants <= capacity;
+        }
+
+        function journeyValidGroupEntryRequestCreate(orgId) {
+          let groupId = request.resource.data.get('groupId', '');
+          let personId = request.resource.data.get('personId', '');
+          let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
+          let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+          return request.resource.data.keys().hasOnly([
+              'organizationId', 'congregationId', 'groupId', 'personId', 'personName',
+              'status', 'requestedAt', 'requestedBy', 'resolvedAt', 'resolvedBy'
+            ]) &&
+            request.resource.data.get('organizationId', '') == orgId &&
+            groupId is string &&
+            groupId.size() > 0 &&
+            personId is string &&
+            personId.size() > 0 &&
+            request.resource.data.get('personName', '') is string &&
+            request.resource.data.get('personName', '').size() > 0 &&
+            request.resource.data.get('status', '') == 'pending' &&
+            request.resource.data.get('requestedAt', null) == request.time &&
+            request.resource.data.get('requestedBy', '') == request.auth.uid &&
+            request.resource.data.get('resolvedAt', null) == null &&
+            request.resource.data.get('resolvedBy', '') == '' &&
+            journeyCanCreateGroupEntryRequest(orgId, groupId) &&
+            exists(groupPath) &&
+            exists(personPath) &&
+            get(groupPath).data.get('congregationId', '') ==
+              request.resource.data.get('congregationId', '') &&
+            get(personPath).data.get('congregationId', '') ==
+              request.resource.data.get('congregationId', '');
+        }
+
+        function journeyValidGroupEntryRequestUpdate(orgId) {
+          let groupId = resource.data.get('groupId', '');
+          let personId = resource.data.get('personId', '');
+          let nextStatus = request.resource.data.get('status', '');
+          let membershipPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groupMemberships/$(groupId + '__' + personId);
+          return request.resource.data.keys().hasOnly([
+              'organizationId', 'congregationId', 'groupId', 'personId', 'personName',
+              'status', 'requestedAt', 'requestedBy', 'resolvedAt', 'resolvedBy'
+            ]) &&
+            resource.data.get('organizationId', '') == orgId &&
+            request.resource.data.get('organizationId', '') == orgId &&
+            request.resource.data.get('organizationId', '') ==
+              resource.data.get('organizationId', '') &&
+            request.resource.data.get('congregationId', '') ==
+              resource.data.get('congregationId', '') &&
+            request.resource.data.get('groupId', '') == groupId &&
+            request.resource.data.get('personId', '') == personId &&
+            request.resource.data.get('personName', '') ==
+              resource.data.get('personName', '') &&
+            request.resource.data.get('requestedAt', null) ==
+              resource.data.get('requestedAt', null) &&
+            request.resource.data.get('requestedBy', '') ==
+              resource.data.get('requestedBy', '') &&
+            resource.data.get('status', '') == 'pending' &&
+            nextStatus in ['accepted', 'declined'] &&
+            request.resource.data.get('resolvedAt', null) == request.time &&
+            request.resource.data.get('resolvedBy', '') == request.auth.uid &&
+            journeyCanManageGroupRoster(orgId, groupId) &&
+            (
+              nextStatus == 'declined' ||
+              (
+                existsAfter(membershipPath) &&
+                getAfter(membershipPath).data.get('status', '') == 'active'
+              )
+            );
+        }
+
+        function journeyValidGroupMembershipCreate(orgId, membershipId) {
+          let groupId = request.resource.data.get('groupId', '');
+          let personId = request.resource.data.get('personId', '');
+          let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
+          let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+          return request.resource.data.keys().hasOnly([
+              'organizationId', 'congregationId', 'groupId', 'personId', 'personName',
+              'status', 'joinedAt', 'joinedBy', 'leftAt', 'leftBy'
+            ]) &&
+            request.resource.data.get('organizationId', '') == orgId &&
+            groupId is string &&
+            groupId.size() > 0 &&
+            personId is string &&
+            personId.size() > 0 &&
+            membershipId == groupId + '__' + personId &&
+            request.resource.data.get('status', '') == 'active' &&
+            request.resource.data.get('joinedAt', null) == request.time &&
+            request.resource.data.get('joinedBy', '') == request.auth.uid &&
+            request.resource.data.get('leftAt', null) == null &&
+            request.resource.data.get('leftBy', '') == '' &&
+            journeyCanManageGroupRoster(orgId, groupId) &&
+            exists(groupPath) &&
+            exists(personPath) &&
+            get(groupPath).data.get('congregationId', '') ==
+              request.resource.data.get('congregationId', '') &&
+            get(personPath).data.get('congregationId', '') ==
+              request.resource.data.get('congregationId', '');
+        }
+
+        function journeyValidGroupMembershipUpdate(orgId) {
+          let groupId = resource.data.get('groupId', '');
+          let nextStatus = request.resource.data.get('status', '');
+          let previousStatus = resource.data.get('status', '');
+          return request.resource.data.get('organizationId', '') == orgId &&
+            request.resource.data.get('organizationId', '') ==
+              resource.data.get('organizationId', '') &&
+            request.resource.data.get('congregationId', '') ==
+              resource.data.get('congregationId', '') &&
+            request.resource.data.get('groupId', '') == groupId &&
+            request.resource.data.get('personId', '') ==
+              resource.data.get('personId', '') &&
+            request.resource.data.get('personName', '') ==
+              resource.data.get('personName', '') &&
+            journeyCanManageGroupRoster(orgId, groupId) &&
+            (
+              (
+                previousStatus == 'active' &&
+                nextStatus == 'left' &&
+                request.resource.data.get('joinedAt', null) ==
+                  resource.data.get('joinedAt', null) &&
+                request.resource.data.get('joinedBy', '') ==
+                  resource.data.get('joinedBy', '') &&
+                request.resource.data.get('leftAt', null) == request.time &&
+                request.resource.data.get('leftBy', '') == request.auth.uid
+              ) ||
+              (
+                previousStatus == 'left' &&
+                nextStatus == 'active' &&
+                request.resource.data.get('joinedAt', null) == request.time &&
+                request.resource.data.get('joinedBy', '') == request.auth.uid &&
+                request.resource.data.get('leftAt', null) == null &&
+                request.resource.data.get('leftBy', '') == ''
+              )
+            );
+        }
+
+        function journeyValidGroupMeetingCreate(orgId) {
+          let groupId = request.resource.data.get('groupId', '');
+          let congregationId = request.resource.data.get('congregationId', '');
+          let groupPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groups/$(groupId);
+          return request.resource.data.keys().hasOnly([
+              'organizationId', 'congregationId', 'groupId', 'status',
+              'startedAt', 'createdBy', 'endedAt', 'closedBy'
+            ]) &&
+            journeyTenantCreate(orgId) &&
+            groupId is string &&
+            groupId.size() > 0 &&
+            congregationId is string &&
+            congregationId.size() > 0 &&
+            request.resource.data.get('status', '') == 'open' &&
+            request.resource.data.get('startedAt', null) == request.time &&
+            request.resource.data.get('createdBy', '') == request.auth.uid &&
+            request.resource.data.get('endedAt', null) == null &&
+            request.resource.data.get('closedBy', '') == '' &&
+            journeyCanManageGroupRoster(orgId, groupId) &&
+            exists(groupPath) &&
+            get(groupPath).data.get('congregationId', '') == congregationId;
+        }
+
+        function journeyValidGroupMeetingClose(orgId) {
+          let groupId = resource.data.get('groupId', '');
+          return journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            request.resource.data.get('groupId', '') == groupId &&
+            request.resource.data.get('startedAt', null) == resource.data.get('startedAt', null) &&
+            request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '') &&
+            resource.data.get('status', '') == 'open' &&
+            request.resource.data.get('status', '') == 'closed' &&
+            request.resource.data.get('endedAt', null) == request.time &&
+            request.resource.data.get('closedBy', '') == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'endedAt', 'closedBy'
+            ]) &&
+            journeyCanManageGroupRoster(orgId, groupId);
+        }
+
+        function journeyValidGroupAttendanceCreate(orgId, attendanceId) {
+          let groupId = request.resource.data.get('groupId', '');
+          let meetingId = request.resource.data.get('meetingId', '');
+          let personId = request.resource.data.get('personId', '');
+          let congregationId = request.resource.data.get('congregationId', '');
+          let meetingPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groupMeetings/$(meetingId);
+          let membershipPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/groupMemberships/$(groupId + '__' + personId);
+          return request.resource.data.keys().hasOnly([
+              'organizationId', 'congregationId', 'groupId', 'meetingId',
+              'personId', 'status', 'recordedAt', 'recordedBy'
+            ]) &&
+            journeyTenantCreate(orgId) &&
+            attendanceId == meetingId + '__' + personId &&
+            groupId is string && groupId.size() > 0 &&
+            meetingId is string && meetingId.size() > 0 &&
+            personId is string && personId.size() > 0 &&
+            congregationId is string && congregationId.size() > 0 &&
+            request.resource.data.get('status', '') == 'present_confirmed' &&
+            request.resource.data.get('recordedAt', null) == request.time &&
+            request.resource.data.get('recordedBy', '') == request.auth.uid &&
+            journeyCanManageGroupRoster(orgId, groupId) &&
+            exists(meetingPath) &&
+            get(meetingPath).data.get('groupId', '') == groupId &&
+            get(meetingPath).data.get('congregationId', '') == congregationId &&
+            get(meetingPath).data.get('status', '') == 'open' &&
+            exists(membershipPath) &&
+            get(membershipPath).data.get('groupId', '') == groupId &&
+            get(membershipPath).data.get('personId', '') == personId &&
+            get(membershipPath).data.get('congregationId', '') == congregationId &&
+            get(membershipPath).data.get('status', '') == 'active';
+        }
+
+        function journeyValidDiscipleshipCreate() {
+          return request.resource.data.get('personId', '') is string &&
+            request.resource.data.get('personId', '').size() > 0 &&
+            request.resource.data.get('disciplerId', '') is string &&
+            request.resource.data.get('disciplerId', '').size() > 0 &&
+            request.resource.data.get('meeting', 0) == 1 &&
+            request.resource.data.get('status', '') == 'active';
+        }
+
+        function journeyValidDiscipleshipUpdate() {
+          let meeting = request.resource.data.get('meeting', 0);
+          let previousMeeting = resource.data.get('meeting', 0);
+          let status = request.resource.data.get('status', '');
+          return request.resource.data.get('personId', '') == resource.data.get('personId', '') &&
+            meeting is number &&
+            previousMeeting is number &&
+            meeting >= previousMeeting &&
+            meeting <= previousMeeting + 1 &&
+            meeting >= 1 &&
+            meeting <= 7 &&
+            status in ['active', 'paused', 'completed'] &&
+            (status != 'completed' || meeting == 7);
+        }
+
+        function journeyValidCanonicalFact(orgId, factId) {
+          let eventType = request.resource.data.get('eventType', '');
+          let payload = request.resource.data.get('payload', {});
+          let personId = payload.get('personId', '');
+          let sessionId = payload.get('sessionId', '');
+          let checkId = payload.get('checkId', '');
+          let careRequestId = payload.get('careRequestId', '');
+          let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+          let sessionPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceSessions/$(sessionId);
+          let checkPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/presenceChecks/$(checkId);
+          let carePath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/careRequests/$(careRequestId);
+          return journeyTenantCreate(orgId) &&
+            request.resource.data.get('eventId', '') == factId &&
+            request.resource.data.get('actorId', '') == request.auth.uid &&
+            request.resource.data.get('sourceApp', '') == 'nestjourney' &&
+            request.resource.data.get('version', 0) == 1 &&
+            request.resource.data.get('recordedAt', null) == request.time &&
+            request.resource.data.get('occurredAt', null) == request.time &&
+            request.resource.data.get('subjectRef', '') is string &&
+            request.resource.data.get('scope', '') is string &&
+            request.resource.data.get('evidenceRef', '') is string &&
+            request.resource.data.get('evidenceRef', '').size() > 0 &&
+            request.resource.data.get('sensitivity', '') in ['public', 'internal', 'confidential', 'restricted'] &&
+            eventType in [
+              'VISITOR_REGISTERED', 'PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED', 'PRESENCE_CORRECTED',
+              'CARE_REQUESTED', 'CARE_ASSIGNED'
+            ] &&
+            (
+              (eventType == 'VISITOR_REGISTERED' &&
+                personId is string &&
+                request.resource.data.get('subjectRef', '') == 'person:' + personId &&
+                request.resource.data.get('evidenceRef', '') == 'person:' + personId &&
+                existsAfter(personPath) &&
+                request.resource.data.get('scope', '') == 'congregation:' + getAfter(personPath).data.get('congregationId', ''))
+              ||
+              (eventType == 'PRESENCE_SESSION_OPENED' &&
+                sessionId is string &&
+                request.resource.data.get('subjectRef', '') == 'presenceSession:' + sessionId &&
+                request.resource.data.get('evidenceRef', '') == 'presenceSession:' + sessionId &&
+                existsAfter(sessionPath) &&
+                request.resource.data.get('scope', '') == 'congregation:' + getAfter(sessionPath).data.get('congregationId', ''))
+              ||
+              (eventType in ['PRESENCE_CONFIRMED', 'PRESENCE_CORRECTED'] &&
+                checkId is string &&
+                request.resource.data.get('evidenceRef', '') == 'presenceCheck:' + checkId &&
+                existsAfter(checkPath) &&
+                getAfter(checkPath).data.get('state', '') != 'unverified' &&
+                (
+                  (eventType == 'PRESENCE_CONFIRMED' && getAfter(checkPath).data.get('source', '') == 'human_check')
+                  ||
+                  (eventType == 'PRESENCE_CORRECTED' && getAfter(checkPath).data.get('source', '') == 'retroactive_human_correction')
+                ) &&
+                request.resource.data.get('subjectRef', '') == 'person:' + getAfter(checkPath).data.get('personId', '') &&
+                request.resource.data.get('scope', '') == 'congregation:' + getAfter(checkPath).data.get('congregationId', ''))
+              ||
+              (eventType == 'CARE_REQUESTED' &&
+                careRequestId is string &&
+                careRequestId.size() > 0 &&
+                factId == 'care-requested-' + careRequestId &&
+                existsAfter(carePath) &&
+                getAfter(carePath).data.get('requestedAt', null) == request.time &&
+                getAfter(carePath).data.get('requestedBy', '') == request.auth.uid &&
+                getAfter(carePath).data.get('personId', '') == personId &&
+                getAfter(carePath).data.get('careType', '') == payload.get('careType', '') &&
+                getAfter(carePath).data.get('source', '') == payload.get('source', '') &&
+                request.resource.data.get('subjectRef', '') == 'person:' + personId &&
+                request.resource.data.get('evidenceRef', '') == 'careRequest:' + careRequestId &&
+                request.resource.data.get('scope', '') == 'congregation:' + getAfter(carePath).data.get('congregationId', ''))
+              ||
+              (eventType == 'CARE_ASSIGNED' &&
+                careRequestId is string &&
+                careRequestId.size() > 0 &&
+                factId == 'care-assigned-' + careRequestId &&
+                existsAfter(carePath) &&
+                getAfter(carePath).data.get('ownerRef', '') == request.auth.uid &&
+                getAfter(carePath).data.get('assignedAt', null) == request.time &&
+                getAfter(carePath).data.get('assignedBy', '') == request.auth.uid &&
+                getAfter(carePath).data.get('personId', '') == personId &&
+                getAfter(carePath).data.get('careType', '') == payload.get('careType', '') &&
+                payload.get('ownerRef', '') == request.auth.uid &&
+                request.resource.data.get('subjectRef', '') == 'person:' + personId &&
+                request.resource.data.get('evidenceRef', '') == 'careRequest:' + careRequestId &&
+                request.resource.data.get('scope', '') == 'congregation:' + getAfter(carePath).data.get('congregationId', ''))
+
+            );
+        }
         allow read: if journeyHasMembership(orgId);
         allow write: if false;
 
