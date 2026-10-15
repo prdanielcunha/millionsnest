@@ -1,6 +1,8 @@
 # MillionsNest — lançamento coordenado dos trials sem cartão (2026-10-08)
 
-## Regra funcional aprovada
+> Atualização 2026-10-15: esta política foi substituída por `ECOSYSTEM_SEVEN_DAY_TRIAL_POLICY.md`. Os 14 dias abaixo descrevem apenas o comportamento histórico, preservado para grants já emitidos.
+
+## Regra funcional aprovada em 2026-10-08
 - MusicScale: 14 dias corridos, sem cartão, para novas organizações elegíveis.
 - NestLocal: 7 dias corridos, sem cartão, para novas organizações elegíveis.
 - Apenas `ceo`, `global_admin`, `ecosystem_owner`, `founder`, `admin` legado e `ecosystem_support` podem conceder **uma única extensão de 1–7 dias** por organização e aplicativo, no painel `/admin/trials`. O suporte não recebe poderes sobre Stripe ou governança.

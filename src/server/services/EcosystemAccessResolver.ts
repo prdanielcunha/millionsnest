@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
 import { isNestLocalInternalTrialActive, isNestLocalInternalTrialExpired } from './NestLocalAiEntitlement.js';
 import { trialWindow } from './HubTrialExtensionService.js';
-import { hasPriorMusicScaleSubscription } from './MusicScaleNoCardTrialService.js';
+import { hasActiveStripeMusicScaleContract } from './MusicScaleNoCardTrialService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney' | 'nestlive';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -413,35 +413,65 @@ export async function resolveEcosystemAppAccess(params: {
     const subRef = db.collection('subscriptions').doc(organizationId);
     const subDoc = await subRef.get();
 
-    // New, explicitly piloted MusicScale trial. Stripe-backed subscriptions
-    // continue through the legacy branch below, unchanged.
-    const musicScaleSubscriptionAlreadyRecorded = subDoc.exists &&
-      hasPriorMusicScaleSubscription(subDoc.data());
-    if (!musicScaleSubscriptionAlreadyRecorded &&
-        orgData.apps?.musicscale?.trialSource === 'hub_internal_trial' &&
-        process.env.MUSICSCALE_INTERNAL_TRIAL_ENABLED === 'true') {
+    // The acquisition flag stops issuing NEW grants, never recognition of an
+    // EXISTING Hub grant. Only a verified MusicScale-specific Stripe contract
+    // can bypass its expiry. A NestLocal-only or ambiguous root subscription
+    // must not unlock the music workspace.
+    const musicScalePaidContract = subDoc.exists &&
+      hasActiveStripeMusicScaleContract(subDoc.data());
+    if (orgData.apps?.musicscale?.trialSource === 'hub_internal_trial' &&
+        !musicScalePaidContract) {
       const trialSnap = await db.collection('musicscale_internal_trials').doc(organizationId).get();
       const window = trialWindow('musicscale',trialSnap.exists?trialSnap.data():null,Date.now(),organizationId);
       if (window.valid) {
-        const readonly = window.expired;
+        // An expired or not-yet-started Hub grant is never a free music reader.
+        // Do not change the separate Stripe-backed legacy subscription branch.
+        if (!window.active) {
+          return {
+            ...defaultDenied,systemRole,organizationRole,
+            readOnly:false,canWrite:false,canUseAI:false,scopes:{},
+            denialReason:DENIAL_REASONS.ENTITLEMENT_INACTIVE,
+            entitlement:{
+              subscriptionStatus:window.expired?'internal_trial_expired':'internal_trial_not_started',
+              organizationAppStatus:String(orgData.apps?.musicscale?.status||''),
+              canonicalStatus:'inactive',
+              cancellationScheduled:false,currentPeriodEndMs:window.endsAt,
+              individualAccessSource,
+            },
+          };
+        }
         const p = memData.appAccess?.musicscale;
         return {
-          appId,organizationId,accessible:true,readOnly:readonly,
-          canWrite:!readonly,canUseAI:!readonly,isGlobalAccess:false,
+          appId,organizationId,accessible:true,readOnly:false,
+          canWrite:true,canUseAI:true,isGlobalAccess:false,
           accessSource:'organization_membership',systemRole,organizationRole,
-          roles:readonly?['reader']:(p?.roles||[]),
-          permissions:readonly?['songs.read','scales.read','bandScales.read']:(p?.permissions||[]),
-          scopes:readonly?{musicscale:['read']}:(p?.scopes||{}),
+          roles:p?.roles||[],
+          permissions:p?.permissions||[],
+          scopes:p?.scopes||{},
           decisionState:'granted',
           entitlement:{
-            subscriptionStatus:readonly?'internal_trial_expired':'internal_trial_active',
+            subscriptionStatus:'internal_trial_active',
             organizationAppStatus:String(orgData.apps?.musicscale?.status||''),
-            canonicalStatus:readonly?'inactive':'trialing',
+            canonicalStatus:'trialing',
             cancellationScheduled:false,currentPeriodEndMs:window.endsAt,
             individualAccessSource,
           },
         };
       }
+      // An absent, revoked or malformed grant must never escape into the
+      // legacy subscription path (which can carry another app's root status).
+      return {
+        ...defaultDenied, systemRole, organizationRole,
+        readOnly:false,canWrite:false,canUseAI:false,scopes:{},
+        denialReason:DENIAL_REASONS.ENTITLEMENT_INACTIVE,
+        entitlement:{
+          subscriptionStatus:'internal_trial_invalid',
+          organizationAppStatus:String(orgData.apps?.musicscale?.status||''),
+          canonicalStatus:'inactive',
+          cancellationScheduled:false,currentPeriodEndMs:null,
+          individualAccessSource,
+        },
+      };
     }
 
     if (!subDoc.exists) {

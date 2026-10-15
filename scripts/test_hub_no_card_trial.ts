@@ -28,7 +28,7 @@ const legacyMusicScale = {
   appId: 'musicscale' as const, hasLegacyTrialHistory: false,
   internalTrialConsumed: false, newNestLocalTrialEnabled: true,
 };
-assert.equal(shouldAddStripeTrial(legacyMusicScale), true);
+assert.equal(shouldAddStripeTrial(legacyMusicScale), false);
 assert.equal(shouldAddStripeTrial({ ...legacyMusicScale, hasLegacyTrialHistory: true }), false);
 const newNestLocal = { ...legacyMusicScale, appId: 'nestlocal' as const };
 assert.equal(shouldAddStripeTrial(newNestLocal), false);

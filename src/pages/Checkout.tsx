@@ -645,10 +645,10 @@ export default function Checkout() {
                                    {checkoutApp==='nestlocal'&&useFoundersOffer&&foundersOffer?.plans?.[String(plan.tier)]&&(
                                      <p className="mt-2 text-xs text-emerald-200">12 meses de Founders · depois R$ {(foundersOffer.plans[String(plan.tier)].regularCents/100).toFixed(2).replace('.',',')}/mês · {foundersOffer.plans[String(plan.tier)].creditsPerMonth} créditos IA/mês</p>
                                    )}
-                                   {(isPro && checkoutApp==='musicscale' || checkoutApp === 'nestlocal'&&trialOffer?.available) && (
+                                   {trialOffer?.available && (
                                        <div className="mt-2">
                                            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-[#2B85EB] text-white rounded-md shadow-[0_0_15px_rgba(43,133,235,0.4)]">
-                                             {t('pricing_free_trial', '7 dias grátis')}
+                                             {trialOffer?.days} {String(i18n.language).startsWith('en')?'days without a card':String(i18n.language).startsWith('es')?'días sin tarjeta':'dias sem cartão'}
                                            </span>
                                        </div>
                                    )}

@@ -740,7 +740,7 @@ export function MusicScaleLanding() {
             />
             <FAQItem 
               question={t('musicscale:faq_q7', 'Posso testar antes de pagar?')} 
-              answer={t('musicscale:faq_a7', 'Com certeza. Todo plano inclui 7 dias de teste gratuito e libera os recursos do plano escolhido. Selecione Starter, Advanced ou Pro na seção de planos; o teste seguirá exatamente essa escolha. Se não fizer sentido para sua equipe, cancele antes do fim do teste para não haver cobrança.')} 
+              answer={t('musicscale:faq_a7', 'Com certeza. Todo plano inclui 7 dias de teste gratuito e libera os recursos do plano escolhido. Selecione Starter, Advanced ou Pro na seção de planos; o teste seguirá exatamente essa escolha. A avaliação acontece no aplicativo, sem cartão e sem cobrança automática. A assinatura paga é contratada separadamente pelo Stripe, sem nova avaliação.')}
             />
             <FAQItem
               question={t('musicscale:faq_q8', 'Cada músico ou vocal precisa pagar uma assinatura?')}

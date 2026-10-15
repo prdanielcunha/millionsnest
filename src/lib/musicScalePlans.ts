@@ -1,3 +1,4 @@
+import {ECOSYSTEM_TRIAL_DAYS} from './ecosystemTrialPolicy.js';
 // Canonical source of truth for MusicScale plans, features, and limits
 // Aligned with the MillionsNest Eco-system Architecture
 
@@ -51,7 +52,7 @@ export const MUSIC_SCALE_PLANS: Record<MusicScalePlan, MusicScalePlanDefinition>
     name: 'Starter',
     priceMonthly: 19.9,
     currency: 'BRL',
-    trialDays: 7,
+    trialDays: ECOSYSTEM_TRIAL_DAYS,
     limits: {
       users: 10,
       songs: -1,
@@ -85,7 +86,7 @@ export const MUSIC_SCALE_PLANS: Record<MusicScalePlan, MusicScalePlanDefinition>
     name: 'Advanced',
     priceMonthly: 29.9,
     currency: 'BRL',
-    trialDays: 7,
+    trialDays: ECOSYSTEM_TRIAL_DAYS,
     limits: {
       users: 20,
       songs: -1,
@@ -120,7 +121,7 @@ export const MUSIC_SCALE_PLANS: Record<MusicScalePlan, MusicScalePlanDefinition>
     priceMonthly: 34.9,
     currency: 'BRL',
     launchPrice: true,
-    trialDays: 7,
+    trialDays: ECOSYSTEM_TRIAL_DAYS,
     limits: {
       users: -1,
       songs: -1,
