@@ -52,4 +52,4 @@ for(const appId of ['musicscale','nestlocal'] as const){
   assert.equal(db.store.get('hub_trial_extension_events/'+appId+'_org1').adminUid,'globalstaff');
   await assert.rejects(extendHubTrial(args),/EXTENSION_ALREADY_USED/);
 }
-console.log('PASS: 14/7 day trials, seven-day extension, final expiry and tenant safety');
+console.log('PASS: seven-day trials, seven-day extension, final expiry and tenant safety');

@@ -2,6 +2,7 @@
 import {Timestamp,type Firestore} from 'firebase-admin/firestore';
 import {DAY_MS,TRIAL_BASE_DAYS,trialWindow} from './HubTrialExtensionService.js';
 import {HubTrialError} from './HubNoCardTrialService.js';
+import {ECOSYSTEM_TRIAL_POLICY_VERSION} from '../../lib/ecosystemTrialPolicy.js';
 export const MUSICSCALE_TRIAL_MS=TRIAL_BASE_DAYS.musicscale*DAY_MS;
 /** Existing NestLocal subscription must not use up a MusicScale evaluation.
  * Legacy MusicScale contracts live in the root of the subscription document.
@@ -12,6 +13,19 @@ export function hasPriorMusicScaleSubscription(record:any):boolean {
   return Boolean(record.stripeSubscriptionId || record.subscriptionId ||
     record.priceId || record.trialUsed || record.subscriptionStatus ||
     record.app==='musicscale' || record.status || record.plan);
+}
+
+/** Only verified MusicScale Stripe contracts can lift an existing Hub trial.
+ * Do not confuse this with hasPriorMusicScaleSubscription: that deliberately
+ * detects ambiguous commercial history to STOP new-trial eligibility.
+ */
+export function hasActiveStripeMusicScaleContract(record:any):boolean {
+  if(!record || typeof record!=='object')return false;
+  const valid=(data:any)=>data && typeof data==='object' &&
+    ['active','trialing'].includes(String(data.status||'').trim().toLowerCase()) &&
+    typeof data.stripeSubscriptionId==='string' && data.stripeSubscriptionId.trim().length>0;
+  if(valid(record.apps?.musicscale))return true;
+  return record.app==='musicscale' && valid(record);
 }
 
 export function musicScaleTrialEnabledForOrganization(id:string,env:NodeJS.ProcessEnv=process.env) {
@@ -60,7 +74,7 @@ export async function activateMusicScaleHubTrial(params:{
     const beginning=Timestamp.fromMillis(now),end=Timestamp.fromMillis(now+MUSICSCALE_TRIAL_MS);
     tx.create(trialRef,{appId:'musicscale',organizationId,ownerUid,
       source:'hub_internal_trial',status:'active',revoked:false,consumed:true,
-      grantVersion:2,beginsAt:beginning,expiresAt:end,createdAt:beginning});
+      grantVersion:ECOSYSTEM_TRIAL_POLICY_VERSION,beginsAt:beginning,expiresAt:end,createdAt:beginning});
     tx.create(ownerRef,{appId:'musicscale',organizationId,trialRef:trialRef.path,createdAt:beginning});
     tx.set(entitlementRef,{schemaVersion:3,appId:'musicscale',source:'hub_internal_trial',
       accessState:'internal_trial_active',trialStartedAt:beginning,

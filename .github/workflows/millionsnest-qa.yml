@@ -190,6 +190,9 @@ jobs:
       - name: Customer purchase-to-first-use activation journey
         run: npx tsx scripts/test_customer_activation_journey.ts
 
+      - name: Ecosystem seven-day no-card trial and paid-account compatibility
+        run: npx tsx scripts/test_ecosystem_seven_day_trial.ts && npx tsx scripts/test_hub_no_card_trial.ts && npx tsx scripts/test_hub_trial_extensions.ts && npx tsx scripts/test_hub_cross_app_trial_eligibility.ts
+
       - name: MusicScale one-trial-per-organization contract
         run: npx tsx scripts/test_music_scale_trial_history.ts
 

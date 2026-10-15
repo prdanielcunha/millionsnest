@@ -87,6 +87,7 @@ jobs:
           set -euo pipefail
           npm ci --no-audit --no-fund
           npx tsx scripts/audit_music_data_integrity_readonly.ts | tee /tmp/music-integrity-before.log
+          npx tsx scripts/audit_trial_policy_readonly.ts
           grep -q '^MUSICSCALE_AGGREGATE_READ_ONLY_AUDIT=' /tmp/music-integrity-before.log
 
       - name: Configure Docker authentication
@@ -239,6 +240,7 @@ jobs:
         run: |
           set -euo pipefail
           npx tsx scripts/audit_music_data_integrity_readonly.ts | tee /tmp/music-integrity-after.log
+          npx tsx scripts/audit_trial_policy_readonly.ts
           BEFORE="$(grep '^MUSICSCALE_AGGREGATE_READ_ONLY_AUDIT=' /tmp/music-integrity-before.log | tail -1 | cut -d= -f2- | jq -cS 'del(.generatedAt)')"
           AFTER="$(grep '^MUSICSCALE_AGGREGATE_READ_ONLY_AUDIT=' /tmp/music-integrity-after.log | tail -1 | cut -d= -f2- | jq -cS 'del(.generatedAt)')"
           if [ "$BEFORE" != "$AFTER" ]; then

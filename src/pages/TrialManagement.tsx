@@ -1,4 +1,6 @@
 import {useState} from 'react';
+import {useTranslation} from 'react-i18next';
+import {ECOSYSTEM_TRIAL_DAYS} from '../lib/ecosystemTrialPolicy.js';
 import {Link} from 'react-router-dom';
 import {useAuth} from '../contexts/AuthContext.js';
 import {canExtendHubTrial} from '../lib/permissionService.js';
@@ -19,6 +21,12 @@ function showDate(value:string|null|undefined) {
 }
 export function TrialManagement(){
   const {user,profile,loading}=useAuth();
+  const {i18n}=useTranslation();
+  const policyCopy=String(i18n.language).startsWith('en')
+    ? `${ECOSYSTEM_TRIAL_DAYS} days without a card for new evaluations. Existing deadlines remain unchanged. Only MillionsNest staff may grant one extension of up to 7 days, without changing Stripe.`
+    : String(i18n.language).startsWith('es')
+      ? `${ECOSYSTEM_TRIAL_DAYS} días sin tarjeta para nuevas pruebas. Se conservan los plazos existentes. Solo el equipo MillionsNest puede conceder una extensión de hasta 7 días, sin cambiar Stripe.`
+      : `${ECOSYSTEM_TRIAL_DAYS} dias sem cartão para novas avaliações. Prazos existentes são preservados. Apenas a equipe MillionsNest pode conceder uma extensão de até 7 dias, sem alterar o Stripe.`;
   const allowed=canExtendHubTrial(profile);
   const [appId,setAppId]=useState<TrialApp>('musicscale');
   const [organizationId,setOrganizationId]=useState('');
@@ -84,7 +92,7 @@ export function TrialManagement(){
         <header className="space-y-2"><Link to="/dashboard" className="text-sm text-blue-300">← Voltar ao Hub</Link>
           <span className="block text-xs uppercase tracking-[.18em] text-blue-300">MillionsNest · Administração do ecossistema</span>
           <h1 className="text-3xl font-semibold tracking-tight">Avaliações e extensões</h1>
-          <p className="text-slate-400">MusicScale: 14 dias. NestLocal: 7 dias. Apenas a equipe MillionsNest pode conceder uma extensão de até 7 dias, sem alterar o Stripe.</p>
+          <p className="text-slate-400">{policyCopy}</p>
         </header>
         <section className="rounded-2xl border border-white/10 bg-[#101827] p-5 space-y-3">
           <label className="block text-sm text-slate-300">Encontre a empresa ou igreja pelo nome
