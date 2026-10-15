@@ -1,5 +1,10 @@
 name: Connect Published Private Storage Rules Gate
 on:
+  push:
+    branches: [production]
+    paths:
+      - .github/workflows/connect-private-storage-rules.yml
+      - tests/firestore/connect_private_storage.test.ts
   pull_request:
     branches: [main, production]
     paths:
@@ -32,9 +37,9 @@ jobs:
       - name: Prove candidate Rules with active tenants and denied browser roles
         run: npx firebase emulators:exec --project demo-connect-private-store --config firebase.rules-test.json --only firestore "node --import tsx tests/firestore/connect_private_storage.test.ts"
   actual-published-rules:
-    # Existing WIF trust is production-only. Automatic published-source proof
-    # runs inside the canonical production release; this is a manual recheck.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
+    # A production push reads/tests the actual release without recompiling or
+    # publishing Rules. Keep the existing production-only WIF boundary.
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
