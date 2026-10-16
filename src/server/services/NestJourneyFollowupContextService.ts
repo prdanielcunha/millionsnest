@@ -1,11 +1,16 @@
 import admin from 'firebase-admin';
 import express from 'express';
 import { resolveEcosystemAppAccess, type ResolvedAppAccess } from './EcosystemAccessResolver.js';
+import type { NestJourneyConnectFollowupSource } from './NestJourneyFollowupEventPublisher.js';
 
 export interface NestJourneyFollowupContextDependencies {
   verifyIdToken: (token: string) => Promise<admin.auth.DecodedIdToken>;
   getDb: () => admin.firestore.Firestore | null;
   resolveAccess?: typeof resolveEcosystemAppAccess;
+  // Called only for a due followup AFTER full canonical church/caregiver/
+  // consent checks. No contact details are handed to the notifier.
+  onEligibleDueFollowup?: (event: NestJourneyConnectFollowupSource) => Promise<unknown>;
+  now?: () => number;
   logger?: {
     info?: (message: string, meta?: Record<string, unknown>) => void;
     warn?: (message: string, meta?: Record<string, unknown>) => void;
@@ -178,6 +183,21 @@ export async function handleNestJourneyFollowupContextRequest(
     !personName
   ) {
     return res.status(409).json({ success: false, code: 'FOLLOWUP_SOURCE_INVALID' });
+  }
+
+  // A GET never grants permission to mass-message people. This optional,
+  // server-owned callback creates only an opaque Connect operator alert and
+  // cannot delay/fail the already authorized manual contact context.
+  const dueAt = toIso(followup.dueAt);
+  const now = (deps.now ?? Date.now)();
+  const due = dueAt ? Date.parse(dueAt) : NaN;
+  if (deps.onEligibleDueFollowup && Number.isSafeInteger(now) &&
+      Number.isFinite(due) && due <= now && due >= now - 7 * 86400000) {
+    void deps.onEligibleDueFollowup({
+      organizationId, followupId, ownerUid: uid, dueAt: dueAt!,
+    }).catch(() => {
+      deps.logger?.warn?.('NESTJOURNEY_CONNECT_DUE_EVENT_DEFERRED');
+    });
   }
 
   deps.logger?.info?.('NESTJOURNEY_CONNECT_FOLLOWUP_CONTEXT', {
