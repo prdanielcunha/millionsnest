@@ -178,7 +178,7 @@ const fetchImpl: typeof fetch = async (url, init) => {
   assert.equal(init?.redirect, 'error');
   const raw = String(init?.body), headers = init!.headers as Record<string, string>;
   assert.equal(headers['x-connect-signature'], createHmac('sha256', key)
-    .update('nestjourney\\n' + headers['x-connect-timestamp'] + '\\n' + raw).digest('hex'));
+    .update('nestjourney\n' + headers['x-connect-timestamp'] + '\n' + raw).digest('hex'));
   const body = JSON.parse(raw);
   assert.deepEqual(Object.keys(body).sort(), [
     'schemaVersion','sourceApp','eventId','organizationId','conversationId','occurredAt','trigger','recipientUid',
