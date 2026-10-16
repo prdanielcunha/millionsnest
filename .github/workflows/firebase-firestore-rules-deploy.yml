@@ -1,5 +1,9 @@
 name: Firebase Firestore Rules Deploy
-# Canonical shared-rules authority. Emergency redeploy marker: 2026-09-28.
+# Canonical shared-rules authority. Emergency restoration marker: 2026-10-16.
+# Shared live cloud.firestore was overwritten with NestFinance repo-local rules SHA256
+# e882bcb5580cc6c3324c86a2cc945f2a4694ed03f5cef052dfb0d89e01bc6371.
+# Re-publish unchanged Hub canonical approved rules c8804c9f... via protected
+# production QA and verify exact live SHA after publication; never use Finance local rules.
 
 on:
   push:
