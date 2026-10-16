@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
+import { publishNestJourneyFollowupDue } from '../src/server/services/NestJourneyFollowupEventPublisher.js';
 import { handleNestJourneyFollowupContextRequest } from '../src/server/services/NestJourneyFollowupContextService.js';
 
 class MockDoc {
@@ -128,3 +130,76 @@ for (const membership of [undefined,{role:'care',status:'inactive'}, {status:'ac
   assert.equal((await execute(db)).statusCode,403,'capability does not bypass congregation scope');
 }
 console.log('NestJourney -> Connect follow-up context contract: explicit consent, revocation, church membership, assigned owner and tenant isolation OK');
+
+const now = Date.parse('2026-10-16T18:00:00.000Z');
+const dueAt = new Date(now - 1000).toISOString();
+const key = 'synthetic-nestjourney-signature-secret-32-minimum';
+const targets = JSON.stringify({ org1: { conversationId: 'authorized-thread', recipientUid: 'current-connect-operator' } });
+const source = { organizationId: 'org1', followupId: 'first-contact-care1', ownerUid: 'user1', dueAt };
+async function signalSourcePatch(patch: (db: MockDb) => void) {
+  const db = new MockDb(); seed(db); patch(db);
+  const events: unknown[] = [];
+  const res = response();
+  await handleNestJourneyFollowupContextRequest(request({
+    organizationId: 'org1', followupId: 'first-contact-care1',
+  }), res, {
+    verifyIdToken: async () => ({ uid: 'user1' } as any),
+    getDb: () => db as any,
+    resolveAccess: async () => ({ accessible: true, isGlobalAccess: false } as any),
+    now: () => now,
+    onEligibleDueFollowup: async input => { events.push(input); },
+  });
+  return { res, events };
+}
+{
+  const a = await signalSourcePatch(db => {
+    db.docs['organizations/org1/products/raiz_e_mesa/followups/first-contact-care1'].dueAt = dueAt;
+  });
+  assert.equal(a.res.statusCode, 200);
+  assert.deepEqual(a.events, [source]);
+  assert(!JSON.stringify(a.events).includes('phone'));
+  assert(!JSON.stringify(a.events).includes('João'));
+}
+for(const patch of [
+  (db: MockDb) => { db.docs['organizations/org1/products/raiz_e_mesa/people/person1'].consent = false; },
+  (db: MockDb) => { db.docs['organizations/org1/products/raiz_e_mesa/people/person1'].consentRevokedAt = dueAt; },
+  (db: MockDb) => { db.docs['organizations/org1/products/raiz_e_mesa/followups/first-contact-care1'].ownerRef = 'other'; },
+  (db: MockDb) => { db.docs['organizations/org1/products/raiz_e_mesa/followups/first-contact-care1'].dueAt = new Date(now + 3600000).toISOString(); },
+  (db: MockDb) => { db.docs['organizations/org1/products/raiz_e_mesa/followups/first-contact-care1'].dueAt = new Date(now - 8 * 86400000).toISOString(); },
+]) {
+  const a = await signalSourcePatch(patch);
+  assert.deepEqual(a.events, [], 'revoked consent, wrong caregiver or outside due window never emits');
+}
+const inputs = { ...source, enabled: true, signingSecret: key, operatorTargetsJson: targets, now: () => now };
+let sent = 0;
+const fetchImpl: typeof fetch = async (url, init) => {
+  sent++;
+  assert.equal(String(url), 'https://connect.millionsnest.com/api/core/automations/events/nestjourney');
+  assert.equal(init?.redirect, 'error');
+  const raw = String(init?.body), headers = init!.headers as Record<string, string>;
+  assert.equal(headers['x-connect-signature'], createHmac('sha256', key)
+    .update('nestjourney\n' + headers['x-connect-timestamp'] + '\n' + raw).digest('hex'));
+  const body = JSON.parse(raw);
+  assert.deepEqual(Object.keys(body).sort(), [
+    'schemaVersion','sourceApp','eventId','organizationId','conversationId','occurredAt','trigger','recipientUid',
+  ].sort());
+  assert.equal(body.trigger, 'followup.due');
+  assert.equal(body.recipientUid, 'current-connect-operator');
+  assert(!JSON.stringify(body).includes('phone'));
+  assert(!JSON.stringify(body).includes('person'));
+  assert(!JSON.stringify(body).includes('careRequest'));
+  return new Response(JSON.stringify({ accepted: true, duplicate: sent > 1 }), { status: 202 });
+};
+assert.equal(await publishNestJourneyFollowupDue({ ...inputs, enabled: false, fetchImpl }), 'disabled');
+assert.equal(await publishNestJourneyFollowupDue({ ...inputs, dueAt: new Date(now + 60000).toISOString(), fetchImpl }), 'not_due');
+assert.equal(await publishNestJourneyFollowupDue({ ...inputs, operatorTargetsJson: '{}', fetchImpl }), 'not_configured');
+assert.equal(await publishNestJourneyFollowupDue({ ...inputs, fetchImpl }), 'accepted');
+assert.equal(await publishNestJourneyFollowupDue({ ...inputs, fetchImpl }), 'duplicate');
+assert.equal(sent, 2);
+let uncertain = 0;
+await assert.rejects(publishNestJourneyFollowupDue({ ...inputs,
+  fetchImpl: (async () => { uncertain++; throw Error('ambiguous network'); }) as typeof fetch,
+}), /JOURNEY_CONNECT_TRANSPORT_UNCERTAIN/);
+assert.equal(uncertain, 1, 'no unbounded retries or Meta sends');
+console.log('NestJourney canonical Hub consent-to-signed Connect operator event: revoked, due-only, tenant, HMAC, no PII OK');
+
