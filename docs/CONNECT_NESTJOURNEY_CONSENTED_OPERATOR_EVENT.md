@@ -10,6 +10,11 @@ Servidor Hub **desligado por padrão**. Requer `NESTJOURNEY_CONNECT_FOLLOWUP_EVE
 
 O contexto manual continua retornando mesmo se a fila/evento estiver indisponível. Ambiguidades não provocam retentativas em loop; no máximo um POST no evento de leitura autorizado. O mesmo ID permite posterior replay idempotente, sujeito aos gates de consentimento, antes de qualquer envio externo.
 
+## Revalidação imediatamente antes da assinatura (2026-10-16)
+O publisher passou a **exigir** uma função de revalidação do Hub antes de criar o corpo HMAC; sem função, com erro ou com negação, retorna `not_authorized` e **não executa HTTP**. `verifyCurrentNestJourneyDueAuthority` reconsulta o Firestore canônico para confirmar organização e produto ativos, membership e capacidade de cuidado, congregação, responsável ainda designado, data de vencimento original, solicitação de cuidado aberta, pessoa vinculada, consentimento explícito não revogado e WhatsApp como canal preferido. Também nega um cuidado encerrado, reatribuído ou reagendado desde o GET. Isso reduz a janela de consentimento obsoleto sem alterar o contexto manual ou introduzir novos dados pessoais na mensagem.
+
+**Limite**: é uma checagem de origem *antes de enfileirar o evento interno*, não prova de revalidação quando uma fila demorada eventualmente tentar notificar um dispositivo; essa última verificação e uma trilha durável continuam pendentes na #226.
+
 ## Limitações e pendências até a certificação #226
 - Este incremento é **publisher backend protegido, oportunístico**; não há ainda outbox transacional de `followup.due`, scanner periódico sobre fatos oficiais, worker de recovery, entrega real via Meta ou aceitação de iPhone físico. Uma requisição GET não é garantia de recuperação autônoma.
 - Qualquer automação baseada em prazos precisa de recuperação independente, validação de consentimento **no momento do envio** e rechecagem de proprietário/atividade em caso de adiamento/revogação. Não ativar este produtor até o desenho e testes operacionais serem finalizados.
