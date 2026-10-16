@@ -16,6 +16,10 @@ on:
       - "src/lib/appExperienceRegistry.ts"
       - "src/pages/ConnectLaunch.tsx"
       - "src/server/services/NestJourneyFollowupContextService.ts"
+      - "src/server/services/NestJourneyDueOutbox.ts"
+      - "src/server/services/NestJourneyQueuedEventAuthority.ts"
+      - "scripts/test_nestjourney_due_outbox.ts"
+      - "scripts/test_journey_recovery_workflow.ts"
       - "server.ts"
       - "scripts/test_connect_handoff.ts"
       - "scripts/test_connect_channel_grants.ts"
@@ -62,4 +66,6 @@ jobs:
         run: npx tsx scripts/test_connect_official_launch.ts
       - name: Validate NestJourney resolve-loop context
         run: npx tsx scripts/test_connect_nestjourney_followup.ts
+      - name: NestJourney durable due source and post-queue authority
+        run: node --import tsx scripts/test_nestjourney_due_outbox.ts && node --import tsx scripts/test_journey_recovery_workflow.ts
       - run: npm run build
