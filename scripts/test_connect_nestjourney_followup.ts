@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { publishNestJourneyFollowupDue } from '../src/server/services/NestJourneyFollowupEventPublisher.js';
+import { verifyCurrentNestJourneyDueAuthority } from '../src/server/services/NestJourneyDueAuthority.js';
 import { handleNestJourneyFollowupContextRequest } from '../src/server/services/NestJourneyFollowupContextService.js';
 
 class MockDoc {
@@ -170,7 +171,7 @@ for(const patch of [
   const a = await signalSourcePatch(patch);
   assert.deepEqual(a.events, [], 'revoked consent, wrong caregiver or outside due window never emits');
 }
-const inputs = { ...source, enabled: true, signingSecret: key, operatorTargetsJson: targets, now: () => now };
+const inputs = { ...source, enabled: true, signingSecret: key, operatorTargetsJson: targets, now: () => now, revalidateBeforeSend: async () => true };
 let sent = 0;
 const fetchImpl: typeof fetch = async (url, init) => {
   sent++;
@@ -203,3 +204,56 @@ await assert.rejects(publishNestJourneyFollowupDue({ ...inputs,
 assert.equal(uncertain, 1, 'no unbounded retries or Meta sends');
 console.log('NestJourney canonical Hub consent-to-signed Connect operator event: revoked, due-only, tenant, HMAC, no PII OK');
 
+
+{
+  const db = new MockDb(); seed(db);
+  const path = 'organizations/org1/products/raiz_e_mesa';
+  db.docs[`${path}/followups/first-contact-care1`].dueAt = dueAt;
+  const check = () => verifyCurrentNestJourneyDueAuthority({ db: db as any, event: source, now: () => now });
+  assert.equal(await check(), true, 'eligible current church, caregiver, due date and explicit consent');
+  db.docs[`${path}/people/person1`].consentRevokedAt = dueAt;
+  assert.equal(await check(), false, 'revocation after GET blocks event');
+  db.docs[`${path}/people/person1`].consentRevokedAt = null;
+  db.docs[`${path}/careRequests/care1`].status = 'closed';
+  assert.equal(await check(), false, 'closed care request blocks event');
+  db.docs[`${path}/careRequests/care1`].status = 'open';
+  db.docs['organizations/org1/members/user1'].status = 'inactive';
+  assert.equal(await check(), false, 'revoked church membership blocks event');
+  db.docs['organizations/org1/members/user1'].status = 'active';
+  db.docs[`${path}/followups/first-contact-care1`].ownerRef = 'someone-else';
+  assert.equal(await check(), false, 'reassignment blocks old caregiver event');
+  db.docs[`${path}/followups/first-contact-care1`].ownerRef = 'user1';
+  db.docs[`${path}/people/person1`].preferredContactChannel = 'phone';
+  assert.equal(await check(), false, 'opted-out WhatsApp contact blocks event');
+  db.docs[`${path}/people/person1`].preferredContactChannel = 'whatsapp';
+  db.docs['organizations/org1'].status = 'suspended';
+  assert.equal(await check(), false, 'suspended tenant blocks event');
+  db.docs['organizations/org1'].status = 'active';
+  db.docs[`${path}/followups/first-contact-care1`].dueAt = new Date(now + 10000).toISOString();
+  assert.equal(await check(), false, 'rescheduled future followup blocks stale due event');
+}
+{
+  const db = new MockDb(); seed(db);
+  db.docs['organizations/org1/products/raiz_e_mesa/followups/first-contact-care1'].dueAt = dueAt;
+  const valid = () => verifyCurrentNestJourneyDueAuthority({ db: db as any, event: source, now: () => now });
+  const calls: unknown[] = [];
+  const transport: typeof fetch = async (url, init) => {
+    calls.push({ url: String(url), body: String(init?.body) });
+    return new Response(JSON.stringify({ accepted: true, duplicate: false }), { status: 202 });
+  };
+  const args = { ...inputs, fetchImpl: transport };
+  assert.equal(await publishNestJourneyFollowupDue({
+    ...args, revalidateBeforeSend: undefined,
+  }), 'not_authorized', 'missing verifier is not an authorization grant');
+  db.docs['organizations/org1/products/raiz_e_mesa/people/person1'].consent = false;
+  assert.equal(await publishNestJourneyFollowupDue({
+    ...args, revalidateBeforeSend: valid,
+  }), 'not_authorized', 'revocation immediately before signing cancels Connect event');
+  assert.equal(calls.length, 0, 'revoked followup emits no signed event');
+  db.docs['organizations/org1/products/raiz_e_mesa/people/person1'].consent = true;
+  assert.equal(await publishNestJourneyFollowupDue({
+    ...args, revalidateBeforeSend: valid,
+  }), 'accepted', 'freshly verified event is still supported');
+  assert.equal(calls.length, 1);
+}
+console.log('NestJourney pre-signing fresh consent/owner/tenant authorization passed.');
