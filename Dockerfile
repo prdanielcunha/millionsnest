@@ -26,7 +26,7 @@ ENV VITE_APP_URL=${VITE_APP_URL}
 ENV VITE_MUSICSCALE_APP_URL=${VITE_MUSICSCALE_APP_URL}
 ENV VITE_NESTFINANCE_LAUNCH_ENABLED=${VITE_NESTFINANCE_LAUNCH_ENABLED}
 
-RUN npm run build
+RUN npm run build && npx esbuild src/server/runJourneyDueRecovery.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/journey-recovery.mjs
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
