@@ -89,8 +89,8 @@ import {
   handleConnectChannelSessionRequest
 } from './src/server/services/ConnectChannelGrantService.js';
 import { handleNestJourneyFollowupContextRequest } from './src/server/services/NestJourneyFollowupContextService.js';
-import { publishNestJourneyFollowupDue } from './src/server/services/NestJourneyFollowupEventPublisher.js';
-import { verifyCurrentNestJourneyDueAuthority } from './src/server/services/NestJourneyDueAuthority.js';
+import { stageNestJourneyDue } from './src/server/services/NestJourneyDueOutbox.js';
+import { createJourneyQueuedEventAuthority } from './src/server/services/NestJourneyQueuedEventAuthority.js';
 import { handleNestJourneyWorkspaceProjectionRequest } from './src/server/services/NestJourneyWorkspaceProjectionService.js';
 import { handleNestAiTokenRequest, handleNestAiGuestTokenRequest, handleNestAiJwksRequest, handleNestLocalNestAiSessionTokenRequest } from './src/server/services/NestAiTokenService.js';
 import { BillingService } from './src/server/services/BillingService.js';
@@ -7587,6 +7587,14 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     });
   });
 
+  app.post('/api/ecosystem/connect/nestjourney/event-authority', express.raw({ type: 'application/json', limit: '4kb' }),
+    createJourneyQueuedEventAuthority({
+      enabled: () => process.env.NESTJOURNEY_CONNECT_FOLLOWUP_EVENTS_ENABLED === 'true',
+      secret: () => process.env.NESTJOURNEY_CONNECT_SOURCE_EVENT_SECRET,
+      targets: () => process.env.NESTJOURNEY_CONNECT_OPERATOR_TARGETS_JSON,
+      db: () => getDb(),
+    }));
+
   app.get('/api/ecosystem/connect/nestjourney/followup-context', async (req, res) => {
     return handleNestJourneyFollowupContextRequest(req, res, {
       verifyIdToken: (token) => admin.auth().verifyIdToken(token),
@@ -7596,14 +7604,9 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       // No browser-selected tenant/recipient is ever forwarded to Connect.
       ...(process.env.NESTJOURNEY_CONNECT_FOLLOWUP_EVENTS_ENABLED === 'true'
         ? { onEligibleDueFollowup: async (event) => {
-          const outcome = await publishNestJourneyFollowupDue({
-            ...event, enabled: true,
-            revalidateBeforeSend: () => db
-              ? verifyCurrentNestJourneyDueAuthority({ db, event })
-              : Promise.resolve(false),
-            signingSecret: process.env.NESTJOURNEY_CONNECT_SOURCE_EVENT_SECRET,
-            operatorTargetsJson: process.env.NESTJOURNEY_CONNECT_OPERATOR_TARGETS_JSON,
-          });
+          const outcome = db ? await stageNestJourneyDue({
+            db, enabled: true, source: event,
+          }) : 'deferred';
           console.info('NESTJOURNEY_CONNECT_DUE_OPERATOR_EVENT:' + outcome);
         } } : {}),
       logger: console

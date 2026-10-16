@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: NestJourney durable due source and post-queue authority
+        run: node --import tsx scripts/test_nestjourney_due_outbox.ts && node --import tsx scripts/test_journey_recovery_workflow.ts
+
       - name: Lint and typecheck
         run: npm run lint
 
