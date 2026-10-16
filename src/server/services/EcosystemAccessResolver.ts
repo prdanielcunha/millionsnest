@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
-import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
+import { resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
+import { mayAttemptNestFinanceTenantAccess } from './NestFinanceTenantRollout.js';
 import { isNestLocalInternalTrialActive, isNestLocalInternalTrialExpired } from './NestLocalAiEntitlement.js';
 import { trialWindow } from './HubTrialExtensionService.js';
 import { hasActiveStripeMusicScaleContract } from './MusicScaleNoCardTrialService.js';
@@ -128,7 +129,12 @@ export async function resolveEcosystemAppAccess(params: {
     return { ...defaultDenied, systemRole, denialReason: DENIAL_REASONS.ORGANIZATION_INACTIVE };
   }
 
-  if (appId === 'nestfinance' && !canAccessNestFinanceDevelopment(systemRole)) {
+  // Release switch: development access remains the default until the NestFinance
+  // production security and billing gates have been certified. Once explicitly
+  // enabled, tenant membership, appAccess and active entitlement checks BELOW
+  // are still mandatory; this flag never grants access on its own.
+  if (appId === 'nestfinance' &&
+      !mayAttemptNestFinanceTenantAccess(systemRole, process.env.NESTFINANCE_PUBLIC_ACCESS_ENABLED)) {
     return {
       ...defaultDenied,
       systemRole,
