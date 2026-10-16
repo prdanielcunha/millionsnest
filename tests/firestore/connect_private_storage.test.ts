@@ -3,7 +3,7 @@ import { doc, collection, collectionGroup, getDoc, getDocs, setDoc, updateDoc, d
 import { readFile } from 'node:fs/promises';
 const host = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8180').split(':');
 const env = await initializeTestEnvironment({ projectId: 'demo-connect-private-store', firestore: { host: host[0], port: Number(host[1]), rules: await readFile(process.env.CONNECT_LIVE_RULES_FILE ?? 'firestore.rules', 'utf8') } });
-const groups = ['connectPushDevices', 'connectPushDeliveries', 'connectPushReadStates', 'connectProductRoutes', 'connectAutomationJobs', 'connectAutomationBudgets', 'organizations/qa-org-a/connectAgentProfiles', 'organizations/qa-org-b/connectAgentProfiles'];
+const groups = ['connectPushDevices', 'connectPushDeliveries', 'connectPushReadStates', 'connectProductRoutes', 'connectAutomationJobs', 'connectAutomationBudgets', 'organizations/qa-org-a/connectAgentProfiles', 'organizations/qa-org-b/connectAgentProfiles', 'organizations/qa-org-a/products/raiz_e_mesa/connectDueOutbox', 'organizations/qa-org-b/products/raiz_e_mesa/connectDueOutbox'];
 let checks = 0;
 try {
   await env.withSecurityRulesDisabled(async ctx => {
