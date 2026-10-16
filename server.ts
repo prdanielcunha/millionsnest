@@ -90,6 +90,7 @@ import {
 } from './src/server/services/ConnectChannelGrantService.js';
 import { handleNestJourneyFollowupContextRequest } from './src/server/services/NestJourneyFollowupContextService.js';
 import { publishNestJourneyFollowupDue } from './src/server/services/NestJourneyFollowupEventPublisher.js';
+import { verifyCurrentNestJourneyDueAuthority } from './src/server/services/NestJourneyDueAuthority.js';
 import { handleNestJourneyWorkspaceProjectionRequest } from './src/server/services/NestJourneyWorkspaceProjectionService.js';
 import { handleNestAiTokenRequest, handleNestAiGuestTokenRequest, handleNestAiJwksRequest, handleNestLocalNestAiSessionTokenRequest } from './src/server/services/NestAiTokenService.js';
 import { BillingService } from './src/server/services/BillingService.js';
@@ -7597,6 +7598,9 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         ? { onEligibleDueFollowup: async (event) => {
           const outcome = await publishNestJourneyFollowupDue({
             ...event, enabled: true,
+            revalidateBeforeSend: () => db
+              ? verifyCurrentNestJourneyDueAuthority({ db, event })
+              : Promise.resolve(false),
             signingSecret: process.env.NESTJOURNEY_CONNECT_SOURCE_EVENT_SECRET,
             operatorTargetsJson: process.env.NESTJOURNEY_CONNECT_OPERATOR_TARGETS_JSON,
           });
