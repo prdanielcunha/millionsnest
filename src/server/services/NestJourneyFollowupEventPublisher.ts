@@ -17,8 +17,10 @@ export type NestJourneyConnectPublisherOptions = NestJourneyConnectFollowupSourc
   operatorTargetsJson?: string;
   now?: () => number;
   fetchImpl?: typeof fetch;
+  /** Mandatory fresh canonical Hub check; the initial GET is not sufficient. */
+  revalidateBeforeSend?: () => Promise<boolean>;
 };
-type Outcome = 'disabled' | 'not_due' | 'not_configured' | 'accepted' | 'duplicate';
+type Outcome = 'disabled' | 'not_due' | 'not_configured' | 'not_authorized' | 'accepted' | 'duplicate';
 const safe = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() === value && value.length > 0 &&
   value.length <= 180 && !/[\\/\u0000-\u001f\u007f]/.test(value);
@@ -51,6 +53,13 @@ export async function publishNestJourneyFollowupDue(
     target = (parsed as Record<string, typeof target>)[input.organizationId];
   } catch { return 'not_configured'; }
   if (!target) return 'not_configured';
+  // Reverify membership, active care ownership, tenant, due date and explicit
+  // non-revoked consent as close as possible to signing. Fail closed when the
+  // canonical verifier is missing, rejects or cannot reach Firestore.
+  if (!input.revalidateBeforeSend) return 'not_authorized';
+  try {
+    if (!await input.revalidateBeforeSend()) return 'not_authorized';
+  } catch { return 'not_authorized'; }
 
   // Event identity is stable across Hub retries. Origin authorization proves
   // an opaque operator alert only; Connect separately checks current Hub
