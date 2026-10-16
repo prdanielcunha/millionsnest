@@ -89,6 +89,7 @@ import {
   handleConnectChannelSessionRequest
 } from './src/server/services/ConnectChannelGrantService.js';
 import { handleNestJourneyFollowupContextRequest } from './src/server/services/NestJourneyFollowupContextService.js';
+import { publishNestJourneyFollowupDue } from './src/server/services/NestJourneyFollowupEventPublisher.js';
 import { handleNestJourneyWorkspaceProjectionRequest } from './src/server/services/NestJourneyWorkspaceProjectionService.js';
 import { handleNestAiTokenRequest, handleNestAiGuestTokenRequest, handleNestAiJwksRequest, handleNestLocalNestAiSessionTokenRequest } from './src/server/services/NestAiTokenService.js';
 import { BillingService } from './src/server/services/BillingService.js';
@@ -7590,6 +7591,17 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       verifyIdToken: (token) => admin.auth().verifyIdToken(token),
       getDb: () => db || null,
       resolveAccess: resolveEcosystemAppAccess,
+      // OFF unless explicitly configured on the protected Hub backend.
+      // No browser-selected tenant/recipient is ever forwarded to Connect.
+      ...(process.env.NESTJOURNEY_CONNECT_FOLLOWUP_EVENTS_ENABLED === 'true'
+        ? { onEligibleDueFollowup: async (event) => {
+          const outcome = await publishNestJourneyFollowupDue({
+            ...event, enabled: true,
+            signingSecret: process.env.NESTJOURNEY_CONNECT_SOURCE_EVENT_SECRET,
+            operatorTargetsJson: process.env.NESTJOURNEY_CONNECT_OPERATOR_TARGETS_JSON,
+          });
+          console.info('NESTJOURNEY_CONNECT_DUE_OPERATOR_EVENT:' + outcome);
+        } } : {}),
       logger: console
     });
   });
