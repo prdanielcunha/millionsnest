@@ -3,6 +3,7 @@ import { verifyServingRelease } from './verify-musicscale-serving-release.mjs';
 const sha='a'.repeat(40), digest='sha256:'+'b'.repeat(64), image='us-central1-docker.pkg.dev/millionsnest/millionsnest-web/musicscale-api';
 const service={status:{conditions:[{type:'Ready',status:'True'}],latestReadyRevisionName:'musicscale-api-good',latestCreatedRevisionName:'musicscale-api-good',traffic:[{revisionName:'musicscale-api-good',percent:100}]},spec:{template:{spec:{containers:[{image:`${image}:${sha}`}]}}}};
 const revision={metadata:{name:'musicscale-api-good'},status:{conditions:[{type:'Ready',status:'True'}],imageDigest:`${image}@${digest}`},spec:{containers:[{image:`${image}:${sha}`,env:[]}]}};
+revision.spec.serviceAccountName='mn-musicscale-runtime@millionsnest.iam.gserviceaccount.com';
 assert.equal(verifyServingRelease(service,revision,sha,digest).sha,sha);
 const pinned=structuredClone(revision);pinned.spec.containers[0].image=`${image}@${digest}`;assert.equal(verifyServingRelease(service,pinned,sha,digest).digest,digest);
 for (const mutate of [
