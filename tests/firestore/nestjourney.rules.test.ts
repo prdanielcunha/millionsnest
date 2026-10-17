@@ -1552,3 +1552,61 @@ test('team interest write rejects missing authorization and extra sensitive fiel
   await assertFails(getDoc(doc(coordDb, 'organizations/org-a/products/raiz_e_mesa/teamInterests/intake-other-unit')));
   await assertFails(getDoc(doc(coordDb, 'organizations/org-b/products/raiz_e_mesa/teamInterests/private')));
 });
+
+
+function rolloutSettings(actor: string, overrides: Record<string,unknown> = {}) {
+  return {
+    organizationId: 'org-a',
+    flags: {
+      memberBulkImport: false,
+      personProfileEdit: false,
+      familyLinks: false,
+      verifiedFrequency: false,
+      optionalProjects: false,
+      crossUnitPresence: false,
+      eventSeries: false,
+      personAliases: false,
+      personAvailability: false,
+      ...overrides,
+    },
+    updatedBy: actor,
+    updatedAt: serverTimestamp(),
+  };
+}
+
+test('church admin may save rollout settings, while ordinary members and coordinators cannot', async () => {
+  const docPath = 'organizations/org-a/products/raiz_e_mesa/settings/releaseFlags';
+  const admin = env.authenticatedContext('admin-a').firestore();
+  const member = env.authenticatedContext('member-a').firestore();
+  const coordinator = env.authenticatedContext('coord-a').firestore();
+  await assertSucceeds(setDoc(doc(admin,docPath), rolloutSettings('admin-a')));
+  await assertSucceeds(getDoc(doc(admin,docPath)));
+  await assertFails(setDoc(doc(member,docPath), rolloutSettings('member-a')));
+  await assertFails(setDoc(doc(coordinator,docPath), rolloutSettings('coord-a')));
+  await assertSucceeds(updateDoc(doc(admin,docPath), {flags:rolloutSettings('admin-a',{memberBulkImport:true}).flags,updatedAt:serverTimestamp(),updatedBy:'admin-a'}));
+  await assertFails(deleteDoc(doc(admin,docPath)));
+});
+
+test('rollout settings are exact booleans and cannot forge tenants, consent or roles', async () => {
+  const admin = env.authenticatedContext('admin-a').firestore();
+  const base = 'organizations/org-a/products/raiz_e_mesa/settings/releaseFlags';
+  await assertFails(setDoc(doc(admin,base), rolloutSettings('admin-a',{familyLinks:'true'})));
+  await assertFails(setDoc(doc(admin,base), {...rolloutSettings('admin-a'),grantAccess:true}));
+  await assertFails(setDoc(doc(admin,base), {...rolloutSettings('admin-a'),organizationId:'org-b'}));
+  await assertFails(setDoc(doc(admin,base), {...rolloutSettings('admin-a'),updatedBy:'member-a'}));
+  await assertFails(setDoc(doc(admin,base), rolloutSettings('admin-a',{remoteSecret:true})));
+  const otherOrg = 'organizations/org-b/products/raiz_e_mesa/settings/releaseFlags';
+  await assertFails(setDoc(doc(admin,otherOrg), rolloutSettings('admin-a')));
+});
+
+test('rollout visibility does not grant team-write authority to ordinary church members', async () => {
+  const pastor = env.authenticatedContext('pastor-a').firestore();
+  const ref = doc(pastor,'organizations/org-a/products/raiz_e_mesa/settings/releaseFlags');
+  await assertSucceeds(setDoc(ref,rolloutSettings('pastor-a',{memberBulkImport:true})));
+  const member = env.authenticatedContext('member-a').firestore();
+  await assertFails(setDoc(doc(member,'organizations/org-a/products/raiz_e_mesa/teamInterests/unapproved-data'), {
+    organizationId:'org-a',congregationId:'unit-a',name:'Unapproved',normalizedName:'unapproved',
+    areas:['care'],active:true,source:'paste',needsReview:false,importBatchId:'run-a',
+    createdAt:serverTimestamp(),createdBy:'member-a',updatedAt:serverTimestamp(),updatedBy:'member-a'
+  }));
+});
