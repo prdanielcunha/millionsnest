@@ -1,0 +1,52 @@
+name: NestJourney Canonical Firestore Rules QA
+
+on:
+  pull_request:
+    branches: [main, production]
+    paths:
+      - "firestore.rules"
+      - "firebase.rules-test.json"
+      - "tests/firestore/nestjourney.rules.test.ts"
+      - ".github/workflows/nestjourney-firestore-rules-qa.yml"
+  push:
+    branches: [main, production]
+    paths:
+      - "firestore.rules"
+      - "firebase.rules-test.json"
+      - "tests/firestore/nestjourney.rules.test.ts"
+      - ".github/workflows/nestjourney-firestore-rules-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nestjourney-canonical-rules-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  firestore-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout canonical Hub rules
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Setup Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Certify NestJourney multi-tenant and team intake rules
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-millionsnest-nestjourney-release
+          "npx tsx --test --test-concurrency=1 tests/firestore/nestjourney.rules.test.ts"
