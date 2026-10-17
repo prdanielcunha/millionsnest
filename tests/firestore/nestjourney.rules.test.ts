@@ -1501,3 +1501,54 @@ test('pastor can read and resolve a scoped pastoral marker while ordinary admin 
   }));
   await assertFails(updateDoc(pastorRef, { note: 'private narrative' }));
 });
+
+
+// Scoped volunteer interest intake is a human-reviewed sign-up list, not a
+// person profile, authorization to contact, or operational team membership.
+function teamInterest(uid: string, unit = 'unit-a') {
+  return {
+    organizationId: 'org-a', congregationId: unit,
+    name: 'Beatriz Oliveira', normalizedName: 'beatriz oliveira',
+    areas: ['presence', 'care'], active: true, source: 'paste',
+    needsReview: false, importBatchId: 'test-batch-01',
+    createdAt: serverTimestamp(), createdBy: uid,
+    updatedAt: serverTimestamp(), updatedBy: uid,
+  };
+}
+
+test('coordinator can import and edit reviewed team interests only within own congregation', async () => {
+  const db = env.authenticatedContext('coord-a').firestore();
+  const ref = doc(db, 'organizations/org-a/products/raiz_e_mesa/teamInterests/intake-allowed');
+  await assertSucceeds(setDoc(ref, teamInterest('coord-a')));
+  await assertSucceeds(getDoc(ref));
+  await assertSucceeds(updateDoc(ref, {
+    name: 'Beatriz Oliveira Silva', normalizedName: 'beatriz oliveira silva',
+    areas: ['presence', 'table'], updatedAt: serverTimestamp(), updatedBy: 'coord-a',
+  }));
+  await assertFails(updateDoc(ref, { congregationId: 'unit-b' }));
+  await assertFails(updateDoc(ref, { phone: '43999999999' }));
+  await assertFails(deleteDoc(ref));
+  await assertFails(setDoc(
+    doc(db, 'organizations/org-a/products/raiz_e_mesa/teamInterests/intake-other-unit'),
+    teamInterest('coord-a', 'unit-b'),
+  ));
+});
+
+test('team interest write rejects missing authorization and extra sensitive fields', async () => {
+  const memberDb = env.authenticatedContext('member-a').firestore();
+  const careDb = env.authenticatedContext('care-a').firestore();
+  const coordDb = env.authenticatedContext('coord-a').firestore();
+  const path = 'organizations/org-a/products/raiz_e_mesa/teamInterests';
+  await assertFails(setDoc(doc(memberDb, path + '/member-forbidden'), teamInterest('member-a')));
+  await assertFails(setDoc(doc(careDb, path + '/care-forbidden'), teamInterest('care-a')));
+  await assertFails(setDoc(doc(coordDb, path + '/secret-rejected'), {
+    ...teamInterest('coord-a'), phone: '43999999999',
+  }));
+  await assertFails(setDoc(doc(coordDb, path + '/consent-rejected'), {
+    ...teamInterest('coord-a'), consent: true,
+  }));
+  await assertFails(setDoc(doc(coordDb, path + '/wrong-creator'), teamInterest('pastor-a')));
+  await assertFails(getDoc(doc(memberDb, path + '/intake-allowed')));
+  await assertFails(getDoc(doc(coordDb, 'organizations/org-a/products/raiz_e_mesa/teamInterests/intake-other-unit')));
+  await assertFails(getDoc(doc(coordDb, 'organizations/org-b/products/raiz_e_mesa/teamInterests/private')));
+});
