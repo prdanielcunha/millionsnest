@@ -1,0 +1,55 @@
+name: MusicScale Actual Serving Release Proof
+on:
+  pull_request:
+    paths: ['.github/workflows/musicscale-serving-release-proof.yml', 'scripts/*musicscale-serving-release.mjs', 'ops/musicscale-serving-release.txt']
+  push:
+    branches: [production]
+    paths: ['.github/workflows/musicscale-serving-release-proof.yml', 'scripts/*musicscale-serving-release.mjs', 'ops/musicscale-serving-release.txt']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: musicscale-serving-release-proof-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - run: node scripts/test-musicscale-serving-release.mjs
+  prove:
+    if: github.ref == 'refs/heads/production' && github.event_name != 'pull_request'
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - name: Prove actual traffic, immutable digest and inactive source bridge (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED_SHA="$(cat ops/musicscale-serving-release.txt)"
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          IMAGE="us-central1-docker.pkg.dev/millionsnest/millionsnest-web/musicscale-api:$EXPECTED_SHA"
+          DIGEST="$(gcloud artifacts docker images describe "$IMAGE" --project millionsnest --format='value(image_summary.digest)')"
+          gcloud run services describe musicscale-api --project millionsnest --region us-central1 --format=json > /tmp/musicscale-service.json
+          REVISION="$(jq -er '.status.latestReadyRevisionName' /tmp/musicscale-service.json)"
+          [[ "$REVISION" =~ ^musicscale-api-[a-z0-9-]+$ ]]
+          gcloud run revisions describe "$REVISION" --project millionsnest --region us-central1 --format=json > /tmp/musicscale-revision.json
+          node scripts/verify-musicscale-serving-release.mjs /tmp/musicscale-service.json /tmp/musicscale-revision.json "$EXPECTED_SHA" "$DIGEST"
+          rm -f /tmp/musicscale-service.json /tmp/musicscale-revision.json
