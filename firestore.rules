@@ -1425,32 +1425,20 @@ service cloud.firestore {
             request.resource.data.get('createdAt', null) == request.time &&
             request.resource.data.get('createdBy', '') == request.auth.uid;
           allow update: if
+            journeyTeamInterestScope(orgId, resource.data.get('congregationId', '')) &&
             journeyTenantUnchanged(orgId) &&
             journeyCongregationUnchanged() &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'name', 'normalizedName', 'areas', 'active', 'source',
               'needsReview', 'importBatchId', 'updatedAt', 'updatedBy'
             ]) &&
-            request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null) &&
             request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '') &&
-            request.resource.data.get('name', '') is string &&
-            request.resource.data.get('name', '').size() > 0 &&
-            request.resource.data.get('name', '').size() <= 120 &&
-            request.resource.data.get('normalizedName', '') is string &&
-            request.resource.data.get('normalizedName', '').size() > 0 &&
-            request.resource.data.get('normalizedName', '').size() <= 140 &&
-            request.resource.data.get('areas', []) is list &&
-            request.resource.data.get('areas', []).size() <= 6 &&
+            request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null) &&
+            request.resource.data.get('updatedBy', '') == request.auth.uid &&
+            request.resource.data.get('updatedAt', null) == request.time &&
             request.resource.data.get('areas', []).hasOnly([
               'presence', 'table', 'care', 'house', 'discipleship', 'support'
-            ]) &&
-            request.resource.data.get('active', false) is bool &&
-            request.resource.data.get('needsReview', false) is bool &&
-            request.resource.data.get('source', '') in ['paste', 'image', 'manual'] &&
-            request.resource.data.get('importBatchId', '') is string &&
-            request.resource.data.get('updatedAt', null) == request.time &&
-            request.resource.data.get('updatedBy', '') == request.auth.uid &&
-            journeyTeamInterestScope(orgId, resource.data.get('congregationId', ''));
+            ]);
           allow delete: if false;
         }
 
