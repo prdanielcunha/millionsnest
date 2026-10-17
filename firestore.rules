@@ -1306,6 +1306,44 @@ service cloud.firestore {
         allow read: if journeyHasMembership(orgId);
         allow write: if false;
 
+        // Advanced modules stay off by default. This document only controls UI
+        // visibility; it never grants Firestore privileges or contact consent.
+        function journeyCanManageRollout(orgId) {
+          return journeyProductEnabled(orgId) &&
+            (journeyOwner(orgId) ||
+              (journeyMemberActive(orgId) &&
+                journeyRole(orgId) in ['owner', 'admin', 'pastor', 'data_admin']));
+        }
+
+        function journeyValidRolloutSettings(orgId) {
+          let data = request.resource.data;
+          let flags = data.get('flags', {});
+          return journeyTenantCreate(orgId) &&
+            data.keys().hasOnly(['organizationId', 'flags', 'updatedAt', 'updatedBy']) &&
+            flags is map &&
+            flags.keys().hasOnly([
+              'memberBulkImport', 'personProfileEdit', 'familyLinks',
+              'verifiedFrequency', 'optionalProjects', 'crossUnitPresence',
+              'eventSeries', 'personAliases', 'personAvailability'
+            ]) &&
+            flags.keys().hasAll([
+              'memberBulkImport', 'personProfileEdit', 'familyLinks',
+              'verifiedFrequency', 'optionalProjects', 'crossUnitPresence',
+              'eventSeries', 'personAliases', 'personAvailability'
+            ]) &&
+            flags.get('memberBulkImport', null) is bool &&
+            flags.get('personProfileEdit', null) is bool &&
+            flags.get('familyLinks', null) is bool &&
+            flags.get('verifiedFrequency', null) is bool &&
+            flags.get('optionalProjects', null) is bool &&
+            flags.get('crossUnitPresence', null) is bool &&
+            flags.get('eventSeries', null) is bool &&
+            flags.get('personAliases', null) is bool &&
+            flags.get('personAvailability', null) is bool &&
+            data.get('updatedAt', null) == request.time &&
+            data.get('updatedBy', '') == request.auth.uid;
+        }
+
         match /settings/{settingsId} {
           allow read: if journeyHasMembership(orgId);
           allow create: if settingsId == 'moduleLabels' &&
@@ -1315,6 +1353,12 @@ service cloud.firestore {
             journeyCanManageSettings(orgId) &&
             resource.data.get('organizationId', '') == orgId &&
             journeyValidModuleLabels(orgId);
+          allow create: if settingsId == 'releaseFlags' &&
+            journeyCanManageRollout(orgId) && journeyValidRolloutSettings(orgId);
+          allow update: if settingsId == 'releaseFlags' &&
+            journeyCanManageRollout(orgId) &&
+            resource.data.get('organizationId', '') == orgId &&
+            journeyValidRolloutSettings(orgId);
           allow delete: if false;
         }
 
