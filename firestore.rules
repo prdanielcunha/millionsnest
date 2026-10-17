@@ -1383,6 +1383,59 @@ service cloud.firestore {
           allow delete: if false;
         }
 
+        // NestJourney Raiz e Mesa: staff interest intake only.
+        // This is NOT a membership, volunteer permission or consent record.
+        match /teamInterests/{interestId} {
+          function journeyTeamInterestScope(orgId, congregationId) {
+            return journeyCanManageImplementation(orgId) &&
+              journeyCanAccessCongregation(orgId, congregationId);
+          }
+
+          function journeyTeamInterestPayload(orgId) {
+            let data = request.resource.data;
+            let unitId = data.get('congregationId', '');
+            let name = data.get('name', '');
+            let normalized = data.get('normalizedName', '');
+            let areas = data.get('areas', []);
+            return data.keys().hasOnly([
+                'organizationId', 'congregationId', 'name', 'normalizedName',
+                'areas', 'active', 'source', 'needsReview', 'importBatchId',
+                'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+              ]) &&
+              journeyTenantCreate(orgId) &&
+              journeyTeamInterestScope(orgId, unitId) &&
+              unitId is string && unitId.size() > 0 &&
+              name is string && name.size() > 0 && name.size() <= 120 &&
+              normalized is string && normalized.size() > 0 && normalized.size() <= 140 &&
+              areas is list && areas.size() <= 6 &&
+              areas.hasOnly(['presence', 'table', 'care', 'house', 'discipleship', 'support']) &&
+              data.get('active', false) is bool &&
+              data.get('needsReview', false) is bool &&
+              data.get('source', '') in ['paste', 'image', 'manual'] &&
+              data.get('importBatchId', '') is string &&
+              data.get('importBatchId', '').size() <= 100 &&
+              data.get('updatedBy', '') == request.auth.uid &&
+              data.get('updatedAt', null) == request.time;
+          }
+
+          allow read: if journeyTeamInterestScope(
+            orgId, resource.data.get('congregationId', '')
+          );
+          allow create: if journeyTeamInterestPayload(orgId) &&
+            request.resource.data.get('createdAt', null) == request.time &&
+            request.resource.data.get('createdBy', '') == request.auth.uid;
+          allow update: if journeyTeamInterestPayload(orgId) &&
+            journeyTenantUnchanged(orgId) &&
+            journeyCongregationUnchanged() &&
+            request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null) &&
+            request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '') &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'name', 'normalizedName', 'areas', 'active', 'source',
+              'needsReview', 'importBatchId', 'updatedAt', 'updatedBy'
+            ]);
+          allow delete: if false;
+        }
+
         match /people/{personId} {
           function journeyPersonBondEmptyOnCreate() {
             return request.resource.data.get('bondHostRef', '') == '' &&
