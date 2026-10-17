@@ -1599,13 +1599,14 @@ test('rollout settings are exact booleans and cannot forge tenants, consent or r
   await assertFails(setDoc(doc(admin,otherOrg), rolloutSettings('admin-a')));
 });
 
-test('a pastor in the organization may configure visibility, without granting permissions or contacts', async () => {
+test('rollout visibility does not grant team-write authority to ordinary church members', async () => {
   const pastor = env.authenticatedContext('pastor-a').firestore();
   const ref = doc(pastor,'organizations/org-a/products/raiz_e_mesa/settings/releaseFlags');
-  await assertSucceeds(setDoc(ref,rolloutSettings('pastor-a')));
-  await assertFails(setDoc(doc(pastor,'organizations/org-a/products/raiz_e_mesa/teamInterests/unauthorized-pastor-data'), {
-    organizationId:'org-a',congregationId:'unit-b',name:'Unapproved',normalizedName:'unapproved',
+  await assertSucceeds(setDoc(ref,rolloutSettings('pastor-a',{memberBulkImport:true})));
+  const member = env.authenticatedContext('member-a').firestore();
+  await assertFails(setDoc(doc(member,'organizations/org-a/products/raiz_e_mesa/teamInterests/unapproved-data'), {
+    organizationId:'org-a',congregationId:'unit-a',name:'Unapproved',normalizedName:'unapproved',
     areas:['care'],active:true,source:'paste',needsReview:false,importBatchId:'run-a',
-    createdAt:serverTimestamp(),createdBy:'pastor-a',updatedAt:serverTimestamp(),updatedBy:'pastor-a'
+    createdAt:serverTimestamp(),createdBy:'member-a',updatedAt:serverTimestamp(),updatedBy:'member-a'
   }));
 });
