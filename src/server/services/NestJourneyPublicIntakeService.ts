@@ -1,7 +1,8 @@
 import type {Request, Response} from 'express';
 import {createHash, randomBytes} from 'node:crypto';
 import {getAuth} from 'firebase-admin/auth';
-import {FieldValue, getFirestore, type Firestore} from 'firebase-admin/firestore';
+import {FieldValue, FieldPath, getFirestore, type Firestore} from 'firebase-admin/firestore';
+import {resolveEcosystemAppAccess} from './EcosystemAccessResolver.js';
 import {canManageTenantMembers} from '../../lib/permissionService.js';
 
 /** A public link never creates a member or grants access to the Hub. */
@@ -39,9 +40,9 @@ export async function authAdmin(req:Request,res:Response,db:Firestore){
   if(!orgDoc.exists||INACTIVE.has(trim(org.status).toLowerCase())){
     res.status(404).json({success:false,reasonCode:'ORGANIZATION_UNAVAILABLE'});return null;
   }
-  const apps=org.apps||{}, product=apps.nestjourney||apps.raiz_e_mesa||{};
-  if(product && INACTIVE.has(trim(product.status).toLowerCase())){
-    res.status(403).json({success:false,reasonCode:'PRODUCT_UNAVAILABLE'});return null;
+  const canonical=await resolveEcosystemAppAccess({uid,organizationId:orgId,appId:'nestjourney',db});
+  if(!canonical.accessible){
+    res.status(403).json({success:false,reasonCode:'PRODUCT_ACCESS_DENIED'});return null;
   }
   const active=memberDoc.exists&&member.disabled!==true&&['','active','ativo'].includes(trim(member.status).toLowerCase());
   const owner=org.ownerUid===uid||org.ownerId===uid;
@@ -101,7 +102,7 @@ export async function submitJourneyIntake(req:Request,res:Response){
     return res.status(400).json({success:false,reasonCode:'INVALID_CONTACT_OR_NOTICE'});
   try{
     const db=getFirestore(),linkRef=db.doc(LINKS+'/'+digest(token));
-    const intakeRef=db.collection('nestjourney_intake_requests').doc();
+    const intakeId=db.collection(LINKS).doc().id;
     const status=await db.runTransaction(async tx=>{
       const snapshot=await tx.get(linkRef),link=snapshot.data()||{};
       if(!snapshot.exists||link.active!==true||Date.now()>=link.expiresAtMs||link.submissionsCount>=link.maxSubmissions)
@@ -109,6 +110,7 @@ export async function submitJourneyIntake(req:Request,res:Response){
       const org=trim(link.organizationId),unit=trim(link.congregationId);
       if(!ID.test(org)||!ID.test(unit))return false;
       tx.update(linkRef,{submissionsCount:FieldValue.increment(1)});
+      const intakeRef=db.doc(paths(org)+'/intakeRequests/'+intakeId);
       tx.set(intakeRef,{
         organizationId:org,congregationId:unit,name,phone,consentContact:consent,
         privacyAcknowledged:true,status:'pending_review',
@@ -127,15 +129,20 @@ export async function listJourneyIntakeRequests(req:Request,res:Response){
   try{
     const db=getFirestore(),actor=await authAdmin(req,res,db);
     if(!actor)return;
-    const rows=await db.collection('nestjourney_intake_requests')
-      .where('organizationId','==',actor.orgId).limit(100).get();
-    const requests=rows.docs.map(x=>({id:x.id,...x.data()})).filter((x:any)=>x.status==='pending_review')
+    const cursor=trim(req.query.cursor);
+    if(cursor&&!ID.test(cursor))return res.status(400).json({success:false,reasonCode:'INVALID_CURSOR'});
+    let q=db.collection(paths(actor.orgId)+'/intakeRequests')
+      .where('status','==','pending_review')
+      .orderBy(FieldPath.documentId()).limit(100);
+    if(cursor)q=q.startAfter(cursor);
+    const rows=await q.get();
+    const requests=rows.docs.map(x=>({id:x.id,...x.data()}))
       .map((x:any)=>({
         id:x.id,name:x.name,phone:x.phone,congregationId:x.congregationId,
         consentContact:x.consentContact,createdAtMs:x.createdAt?.toMillis?.()||null,
       }));
     res.setHeader('Cache-Control','private,no-store');
-    return res.status(200).json({success:true,requests});
+    return res.status(200).json({success:true,requests,nextCursor:rows.docs.length===100?rows.docs.at(-1)?.id:null});
   }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
 }
 
@@ -147,7 +154,7 @@ export async function approveJourneyIntake(req:Request,res:Response){
     if(!actor)return;
     const intakeId=trim(req.params.intakeId);
     if(!ID.test(intakeId))return res.status(400).json({success:false,reasonCode:'INVALID_REQUEST'});
-    const requestRef=db.doc('nestjourney_intake_requests/'+intakeId);
+    const requestRef=db.doc(paths(actor.orgId)+'/intakeRequests/'+intakeId);
     const inputPersonId=trim(req.body?.existingPersonId);
     if(inputPersonId&&!ID.test(inputPersonId))return res.status(400).json({success:false,reasonCode:'INVALID_PERSON'});
     const response=await db.runTransaction(async tx=>{
@@ -304,7 +311,7 @@ export async function rejectJourneyIntake(req:Request,res:Response){
     if(!actor)return;
     const id=trim(req.params.intakeId);
     if(!ID.test(id))return res.status(400).json({success:false,reasonCode:'INVALID_REQUEST'});
-    const ref=db.doc('nestjourney_intake_requests/'+id);
+    const ref=db.doc(paths(actor.orgId)+'/intakeRequests/'+id);
     const result=await db.runTransaction(async tx=>{
       const snap=await tx.get(ref),record=snap.data()||{};
       if(!snap.exists||record.organizationId!==actor.orgId)
