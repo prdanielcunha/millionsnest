@@ -22,7 +22,7 @@ import {
 import { claimNestJourneyRelationshipHost } from './src/server/services/NestJourneyRelationshipHostCommandService.js';
 import {
   createJourneyIntakeLink,describeJourneyIntakeLink,submitJourneyIntake,
-  listJourneyIntakeRequests,approveJourneyIntake,rejectJourneyIntake,revokeJourneyIntakeLink,
+  listJourneyIntakeRequests,approveJourneyIntake,rejectJourneyIntake,listJourneyIntakeLinks,revokeJourneyIntakeLink,
   readJourneyPersonAddress,saveJourneyPersonAddress,deleteJourneyPersonAddress,
 } from './src/server/services/NestJourneyPublicIntakeService.js';
 import {
@@ -3062,6 +3062,7 @@ async function startServer() {
   app.patch('/api/v1/organizations/:organizationId/nestjourney/support-assignments/:taskId', express.json({ limit: '2kb' }), (req, res) => changeNestJourneySupportAssignment(req, res));
   app.put('/api/v1/organizations/:organizationId/nestjourney/people/:personId/bond-host', express.json({ limit: '4kb' }), (req, res) => claimNestJourneyRelationshipHost(req, res));
   app.post('/api/v1/organizations/:organizationId/nestjourney/intake-links', express.json({ limit: '3kb' }), createJourneyIntakeLink);
+  app.get('/api/v1/organizations/:organizationId/nestjourney/intake-links', listJourneyIntakeLinks);
   app.post('/api/v1/organizations/:organizationId/nestjourney/intake-links/revoke', express.json({ limit: '2kb' }), revokeJourneyIntakeLink);
   app.post('/api/v1/organizations/:organizationId/nestjourney/calendar-feed', express.json({ limit: '2kb' }), createJourneyCalendarFeed);
   app.get('/api/v1/organizations/:organizationId/nestjourney/calendar-feeds', listJourneyCalendarFeeds);
