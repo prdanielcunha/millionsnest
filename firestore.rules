@@ -1549,10 +1549,24 @@ service cloud.firestore {
               && audit.targetRef == 'person:' + personId
               && audit.createdAt == request.time;
           }
-          allow read: if birthdayAdmin()
-            || (journeyMemberActive(orgId) && journeyCanManagePeople(orgId)
-                && resource.data.get('shareWithTeam',false) == true
-                && journeyCanAccessCongregation(orgId, resource.data.get('congregationId','')));
+          function birthdayReadable() {
+            let member = getMemberPermissions(orgId);
+            let active = isAuthenticated() && member != null
+              && member.get('status','active') in ['active','ativo'];
+            let roleName = active ? member.get('organizationRole',member.get('role','')) : '';
+            let permissions = active ? member.get('permissions',{}) : {};
+            let inUnit = active && resource.data.get('congregationId','')
+              in member.get('congregationIds',[]);
+            return journeyProductEnabled(orgId) && (
+              (active && roleName in ['owner','admin','pastor','data_admin'])
+              || journeyOwner(orgId)
+              || (
+                active && resource.data.get('shareWithTeam',false) == true
+                && permissions.get('canManagePeople',false) == true && inUnit
+              )
+            );
+          }
+          allow read: if birthdayReadable();
           allow create: if birthdayAdmin()
             && request.resource.data.createdBy == request.auth.uid
             && request.resource.data.createdAt == request.time
