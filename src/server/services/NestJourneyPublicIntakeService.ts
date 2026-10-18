@@ -176,6 +176,11 @@ export async function approveJourneyIntake(req:Request,res:Response){
         status:'integrated',approvedPersonId:personId,
         approvedBy:actor.uid,approvedAt:FieldValue.serverTimestamp(),
       });
+      tx.set(db.collection(paths(actor.orgId)+'/audit').doc(),{
+        organizationId:actor.orgId,congregationId:data.congregationId,
+        actorId:actor.uid,action:'person.intake_integrated',
+        targetRef:'person:'+personId,createdAt:FieldValue.serverTimestamp(),
+      });
       return {status:200,personId};
     });
     if(response.status!==200)return res.status(response.status).json({success:false,reasonCode:response.reasonCode});
