@@ -29,6 +29,9 @@ import {
   createJourneyCalendarFeed,revokeJourneyCalendarFeed,listJourneyCalendarFeeds,deliverJourneyCalendarFeed,
 } from './src/server/services/NestJourneyBirthdayCalendarFeedService.js';
 import {
+  getJourneyBirthdayWhatsAppConsent,setJourneyBirthdayWhatsAppConsent,
+} from './src/server/services/NestJourneyBirthdayWhatsAppConsentService.js';
+import {
   getActionPreferences,
   updateActionPreference
 } from './src/server/services/ActionPreferenceCommandService.js';
@@ -3064,6 +3067,8 @@ async function startServer() {
   app.get('/api/v1/organizations/:organizationId/nestjourney/calendar-feeds', listJourneyCalendarFeeds);
   app.post('/api/v1/organizations/:organizationId/nestjourney/calendar-feed/revoke', express.json({ limit: '2kb' }), revokeJourneyCalendarFeed);
   app.get('/api/public/nestjourney/calendar/:token.ics', deliverJourneyCalendarFeed);
+  app.get('/api/v1/organizations/:organizationId/nestjourney/people/:personId/birthday-whatsapp-consent', getJourneyBirthdayWhatsAppConsent);
+  app.put('/api/v1/organizations/:organizationId/nestjourney/people/:personId/birthday-whatsapp-consent', express.json({ limit: '2kb' }), setJourneyBirthdayWhatsAppConsent);
   app.get('/api/v1/organizations/:organizationId/nestjourney/people/:personId/address', readJourneyPersonAddress);
   app.put('/api/v1/organizations/:organizationId/nestjourney/people/:personId/address', express.json({ limit: '4kb' }), saveJourneyPersonAddress);
   app.delete('/api/v1/organizations/:organizationId/nestjourney/people/:personId/address', deleteJourneyPersonAddress);
