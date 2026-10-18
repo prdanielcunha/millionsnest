@@ -21,6 +21,10 @@ import {
 } from './src/server/services/NestJourneySupportAssignmentService.js';
 import { claimNestJourneyRelationshipHost } from './src/server/services/NestJourneyRelationshipHostCommandService.js';
 import {
+  createJourneyIntakeLink,describeJourneyIntakeLink,submitJourneyIntake,
+  listJourneyIntakeRequests,approveJourneyIntake,
+} from './src/server/services/NestJourneyPublicIntakeService.js';
+import {
   getActionPreferences,
   updateActionPreference
 } from './src/server/services/ActionPreferenceCommandService.js';
@@ -3050,6 +3054,11 @@ async function startServer() {
   app.post('/api/v1/organizations/:organizationId/nestjourney/support-assignments', express.json({ limit: '4kb' }), (req, res) => createNestJourneySupportAssignment(req, res));
   app.patch('/api/v1/organizations/:organizationId/nestjourney/support-assignments/:taskId', express.json({ limit: '2kb' }), (req, res) => changeNestJourneySupportAssignment(req, res));
   app.put('/api/v1/organizations/:organizationId/nestjourney/people/:personId/bond-host', express.json({ limit: '4kb' }), (req, res) => claimNestJourneyRelationshipHost(req, res));
+  app.post('/api/v1/organizations/:organizationId/nestjourney/intake-links', express.json({ limit: '3kb' }), createJourneyIntakeLink);
+  app.get('/api/v1/organizations/:organizationId/nestjourney/intakes', listJourneyIntakeRequests);
+  app.post('/api/v1/organizations/:organizationId/nestjourney/intakes/:intakeId/approve', express.json({ limit: '2kb' }), approveJourneyIntake);
+  app.get('/api/public/nestjourney/intake/:token', describeJourneyIntakeLink);
+  app.post('/api/public/nestjourney/intake/:token', express.json({ limit: '4kb' }), submitJourneyIntake);
   app.get('/api/v1/organizations/:organizationId/action-preferences', (req, res) => getActionPreferences(req, res));
   app.put('/api/v1/organizations/:organizationId/action-preference', express.json({ limit: '8kb' }), (req, res) => updateActionPreference(req, res));
   app.get('/api/v1/organizations/:organizationId/action-resolutions', (req, res) => getActionResolutions(req, res));
