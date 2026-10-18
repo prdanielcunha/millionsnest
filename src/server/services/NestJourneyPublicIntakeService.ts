@@ -38,7 +38,7 @@ async function authAdmin(req:Request,res:Response,db:Firestore){
     res.status(404).json({success:false,reasonCode:'ORGANIZATION_UNAVAILABLE'});return null;
   }
   const apps=org.apps||{}, product=apps.nestjourney||apps.raiz_e_mesa||{};
-  if(INACTIVE.has(trim(product.status).toLowerCase())){
+  if(!['active','trialing'].includes(trim(product.status).toLowerCase())){
     res.status(403).json({success:false,reasonCode:'PRODUCT_UNAVAILABLE'});return null;
   }
   const active=memberDoc.exists&&!INACTIVE.has(trim(member.status).toLowerCase());
@@ -180,5 +180,102 @@ export async function approveJourneyIntake(req:Request,res:Response){
     });
     if(response.status!==200)return res.status(response.status).json({success:false,reasonCode:response.reasonCode});
     return res.status(200).json({success:true,personId:response.personId});
+  }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
+}
+
+
+export async function revokeJourneyIntakeLink(req:Request,res:Response){
+  try{
+    const db=getFirestore(),actor=await authAdmin(req,res,db);
+    if(!actor)return;
+    const token=trim(req.body?.token);
+    if(!TOKEN.test(token))return res.status(400).json({success:false,reasonCode:'INVALID_LINK'});
+    const ref=db.doc(LINKS+'/'+digest(token)),snap=await ref.get();
+    if(!snap.exists||snap.data()?.organizationId!==actor.orgId)
+      return res.status(404).json({success:false,reasonCode:'LINK_UNAVAILABLE'});
+    await ref.update({active:false,revokedAt:FieldValue.serverTimestamp(),revokedBy:actor.uid});
+    return res.status(200).json({success:true});
+  }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
+}
+
+const ADDRESS_FIELDS=['street','number','district','complement','city','region','postalCode'] as const;
+type AddressField=typeof ADDRESS_FIELDS[number];
+const MAX_LENGTH:Record<AddressField,number>={
+  street:140,number:20,district:90,complement:120,city:90,region:60,postalCode:15
+};
+function sanitizeAddress(raw:unknown):Record<AddressField,string>|null{
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const obj=raw as Record<string,unknown>;
+  if(Object.keys(obj).some(k=>!ADDRESS_FIELDS.includes(k as AddressField)))return null;
+  const result={} as Record<AddressField,string>;
+  for(const key of ADDRESS_FIELDS){
+    const value=trim(obj[key]).replace(/\s+/g,' ');
+    if(value.length>MAX_LENGTH[key]||/[<>\u0000-\u001f]/.test(value))return null;
+    result[key]=value;
+  }
+  return result;
+}
+export async function readJourneyPersonAddress(req:Request,res:Response){
+  try{
+    const db=getFirestore(),actor=await authAdmin(req,res,db);
+    if(!actor)return;
+    const personId=trim(req.params.personId);
+    if(!ID.test(personId))return res.status(400).json({success:false,reasonCode:'INVALID_PERSON'});
+    const person=await db.doc(paths(actor.orgId)+'/people/'+personId).get();
+    if(!person.exists||person.data()?.organizationId!==actor.orgId)
+      return res.status(404).json({success:false,reasonCode:'PERSON_NOT_FOUND'});
+    const snap=await db.doc(paths(actor.orgId)+'/personContactDetails/'+personId).get();
+    res.setHeader('Cache-Control','private,no-store');
+    return res.status(200).json({success:true,address:snap.exists?snap.data()?.address||null:null});
+  }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
+}
+export async function saveJourneyPersonAddress(req:Request,res:Response){
+  try{
+    const db=getFirestore(),actor=await authAdmin(req,res,db);
+    if(!actor)return;
+    const personId=trim(req.params.personId);
+    if(!ID.test(personId))return res.status(400).json({success:false,reasonCode:'INVALID_PERSON'});
+    const address=sanitizeAddress(req.body?.address);
+    if(!address||req.body?.permissionConfirmed!==true)
+      return res.status(400).json({success:false,reasonCode:'INVALID_ADDRESS_OR_PERMISSION'});
+    const ref=db.doc(paths(actor.orgId)+'/personContactDetails/'+personId);
+    const personRef=db.doc(paths(actor.orgId)+'/people/'+personId);
+    await db.runTransaction(async tx=>{
+      const person=await tx.get(personRef);
+      if(!person.exists||person.data()?.organizationId!==actor.orgId||person.data()?.deletedAt)
+        throw Error('PERSON_NOT_FOUND');
+      const audit=db.collection(paths(actor.orgId)+'/audit').doc();
+      tx.set(ref,{
+        organizationId:actor.orgId,personId,congregationId:person.data()?.congregationId,
+        address,updatedBy:actor.uid,updatedAt:FieldValue.serverTimestamp(),
+        permissionConfirmedBy:actor.uid,permissionConfirmedAt:FieldValue.serverTimestamp(),
+      });
+      tx.set(audit,{
+        organizationId:actor.orgId,congregationId:person.data()?.congregationId,
+        actorId:actor.uid,action:'person.address_saved',
+        targetRef:'person:'+personId,createdAt:FieldValue.serverTimestamp(),
+      });
+    });
+    return res.status(200).json({success:true});
+  }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
+}
+export async function deleteJourneyPersonAddress(req:Request,res:Response){
+  try{
+    const db=getFirestore(),actor=await authAdmin(req,res,db);
+    if(!actor)return;
+    const personId=trim(req.params.personId);
+    if(!ID.test(personId))return res.status(400).json({success:false,reasonCode:'INVALID_PERSON'});
+    const person=await db.doc(paths(actor.orgId)+'/people/'+personId).get();
+    if(!person.exists||person.data()?.organizationId!==actor.orgId)
+      return res.status(404).json({success:false,reasonCode:'PERSON_NOT_FOUND'});
+    const batch=db.batch(),ref=db.doc(paths(actor.orgId)+'/personContactDetails/'+personId);
+    batch.delete(ref);
+    batch.set(db.collection(paths(actor.orgId)+'/audit').doc(),{
+      organizationId:actor.orgId,congregationId:person.data()?.congregationId,
+      actorId:actor.uid,action:'person.address_removed',
+      targetRef:'person:'+personId,createdAt:FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+    return res.status(200).json({success:true});
   }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
 }
