@@ -38,10 +38,10 @@ export async function authAdmin(req:Request,res:Response,db:Firestore){
     res.status(404).json({success:false,reasonCode:'ORGANIZATION_UNAVAILABLE'});return null;
   }
   const apps=org.apps||{}, product=apps.nestjourney||apps.raiz_e_mesa||{};
-  if(!['active','trialing'].includes(trim(product.status).toLowerCase())){
+  if(product && INACTIVE.has(trim(product.status).toLowerCase())){
     res.status(403).json({success:false,reasonCode:'PRODUCT_UNAVAILABLE'});return null;
   }
-  const active=memberDoc.exists&&!INACTIVE.has(trim(member.status).toLowerCase());
+  const active=memberDoc.exists&&member.disabled!==true&&['','active','ativo'].includes(trim(member.status).toLowerCase());
   const owner=org.ownerUid===uid||org.ownerId===uid;
   const role=trim(member.organizationRole||member.role).toLowerCase();
   if(!owner&&(!active||!ADMIN.has(role))){
@@ -163,6 +163,11 @@ export async function approveJourneyIntake(req:Request,res:Response){
           .where('congregationId','==',data.congregationId)
           .where('phone','==',data.phone).limit(1));
         if(!candidates.empty)return {status:409,reasonCode:'POSSIBLE_DUPLICATE'};
+        // Phones intentionally absent from non-consented profiles still require a human duplicate check.
+        const sameName=await tx.get(db.collection(paths(actor.orgId)+'/people')
+          .where('name','==',data.name).limit(25));
+        if(sameName.docs.some(x=>x.data()?.congregationId===data.congregationId))
+          return {status:409,reasonCode:'POSSIBLE_DUPLICATE'};
         tx.create(ref,{
           organizationId:actor.orgId,congregationId:data.congregationId,
           name:data.name,preferredName:'',communityStatus:'visitor',
