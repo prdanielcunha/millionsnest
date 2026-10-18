@@ -22,7 +22,7 @@ import {
 import { claimNestJourneyRelationshipHost } from './src/server/services/NestJourneyRelationshipHostCommandService.js';
 import {
   createJourneyIntakeLink,describeJourneyIntakeLink,submitJourneyIntake,
-  listJourneyIntakeRequests,approveJourneyIntake,revokeJourneyIntakeLink,
+  listJourneyIntakeRequests,approveJourneyIntake,rejectJourneyIntake,revokeJourneyIntakeLink,
   readJourneyPersonAddress,saveJourneyPersonAddress,deleteJourneyPersonAddress,
 } from './src/server/services/NestJourneyPublicIntakeService.js';
 import {
@@ -3074,6 +3074,7 @@ async function startServer() {
   app.delete('/api/v1/organizations/:organizationId/nestjourney/people/:personId/address', deleteJourneyPersonAddress);
   app.get('/api/v1/organizations/:organizationId/nestjourney/intakes', listJourneyIntakeRequests);
   app.post('/api/v1/organizations/:organizationId/nestjourney/intakes/:intakeId/approve', express.json({ limit: '2kb' }), approveJourneyIntake);
+  app.post('/api/v1/organizations/:organizationId/nestjourney/intakes/:intakeId/reject', express.json({ limit: '2kb' }), rejectJourneyIntake);
   app.get('/api/public/nestjourney/intake/:token', describeJourneyIntakeLink);
   app.post('/api/public/nestjourney/intake/:token', express.json({ limit: '4kb' }), submitJourneyIntake);
   app.get('/api/v1/organizations/:organizationId/action-preferences', (req, res) => getActionPreferences(req, res));
