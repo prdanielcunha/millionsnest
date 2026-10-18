@@ -10,6 +10,10 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  collection,
+  query,
+  where,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -1649,6 +1653,7 @@ test('birthday dates require consent audit, enforce tenant isolation and opt-in 
   });
   await assertSucceeds(change.commit());
   await assertSucceeds(getDoc(doc(team,root+'/personBirthdays/person-a')));
+  await assertSucceeds(getDocs(query(collection(team,root+'/personBirthdays'),where('congregationId','==','unit-a'),where('shareWithTeam','==',true))));
   await assertFails(getDoc(doc(member,root+'/personBirthdays/person-a')));
   await assertFails(updateDoc(doc(team,root+'/personBirthdays/person-a'),{day:19}));
 });
