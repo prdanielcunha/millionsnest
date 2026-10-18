@@ -109,6 +109,15 @@ export async function submitJourneyIntake(req:Request,res:Response){
         return false;
       const org=trim(link.organizationId),unit=trim(link.congregationId);
       if(!ID.test(org)||!ID.test(unit))return false;
+      // Public links are not perpetual authority: recheck tenant, campus and
+      // canonical-first entitlement on every collection of personal data.
+      const orgDoc=await tx.get(db.doc('organizations/'+org));
+      const unitDoc=await tx.get(db.doc(paths(org)+'/congregations/'+unit));
+      if(!orgDoc.exists||!unitDoc.exists||unitDoc.data()?.active===false)return false;
+      const orgData=orgDoc.data()||{};
+      if(orgData.disabled===true||INACTIVE.has(trim(orgData.status).toLowerCase()))return false;
+      const canonical=orgData.apps?.nestjourney??orgData.apps?.raiz_e_mesa;
+      if(!canonical||!['active','trialing'].includes(trim(canonical.status).toLowerCase()))return false;
       tx.update(linkRef,{submissionsCount:FieldValue.increment(1)});
       const intakeRef=db.doc(paths(org)+'/intakeRequests/'+intakeId);
       tx.set(intakeRef,{

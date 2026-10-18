@@ -78,6 +78,10 @@ before(async () => {
         uid, status: 'active', role, organizationRole: role, congregationIds, permissions,
       });
     }
+    // Birthday PII Rules honor the canonical user lifecycle independently of membership.
+    await setDoc(doc(db, 'users/admin-a'), { status: 'active' });
+    await setDoc(doc(db, 'users/coord-a'), { status: 'active' });
+    await setDoc(doc(db, 'users/member-a'), { status: 'active' });
     await setDoc(doc(db, 'organizations/org-b/members/member-b'), {
       uid: 'member-b', status: 'active', role: 'member', organizationRole: 'member', congregationIds: ['unit-b'],
     });
@@ -1693,5 +1697,17 @@ test('birthday dates require consent audit, enforce tenant isolation and opt-in 
   await assertFails(getDoc(personBirthday));
   await env.withSecurityRulesDisabled(async context=>{
     await updateDoc(doc(context.firestore(),'organizations/org-a'),{disabled:false});
+    await updateDoc(doc(context.firestore(),'users/admin-a'),{status:'suspended'});
   });
+  await assertFails(getDoc(personBirthday));
+  await assertFails(deleteDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'users/admin-a'),{status:'active'});
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{
+      'apps.nestjourney.status':'suspended',
+      'apps.raiz_e_mesa.status':'active',
+    });
+  });
+  await assertFails(getDoc(personBirthday));
+  await assertFails(deleteDoc(personBirthday));
 });

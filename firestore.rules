@@ -1516,14 +1516,26 @@ service cloud.firestore {
         match /personBirthdays/{personId} {
           // This collection is more restrictive than generic People access:
           // denying appAccess and disabled memberships must revoke birthday access.
+          function birthdayEntitled() {
+            let org = get(/databases/$(database)/documents/organizations/$(orgId)).data;
+            let apps = org.get('apps', {});
+            let canonical = apps is map ? apps.get('nestjourney', null) : null;
+            let legacy = apps is map ? apps.get('raiz_e_mesa', null) : null;
+            let selected = canonical is map ? canonical : legacy;
+            return selected is map && selected.get('status', '') in ['active','trialing'];
+          }
           function birthdayMemberAppAllowed() {
+            let userRecord = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
             let orgRecord = get(/databases/$(database)/documents/organizations/$(orgId)).data;
             let member = getMemberPermissions(orgId);
             let apps = member != null ? member.get('appAccess', {}) : {};
             let current = apps is map ? apps.get('nestjourney', null) : null;
             let legacy = apps is map ? apps.get('raiz_e_mesa', {}) : {};
             let app = current is map ? current : (legacy is map ? legacy : {});
-            return orgRecord != null &&
+            return isAuthenticated() && userRecord != null &&
+              userRecord.get('disabled',false) != true &&
+              !(userRecord.get('status','active') in ['inactive','suspended','disabled']) &&
+              orgRecord != null &&
               orgRecord.get('disabled',false) != true &&
               !(orgRecord.get('status','active') in ['archived','inactive','suspended','disabled']) &&
               (isSystemAdmin() || (
@@ -1535,7 +1547,7 @@ service cloud.firestore {
             ));
           }
           function birthdayAdmin() {
-            return journeyProductEnabled(orgId) && birthdayMemberAppAllowed() &&
+            return birthdayEntitled() && birthdayMemberAppAllowed() &&
               (journeyOwner(orgId) || (journeyMemberActive(orgId) && journeyRole(orgId) in ['owner','admin','pastor','data_admin']));
           }
           function validDate() {
@@ -1578,7 +1590,7 @@ service cloud.firestore {
             let permissions = active ? member.get('permissions',{}) : {};
             let inUnit = active && resource.data.get('congregationId','')
               in member.get('congregationIds',[]);
-            return journeyProductEnabled(orgId) && birthdayMemberAppAllowed() && (
+            return birthdayEntitled() && birthdayMemberAppAllowed() && (
               (active && roleName in ['owner','admin','pastor','data_admin'])
               || journeyOwner(orgId)
               || (
