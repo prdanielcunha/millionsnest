@@ -206,13 +206,30 @@ export async function approveJourneyIntake(req:Request,res:Response){
 }
 
 
+export async function listJourneyIntakeLinks(req:Request,res:Response){
+  try{
+    const db=getFirestore(),actor=await authAdmin(req,res,db);
+    if(!actor)return;
+    const docs=await db.collection(LINKS).where('organizationId','==',actor.orgId)
+      .where('active','==',true).limit(200).get();
+    res.setHeader('Cache-Control','private,no-store');
+    return res.status(200).json({success:true,links:docs.docs
+      .filter(d=>Date.now()<Number(d.data().expiresAtMs)&&Number(d.data().submissionsCount)<Number(d.data().maxSubmissions))
+      .map(d=>({id:d.id,congregationId:d.data().congregationId,
+        congregationName:d.data().congregationName,createdAtMs:d.data().createdAt?.toMillis?.()||null,
+        expiresAtMs:d.data().expiresAtMs,submissionsCount:d.data().submissionsCount,
+        maxSubmissions:d.data().maxSubmissions}))});
+  }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
+}
+
 export async function revokeJourneyIntakeLink(req:Request,res:Response){
   try{
     const db=getFirestore(),actor=await authAdmin(req,res,db);
     if(!actor)return;
-    const token=trim(req.body?.token);
-    if(!TOKEN.test(token))return res.status(400).json({success:false,reasonCode:'INVALID_LINK'});
-    const ref=db.doc(LINKS+'/'+digest(token)),snap=await ref.get();
+    const token=trim(req.body?.token),linkId=trim(req.body?.linkId);
+    if(!TOKEN.test(token)&&!/^[a-f0-9]{64}$/.test(linkId))
+      return res.status(400).json({success:false,reasonCode:'INVALID_LINK'});
+    const ref=db.doc(LINKS+'/'+(TOKEN.test(token)?digest(token):linkId)),snap=await ref.get();
     if(!snap.exists||snap.data()?.organizationId!==actor.orgId)
       return res.status(404).json({success:false,reasonCode:'LINK_UNAVAILABLE'});
     await ref.update({active:false,revokedAt:FieldValue.serverTimestamp(),revokedBy:actor.uid});
