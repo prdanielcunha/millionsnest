@@ -1,6 +1,6 @@
 import type {Request,Response} from 'express';
 import {createHash,randomBytes} from 'node:crypto';
-import {getFirestore,FieldValue} from 'firebase-admin/firestore';
+import {getFirestore,FieldValue,FieldPath} from 'firebase-admin/firestore';
 import {authAdmin} from './NestJourneyPublicIntakeService.js';
 import {resolveEcosystemAppAccess} from './EcosystemAccessResolver.js';
 import {canManageTenantMembers} from '../../lib/permissionService.js';
@@ -83,12 +83,22 @@ export async function listJourneyCalendarFeeds(req:Request,res:Response){
   try{
     const db=getFirestore(),actor=await authAdmin(req,res,db);
     if(!actor)return;
-    const docs=await db.collection(COLLECTION).where('organizationId','==',actor.orgId).limit(100).get();
+    const cursor=typeof req.query.cursor==='string'?req.query.cursor.trim():'';
+    if(cursor&&!/^[a-f0-9]{64}$/.test(cursor))
+      return res.status(400).json({success:false,reasonCode:'INVALID_CURSOR'});
+    let query=db.collection(COLLECTION)
+      .where('organizationId','==',actor.orgId)
+      .where('active','==',true)
+      .orderBy(FieldPath.documentId()).limit(100);
+    if(cursor)query=query.startAfter(cursor);
+    const docs=await query.get();
     res.setHeader('Cache-Control','private,no-store');
-    return res.status(200).json({success:true,feeds:docs.docs.filter(s=>s.data().active===true).map(s=>({
-      id:s.id,congregationId:s.data().congregationId,
-      createdAtMs:s.data().createdAt?.toMillis?.()||null,createdBy:s.data().createdBy,
-    }))});
+    return res.status(200).json({success:true,
+      nextCursor:docs.docs.length===100?docs.docs.at(-1)?.id:null,
+      feeds:docs.docs.map(s=>({
+        id:s.id,congregationId:s.data().congregationId,
+        createdAtMs:s.data().createdAt?.toMillis?.()||null,createdBy:s.data().createdBy,
+      }))});
   }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
 }
 
