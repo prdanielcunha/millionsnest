@@ -6,6 +6,8 @@ on:
     branches: [ production ]
     paths:
       - "firestore.rules"
+      - "firestore.indexes.json"
+      - "scripts/ensure_nestjourney_indexes.mjs"
       - "firebase.rules-test.json"
       - "tests/firestore/nestjourney.rules.test.ts"
       - "tests/firestore/musicscale_live.rules.test.ts"
@@ -122,6 +124,16 @@ jobs:
           --only firestore
           --project demo-millionsnest-nestaffiliate-release
           "npx tsx --test --test-concurrency=1 tests/firestore/nestaffiliate.rules.test.ts"
+
+      - name: Ensure required NestJourney indexes without deleting other indexes
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          echo "::add-mask::$ACCESS_TOKEN"
+          FIRESTORE_INDEX_ACCESS_TOKEN="$ACCESS_TOKEN" node scripts/ensure_nestjourney_indexes.mjs
+          unset ACCESS_TOKEN
 
       - name: Deploy and verify canonical Firestore rules
         shell: bash
