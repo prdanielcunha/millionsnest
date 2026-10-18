@@ -1515,70 +1515,55 @@ service cloud.firestore {
         // Birthdays are stored separately from member profiles to avoid broad disclosure.
         match /personBirthdays/{personId} {
           function birthdayAdmin() {
-            return journeyProductEnabled(orgId) && (
-              journeyOwner(orgId) ||
-              (journeyMemberActive(orgId) && journeyRole(orgId) in ['owner','admin','pastor','data_admin'])
-            );
+            return (journeyOwner(orgId) || (journeyMemberActive(orgId) && journeyRole(orgId) in ['owner','admin','pastor','data_admin']));
           }
-          function birthdayDateValid() {
-            let month = request.resource.data.get('month', 0);
-            let day = request.resource.data.get('day', 0);
-            return month is int && day is int
-              && month >= 1 && month <= 12
-              && day >= 1 && day <= 31
-              && (month != 2 || day <= 29)
-              && (!(month in [4,6,9,11]) || day <= 30);
+          function validDate() {
+            let m = request.resource.data.month;
+            let d = request.resource.data.day;
+            return m is int && d is int
+              && m >= 1 && m <= 12 && d >= 1 && d <= 31
+              && (m != 2 || d <= 29)
+              && (!(m in [4,6,9,11]) || d <= 30);
           }
-          function birthdayWriteValid() {
-            let auditId = request.resource.data.get('lastAuditId', '');
-            let auditPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/audit/$(auditId);
+          function validWrite() {
+            let x = request.resource.data;
             let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
-            return request.resource.data.keys().hasOnly([
+            let auditPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/audit/$(x.lastAuditId);
+            let person = get(personPath).data;
+            let audit = getAfter(auditPath).data;
+            return x.keys().hasOnly([
                 'organizationId','congregationId','personId','month','day',
                 'shareWithTeam','permissionRecordedBy','permissionRecordedAt',
                 'updatedAt','updatedBy','createdAt','createdBy','lastAuditId'
               ])
-              && request.resource.data.get('organizationId','') == orgId
-              && request.resource.data.get('personId','') == personId
-              && birthdayDateValid()
-              && request.resource.data.get('shareWithTeam',null) is bool
-              && request.resource.data.get('permissionRecordedBy','') == request.auth.uid
-              && request.resource.data.get('permissionRecordedAt',null) == request.time
-              && request.resource.data.get('updatedBy','') == request.auth.uid
-              && request.resource.data.get('updatedAt',null) == request.time
-              && auditId is string && auditId.size() > 0
-              && exists(personPath)
-              && get(personPath).data.get('congregationId','') == request.resource.data.get('congregationId','')
-              && get(personPath).data.get('organizationId','') == orgId
-              && get(personPath).data.get('deletedAt',null) == null
-              && existsAfter(auditPath)
-              && getAfter(auditPath).data.get('action','') == 'person.birthday_saved'
-              && getAfter(auditPath).data.get('targetRef','') == 'person:' + personId
-              && getAfter(auditPath).data.get('createdAt',null) == request.time;
+              && x.organizationId == orgId && x.personId == personId
+              && validDate() && x.shareWithTeam is bool
+              && x.permissionRecordedBy == request.auth.uid
+              && x.permissionRecordedAt == request.time
+              && x.updatedBy == request.auth.uid && x.updatedAt == request.time
+              && x.lastAuditId is string
+              && person.organizationId == orgId
+              && person.congregationId == x.congregationId
+              && person.get('deletedAt',null) == null
+              && audit.action == 'person.birthday_saved'
+              && audit.targetRef == 'person:' + personId
+              && audit.createdAt == request.time;
           }
-          allow read: if (
-            birthdayAdmin()
-            || (
-              journeyMemberActive(orgId)
-              && journeyCanManagePeople(orgId)
-              && resource.data.get('shareWithTeam',false) == true
-            )
-          ) && journeyCanAccessCongregation(orgId, resource.data.get('congregationId',''));
-          allow create: if birthdayAdmin() && journeyTenantCreate(orgId)
-            && journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId',''))
-            && request.resource.data.get('createdBy','') == request.auth.uid
-            && request.resource.data.get('createdAt',null) == request.time
-            && birthdayWriteValid();
-          allow update: if birthdayAdmin() && journeyTenantUnchanged(orgId)
-            && journeyCongregationUnchanged()
-            && journeyCanAccessCongregation(orgId, resource.data.get('congregationId',''))
+          allow read: if birthdayAdmin()
+            || (journeyMemberActive(orgId) && journeyCanManagePeople(orgId)
+                && resource.data.get('shareWithTeam',false) == true
+                && journeyCanAccessCongregation(orgId, resource.data.get('congregationId','')));
+          allow create: if birthdayAdmin()
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.createdAt == request.time
+            && validWrite();
+          allow update: if birthdayAdmin()
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'month','day','shareWithTeam','permissionRecordedBy',
-              'permissionRecordedAt','updatedAt','updatedBy','lastAuditId'
-            ])
-            && birthdayWriteValid();
-          allow delete: if birthdayAdmin()
-            && journeyCanAccessCongregation(orgId, resource.data.get('congregationId',''));
+                'month','day','shareWithTeam','permissionRecordedBy',
+                'permissionRecordedAt','updatedAt','updatedBy','lastAuditId'
+              ])
+            && validWrite();
+          allow delete: if birthdayAdmin();
         }
 
         match /presenceSessions/{sessionId} {
