@@ -1512,6 +1512,107 @@ service cloud.firestore {
           allow delete: if false;
         }
 
+        // Birthdays are stored separately from member profiles to avoid broad disclosure.
+        match /personBirthdays/{personId} {
+          // This collection is more restrictive than generic People access:
+          // denying appAccess and disabled memberships must revoke birthday access.
+          function birthdayEntitled() {
+            let org = get(/databases/$(database)/documents/organizations/$(orgId)).data;
+            let apps = org.get('apps', {});
+            let canonical = apps is map ? apps.get('nestjourney', null) : null;
+            let legacy = apps is map ? apps.get('raiz_e_mesa', null) : null;
+            let selected = canonical is map ? canonical : legacy;
+            return selected is map && selected.get('status', '') in ['active','trialing'];
+          }
+          function birthdayMemberAppAllowed() {
+            let userRecord = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+            let orgRecord = get(/databases/$(database)/documents/organizations/$(orgId)).data;
+            let member = getMemberPermissions(orgId);
+            let apps = member != null ? member.get('appAccess', {}) : {};
+            let current = apps is map ? apps.get('nestjourney', null) : null;
+            let legacy = apps is map ? apps.get('raiz_e_mesa', {}) : {};
+            let app = current is map ? current : (legacy is map ? legacy : {});
+            return isAuthenticated() && userRecord != null &&
+              userRecord.get('disabled',false) != true &&
+              !(userRecord.get('status','active') in ['inactive','suspended','disabled']) &&
+              orgRecord != null &&
+              orgRecord.get('disabled',false) != true &&
+              !(orgRecord.get('status','active') in ['archived','inactive','suspended','disabled']) &&
+              (isSystemAdmin() || (
+              member != null &&
+              member.get('enabled', true) != false &&
+              member.get('disabled', false) != true &&
+              member.get('status', 'active') in ['active', 'ativo'] &&
+              app.get('enabled', true) != false
+            ));
+          }
+          function birthdayAdmin() {
+            return birthdayEntitled() && birthdayMemberAppAllowed() &&
+              (journeyOwner(orgId) || (journeyMemberActive(orgId) && journeyRole(orgId) in ['owner','admin','pastor','data_admin']));
+          }
+          function validDate() {
+            let m = request.resource.data.month;
+            let d = request.resource.data.day;
+            return m is int && d is int
+              && m >= 1 && m <= 12 && d >= 1 && d <= 31
+              && (m != 2 || d <= 29)
+              && (!(m in [4,6,9,11]) || d <= 30);
+          }
+          function validWrite() {
+            let x = request.resource.data;
+            let personPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/people/$(personId);
+            let auditPath = /databases/$(database)/documents/organizations/$(orgId)/products/raiz_e_mesa/audit/$(x.lastAuditId);
+            let person = get(personPath).data;
+            let audit = getAfter(auditPath).data;
+            return x.keys().hasOnly([
+                'organizationId','congregationId','personId','month','day',
+                'shareWithTeam','permissionRecordedBy','permissionRecordedAt',
+                'updatedAt','updatedBy','createdAt','createdBy','lastAuditId'
+              ])
+              && x.organizationId == orgId && x.personId == personId
+              && validDate() && x.shareWithTeam is bool
+              && x.permissionRecordedBy == request.auth.uid
+              && x.permissionRecordedAt == request.time
+              && x.updatedBy == request.auth.uid && x.updatedAt == request.time
+              && x.lastAuditId is string
+              && person.organizationId == orgId
+              && person.congregationId == x.congregationId
+              && person.get('deletedAt',null) == null
+              && audit.action == 'person.birthday_saved'
+              && audit.targetRef == 'person:' + personId
+              && audit.createdAt == request.time;
+          }
+          function birthdayReadable() {
+            let member = getMemberPermissions(orgId);
+            let active = isAuthenticated() && member != null
+              && member.get('status','active') in ['active','ativo'];
+            let roleName = active ? member.get('organizationRole',member.get('role','')) : '';
+            let permissions = active ? member.get('permissions',{}) : {};
+            let inUnit = active && resource.data.get('congregationId','')
+              in member.get('congregationIds',[]);
+            return birthdayEntitled() && birthdayMemberAppAllowed() && (
+              (active && roleName in ['owner','admin','pastor','data_admin'])
+              || journeyOwner(orgId)
+              || (
+                active && resource.data.get('shareWithTeam',false) == true
+                && permissions.get('canManagePeople',false) == true && inUnit
+              )
+            );
+          }
+          allow read: if birthdayReadable();
+          allow create: if birthdayAdmin()
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.createdAt == request.time
+            && validWrite();
+          allow update: if birthdayAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'month','day','shareWithTeam','permissionRecordedBy',
+                'permissionRecordedAt','updatedAt','updatedBy','lastAuditId'
+              ])
+            && validWrite();
+          allow delete: if birthdayAdmin();
+        }
+
         match /presenceSessions/{sessionId} {
           function journeyValidPresenceSessionCreate(orgId) {
             return journeyTenantCreate(orgId) &&
