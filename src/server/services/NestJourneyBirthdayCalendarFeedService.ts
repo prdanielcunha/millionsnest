@@ -37,6 +37,7 @@ export function renderBirthdaySubscription(events:Array<{id:string;name:string;m
         ...(repeat?['RRULE:FREQ=YEARLY']:[]),
         'SUMMARY:'+title,'CLASS:PRIVATE','TRANSP:TRANSPARENT',
         'DESCRIPTION:Aniversário compartilhado com a equipe mediante autorização. Não divulgar este calendário.',
+        'BEGIN:VALARM','ACTION:DISPLAY','TRIGGER:-P1D','DESCRIPTION:'+title,'END:VALARM',
         'END:VEVENT');
     };
     if(person.month===2&&person.day===29){
