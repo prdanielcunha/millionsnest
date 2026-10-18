@@ -21,7 +21,7 @@ export function validJourneyIntakeContact(name:unknown,phone:unknown){
 }
 const paths=(org:string)=>'organizations/'+org+'/products/raiz_e_mesa';
 
-async function authAdmin(req:Request,res:Response,db:Firestore){
+export async function authAdmin(req:Request,res:Response,db:Firestore){
   const orgId=trim(req.params.organizationId);
   if(!ID.test(orgId)){res.status(400).json({success:false,reasonCode:'INVALID_ORGANIZATION'});return null;}
   const header=trim(req.headers.authorization);
