@@ -87,6 +87,8 @@ Os testes que usam Firestore devem ser executados somente no Emulator, com um pr
 firebase emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-invitations-p0 "npx tsx scripts/test_p0_invitation_final_certification.ts"
 ```
 
+Os registros do NestFinance nos namespaces `finance*` usam leitura e gravação pelo gateway autenticado do produto. O SDK do navegador não acessa esses registros diretamente, inclusive os subdocumentos. A suíte canônica desse contrato é `tests/firestore/nestfinance_gateway_storage.test.ts`, executada no Emulator com `demo-millionsnest-finance-gateway`; ela também faz parte do gate anterior à publicação compartilhada de Rules. Essa política não altera o acesso por Admin SDK nem os namespaces dos demais produtos.
+
 ## Variáveis de Ambiente
 
 As variáveis necessárias para rodar este projeto estão mapeadas sem seus valores secretos em `.env.example`.
