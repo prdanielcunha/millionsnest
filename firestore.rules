@@ -1514,8 +1514,25 @@ service cloud.firestore {
 
         // Birthdays are stored separately from member profiles to avoid broad disclosure.
         match /personBirthdays/{personId} {
+          // This collection is more restrictive than generic People access:
+          // denying appAccess and disabled memberships must revoke birthday access.
+          function birthdayMemberAppAllowed() {
+            let member = getMemberPermissions(orgId);
+            let apps = member != null ? member.get('appAccess', {}) : {};
+            let current = apps is map ? apps.get('nestjourney', null) : null;
+            let legacy = apps is map ? apps.get('raiz_e_mesa', {}) : {};
+            let app = current is map ? current : (legacy is map ? legacy : {});
+            return isSystemAdmin() || (
+              member != null &&
+              member.get('enabled', true) != false &&
+              member.get('disabled', false) != true &&
+              member.get('status', 'active') in ['active', 'ativo'] &&
+              app.get('enabled', true) != false
+            );
+          }
           function birthdayAdmin() {
-            return (journeyOwner(orgId) || (journeyMemberActive(orgId) && journeyRole(orgId) in ['owner','admin','pastor','data_admin']));
+            return journeyProductEnabled(orgId) && birthdayMemberAppAllowed() &&
+              (journeyOwner(orgId) || (journeyMemberActive(orgId) && journeyRole(orgId) in ['owner','admin','pastor','data_admin']));
           }
           function validDate() {
             let m = request.resource.data.month;
@@ -1557,7 +1574,7 @@ service cloud.firestore {
             let permissions = active ? member.get('permissions',{}) : {};
             let inUnit = active && resource.data.get('congregationId','')
               in member.get('congregationIds',[]);
-            return journeyProductEnabled(orgId) && (
+            return journeyProductEnabled(orgId) && birthdayMemberAppAllowed() && (
               (active && roleName in ['owner','admin','pastor','data_admin'])
               || journeyOwner(orgId)
               || (
