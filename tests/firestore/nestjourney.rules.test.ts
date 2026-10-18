@@ -10,6 +10,10 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  collection,
+  query,
+  where,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -1609,4 +1613,105 @@ test('rollout visibility does not grant team-write authority to ordinary church 
     areas:['care'],active:true,source:'paste',needsReview:false,importBatchId:'run-a',
     createdAt:serverTimestamp(),createdBy:'member-a',updatedAt:serverTimestamp(),updatedBy:'member-a'
   }));
+});
+
+
+test('birthday dates require consent audit, enforce tenant isolation and opt-in team visibility',async()=>{
+  const root='organizations/org-a/products/raiz_e_mesa';
+  // Seed canonical user records ONLY for this last security test: early fixture
+  // population changes legacy rule evaluation cost in unrelated Care tests.
+  await env.withSecurityRulesDisabled(async context=>{
+    const db=context.firestore();
+    for(const uid of ['admin-a','coord-a','member-a']){
+      await setDoc(doc(db,'users/'+uid),{status:'active'});
+    }
+  });
+  const owner=env.authenticatedContext('admin-a').firestore();
+  const team=env.authenticatedContext('coord-a').firestore();
+  const member=env.authenticatedContext('member-a').firestore();
+  const other=env.authenticatedContext('member-b').firestore();
+  const personBirthday=doc(owner,root+'/personBirthdays/person-a');
+  await assertFails(getDoc(doc(member,root+'/personBirthdays/person-a')));
+  const batch=writeBatch(owner);
+  batch.set(doc(owner,root+'/audit/birthday-audit-1'),{
+    organizationId:'org-a',congregationId:'unit-a',actorId:'admin-a',
+    action:'person.birthday_saved',targetRef:'person:person-a',
+    createdAt:serverTimestamp()
+  });
+  batch.set(personBirthday,{
+    organizationId:'org-a',congregationId:'unit-a',personId:'person-a',
+    month:10,day:18,shareWithTeam:false,
+    permissionRecordedBy:'admin-a',permissionRecordedAt:serverTimestamp(),
+    createdAt:serverTimestamp(),createdBy:'admin-a',
+    updatedAt:serverTimestamp(),updatedBy:'admin-a',lastAuditId:'birthday-audit-1'
+  });
+  await assertSucceeds(batch.commit());
+  await assertSucceeds(getDoc(personBirthday));
+  await assertFails(getDoc(doc(team,root+'/personBirthdays/person-a')));
+  await assertFails(getDoc(doc(other,root+'/personBirthdays/person-a')));
+  const change=writeBatch(owner);
+  change.set(doc(owner,root+'/audit/birthday-audit-2'),{
+    organizationId:'org-a',congregationId:'unit-a',actorId:'admin-a',
+    action:'person.birthday_saved',targetRef:'person:person-a',
+    createdAt:serverTimestamp()
+  });
+  change.update(personBirthday,{
+    shareWithTeam:true,permissionRecordedBy:'admin-a',permissionRecordedAt:serverTimestamp(),
+    updatedBy:'admin-a',updatedAt:serverTimestamp(),lastAuditId:'birthday-audit-2'
+  });
+  await assertSucceeds(change.commit());
+  await assertSucceeds(getDoc(doc(team,root+'/personBirthdays/person-a')));
+  await assertSucceeds(getDocs(query(collection(team,root+'/personBirthdays'),where('congregationId','==','unit-a'),where('shareWithTeam','==',true))));
+  await assertFails(getDoc(doc(member,root+'/personBirthdays/person-a')));
+  await assertFails(updateDoc(doc(team,root+'/personBirthdays/person-a'),{day:19}));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a/members/admin-a'),{
+      'appAccess.nestjourney.enabled':false
+    });
+  });
+  await assertFails(getDoc(personBirthday));
+  await assertFails(deleteDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a/members/admin-a'),{
+      'appAccess.nestjourney.enabled':true,'enabled':false
+    });
+  });
+  await assertFails(getDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a/members/admin-a'),{'enabled':true});
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{'apps.nestjourney.status':'inactive'});
+  });
+  await assertFails(getDoc(personBirthday));
+  await assertFails(deleteDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{'apps.nestjourney.status':'active'});
+    await updateDoc(doc(context.firestore(),'organizations/org-a/members/coord-a'),{
+      'appAccess.nestjourney.enabled':false
+    });
+  });
+  await assertFails(getDoc(doc(team,root+'/personBirthdays/person-a')));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{status:'suspended'});
+  });
+  await assertFails(getDoc(personBirthday));
+  await assertFails(deleteDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{status:'active',disabled:true});
+  });
+  await assertFails(getDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{disabled:false});
+    await updateDoc(doc(context.firestore(),'users/admin-a'),{status:'suspended'});
+  });
+  await assertFails(getDoc(personBirthday));
+  await assertFails(deleteDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'users/admin-a'),{status:'active'});
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{
+      'apps.nestjourney.status':'suspended',
+      'apps.raiz_e_mesa.status':'active',
+    });
+  });
+  await assertFails(getDoc(personBirthday));
+  await assertFails(deleteDoc(personBirthday));
 });
