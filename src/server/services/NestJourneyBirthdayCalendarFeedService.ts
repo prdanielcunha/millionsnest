@@ -2,6 +2,7 @@ import type {Request,Response} from 'express';
 import {createHash,randomBytes} from 'node:crypto';
 import {getFirestore,FieldValue} from 'firebase-admin/firestore';
 import {authAdmin} from './NestJourneyPublicIntakeService.js';
+import {canManageTenantMembers} from '../../lib/permissionService.js';
 
 const COLLECTION='nestjourney_calendar_feeds';
 const SECRET=/^[A-Za-z0-9_-]{40,80}$/;
@@ -115,15 +116,17 @@ export async function deliverJourneyCalendarFeed(req:Request,res:Response){
       return res.status(404).send('Not found');
     }
     const orgId=data.organizationId,unitId=data.congregationId;
-    const [org,member,unit]=await Promise.all([
+    const [org,member,unit,user]=await Promise.all([
       db.doc('organizations/'+orgId).get(),
       db.doc('organizations/'+orgId+'/members/'+data.createdBy).get(),
       db.doc(personRoot(orgId)+'/congregations/'+unitId).get(),
+      db.doc('users/'+data.createdBy).get(),
     ]);
     const o=org.data()||{},m=member.data()||{};
     const owner=o.ownerUid===data.createdBy||o.ownerId===data.createdBy;
+    const globalAdmin=canManageTenantMembers(user.data()?.systemRole);
     if(!org.exists||!active(o.status)||!unit.exists||unit.data()?.active===false||
-       (!owner&&(!member.exists||!activeMembership(m)||!adminRole(m.organizationRole||m.role)))){
+       (!owner&&!globalAdmin&&(!member.exists||!activeMembership(m)||!adminRole(m.organizationRole||m.role)))){
       return res.status(404).send('Not found');
     }
     const birthdayDocs=await db.collection(personRoot(orgId)+'/personBirthdays')
