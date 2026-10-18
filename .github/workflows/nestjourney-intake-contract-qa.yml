@@ -4,14 +4,18 @@ on:
     paths:
       - 'server.ts'
       - 'src/server/services/NestJourneyPublicIntakeService.ts'
+      - 'src/server/services/NestJourneyBirthdayCalendarFeedService.ts'
       - 'scripts/test_nestjourney_public_intake.ts'
+      - 'scripts/test_nestjourney_calendar_feed.ts'
       - '.github/workflows/nestjourney-intake-contract-qa.yml'
   push:
     branches: [main, production]
     paths:
       - 'server.ts'
       - 'src/server/services/NestJourneyPublicIntakeService.ts'
+      - 'src/server/services/NestJourneyBirthdayCalendarFeedService.ts'
       - 'scripts/test_nestjourney_public_intake.ts'
+      - 'scripts/test_nestjourney_calendar_feed.ts'
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,5 +31,6 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npx tsx scripts/test_nestjourney_public_intake.ts
+      - run: npx tsx scripts/test_nestjourney_calendar_feed.ts
       - run: npm run lint
       - run: npm run build
