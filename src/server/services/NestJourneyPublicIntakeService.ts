@@ -2,6 +2,7 @@ import type {Request, Response} from 'express';
 import {createHash, randomBytes} from 'node:crypto';
 import {getAuth} from 'firebase-admin/auth';
 import {FieldValue, getFirestore, type Firestore} from 'firebase-admin/firestore';
+import {canManageTenantMembers} from '../../lib/permissionService.js';
 
 /** A public link never creates a member or grants access to the Hub. */
 const LINKS = 'nestjourney_public_intake_links';
@@ -29,9 +30,10 @@ export async function authAdmin(req:Request,res:Response,db:Firestore){
   let uid='';
   try{uid=(await getAuth().verifyIdToken(header.slice(7))).uid}catch{}
   if(!uid){res.status(401).json({success:false,reasonCode:'UNAUTHENTICATED'});return null;}
-  const [orgDoc,memberDoc]=await Promise.all([
+  const [orgDoc,memberDoc,userDoc]=await Promise.all([
     db.doc('organizations/'+orgId).get(),
     db.doc('organizations/'+orgId+'/members/'+uid).get(),
+    db.doc('users/'+uid).get(),
   ]);
   const org=orgDoc.data()||{},member=memberDoc.data()||{};
   if(!orgDoc.exists||INACTIVE.has(trim(org.status).toLowerCase())){
@@ -44,7 +46,8 @@ export async function authAdmin(req:Request,res:Response,db:Firestore){
   const active=memberDoc.exists&&member.disabled!==true&&['','active','ativo'].includes(trim(member.status).toLowerCase());
   const owner=org.ownerUid===uid||org.ownerId===uid;
   const role=trim(member.organizationRole||member.role).toLowerCase();
-  if(!owner&&(!active||!ADMIN.has(role))){
+  const systemAdmin=canManageTenantMembers(userDoc.data()?.systemRole);
+  if(!owner&&!systemAdmin&&(!active||!ADMIN.has(role))){
     res.status(403).json({success:false,reasonCode:'ADMIN_REQUIRED'});return null;
   }
   return {uid,orgId,org};
