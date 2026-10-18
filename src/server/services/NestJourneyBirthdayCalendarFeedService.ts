@@ -2,6 +2,7 @@ import type {Request,Response} from 'express';
 import {createHash,randomBytes} from 'node:crypto';
 import {getFirestore,FieldValue} from 'firebase-admin/firestore';
 import {authAdmin} from './NestJourneyPublicIntakeService.js';
+import {resolveEcosystemAppAccess} from './EcosystemAccessResolver.js';
 import {canManageTenantMembers} from '../../lib/permissionService.js';
 
 const COLLECTION='nestjourney_calendar_feeds';
@@ -125,7 +126,8 @@ export async function deliverJourneyCalendarFeed(req:Request,res:Response){
     const o=org.data()||{},m=member.data()||{};
     const owner=o.ownerUid===data.createdBy||o.ownerId===data.createdBy;
     const globalAdmin=canManageTenantMembers(user.data()?.systemRole);
-    if(!org.exists||!active(o.status)||!unit.exists||unit.data()?.active===false||
+    const appAccess=await resolveEcosystemAppAccess({uid:data.createdBy,organizationId:orgId,appId:'nestjourney',db});
+    if(!appAccess.accessible||!org.exists||!active(o.status)||!unit.exists||unit.data()?.active===false||
        (!owner&&!globalAdmin&&(!member.exists||!activeMembership(m)||!adminRole(m.organizationRole||m.role)))){
       return res.status(404).send('Not found');
     }
