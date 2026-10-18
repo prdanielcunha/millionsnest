@@ -26,7 +26,7 @@ import {
   readJourneyPersonAddress,saveJourneyPersonAddress,deleteJourneyPersonAddress,
 } from './src/server/services/NestJourneyPublicIntakeService.js';
 import {
-  createJourneyCalendarFeed,revokeJourneyCalendarFeed,deliverJourneyCalendarFeed,
+  createJourneyCalendarFeed,revokeJourneyCalendarFeed,listJourneyCalendarFeeds,deliverJourneyCalendarFeed,
 } from './src/server/services/NestJourneyBirthdayCalendarFeedService.js';
 import {
   getActionPreferences,
@@ -3061,6 +3061,7 @@ async function startServer() {
   app.post('/api/v1/organizations/:organizationId/nestjourney/intake-links', express.json({ limit: '3kb' }), createJourneyIntakeLink);
   app.post('/api/v1/organizations/:organizationId/nestjourney/intake-links/revoke', express.json({ limit: '2kb' }), revokeJourneyIntakeLink);
   app.post('/api/v1/organizations/:organizationId/nestjourney/calendar-feed', express.json({ limit: '2kb' }), createJourneyCalendarFeed);
+  app.get('/api/v1/organizations/:organizationId/nestjourney/calendar-feeds', listJourneyCalendarFeeds);
   app.post('/api/v1/organizations/:organizationId/nestjourney/calendar-feed/revoke', express.json({ limit: '2kb' }), revokeJourneyCalendarFeed);
   app.get('/api/public/nestjourney/calendar/:token.ics', deliverJourneyCalendarFeed);
   app.get('/api/v1/organizations/:organizationId/nestjourney/people/:personId/address', readJourneyPersonAddress);
