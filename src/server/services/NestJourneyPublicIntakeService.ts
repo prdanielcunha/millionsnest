@@ -182,6 +182,8 @@ export async function approveJourneyIntake(req:Request,res:Response){
       }
       tx.update(requestRef,{
         status:'integrated',approvedPersonId:personId,
+        // Keep the approved identity in the canonical person record only.
+        name:FieldValue.delete(),phone:FieldValue.delete(),
         approvedBy:actor.uid,approvedAt:FieldValue.serverTimestamp(),
       });
       tx.set(db.collection(paths(actor.orgId)+'/audit').doc(),{
