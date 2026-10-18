@@ -1,4 +1,3 @@
-// Release retry marker: Hub API source unchanged; require canonical shared index + Rules publication before routing Cloud Run traffic.
 import {ECOSYSTEM_TRIAL_POLICY_VERSION} from './src/lib/ecosystemTrialPolicy.js';
 import express from 'express';
 import { bootstrapUserContext, acceptInvitation, setActiveOrganization } from './src/server/services/TenantContextMutationService.js';
