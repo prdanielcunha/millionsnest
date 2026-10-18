@@ -21,6 +21,17 @@ import {
 } from './src/server/services/NestJourneySupportAssignmentService.js';
 import { claimNestJourneyRelationshipHost } from './src/server/services/NestJourneyRelationshipHostCommandService.js';
 import {
+  createJourneyIntakeLink,describeJourneyIntakeLink,submitJourneyIntake,
+  listJourneyIntakeRequests,approveJourneyIntake,revokeJourneyIntakeLink,
+  readJourneyPersonAddress,saveJourneyPersonAddress,deleteJourneyPersonAddress,
+} from './src/server/services/NestJourneyPublicIntakeService.js';
+import {
+  createJourneyCalendarFeed,revokeJourneyCalendarFeed,listJourneyCalendarFeeds,deliverJourneyCalendarFeed,
+} from './src/server/services/NestJourneyBirthdayCalendarFeedService.js';
+import {
+  getJourneyBirthdayWhatsAppConsent,setJourneyBirthdayWhatsAppConsent,
+} from './src/server/services/NestJourneyBirthdayWhatsAppConsentService.js';
+import {
   getActionPreferences,
   updateActionPreference
 } from './src/server/services/ActionPreferenceCommandService.js';
@@ -3050,6 +3061,21 @@ async function startServer() {
   app.post('/api/v1/organizations/:organizationId/nestjourney/support-assignments', express.json({ limit: '4kb' }), (req, res) => createNestJourneySupportAssignment(req, res));
   app.patch('/api/v1/organizations/:organizationId/nestjourney/support-assignments/:taskId', express.json({ limit: '2kb' }), (req, res) => changeNestJourneySupportAssignment(req, res));
   app.put('/api/v1/organizations/:organizationId/nestjourney/people/:personId/bond-host', express.json({ limit: '4kb' }), (req, res) => claimNestJourneyRelationshipHost(req, res));
+  app.post('/api/v1/organizations/:organizationId/nestjourney/intake-links', express.json({ limit: '3kb' }), createJourneyIntakeLink);
+  app.post('/api/v1/organizations/:organizationId/nestjourney/intake-links/revoke', express.json({ limit: '2kb' }), revokeJourneyIntakeLink);
+  app.post('/api/v1/organizations/:organizationId/nestjourney/calendar-feed', express.json({ limit: '2kb' }), createJourneyCalendarFeed);
+  app.get('/api/v1/organizations/:organizationId/nestjourney/calendar-feeds', listJourneyCalendarFeeds);
+  app.post('/api/v1/organizations/:organizationId/nestjourney/calendar-feed/revoke', express.json({ limit: '2kb' }), revokeJourneyCalendarFeed);
+  app.get('/api/public/nestjourney/calendar/:token.ics', deliverJourneyCalendarFeed);
+  app.get('/api/v1/organizations/:organizationId/nestjourney/people/:personId/birthday-whatsapp-consent', getJourneyBirthdayWhatsAppConsent);
+  app.put('/api/v1/organizations/:organizationId/nestjourney/people/:personId/birthday-whatsapp-consent', express.json({ limit: '2kb' }), setJourneyBirthdayWhatsAppConsent);
+  app.get('/api/v1/organizations/:organizationId/nestjourney/people/:personId/address', readJourneyPersonAddress);
+  app.put('/api/v1/organizations/:organizationId/nestjourney/people/:personId/address', express.json({ limit: '4kb' }), saveJourneyPersonAddress);
+  app.delete('/api/v1/organizations/:organizationId/nestjourney/people/:personId/address', deleteJourneyPersonAddress);
+  app.get('/api/v1/organizations/:organizationId/nestjourney/intakes', listJourneyIntakeRequests);
+  app.post('/api/v1/organizations/:organizationId/nestjourney/intakes/:intakeId/approve', express.json({ limit: '2kb' }), approveJourneyIntake);
+  app.get('/api/public/nestjourney/intake/:token', describeJourneyIntakeLink);
+  app.post('/api/public/nestjourney/intake/:token', express.json({ limit: '4kb' }), submitJourneyIntake);
   app.get('/api/v1/organizations/:organizationId/action-preferences', (req, res) => getActionPreferences(req, res));
   app.put('/api/v1/organizations/:organizationId/action-preference', express.json({ limit: '8kb' }), (req, res) => updateActionPreference(req, res));
   app.get('/api/v1/organizations/:organizationId/action-resolutions', (req, res) => getActionResolutions(req, res));

@@ -1,0 +1,41 @@
+name: NestJourney Public Intake API QA
+on:
+  pull_request:
+    paths:
+      - 'server.ts'
+      - 'src/server/services/NestJourneyPublicIntakeService.ts'
+      - 'src/server/services/NestJourneyBirthdayCalendarFeedService.ts'
+      - 'src/server/services/NestJourneyBirthdayWhatsAppConsentService.ts'
+      - 'scripts/test_nestjourney_public_intake.ts'
+      - 'scripts/test_nestjourney_calendar_feed.ts'
+      - 'scripts/test_nestjourney_birthday_whatsapp_consent.ts'
+      - '.github/workflows/nestjourney-intake-contract-qa.yml'
+  push:
+    branches: [main, production]
+    paths:
+      - 'server.ts'
+      - 'src/server/services/NestJourneyPublicIntakeService.ts'
+      - 'src/server/services/NestJourneyBirthdayCalendarFeedService.ts'
+      - 'src/server/services/NestJourneyBirthdayWhatsAppConsentService.ts'
+      - 'scripts/test_nestjourney_public_intake.ts'
+      - 'scripts/test_nestjourney_calendar_feed.ts'
+      - 'scripts/test_nestjourney_birthday_whatsapp_consent.ts'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  types-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsx scripts/test_nestjourney_public_intake.ts
+      - run: npx tsx scripts/test_nestjourney_calendar_feed.ts
+      - run: npx tsx scripts/test_nestjourney_birthday_whatsapp_consent.ts
+      - run: npm run lint
+      - run: npm run build
