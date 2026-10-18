@@ -292,3 +292,35 @@ export async function deleteJourneyPersonAddress(req:Request,res:Response){
     return res.status(200).json({success:true});
   }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
 }
+
+
+/** A rejected submission must not become an indefinite shadow address book.
+ * Reject atomically, retaining only the minimum audit metadata. */
+export async function rejectJourneyIntake(req:Request,res:Response){
+  try{
+    const db=getFirestore(),actor=await authAdmin(req,res,db);
+    if(!actor)return;
+    const id=trim(req.params.intakeId);
+    if(!ID.test(id))return res.status(400).json({success:false,reasonCode:'INVALID_REQUEST'});
+    const ref=db.doc('nestjourney_intake_requests/'+id);
+    const result=await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref),record=snap.data()||{};
+      if(!snap.exists||record.organizationId!==actor.orgId)
+        return {status:404,reasonCode:'NOT_FOUND'};
+      if(record.status!=='pending_review')
+        return {status:409,reasonCode:'ALREADY_PROCESSED'};
+      tx.update(ref,{
+        status:'rejected',name:FieldValue.delete(),phone:FieldValue.delete(),
+        rejectedBy:actor.uid,rejectedAt:FieldValue.serverTimestamp(),
+      });
+      tx.set(db.collection(paths(actor.orgId)+'/audit').doc(),{
+        organizationId:actor.orgId,congregationId:record.congregationId,
+        actorId:actor.uid,action:'person.intake_rejected',
+        targetRef:'intake:'+id,createdAt:FieldValue.serverTimestamp(),
+      });
+      return {status:200};
+    });
+    if(result.status!==200)return res.status(result.status).json({success:false,reasonCode:result.reasonCode});
+    return res.status(200).json({success:true,status:'rejected'});
+  }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
+}
