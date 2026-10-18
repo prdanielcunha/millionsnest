@@ -130,10 +130,7 @@ jobs:
         timeout-minutes: 20
         run: |
           set -euo pipefail
-          ACCESS_TOKEN="$(gcloud auth print-access-token)"
-          echo "::add-mask::$ACCESS_TOKEN"
-          FIRESTORE_INDEX_ACCESS_TOKEN="$ACCESS_TOKEN" node scripts/ensure_nestjourney_indexes.mjs
-          unset ACCESS_TOKEN
+          node scripts/ensure_nestjourney_indexes.mjs
 
       - name: Deploy and verify canonical Firestore rules
         shell: bash
