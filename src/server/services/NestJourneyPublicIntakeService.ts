@@ -210,11 +210,18 @@ export async function listJourneyIntakeLinks(req:Request,res:Response){
   try{
     const db=getFirestore(),actor=await authAdmin(req,res,db);
     if(!actor)return;
-    const docs=await db.collection(LINKS).where('organizationId','==',actor.orgId)
-      .where('active','==',true).limit(200).get();
+    const cursor=trim(req.query.cursor);
+    if(cursor&&!/^[a-f0-9]{64}$/.test(cursor))
+      return res.status(400).json({success:false,reasonCode:'INVALID_CURSOR'});
+    let query=db.collection(LINKS).where('organizationId','==',actor.orgId)
+      .orderBy(FieldPath.documentId()).limit(100);
+    if(cursor)query=query.startAfter(cursor);
+    const docs=await query.get();
     res.setHeader('Cache-Control','private,no-store');
-    return res.status(200).json({success:true,links:docs.docs
-      .filter(d=>Date.now()<Number(d.data().expiresAtMs)&&Number(d.data().submissionsCount)<Number(d.data().maxSubmissions))
+    return res.status(200).json({success:true,
+      nextCursor:docs.docs.length===100?docs.docs.at(-1)?.id:null,
+      links:docs.docs
+      .filter(d=>d.data().active===true&&Date.now()<Number(d.data().expiresAtMs)&&Number(d.data().submissionsCount)<Number(d.data().maxSubmissions))
       .map(d=>({id:d.id,congregationId:d.data().congregationId,
         congregationName:d.data().congregationName,createdAtMs:d.data().createdAt?.toMillis?.()||null,
         expiresAtMs:d.data().expiresAtMs,submissionsCount:d.data().submissionsCount,

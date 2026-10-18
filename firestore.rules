@@ -1517,18 +1517,22 @@ service cloud.firestore {
           // This collection is more restrictive than generic People access:
           // denying appAccess and disabled memberships must revoke birthday access.
           function birthdayMemberAppAllowed() {
+            let orgRecord = get(/databases/$(database)/documents/organizations/$(orgId)).data;
             let member = getMemberPermissions(orgId);
             let apps = member != null ? member.get('appAccess', {}) : {};
             let current = apps is map ? apps.get('nestjourney', null) : null;
             let legacy = apps is map ? apps.get('raiz_e_mesa', {}) : {};
             let app = current is map ? current : (legacy is map ? legacy : {});
-            return isSystemAdmin() || (
+            return orgRecord != null &&
+              orgRecord.get('disabled',false) != true &&
+              !(orgRecord.get('status','active') in ['archived','inactive','suspended','disabled']) &&
+              (isSystemAdmin() || (
               member != null &&
               member.get('enabled', true) != false &&
               member.get('disabled', false) != true &&
               member.get('status', 'active') in ['active', 'ativo'] &&
               app.get('enabled', true) != false
-            );
+            ));
           }
           function birthdayAdmin() {
             return journeyProductEnabled(orgId) && birthdayMemberAppAllowed() &&

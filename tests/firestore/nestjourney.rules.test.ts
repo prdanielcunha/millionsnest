@@ -1682,4 +1682,16 @@ test('birthday dates require consent audit, enforce tenant isolation and opt-in 
     });
   });
   await assertFails(getDoc(doc(team,root+'/personBirthdays/person-a')));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{status:'suspended'});
+  });
+  await assertFails(getDoc(personBirthday));
+  await assertFails(deleteDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{status:'active',disabled:true});
+  });
+  await assertFails(getDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{disabled:false});
+  });
 });
