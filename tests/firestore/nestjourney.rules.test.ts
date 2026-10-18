@@ -1656,4 +1656,30 @@ test('birthday dates require consent audit, enforce tenant isolation and opt-in 
   await assertSucceeds(getDocs(query(collection(team,root+'/personBirthdays'),where('congregationId','==','unit-a'),where('shareWithTeam','==',true))));
   await assertFails(getDoc(doc(member,root+'/personBirthdays/person-a')));
   await assertFails(updateDoc(doc(team,root+'/personBirthdays/person-a'),{day:19}));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a/members/admin-a'),{
+      'appAccess.nestjourney.enabled':false
+    });
+  });
+  await assertFails(getDoc(personBirthday));
+  await assertFails(deleteDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a/members/admin-a'),{
+      'appAccess.nestjourney.enabled':true,'enabled':false
+    });
+  });
+  await assertFails(getDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a/members/admin-a'),{'enabled':true});
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{'apps.nestjourney.status':'inactive'});
+  });
+  await assertFails(getDoc(personBirthday));
+  await assertFails(deleteDoc(personBirthday));
+  await env.withSecurityRulesDisabled(async context=>{
+    await updateDoc(doc(context.firestore(),'organizations/org-a'),{'apps.nestjourney.status':'active'});
+    await updateDoc(doc(context.firestore(),'organizations/org-a/members/coord-a'),{
+      'appAccess.nestjourney.enabled':false
+    });
+  });
+  await assertFails(getDoc(doc(team,root+'/personBirthdays/person-a')));
 });
