@@ -175,7 +175,15 @@ jobs:
         run: |
           set -euo pipefail
           CHANGED_FILES="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}?per_page=100" --jq '.files[].filename')"
-          if ! grep -Eq '^(firestore\\.rules|firestore\\.indexes\\.json|scripts/ensure_nestjourney_indexes\\.mjs|\\.github/workflows/firebase-firestore-rules-deploy\\.yml)
+          if grep -Fxq 'firestore.rules' <<< "$CHANGED_FILES" ||
+             grep -Fxq 'firestore.indexes.json' <<< "$CHANGED_FILES" ||
+             grep -Fxq 'scripts/ensure_nestjourney_indexes.mjs' <<< "$CHANGED_FILES" ||
+             grep -Fxq '.github/workflows/firebase-firestore-rules-deploy.yml' <<< "$CHANGED_FILES"; then
+            echo 'HUB_SHARED_RULES_AND_INDEXES_PUBLICATION_REQUIRED'
+          else
+            echo 'HUB_SHARED_RULES_AND_INDEXES_UNCHANGED_NO_WAIT_REQUIRED'
+            exit 0
+          fi
           for attempt in {1..80}; do
             RULES_STATE="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100" \
               | jq -r --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.path == ".github/workflows/firebase-firestore-rules-deploy.yml" and .head_sha == $sha)] | sort_by(.created_at) | last | if . == null then "pending:none" else .status + ":" + (.conclusion // "none") end')"
