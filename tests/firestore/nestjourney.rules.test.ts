@@ -78,10 +78,6 @@ before(async () => {
         uid, status: 'active', role, organizationRole: role, congregationIds, permissions,
       });
     }
-    // Birthday PII Rules honor the canonical user lifecycle independently of membership.
-    await setDoc(doc(db, 'users/admin-a'), { status: 'active' });
-    await setDoc(doc(db, 'users/coord-a'), { status: 'active' });
-    await setDoc(doc(db, 'users/member-a'), { status: 'active' });
     await setDoc(doc(db, 'organizations/org-b/members/member-b'), {
       uid: 'member-b', status: 'active', role: 'member', organizationRole: 'member', congregationIds: ['unit-b'],
     });
@@ -1622,6 +1618,14 @@ test('rollout visibility does not grant team-write authority to ordinary church 
 
 test('birthday dates require consent audit, enforce tenant isolation and opt-in team visibility',async()=>{
   const root='organizations/org-a/products/raiz_e_mesa';
+  // Seed canonical user records ONLY for this last security test: early fixture
+  // population changes legacy rule evaluation cost in unrelated Care tests.
+  await env.withSecurityRulesDisabled(async context=>{
+    const db=context.firestore();
+    for(const uid of ['admin-a','coord-a','member-a']){
+      await setDoc(doc(db,'users/'+uid),{status:'active'});
+    }
+  });
   const owner=env.authenticatedContext('admin-a').firestore();
   const team=env.authenticatedContext('coord-a').firestore();
   const member=env.authenticatedContext('member-a').firestore();
