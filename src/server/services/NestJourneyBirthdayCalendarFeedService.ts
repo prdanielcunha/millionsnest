@@ -8,6 +8,7 @@ const SECRET=/^[A-Za-z0-9_-]{40,80}$/;
 const safeId=(x:unknown)=>typeof x==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(x);
 const hash=(token:string)=>createHash('sha256').update('nestjourney-calendar-v1:'+token).digest('hex');
 const active=(status:unknown)=>!['inactive','suspended','disabled','archived','deleted','removed','revoked'].includes(String(status||'').toLowerCase());
+const activeMembership=(m:Record<string,unknown>)=>m.disabled!==true&&['','active','ativo'].includes(String(m.status||'').toLowerCase());
 const adminRole=(role:unknown)=>['owner','admin','pastor','data_admin'].includes(String(role||'').toLowerCase());
 const personRoot=(id:string)=>'organizations/'+id+'/products/raiz_e_mesa';
 const iso=(date:Date)=>date.toISOString().slice(0,10).replace(/-/g,'');
@@ -72,16 +73,29 @@ export async function createJourneyCalendarFeed(req:Request,res:Response){
       createdAt:FieldValue.serverTimestamp(),revokedAt:null
     });
     res.setHeader('Cache-Control','private,no-store');
-    return res.status(201).json({success:true,url:'https://www.millionsnest.com/api/public/nestjourney/calendar/'+token+'.ics'});
+    return res.status(201).json({success:true,feedId:id,url:'https://www.millionsnest.com/api/public/nestjourney/calendar/'+token+'.ics'});
   }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
 }
+export async function listJourneyCalendarFeeds(req:Request,res:Response){
+  try{
+    const db=getFirestore(),actor=await authAdmin(req,res,db);
+    if(!actor)return;
+    const docs=await db.collection(COLLECTION).where('organizationId','==',actor.orgId).limit(100).get();
+    res.setHeader('Cache-Control','private,no-store');
+    return res.status(200).json({success:true,feeds:docs.docs.filter(s=>s.data().active===true).map(s=>({
+      id:s.id,congregationId:s.data().congregationId,
+      createdAtMs:s.data().createdAt?.toMillis?.()||null,createdBy:s.data().createdBy,
+    }))});
+  }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
+}
+
 export async function revokeJourneyCalendarFeed(req:Request,res:Response){
   try{
     const db=getFirestore(),actor=await authAdmin(req,res,db);
     if(!actor)return;
-    const token=req.body?.token;
-    if(!SECRET.test(token||''))return res.status(400).json({success:false,reasonCode:'INVALID_TOKEN'});
-    const ref=db.doc(COLLECTION+'/'+hash(token));
+    const id=req.body?.feedId;
+    if(typeof id!=='string'||!/^[0-9a-f]{64}$/.test(id))return res.status(400).json({success:false,reasonCode:'INVALID_FEED_ID'});
+    const ref=db.doc(COLLECTION+'/'+id);
     const snap=await ref.get();
     if(!snap.exists||snap.data()?.organizationId!==actor.orgId)
       return res.status(404).json({success:false,reasonCode:'FEED_NOT_FOUND'});
@@ -108,7 +122,7 @@ export async function deliverJourneyCalendarFeed(req:Request,res:Response){
     const o=org.data()||{},m=member.data()||{};
     const owner=o.ownerUid===data.createdBy||o.ownerId===data.createdBy;
     if(!org.exists||!active(o.status)||!unit.exists||unit.data()?.active===false||
-       (!owner&&(!member.exists||!active(m.status)||!adminRole(m.organizationRole||m.role)))){
+       (!owner&&(!member.exists||!activeMembership(m)||!adminRole(m.organizationRole||m.role)))){
       return res.status(404).send('Not found');
     }
     const birthdayDocs=await db.collection(personRoot(orgId)+'/personBirthdays')
