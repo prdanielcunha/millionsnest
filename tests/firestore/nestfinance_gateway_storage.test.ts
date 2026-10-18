@@ -26,8 +26,10 @@ const paths=[
 try {
   await env.withSecurityRulesDisabled(async context=>{
     const db=context.firestore(),batch=writeBatch(db);
-    batch.set(doc(db,'organizations',org),{status:'active',ownerUid:'synthetic_owner'});
-    batch.set(doc(db,'organizations',other),{status:'active',ownerUid:'synthetic_outsider'});
+    batch.set(doc(db,'organizations',org),{status:'active',ownerUid:'synthetic_owner',apps:{musicscale:{status:'active'}}});
+    batch.set(doc(db,'organizations',other),{status:'active',ownerUid:'synthetic_outsider',apps:{musicscale:{status:'active'}}});
+    for(const uid of ['synthetic_member','synthetic_owner','synthetic_counter','synthetic_outsider'])
+      batch.set(doc(db,'users',uid),{systemRole:'user'});
     for(const [uid,role]of [['synthetic_member','member'],['synthetic_owner','owner'],['synthetic_counter','member']]) {
       batch.set(doc(db,'organizations',org,'members',uid),{status:'active',role,
         appAccess:{nestFinance:{enabled:true,permissions:uid==='synthetic_counter'?['finance.count.execute']:['finance.manage']}}});
