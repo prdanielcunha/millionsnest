@@ -2,9 +2,8 @@ name: NestFinance Summary Read-only Index Preflight
 on:
   pull_request:
     paths: ['scripts/probe_nestfinance_summary_indexes.mjs', 'scripts/finance_summary_probe_result.mjs', 'scripts/test_finance_summary_probe_result.mjs', '.github/workflows/nestfinance-summary-index-preflight.yml']
-  push:
-    branches: [production]
-    paths: ['scripts/probe_nestfinance_summary_indexes.mjs', 'scripts/finance_summary_probe_result.mjs', 'scripts/test_finance_summary_probe_result.mjs', '.github/workflows/nestfinance-summary-index-preflight.yml']
+  # Standalone investigation remains manual. Automatic publication certifies
+  # queries AFTER the additive publisher has proved both indexes READY.
   workflow_dispatch:
 permissions:
   contents: read

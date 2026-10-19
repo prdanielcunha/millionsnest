@@ -1,0 +1,49 @@
+name: NestFinance Additive Summary Index Certification
+on:
+  pull_request:
+    paths: ['firestore.indexes.json', 'scripts/ensure_nestfinance_summary_indexes.mjs', 'scripts/test_nestfinance_summary_indexes.mjs', 'scripts/probe_nestfinance_summary_indexes.mjs', 'scripts/finance_summary_probe_result.mjs', 'scripts/test_finance_summary_probe_result.mjs', '.github/workflows/nestfinance-summary-indexes.yml', '.github/workflows/nestfinance-summary-index-preflight.yml']
+  push:
+    branches: [production]
+    paths: ['firestore.indexes.json', 'scripts/ensure_nestfinance_summary_indexes.mjs', 'scripts/test_nestfinance_summary_indexes.mjs', 'scripts/probe_nestfinance_summary_indexes.mjs', 'scripts/finance_summary_probe_result.mjs', 'scripts/test_finance_summary_probe_result.mjs', '.github/workflows/nestfinance-summary-indexes.yml', '.github/workflows/nestfinance-summary-index-preflight.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: millionsnest-finance-summary-indexes-production
+  cancel-in-progress: false
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --check scripts/ensure_nestfinance_summary_indexes.mjs
+      - run: node scripts/test_nestfinance_summary_indexes.mjs
+      - run: node scripts/test_finance_summary_probe_result.mjs
+  certify:
+    needs: contract
+    if: github.ref == 'refs/heads/production' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - name: Add only the two versioned summary indexes and wait until READY
+        run: node scripts/ensure_nestfinance_summary_indexes.mjs
+      - name: Prove actual COUNT and SUM queries succeed without tenant data
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          echo "::add-mask::$ACCESS_TOKEN"
+          printf '%s' "$ACCESS_TOKEN" | node scripts/probe_nestfinance_summary_indexes.mjs
+          unset ACCESS_TOKEN
