@@ -1,0 +1,33 @@
+name: People Foundation Read-only Preflight
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - .github/workflows/people-foundation-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: millionsnest-people-foundation-preflight
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Authenticate with existing MillionsNest production WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - name: Inspect existing database metadata only
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud firestore databases describe --database='(default)' --project=millionsnest --format='yaml(name,type,databaseEdition,locationId)'
+          echo 'PEOPLE_FOUNDATION_EXISTING_WIF_AUTHENTICATED=true'

@@ -1,0 +1,28 @@
+name: Canonical Identity and Membership Authority
+on:
+  pull_request:
+    paths: ['firestore.rules', 'src/pages/Dashboard.tsx', 'tests/firestore/canonical_authority.rules.test.ts', '.github/workflows/canonical-authority-quality.yml']
+  push:
+    branches: [main, production]
+    paths: ['firestore.rules', 'tests/firestore/canonical_authority.rules.test.ts']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  canonical-authority:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci --no-audit --no-fund
+      - run: npx firebase-tools@15.27.0 emulators:exec --config firebase.rules-test.json --only firestore --project demo-canonical-authority "node --import tsx tests/firestore/canonical_authority.rules.test.ts"
+      - run: npm run lint
+      - run: npm run build
