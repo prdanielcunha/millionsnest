@@ -9,7 +9,7 @@ import {
   Star, Zap, Headphones, Video, ListMusic, Check, Users, Link, Mail, Plus, X, Loader2, Copy, Wallet
 } from "lucide-react";
 import { Navbar } from "../components/Navbar.js";
-import { doc, getDoc, updateDoc, setDoc, collection, getDocs, query, where, limit, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, updateDoc, collection, getDocs, query, where, limit, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { auth } from "../lib/firebase.js";
 import { sendPasswordResetEmail } from "firebase/auth";
@@ -1397,19 +1397,8 @@ export function Dashboard() {
       }
 
       if (currentOrgData) {
-        let currentUserMem = baseMembers.find(m => m.id === user.uid || m.uid === user.uid);
-        const isOwnerUid = currentOrgData?.ownerUid === user.uid;
-        if (currentUserMem && isOwnerUid && currentUserMem.role !== 'owner') {
-            currentUserMem.role = 'owner';
-            setDoc(doc(db, `organizations/${orgId}/members`, user.uid), { role: 'owner', organizationRole: 'owner' }, { merge: true }).catch(console.error);
-        } else if (!currentUserMem && isOwnerUid) {
-            baseMembers.push({
-              id: user.uid, uid: user.uid, role: 'owner', organizationRole: 'owner', displayName: profile?.displayName || '', email: user.email || '', photoURL: profile?.photoURL || ''
-            });
-            setDoc(doc(db, `organizations/${orgId}/members`, user.uid), {
-              uid: user.uid, role: 'owner', organizationRole: 'owner', addedAt: new Date()
-            }, { merge: true }).catch(console.error);
-        }
+        // Render canonical membership as returned. Ownership repair is an
+        // explicit authenticated server command, never an automatic self-grant.
         setMembers(baseMembers);
       } else {
         setMembers([]);
