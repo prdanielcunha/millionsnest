@@ -31,7 +31,7 @@ export async function searchPeopleDirectory(org:string,q:string):Promise<Directo
   for(let page=0;page<100;page++){
     const result=await directoryRequest(org,undefined,'?q='+encodeURIComponent(q)+(cursor?'&cursor='+encodeURIComponent(cursor):''))
     people.push(...result.people)
-    if(!result.nextCursor)return people
+    if(!result.nextCursor)return [...new Map(people.map(person=>[person.id,person])).values()]
     cursor=result.nextCursor
   }
   throw new PeopleDirectoryError('DIRECTORY_SEARCH_LIMIT')

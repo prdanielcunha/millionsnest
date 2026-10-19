@@ -151,7 +151,10 @@ export async function listDirectory(db:Firestore,org:string,q:string,cursor?:str
   for(const x of rows.docs){
     const sources=await db.runTransaction(tx=>sourcesForPerson(tx,db,org,x.data().mergedInto||x.id));
     if(sources.empty)continue;
-    people.push({id:x.id,name:x.data().name,hasAccount:sources.docs.some(s=>s.data().kind==='account'),unitIds:[...new Set(sources.docs.map(s=>s.data().unitId).filter(Boolean))],revision:x.data().revision,...(x.data().mergedInto?{mergedInto:x.data().mergedInto}:{})});
+    const shared={hasAccount:sources.docs.some(s=>s.data().kind==='account'),unitIds:[...new Set(sources.docs.map(s=>s.data().unitId).filter(Boolean))]};
+    if(!people.some(p=>p.id===x.id))people.push({id:x.id,name:x.data().name,...shared,revision:x.data().revision,...(x.data().mergedInto?{mergedInto:x.data().mergedInto}:{})});
+    // Searching an old/source name must also return its current canonical person.
+    if(x.data().mergedInto){const target=await db.doc(rootFor(org)+'/peopleDirectory/'+x.data().mergedInto).get();if(target.exists&&target.data()?.organizationId===org&&!people.some(p=>p.id===target.id))people.push({id:target.id,name:target.data()!.name,...shared,revision:target.data()!.revision});}
   }
   return {people,nextCursor:rows.size===60?rows.docs.at(-1)!.id:null};
 }

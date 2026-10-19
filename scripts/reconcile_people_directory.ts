@@ -29,9 +29,35 @@ const sources=accounts+journeyPeople;
 // Conservative bounded rollout. Do not silently spend unbounded reads/writes.
 if(sources>2000)throw Error('INITIAL_SOURCE_BUDGET_EXCEEDED');
 console.log(JSON.stringify({mode:manifest.mode,organizations:work.length,skipped,accountSources:accounts,journeySources:journeyPeople,projectedInitialWritesUpperBound:sources*5}));
+const token=execFileSync('gcloud',['auth','print-access-token'],{encoding:'utf8'}).trim();
+// Read existing provider telemetry; never enable APIs or expand IAM to obtain it.
+async function usage(metric:string,gauge=false):Promise<number|null>{
+  try{
+    const url=new URL('https://monitoring.googleapis.com/v3/projects/millionsnest/timeSeries');
+    url.searchParams.set('filter','metric.type="firestore.googleapis.com/'+metric+'"');
+    url.searchParams.set('interval.startTime',new Date(Date.now()-86400000).toISOString());
+    url.searchParams.set('interval.endTime',new Date().toISOString());
+    url.searchParams.set('aggregation.alignmentPeriod','86400s');
+    url.searchParams.set('aggregation.perSeriesAligner',gauge?'ALIGN_MAX':'ALIGN_SUM');
+    url.searchParams.set('pageSize','1000');
+    const r=await fetch(url,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(30000)});
+    if(!r.ok)return null;
+    const data=await r.json();
+    if(!data.timeSeries?.length||data.nextPageToken)return null;
+    const values=data.timeSeries.flatMap((s:any)=>s.points.map((p:any)=>Number(p.value.int64Value??p.value.doubleValue)));
+    if(values.some((n:number)=>!Number.isFinite(n)||n<0))return null;
+    return gauge?Math.max(...values):values.reduce((sum:number,n:number)=>sum+n,0);
+  }catch{return null;}
+}
+const [reads24h,writes24h,storageBytes]=await Promise.all([usage('document/read_ops_count'),usage('document/write_ops_count'),usage('storage/data_and_index_storage_bytes',true)]);
+// A generous reserve covers telemetry lag and normal traffic; this is a preflight,
+// not a billing cap or a promise about future tenant traffic.
+const freeQuotaHeadroom=reads24h!==null&&writes24h!==null&&storageBytes!==null&&reads24h+sources*30+5000<50000&&writes24h+sources*5+5000<20000&&storageBytes+sources*20000<800000000;
+console.log(JSON.stringify({usagePreflight:{reads24h,writes24h,storageBytes,freeQuotaHeadroom}}));
 if(!apply)process.exit(0);
+if(!freeQuotaHeadroom)throw Error('ZERO_COST_HEADROOM_UNVERIFIED_OR_INSUFFICIENT');
 for(const key of ['hubReleaseSha','journeyReleaseSha'])if(!/^[a-f0-9]{40}$/.test(manifest[key]||''))throw Error('EXACT_RELEASE_REQUIRED');
-if(process.env.GITHUB_REF!=='refs/heads/production')throw Error('PRODUCTION_REF_REQUIRED');
+if(process.env.GITHUB_REF!=='refs/heads/production'||!/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA||''))throw Error('PRODUCTION_REF_REQUIRED');
 const service=JSON.parse(execFileSync('gcloud',['run','services','describe','millionsnest-api','--project=millionsnest','--region=us-central1','--format=json'],{encoding:'utf8'}));
 const image=service.spec?.template?.spec?.containers?.[0]?.image||'';
 if(!image.endsWith(':'+manifest.hubReleaseSha)||service.status.latestCreatedRevisionName!==service.status.latestReadyRevisionName||!service.status.traffic?.some((t:any)=>t.percent===100&&(t.revisionName===service.status.latestReadyRevisionName||t.latestRevision===true)))throw Error('HUB_EXACT_SERVING_RELEASE_REQUIRED');
@@ -39,7 +65,6 @@ const release=await fetch('https://nestjourney.millionsnest.com/connect-release.
 if(!release.ok||(await release.json()).releaseSha!==manifest.journeyReleaseSha)throw Error('JOURNEY_EXACT_SERVING_RELEASE_REQUIRED');
 const authProbe=await fetch('https://www.millionsnest.com/api/v1/organizations/release-smoke-synthetic/people-directory',{signal:AbortSignal.timeout(30000)});
 if(authProbe.status!==401||(await authProbe.json()).reasonCode!=='UNAUTHENTICATED')throw Error('DIRECTORY_RUNTIME_GATEWAY_REQUIRED');
-const token=execFileSync('gcloud',['auth','print-access-token'],{encoding:'utf8'}).trim();
 const authorized=async(url:string)=>{const r=await fetch(url,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('PUBLISHED_RULES_READ_FAILED');return r.json();};
 const live=await authorized('https://firebaserules.googleapis.com/v1/projects/millionsnest/releases/cloud.firestore');
 const ruleSet=await authorized('https://firebaserules.googleapis.com/v1/'+live.rulesetName);

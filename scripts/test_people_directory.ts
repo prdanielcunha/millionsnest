@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {requireInvitationEmulator,clearInvitationEmulator} from './helpers/p0HandlerTestHarness.js';
 import type {Request,Response} from 'express';
-import {contactKey,keyFor,linkDirectoryPeople,rootFor,synchronizeDirectoryPage,unlinkDirectoryPeople} from '../src/server/services/PeopleDirectory.js';
+import {contactKey,keyFor,linkDirectoryPeople,listDirectory,rootFor,synchronizeDirectoryPage,unlinkDirectoryPeople} from '../src/server/services/PeopleDirectory.js';
 import {peopleDirectoryHandler,registerDirectory,synchronizeDirectory} from '../src/server/services/PeopleDirectoryService.js';
 
 const db=requireInvitationEmulator();
@@ -60,6 +60,7 @@ await db.doc('organizations/demo-org/products/raiz_e_mesa/people/alias-only').se
 await synchronizeDirectoryPage(db,'demo-org','owner','journey');
 const aliasOnly=keyFor('journey','alias-only');
 await linkDirectoryPeople(db,'demo-org','owner',aliasOnly,personB,'Administrator independently verified the same individual',1);
+assert((await listDirectory(db,'demo-org','Synthetic Alias Only')).people.some(p=>p.id===personB),'An old name resolves to the linked canonical identity in search');
 const aliasReuse=await call({...base,unitId:'unit-b',requestId:'alias-reuse-0001',rows:[{name:'Synthetic Lucas',personId:personB}]});
 assert.equal(aliasReuse.statusCode,200);
 assert.equal(aliasReuse.body.people[0].id,'alias-only','Merged source participation is reused');

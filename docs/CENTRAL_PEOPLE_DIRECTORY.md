@@ -59,6 +59,11 @@ Publish Hub and canonical Rules, verify exact serving commits, then publish Jour
 with the pinned live Rules hash. Only after both are verified may the production
 activation manifest move from plan to apply. Reconciliation refuses an unexpected
 runtime, Rules hash, release, more than 200 organizations or 2,000 initial sources.
+The initial source limit is a preflight bound, not a cap on concurrent growth.
+Read-only Monitoring telemetry must also show conservative free-tier headroom for
+the initial reconciliation. Missing permission/telemetry or insufficient room stops
+apply without adding IAM privileges or provisioning any service. Telemetry has lag;
+the safety reserve is not a guarantee about future billing or concurrent traffic.
 
 The additive migration keeps every authoritative source record unchanged and
 records a private recovery journal before enabling per-organization legacy-create
