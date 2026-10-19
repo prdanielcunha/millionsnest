@@ -5,6 +5,17 @@ antes de executar. Não confundir merge com publicação ou plano com migração
 
 ## Checkpoint mais recente — substitui status antigos abaixo
 
+Atualização final em preparação: PR428 merged production5fb11db71f57550e9c32617a5da13ecf2bcfd45a,
+aguardando prova de publicação das Rules5372 e runtime. PR429 merged main652ba1e7a1d3938ccb745b5a7f00f018ad51e39d;
+JourneyPR136 merged main8fd667a1f37eeb131cabaf43e00c06f4a109323e.
+Journey135 está pronta com pin5372 e mensagem de erro dentro do modal; manter essa
+PR sem merge enquanto apply usa o cliente central já publicado ab7954e. Esse cliente
+já usa exclusivamente o gateway: não depende do ajuste cosmético135 para migrar.
+Após apply completar, publicar135, depois conferir Hosting. Main137 porta o aviso.
+Manifest apply está preparado para Hub5fb11db, Journeyab7954e e Rules5372: os gates
+conferem os três valores reais antes de qualquer escrita. Não confundir preparado
+com aplicado. Ler workflow do commit de ativação e procurar o marcador final.
+
 - Hub218cb84 e Journeyab7954e efetivamente publicados, smokes verdes e SHAs
   comprovados nos logs; API central devolveu401 sem autenticação.
 - Funcionalidade já integrada à main: HubPR427 →3311c11d4d178ea920f16e5b105c70e8e157bba8;
