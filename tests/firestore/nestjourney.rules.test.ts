@@ -27,7 +27,7 @@ before(async () => {
     firestore: {
       host: firestoreHost,
       port: Number(firestorePort),
-      rules: await readFile('firestore.rules', 'utf8'),
+      rules: await readFile(process.env.FIRESTORE_RULES_PATH || 'firestore.rules', 'utf8'),
     },
   });
 
@@ -102,6 +102,41 @@ before(async () => {
 });
 
 after(async () => env.cleanup());
+
+test('central person identities, source indexes, receipts and audit are server-owned, including nested paths', async () => {
+  const namespaces=['peopleDirectory','peopleDirectorySources','peopleDirectoryNameLocks','peopleDirectoryRequests','peopleDirectoryEvents'];
+  await env.withSecurityRulesDisabled(async c=>{
+    await setDoc(doc(c.firestore(),'users/central-global'),{systemRole:'ceo',status:'active'});
+    for(const namespace of namespaces){
+      await setDoc(doc(c.firestore(),`organizations/org-a/${namespace}/synthetic`),{organizationId:'org-a'});
+      await setDoc(doc(c.firestore(),`organizations/org-a/${namespace}/synthetic/nested/private`),{organizationId:'org-a'});
+    }
+  });
+  for(const uid of ['member-a','coord-a','admin-a','pastor-a','data-a','central-global']){
+    const db=env.authenticatedContext(uid).firestore();
+    for(const namespace of namespaces){
+      for(const suffix of ['synthetic','synthetic/nested/private']){
+        const ref=doc(db,`organizations/org-a/${namespace}/${suffix}`);
+        await assertFails(getDoc(ref));await assertFails(updateDoc(ref,{tampered:true}));await assertFails(deleteDoc(ref));
+      }
+      await assertFails(setDoc(doc(db,`organizations/org-a/${namespace}/forged`),{organizationId:'org-a'}));
+    }
+    await assertFails(setDoc(doc(db,'people_directory_policies/org-a'),{enabled:true}));
+  }
+});
+
+test('central identity cannot be forged or changed and activated policy stops legacy parallel creates', async()=>{
+  const db=env.authenticatedContext('admin-a').firestore();
+  const base={organizationId:'org-a',congregationId:'unit-a',name:'Synthetic Central',consent:false};
+  await assertFails(setDoc(doc(db,'organizations/org-a/products/raiz_e_mesa/people/forged-central'),{...base,centralPersonId:'another-identity'}));
+  const ref=doc(db,'organizations/org-a/products/raiz_e_mesa/people/person-a');
+  await assertFails(updateDoc(ref,{centralPersonId:'another-identity'}));
+  await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'people_directory_policies/org-a'),{enabled:true}));
+  try{
+    await assertFails(setDoc(doc(db,'organizations/org-a/products/raiz_e_mesa/people/parallel-create'),base));
+    await assertSucceeds(updateDoc(ref,{preferredName:'Synthetic safe edit'}));
+  }finally{await env.withSecurityRulesDisabled(c=>deleteDoc(doc(c.firestore(),'people_directory_policies/org-a')));}
+});
 
 function careRequest(uid: string, source: 'manual' | 'visitor_registration' = 'manual') {
   const manual = source === 'manual';
