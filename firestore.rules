@@ -549,13 +549,15 @@ service cloud.firestore {
         isSystemAdmin() ||
         (
           (isOwner(userId) || (resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId))) &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['organizationId', 'activeOrganizationId', 'primaryOrganizationId', 'defaultOrganizationId', 'lastOrganizationId', 'organizations', 'organizationIds', 'memberships', 'organizationRole', 'systemRole', 'globalRole', 'capabilities', 'appsAccess', 'products', 'lifetimeAccess'])
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'status', 'disabled', 'enabled', 'ecosystemSessionVersion', 'ecosystemSessionVersionUpdatedAt', 'organizationId', 'activeOrganizationId', 'primaryOrganizationId', 'defaultOrganizationId', 'lastOrganizationId', 'organizations', 'organizationIds', 'memberships', 'organizationRole', 'systemRole', 'globalRole', 'capabilities', 'appsAccess', 'products', 'lifetimeAccess'])
         )
       );
-      allow delete: if isAuthenticated() && (isSystemAdmin() || (resource != null && 'organizationId' in resource.data && isOrgAdmin(resource.data.organizationId) && checkOrgAccess(resource.data.organizationId)));
+      allow delete: if isAuthenticated() && isSystemAdmin();
     }
 
-    match /users/{userId}/{document=**} {
+    // A required subcollection segment prevents Rules v2's zero-segment
+    // recursive wildcard from overriding protected root-profile fields.
+    match /users/{userId}/{subcollection}/{document=**} {
       allow read, write: if isOwner(userId);
     }
 
@@ -618,10 +620,9 @@ service cloud.firestore {
           uid == request.auth.uid || checkOrgReadAccess(orgId) || isSystemAdmin()
         );
         allow list: if isAuthenticated() && (checkOrgReadAccess(orgId) || isSystemAdmin());
-        allow create: if isAuthenticated() && (isOrgAdmin(orgId) || isSystemAdmin());
-        allow update, delete: if isAuthenticated() && (
-          isOrgAdmin(orgId) || isSystemAdmin()
-        );
+        // Roles, lifecycle, scopes and per-app grants are canonical backend
+        // commands, including for organization and global administrators.
+        allow create, update, delete: if false;
       }
 
       match /invites/{inviteId} {
@@ -649,7 +650,14 @@ service cloud.firestore {
 
       match /audit_logs/{document=**} {
         allow read: if isAuthenticated() && checkOrgReadAccess(orgId);
-        allow write: if isAuthenticated() && checkOrgAccess(orgId);
+        // Preserve legacy audit callers; access-change evidence is server-owned.
+        allow create: if isAuthenticated() && checkOrgAccess(orgId) &&
+          request.resource.data.get('action', '') != 'nestfinance.member.permissions_updated';
+        allow update: if isAuthenticated() && checkOrgAccess(orgId) &&
+          resource.data.get('action', '') != 'nestfinance.member.permissions_updated' &&
+          request.resource.data.get('action', '') != 'nestfinance.member.permissions_updated';
+        allow delete: if isAuthenticated() && checkOrgAccess(orgId) &&
+          resource.data.get('action', '') != 'nestfinance.member.permissions_updated';
       }
       match /timeline/{document=**} {
         allow read: if isAuthenticated() && checkOrgReadAccess(orgId);
@@ -2806,8 +2814,8 @@ service cloud.firestore {
         // Likewise, Hub entitlement grants are emitted only by the backend.
         // Firestore ORs overlapping allows: exclude these namespaces HERE,
         // rather than adding a separate deny match that can be overridden.
-        allow create: if !app.matches('^finance.*') && !(app in ['connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if !app.matches('^finance.*') && !(app in ['connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if !app.matches('^finance.*') && !(app in ['members', 'audit_logs', 'connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if !app.matches('^finance.*') && !(app in ['members', 'audit_logs', 'connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 
@@ -2819,15 +2827,8 @@ service cloud.firestore {
         checkOrgAccess(id.split('_')[0])
       );
       allow list: if isAuthenticated() && isSystemAdmin();
-      allow create: if isAuthenticated() && (isOrgAdmin(request.resource.data.get('organizationId', '')) || isSystemAdmin());
-      allow update: if isAuthenticated() && (
-        isSystemAdmin() || 
-        (checkOrgAccess(resource.data.get('organizationId', '')) && isOrgAdmin(resource.data.get('organizationId', '')))
-      );
-      allow delete: if isAuthenticated() && (
-        isSystemAdmin() || 
-        (checkOrgAccess(resource.data.get('organizationId', '')) && isOrgAdmin(resource.data.get('organizationId', '')))
-      );
+      // Legacy authority mirrors are maintained by the same Admin SDK commands.
+      allow create, update, delete: if false;
     }
 
     // ==========================================
