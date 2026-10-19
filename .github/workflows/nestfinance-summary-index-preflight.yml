@@ -1,0 +1,41 @@
+name: NestFinance Summary Read-only Index Preflight
+on:
+  pull_request:
+    paths: ['scripts/probe_nestfinance_summary_indexes.mjs', '.github/workflows/nestfinance-summary-index-preflight.yml']
+  push:
+    branches: [production]
+    paths: ['scripts/probe_nestfinance_summary_indexes.mjs', '.github/workflows/nestfinance-summary-index-preflight.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --check scripts/probe_nestfinance_summary_indexes.mjs
+  inspect:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - name: Verify synthetic query plans and index metadata without tenant data
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          echo "::add-mask::$ACCESS_TOKEN"
+          printf '%s' "$ACCESS_TOKEN" | node scripts/probe_nestfinance_summary_indexes.mjs
+          unset ACCESS_TOKEN
