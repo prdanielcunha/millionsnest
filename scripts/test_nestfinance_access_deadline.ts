@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { withAbortDeadline } from '../src/lib/withAbortDeadline.js';
+assert.equal(await withAbortDeadline(new AbortController(), async () => 'ready', 100), 'ready');
+await assert.rejects(() => withAbortDeadline(new AbortController(), () => new Promise(() => {}), 10), /REQUEST_ABORTED/, 'Hung identity request must return control');
+const controller = new AbortController();
+const pending = withAbortDeadline(controller, () => new Promise(() => {}), 1000);
+controller.abort();
+await assert.rejects(() => pending, /REQUEST_ABORTED/, 'Changing organization/unmount cancels immediately');
+await assert.rejects(() => withAbortDeadline(new AbortController(), async () => { throw Error('FAILED'); }), /FAILED/);
+console.log('PASS: successful, failed, hung and cancelled permission requests are bounded');
