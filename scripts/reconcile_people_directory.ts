@@ -15,20 +15,30 @@ initializeApp({projectId:'millionsnest',credential:applicationDefault()});
 const db=getFirestore();
 const organizations=await db.collection('organizations').orderBy(FieldPath.documentId()).limit(201).get();
 if(organizations.size>200)throw Error('ORGANIZATION_BUDGET_EXCEEDED');
-const work:Array<{org:string;owner:string;journey:boolean}>=[];
-let accounts=0,journeyPeople=0,skipped=0;
+const work:Array<{org:string;actor:string;journey:boolean}>=[];
+let accounts=0,journeyPeople=0,skipped=0,allJourneyPeople=0,skippedJourneyPeople=0,unresolvedActiveJourneyPeople=0;
 for(const org of organizations.docs){
-  const data=org.data(),owner=data.ownerUid||data.ownerId||data.ownerUserId;
-  if(!active(data)||typeof owner!=='string'||!active((await db.doc('users/'+owner).get()).data())){skipped++;continue;}
+  const data=org.data();
   const [a,j]=await Promise.all([org.ref.collection('members').count().get(),db.collection(rootFor(org.id)+'/products/raiz_e_mesa/people').count().get()]);
+  allJourneyPeople+=j.data().count;
+  if(!active(data)){skipped++;skippedJourneyPeople+=j.data().count;continue;}
+  let actor=data.ownerUid||data.ownerId||data.ownerUserId;
+  if(typeof actor!=='string'||!active((await db.doc('users/'+actor).get()).data())){
+    actor='';
+    // A pre-existing local administrator may reconcile; never invent a role or
+    // use a global SaaS privilege to get access to church records.
+    const members=await org.ref.collection('members').limit(1001).get();
+    if(members.size<=1000)for(const member of members.docs){const m=member.data();if(active(m)&&(!m.organizationId||m.organizationId===org.id)&&['owner','admin','pastor','data_admin'].includes(String(m.organizationRole||m.role||'').trim().toLowerCase())&&active((await db.doc('users/'+member.id).get()).data())){actor=member.id;break;}}
+  }
+  if(!actor){skipped++;skippedJourneyPeople+=j.data().count;unresolvedActiveJourneyPeople+=j.data().count;continue;}
   accounts+=a.data().count;journeyPeople+=j.data().count;
   const journey=['active','trialing'].includes(String((data.apps?.nestjourney||data.apps?.raiz_e_mesa)?.status||'').toLowerCase());
-  work.push({org:org.id,owner,journey});
+  work.push({org:org.id,actor,journey});
 }
 const sources=accounts+journeyPeople;
 // Conservative bounded rollout. Do not silently spend unbounded reads/writes.
 if(sources>2000)throw Error('INITIAL_SOURCE_BUDGET_EXCEEDED');
-console.log(JSON.stringify({mode:manifest.mode,organizations:work.length,skipped,accountSources:accounts,journeySources:journeyPeople,projectedInitialWritesUpperBound:sources*5}));
+console.log(JSON.stringify({mode:manifest.mode,organizations:work.length,skipped,accountSources:accounts,journeySources:journeyPeople,allJourneySources:allJourneyPeople,skippedJourneySources:skippedJourneyPeople,unresolvedActiveJourneySources:unresolvedActiveJourneyPeople,projectedInitialWritesUpperBound:sources*5}));
 const token=execFileSync('gcloud',['auth','print-access-token'],{encoding:'utf8'}).trim();
 // Read existing provider telemetry; never enable APIs or expand IAM to obtain it.
 async function usage(metric:string,gauge=false):Promise<number|null>{
@@ -55,6 +65,7 @@ const [reads24h,writes24h,storageBytes]=await Promise.all([usage('document/read_
 const freeQuotaHeadroom=reads24h!==null&&writes24h!==null&&storageBytes!==null&&reads24h+sources*30+5000<50000&&writes24h+sources*5+5000<20000&&storageBytes+sources*20000<800000000;
 console.log(JSON.stringify({usagePreflight:{reads24h,writes24h,storageBytes,freeQuotaHeadroom}}));
 if(!apply)process.exit(0);
+if(unresolvedActiveJourneyPeople)throw Error('ACTIVE_JOURNEY_SOURCES_REQUIRE_VALID_LOCAL_ADMINISTRATOR');
 if(!freeQuotaHeadroom)throw Error('ZERO_COST_HEADROOM_UNVERIFIED_OR_INSUFFICIENT');
 for(const key of ['hubReleaseSha','journeyReleaseSha'])if(!/^[a-f0-9]{40}$/.test(manifest[key]||''))throw Error('EXACT_RELEASE_REQUIRED');
 if(process.env.GITHUB_REF!=='refs/heads/production'||!/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA||''))throw Error('PRODUCTION_REF_REQUIRED');
@@ -79,7 +90,7 @@ for(const item of work){
   const policyRef=db.doc('people_directory_policies/'+item.org),before=await policyRef.get();
   const recoveryRef=releaseRef.collection('organizations').doc(keyFor('organization',item.org));
   if(!(await recoveryRef.get()).exists)await recoveryRef.create({organizationId:item.org,hadPolicy:before.exists,previousPolicy:before.data()||null,sourceRecordsPreserved:true,createdAt:FieldValue.serverTimestamp()});
-  const snapshot=await synchronizeDirectory(db,item.org,item.owner);
+  const snapshot=await synchronizeDirectory(db,item.org,item.actor);
   await db.runTransaction(async tx=>{
     await assertSourceSnapshot(tx,db,item.org,snapshot);
     const current=await tx.get(policyRef);
