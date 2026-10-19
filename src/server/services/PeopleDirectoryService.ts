@@ -60,6 +60,9 @@ export async function registerDirectory(db:Firestore,actor:Actor,input:{unitId:s
   if(!safeId(unitId)||!safeId(requestId)||requestId.length<8||!rows.length||rows.length>75||kind==='visitor'&&rows.length!==1)throw new DirectoryError('INVALID_REGISTRATION',400);
   if(!actor.admin&&(kind!=='visitor'||!actor.units.includes(unitId)))throw new DirectoryError('SCOPE_DENIED',403);
   if(new Set(rows.map(r=>nameKey(r.name))).size!==rows.length)throw new DirectoryError('IMPORT_NAMES_REQUIRE_INDIVIDUAL_REVIEW');
+  if(kind==='member'&&rows.some(r=>r.consent||r.phone||r.channel))throw new DirectoryError('MEMBER_CONTACT_REQUIRES_SEPARATE_CONSENT',400);
+  const phones=rows.filter(r=>r.consent).map(r=>contactKey('phone',r.phone));
+  if(new Set(phones).size!==phones.length)throw new DirectoryError('IMPORT_CONTACTS_REQUIRE_INDIVIDUAL_REVIEW');
   const receiptRef=db.doc(rootFor(actor.org)+'/peopleDirectoryRequests/'+keyFor('request',actor.uid+':'+requestId));
   const payloadHash=createHash('sha256').update(JSON.stringify(input)).digest('hex');
   return db.runTransaction(async tx=>{
@@ -68,6 +71,7 @@ export async function registerDirectory(db:Firestore,actor:Actor,input:{unitId:s
     ]);
     // Revalidate authority in the same transaction that commits the records.
     if(!active(org.data())||!active(user.data())||member.data()?.organizationId&&member.data()?.organizationId!==actor.org||actor.admin&&!isAdmin(org.data(),member.data(),actor.uid)||!actor.admin&&(!active(member.data())||!member.data()?.congregationIds?.includes(unitId)||!(member.data()?.permissions?.canManagePeople===true||member.data()?.journeyRole==='presence_host')))throw new DirectoryError('ACCESS_CHANGED',403);
+    if(!actor.admin){const app=org.data()?.apps?.nestjourney||org.data()?.apps?.raiz_e_mesa,grant=member.data()?.appAccess?.nestjourney||member.data()?.appAccess?.raiz_e_mesa;if(!['active','trialing'].includes(String(app?.status||'').trim().toLowerCase())||grant?.enabled===false)throw new DirectoryError('PRODUCT_ACCESS_DENIED',403);}
     if(!unit.exists||unit.data()?.active===false||unit.data()?.organizationId&&unit.data()?.organizationId!==actor.org)throw new DirectoryError('UNIT_UNAVAILABLE',404);
     if(receipt.exists){if(receipt.data()?.payloadHash!==payloadHash)throw new DirectoryError('REQUEST_ID_REUSED');return receipt.data()!.result;}
     await assertSourceSnapshot(tx,db,actor.org,snapshot);
@@ -105,7 +109,7 @@ export async function registerDirectory(db:Firestore,actor:Actor,input:{unitId:s
     const result={people,created:people.filter(p=>!p.reused).length,batchId:receiptRef.id};
     plans.forEach(apply=>apply());
     tx.create(receiptRef,{organizationId:actor.org,actorId:actor.uid,payloadHash,result,createdAt:FieldValue.serverTimestamp()});
-    tx.create(db.collection(rootFor(actor.org)+'/peopleDirectoryEvents').doc(),{organizationId:actor.org,actorId:actor.uid,action:'people.registered',count:rows.length,created:result.created,requestRef:receiptRef.id,createdAt:FieldValue.serverTimestamp()});
+    tx.create(db.collection(rootFor(actor.org)+'/peopleDirectoryEvents').doc(),{organizationId:actor.org,actorId:actor.uid,action:'people.registered',count:rows.length,created:result.created,requestRef:receiptRef.id,distinctReviews:rows.flatMap((row,i)=>row.distinctReason?[{personId:people[i].personId,participationId:people[i].id,reason:row.distinctReason}]:[]),createdAt:FieldValue.serverTimestamp()});
     return result;
   });
 }

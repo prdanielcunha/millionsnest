@@ -10,7 +10,7 @@ const snapshotVersion=(snap:FirebaseFirestore.DocumentSnapshot|null)=>snap?.upda
 export class DirectoryError extends Error{
   constructor(public code:string,public status=409){super(code);}
 }
-export function active(data:any){return Boolean(data)&&data.disabled!==true&&data.archived!==true&&!data.deletedAt&&!['removed','revoked','inactive','suspended','disabled','deleted','archived'].includes(String(data.status||'active').trim().toLowerCase());}
+export function active(data:any){return Boolean(data)&&data.enabled!==false&&data.active!==false&&data.disabled!==true&&data.archived!==true&&!data.deletedAt&&!['removed','revoked','inactive','suspended','disabled','deleted','archived','pending','invited'].includes(String(data.status||'active').trim().toLowerCase());}
 export const contactKey=(kind:'phone'|'email',value:string)=>{
   const normalized=kind==='email'?value.trim().toLowerCase():value.replace(/\D/g,'');
   const key=kind==='phone'&&[10,11].includes(normalized.length)?'55'+normalized:normalized;

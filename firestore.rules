@@ -804,13 +804,13 @@ service cloud.firestore {
           let apps = orgDoc != null ? orgDoc.data.get('apps', {}) : {};
           let nestJourney = apps is map ? apps.get('nestjourney', {}) : {};
           let legacyJourney = apps is map ? apps.get('raiz_e_mesa', {}) : {};
-          return isSystemAdmin() || (
+          return (
             orgDoc != null &&
             (
               (nestJourney is map && nestJourney.get('status', '') in ['active', 'trialing']) ||
               (legacyJourney is map && legacyJourney.get('status', '') in ['active', 'trialing'])
             )
-          );
+          ) || isSystemAdmin();
         }
 
         function journeyHasMembership(orgId) {

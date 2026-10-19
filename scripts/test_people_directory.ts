@@ -14,7 +14,7 @@ async function call(body:any,uid='owner',org='demo-org'){
   return {statusCode,body:result};
 }
 await clearInvitationEmulator();
-await db.doc('organizations/demo-org').set({status:'active',ownerUid:'owner'});
+await db.doc('organizations/demo-org').set({status:'active',ownerUid:'owner',apps:{nestjourney:{status:'active'}}});
 for(const uid of ['owner','account-a','account-b','host','outsider'])await db.doc('users/'+uid).set({uid,displayName:uid.startsWith('account')?'Synthetic Lucas':'Synthetic '+uid});
 for(const uid of ['owner','account-a','account-b','host'])await db.doc('organizations/demo-org/members/'+uid).set({organizationId:'demo-org',status:'active',role:uid==='owner'?'owner':'member',congregationIds:['unit-a'],permissions:uid==='host'?{canManagePeople:true}:{}});
 for(const id of ['unit-a','unit-b'])await db.doc('organizations/demo-org/products/raiz_e_mesa/congregations/'+id).set({organizationId:'demo-org',active:true});
