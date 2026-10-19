@@ -1,6 +1,24 @@
 {
   "indexes": [
     {
+      "collectionGroup": "financeTransactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "financeEntityId", "order": "ASCENDING" },
+        { "fieldPath": "listQueryKeys.direction", "order": "ASCENDING" },
+        { "fieldPath": "amountCents", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "financeTransactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "financeEntityId", "order": "ASCENDING" },
+        { "fieldPath": "listQueryKeys.directionStatus", "order": "ASCENDING" },
+        { "fieldPath": "amountCents", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "songs",
       "queryScope": "COLLECTION",
       "fields": [
