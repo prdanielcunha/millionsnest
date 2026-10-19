@@ -23,6 +23,7 @@ import {
 import { feedback } from '../packages/ui/feedback.js';
 import type { HubAppExperience } from '../lib/hubAppExperience.js';
 import { EcosystemAppIcon } from './apps/EcosystemAppIcon.js';
+import { NestFinanceMemberAccessEditor } from './NestFinanceMemberAccessEditor.js';
 
 type OrgTab = 'settings' | 'members' | 'apps' | 'roles' | 'billing' | 'audit';
 
@@ -891,6 +892,9 @@ export function OrganizationManager({
                         </div>
                       </button>
                       
+                      {(currentUserPerms['organization.roles.manage'] || isGlobalAdmin || currentUserRole === 'owner') && organization.enabledApps?.includes('nestfinance') && (
+                        <div key={`${organization.id}:${member.id}`}><NestFinanceMemberAccessEditor organizationId={organization.id} memberId={member.id} locale={organizationRoleLocale} user={user} /></div>
+                      )}
                       {(currentUserPerms['organization.roles.manage'] || isGlobalAdmin) ? (
                         <div data-hub-member-controls className="flex w-full min-w-0 flex-wrap items-end gap-3 border-t border-white/[0.06] pt-4">
                           {(() => {

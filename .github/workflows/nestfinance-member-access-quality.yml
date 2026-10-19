@@ -1,0 +1,29 @@
+name: Hub NestFinance Member Access Quality
+on:
+  pull_request:
+    paths: ['server.ts', 'src/components/OrganizationManager.tsx', 'src/components/NestFinanceMemberAccessEditor.tsx', 'src/server/services/NestFinanceMemberAccessCommandService.ts', 'src/lib/withAbortDeadline.ts', 'scripts/test_nestfinance_access_deadline.ts', 'scripts/test_nestfinance_member_access.ts', '.github/workflows/nestfinance-member-access-quality.yml']
+  push:
+    branches: [main, production]
+    paths: ['server.ts', 'src/components/OrganizationManager.tsx', 'src/components/NestFinanceMemberAccessEditor.tsx', 'src/server/services/NestFinanceMemberAccessCommandService.ts', 'src/lib/withAbortDeadline.ts', 'scripts/test_nestfinance_access_deadline.ts', 'scripts/test_nestfinance_member_access.ts']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  canonical-command:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci --no-audit --no-fund
+      - run: node --import tsx scripts/test_nestfinance_access_deadline.ts
+      - run: npx firebase-tools@15.27.0 emulators:exec --only firestore --project demo-millionsnest-invitations-p0 "node --import tsx scripts/test_nestfinance_member_access.ts"
+      - run: npm run lint
+      - run: npm run build

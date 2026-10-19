@@ -14,6 +14,7 @@ import { updateOrganizationMemberRole } from './src/server/services/Organization
 import { repairOrganizationOwnership } from './src/server/services/OrganizationOwnershipRepairService.js';
 import { transferOrganizationOwnership } from './src/server/services/OrganizationOwnershipTransferService.js';
 import { updateMusicScaleMemberCapability } from './src/server/services/MusicScaleMemberCapabilityCommandService.js';
+import { nestFinanceMemberAccess } from './src/server/services/NestFinanceMemberAccessCommandService.js';
 import { updateNestJourneyMemberResponsibility } from './src/server/services/NestJourneyMemberResponsibilityCommandService.js';
 import {
   listNestJourneySupportAssignments, listNestJourneySupportCandidates,
@@ -3044,6 +3045,8 @@ async function startServer() {
     getFirestore: () => getDb()!,
   }));
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/musicscale-capability', express.json({ limit: '8kb' }), (req, res) => updateMusicScaleMemberCapability(req, res));
+  app.get('/api/v1/organizations/:organizationId/members/:memberId/nestfinance-access', (req, res) => nestFinanceMemberAccess(req, res));
+  app.patch('/api/v1/organizations/:organizationId/members/:memberId/nestfinance-access', express.json({ limit: '8kb' }), (req, res) => nestFinanceMemberAccess(req, res));
   app.patch('/api/v1/organizations/:organizationId/members/:memberId/nestjourney-responsibility', express.json({ limit: '8kb' }), (req, res) => updateNestJourneyMemberResponsibility(req, res));
   app.get('/api/v1/organizations/:organizationId/nestjourney/support-assignments', (req, res) => listNestJourneySupportAssignments(req, res));
   app.get('/api/v1/organizations/:organizationId/nestjourney/support-candidates', (req, res) => listNestJourneySupportCandidates(req, res));
