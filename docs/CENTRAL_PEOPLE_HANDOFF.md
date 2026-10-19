@@ -3,6 +3,31 @@
 Atualizado em 19/10/2026. Leia este arquivo e as alterações mais recentes no GitHub
 antes de executar. Não confundir merge com publicação ou plano com migração aplicada.
 
+## Checkpoint mais recente — substitui status antigos abaixo
+
+- Hub218cb84 e Journeyab7954e efetivamente publicados, smokes verdes e SHAs
+  comprovados nos logs; API central devolveu401 sem autenticação.
+- Funcionalidade já integrada à main: HubPR427 →3311c11d4d178ea920f16e5b105c70e8e157bba8;
+  JourneyPR134 →9267d084240826f5ad0c310f3d96c7640c7da91a. CI e revisão passaram.
+- Plano ampliado PR426 foi merged →5b415419968dfbb16c008671b1f0c533be714161.
+  Run39323685681/job118303926937:26 elegíveis,18 ignoradas,36 contas,
+  ZERO fontes Journey em TODAS44 organizações, incluindo ignoradas. Não afirmar
+  que perfis Journey históricos/Lucas foram mesclados: nenhum foi encontrado ali.
+  Uso24h14736 reads/1880 writes/94158199 bytes, margem de franquia true.
+- Endurecimento final aprovado independentemente: criar People via SDK sempre
+  negado, mesmo em organizações futuras sem policy. Policies serão só marcadores
+  de rollout, não autorização. Gateway e atualizações permitidas permanecem.
+- Últimas PRs: Hub428(production)/429(main), Journey135(production)/136(main).
+  Rules/pin alvoFINAL:5372febb59a285e40a567d6caaf5b35ac9ed97f23646e0ffe93959a6bf55f8cd.
+  Fonte local teve44/44 Rules +testes centrais aprovados; esperar CI dessas PRs.
+- Próximo: publicar Hub428 e verificar Rules+runtime reais; publicar Journey135
+  depois, comprovar novo release; mesclar429/136 após CI. Só então mode=apply,
+  com os SHAs dos novos merges realmente publicados e hash5372febb... acima.
+- Migração AINDA NÃO APLICADA neste checkpoint. Não há merge automático nem
+  exclusão autorizada de pessoas. Documentar counts reais após o apply.
+- Main/production tinham diferenças anteriores (birthday/endereço/intake) que o
+  port preservou. Não substituir production inteira por main para sincronizar.
+
 ## Objetivo e autorização
 
 Daniel autorizou implementação reversível até produção, sem serviços/planos pagos,
