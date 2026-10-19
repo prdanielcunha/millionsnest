@@ -14,7 +14,10 @@ and application permissions remain independent. No invented e-mail is required.
 | peopleDirectoryRequests | Atomic idempotency receipts |
 | peopleDirectoryEvents | Server-owned reconciliation and distinction audit |
 
-All namespaces are excluded from generic tenant SDK access. Only the authenticated
+All namespaces are excluded from generic tenant SDK access. New Journey person
+documents are server-gateway-only in ALL organizations, including future ones,
+independent of rollout marker presence. Old cached clients must update, never fall
+back to SDK creation. Only the authenticated
 Hub API may read/write them; local owner/admin/pastor/data_admin may reconcile.
 A global SaaS role alone confers no directory access. Operational visitor writers
 need current Journey entitlement, people permission and the target congregation.
@@ -66,9 +69,11 @@ apply without adding IAM privileges or provisioning any service. Telemetry has l
 the safety reserve is not a guarantee about future billing or concurrent traffic.
 
 The additive migration keeps every authoritative source record unchanged and
-records a private recovery journal before enabling per-organization legacy-create
-blocking in people_directory_policies. Policies must never be enabled before the
-new Journey client is live. To recover an interrupted rollout, restore the prior
+records a private recovery journal and per-organization rollout markers in
+people_directory_policies. These are not authorization grants: SDK person creation
+remains denied even if a marker is missing or disabled. The new Journey client and
+gateway must be live before publishing the permanent SDK creation denial.
+To recover an interrupted rollout, restore the prior
 Hosting/Cloud Run release and restore ONLY policies introduced by that release,
 using its journal. Preserve mappings and audit; do not delete source people.
 

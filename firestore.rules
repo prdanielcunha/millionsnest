@@ -1516,13 +1516,9 @@ service cloud.firestore {
               request.resource.data.get('bondAssignedBy', '') == resource.data.get('bondAssignedBy', '');
           }
           allow read: if journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
-          allow create: if journeyTenantCreate(orgId) &&
-            !exists(/databases/$(database)/documents/people_directory_policies/$(orgId)) &&
-            request.resource.data.get('centralPersonId', '') == '' &&
-            request.resource.data.get('deletedAt', null) == null &&
-            journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
-            journeyCanManagePeople(orgId) &&
-            journeyPersonBondEmptyOnCreate();
+          // Every current and future organization uses the canonical gateway.
+          // Do not let a missing rollout marker reopen legacy parallel creation.
+          allow create: if false;
           allow update: if journeyTenantUnchanged(orgId) &&
             journeyCongregationUnchanged() &&
             request.resource.data.get('centralPersonId', '') == resource.data.get('centralPersonId', '') &&
