@@ -24,6 +24,6 @@ jobs:
           java-version: 21
       - run: npm ci --no-audit --no-fund
       - run: node --import tsx scripts/test_nestfinance_access_deadline.ts
-      - run: npx firebase-tools@15.27.0 emulators:exec --only firestore --project demo-millionsnest-invitations-p0 "node --import tsx scripts/test_nestfinance_member_access.ts"
+      - run: npx firebase-tools@15.27.0 emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-invitations-p0 "node --import tsx scripts/test_nestfinance_member_access.ts"
       - run: npm run lint
       - run: npm run build
