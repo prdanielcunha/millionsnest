@@ -1,0 +1,11 @@
+# NestFinance member access editor
+
+Organization → Members and Invitations → NestFinance permissions loads canonical access on demand. Labels support PT/EN/ES: enter the app, count tithes/offerings, see balance, register income/expenses, check records, approve records and manage finances. Saving requires an explicit reason. The editor never provisions billing or entitlements.
+
+GET/PATCH `/api/v1/organizations/:organizationId/members/:memberId/nestfinance-access` revalidates Firebase tokens with revocation checking and reads current actor, target, canonical memberships and organization inside a Firestore transaction. Only canonical global authority or an active, financially authorized member manager can edit within their entity scope. Targets with global authority, self edits and unauthorized owner edits are protected. No client-supplied role or scope is accepted.
+
+The command replaces only the explicitly selected NestFinance permission array and enabled flag, preserves all other app data/scopes/roles, logs reason and previous/next access, increments an optimistic access revision and invalidates prior bound sessions through the existing ecosystem session version. A legacy Count-only membership is projected using effective restrictions; saving unchanged does not grant general transaction or balance access. Requests have a bounded token/network deadline and stale-context cancellation.
+
+Deploy the new `individual_v1`-aware NestFinance consumer **first**, then the Hub editor. Do not roll NestFinance back to legacy code after real marked grants have been saved: use a compatible fix-forward or an explicitly audited membership restoration procedure. The editor can be reverted separately. Previous Hub production baseline for this slice: `589b89fe70e88375e2895f2352bd3eb2564b047a`.
+
+The change is applied separately to Hub main and production, preserving pre-existing unrelated differences (Journey APIs, Rules/indexes, rollout gate and recovery workflow). No shared Rules, IAM, billing, credentials or production member data are changed by this feature deployment. Tests use isolated Firestore only; `scripts/test_nestfinance_member_access.ts` refuses production without the emulator. `scripts/test_nestfinance_access_deadline.ts` covers successful, failed, hung and cancelled requests. Dedicated CI runs these, TypeScript and the production build.
