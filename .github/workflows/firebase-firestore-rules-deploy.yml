@@ -15,6 +15,7 @@ on:
       - "tests/firestore/nestaffiliate.rules.test.ts"
       - "tests/firestore/connect_private_storage.test.ts"
       - "tests/firestore/nestfinance_gateway_storage.test.ts"
+      - "tests/firestore/canonical_authority.rules.test.ts"
       - "scripts/verify_connect_rules_compiler.mjs"
       - "scripts/test_connect_rules_compiler.mjs"
       - ".github/workflows/firebase-firestore-rules-deploy.yml"
@@ -82,6 +83,14 @@ jobs:
           --only firestore
           --project demo-connect-private-store
           "node --import tsx tests/firestore/connect_private_storage.test.ts"
+
+      - name: Certify canonical identity and membership authority
+        run: >-
+          npx firebase emulators:exec
+          --config firebase.rules-test.json
+          --only firestore
+          --project demo-canonical-authority
+          "node --import tsx tests/firestore/canonical_authority.rules.test.ts"
 
       - name: Certify NestFinance canonical gateway storage
         run: >-
