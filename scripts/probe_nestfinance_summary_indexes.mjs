@@ -1,6 +1,7 @@
 // Read-only production query certification. Never reads a real tenant path,
 // prints response documents, writes data/indexes, or changes IAM/billing.
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { summarizeProbeResult } from './finance_summary_probe_result.mjs';
 const token = readFileSync(0, 'utf8').trim();
 if (!token) throw Error('ACCESS_TOKEN_REQUIRED_ON_STDIN');
@@ -13,20 +14,22 @@ const specs = [
   { name: 'direction_sum', key: 'listQueryKeys.direction', sum: true },
   { name: 'direction_status_sum', key: 'listQueryKeys.directionStatus', sum: true },
 ];
-const metadataResponse = await fetch(base + '/collectionGroups/financeTransactions/indexes?pageSize=100', {
-  headers, signal: AbortSignal.timeout(20000),
-});
-if (metadataResponse.ok) {
-  const metadata = await metadataResponse.json();
-  for (const index of metadata.indexes ?? []) {
+// Use the metadata-only CLI path already certified by the canonical publisher.
+try {
+  const indexes = JSON.parse(execFileSync('gcloud', ['firestore', 'indexes', 'composite', 'list',
+    '--project=millionsnest', '--database=(default)', '--format=json'],
+    { encoding: 'utf8', timeout: 45000, maxBuffer: 4 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }));
+  for (const index of indexes) {
+    if (!String(index.name ?? '').includes('/collectionGroups/financeTransactions/')) continue;
     const fields = (index.fields ?? []).filter(field => field.fieldPath !== '__name__');
     if (fields.some(field => field.fieldPath.startsWith('listQueryKeys.'))) {
       console.log('FINANCE_INDEX_METADATA=' + JSON.stringify({ state: index.state,
         scope: index.queryScope, fields: fields.map(field => [field.fieldPath, field.order]) }));
     }
   }
-} else console.log('FINANCE_INDEX_METADATA_ERROR=' + JSON.stringify(
-  summarizeProbeResult(await metadataResponse.json(), metadataResponse.status)));
+} catch {
+  console.log('FINANCE_INDEX_METADATA_UNAVAILABLE');
+}
 let failures = 0;
 for (const spec of specs) {
   const structuredQuery = {
