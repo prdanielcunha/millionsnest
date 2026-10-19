@@ -1,0 +1,28 @@
+name: Central People Directory Reconciliation
+on:
+  push:
+    branches: [production]
+    paths: ['ops/people-directory-activation.json', '.github/workflows/people-directory-reconcile.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: millionsnest-people-directory-reconciliation
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - run: npm ci --no-audit --no-fund
+      - run: node --import tsx scripts/reconcile_people_directory.ts
