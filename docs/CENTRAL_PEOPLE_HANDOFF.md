@@ -1,126 +1,109 @@
 # Continuidade — Cadastro central de pessoas
 
-Atualizado em 19/10/2026. Leia este arquivo e as alterações mais recentes no GitHub
-antes de executar. Não confundir merge com publicação ou plano com migração aplicada.
+Atualizado em 19/10/2026. Este é o checkpoint atual: código publicado, mas a
+sincronização inicial NÃO foi concluída. Não confundir merge, deploy, plano e apply.
 
-## Checkpoint mais recente — substitui status antigos abaixo
+## Bloqueio que exige decisão do administrador
 
-Atualização final em preparação: PR428 merged production5fb11db71f57550e9c32617a5da13ecf2bcfd45a,
-aguardando prova de publicação das Rules5372 e runtime. PR429 merged main652ba1e7a1d3938ccb745b5a7f00f018ad51e39d;
-JourneyPR136 merged main8fd667a1f37eeb131cabaf43e00c06f4a109323e.
-Journey135 está pronta com pin5372 e mensagem de erro dentro do modal; manter essa
-PR sem merge enquanto apply usa o cliente central já publicado ab7954e. Esse cliente
-já usa exclusivamente o gateway: não depende do ajuste cosmético135 para migrar.
-Após apply completar, publicar135, depois conferir Hosting. Main137 porta o aviso.
-Manifest apply está preparado para Hub5fb11db, Journeyab7954e e Rules5372: os gates
-conferem os três valores reais antes de qualquer escrita. Não confundir preparado
-com aplicado. Ler workflow do commit de ativação e procurar o marcador final.
+A ativação PR430 foi merged em production:
+1efb6939e7ed5525d9eed7378811df6928a3c752.
+O workflow Central People Directory Reconciliation run39325845934,
+job118311360040, terminou com PERMISSION_DENIED na primeira escrita Firestore
+(WriteBatch.commit). No script, a primeira escrita é o journal privado de recuperação,
+ANTES do laço que sincroniza organizações e cria marcadores. Não há marcador
+PEOPLE_DIRECTORY_PRODUCTION_RECONCILED. Não afirmar que as36 fontes foram migradas.
 
-- Hub218cb84 e Journeyab7954e efetivamente publicados, smokes verdes e SHAs
-  comprovados nos logs; API central devolveu401 sem autenticação.
-- Funcionalidade já integrada à main: HubPR427 →3311c11d4d178ea920f16e5b105c70e8e157bba8;
-  JourneyPR134 →9267d084240826f5ad0c310f3d96c7640c7da91a. CI e revisão passaram.
-- Plano ampliado PR426 foi merged →5b415419968dfbb16c008671b1f0c533be714161.
-  Run39323685681/job118303926937:26 elegíveis,18 ignoradas,36 contas,
-  ZERO fontes Journey em TODAS44 organizações, incluindo ignoradas. Não afirmar
-  que perfis Journey históricos/Lucas foram mesclados: nenhum foi encontrado ali.
-  Uso24h14736 reads/1880 writes/94158199 bytes, margem de franquia true.
-- Endurecimento final aprovado independentemente: criar People via SDK sempre
-  negado, mesmo em organizações futuras sem policy. Policies serão só marcadores
-  de rollout, não autorização. Gateway e atualizações permitidas permanecem.
-- Últimas PRs: Hub428(production)/429(main), Journey135(production)/136(main).
-  Rules/pin alvoFINAL:5372febb59a285e40a567d6caaf5b35ac9ed97f23646e0ffe93959a6bf55f8cd.
-  Fonte local teve44/44 Rules +testes centrais aprovados; esperar CI dessas PRs.
-- Próximo: publicar Hub428 e verificar Rules+runtime reais; publicar Journey135
-  depois, comprovar novo release; mesclar429/136 após CI. Só então mode=apply,
-  com os SHAs dos novos merges realmente publicados e hash5372febb... acima.
-- Migração AINDA NÃO APLICADA neste checkpoint. Não há merge automático nem
-  exclusão autorizada de pessoas. Documentar counts reais após o apply.
-- Main/production tinham diferenças anteriores (birthday/endereço/intake) que o
-  port preservou. Não substituir production inteira por main para sincronizar.
+A autenticação WIF e as consultas somente leitura funcionaram. A identidade usada
+é mn-web-deployer@millionsnest.iam.gserviceaccount.com. Nenhum privilégio foi ampliado,
+nenhuma nova credencial foi extraída, nenhum serviço/plano pago foi criado.
+É necessário um administrador resolver a autorização de escrita do processo de
+migração, com privilégio mínimo, ou executá-lo por um fluxo autorizado já existente.
+Não contornar este bloqueio usando credenciais de outra identidade sem autorização.
 
-## Objetivo e autorização
+O manifesto foi devolvido a mode=plan para não manter uma ativação de escrita armada.
+Essa alteração apenas desarma futuras execuções; não é uma migração nem um rollback.
+Não reexecutar apply cegamente. Antes de nova tentativa, conferir o journal privado
+people_directory_releases/1efb6939e7ed5525d9eed7378811df6928a3c752 e a autoridade,
+sem publicar seu conteúdo ou dados pessoais.
 
-Daniel autorizou implementação reversível até produção, sem serviços/planos pagos,
-preservando cadastros e permissões dos demais aplicativos. Uma pessoa por organização,
-participações por igreja e aplicativo, sem e-mail fictício ou fusão pelo nome/telefone.
-O diretório admite pessoas sem login. Duplicidades históricas precisam de verificação
-explícita; links/desvínculos são auditados e reversíveis.
+## Evidência de produção
 
-## Implementação já aprovada
+- Hub runtime: 5fb11db71f57550e9c32617a5da13ecf2bcfd45a.
+  Cloud Run run39324830017/job118307819051 SUCCESS:
+  HUB_EXACT_SERVING_IMAGE_SHA_OK, revisão millionsnest-api-r39324830017,
+  MUSICSCALE_AGGREGATE_INTEGRITY_UNCHANGED e MILLIONSNEST_PRODUCTION_RELEASE_OK.
+- Rules: run39324830021/job118307818773 SUCCESS, hash publicado
+  5372febb59a285e40a567d6caaf5b35ac9ed97f23646e0ffe93959a6bf55f8cd.
+  Criação direta de People via SDK negada em todas as organizações, inclusive futuras;
+  atualizações autorizadas continuam. O gateway Admin SDK não depende dessas Rules.
+- Journey publicado: ab7954efc4eb6d8d568c5e7a0d2122bbe069ad3e.
+  Hosting run39323130988/job118302012751 SUCCESS; release exato comprovado.
+  Esse cliente já cria membros, visitantes e importações exclusivamente pelo gateway.
+- Interface central comprovada nos bundles públicos do Hub e Journey; API central
+  sem autenticação devolveu401. Não foi realizado login sintético em produção.
+- Menu Hub: Organização → Membros & Convites → cadastro central.
+- Funcionalidade integrada à main: Hub PR427/429, Journey PR134/136/137.
+  Main Journey inclui o aviso dentro do modal (PR137 merge7624f3f2216c907ad82af022c37474520e880eec).
+- Journey PR135 permanece ABERTA com CI Quality verde, head
+  b0a02bedc199ce50084cec21e40fc8e9d378e99c.
+  Ela atualiza o pin de build para as Rules5372 e mostra erro de duplicidade dentro
+  do modal. Foi mantida sem merge para preservar o release exato exigido no apply.
+  Depois de resolver a migração, publicar135 e verificar o novo Hosting.
 
-- Hub PR425: https://github.com/prdanielcunha/millionsnest/pull/425
-  Merge em production: 218cb84c271a49f7ba3569438b843ae3068aad2b.
-  Quinze workflows da PR passaram; revisão independente de segurança aprovada.
-- Journey PR133: https://github.com/prdanielcunha/nestjourney/pull/133
-  Head aprovado: a8ad696e4b7e51d96817963db263c7a9fd63acc4.
-  Quality aprovada; aguarda Hub e Rules efetivamente publicados antes de merge.
-- Hash das Rules canônicas que Journey exige:
-  cdf3bffa148811de97600fd646ea4fd2331b08c9b7da594d03c680f542c5bf05.
-- Testes locais: Journey183 testes +78 Rules; Hub44 Rules Journey; testes centrais
-  de concorrência, replay, homônimos, aliases, consentimento e mudança concorrente
-  da fonte;114 tentativas de adulteração de autoridade negadas; types/build.
+## Inventário real — não são36 pessoas globais distintas
 
-## Publicação em andamento no momento deste checkpoint
+O plano ampliado run39323685681 e o apply bloqueado concordaram:
+26 organizações elegíveis,18 ignoradas e36 fontes de contas/vínculos por organização.
+ZERO fontes Journey em TODAS44 organizações, inclusive as ignoradas.
+Não foram encontrados perfis históricos de Lucas para unir nessa base.
+Não houve fusão automática nem exclusão de registros originais.
 
-Hub Cloud Run: run39322376256. Rules: run39322376345.
-Não afirmar conclusão sem ler jobs/logs atuais e comprovar o SHA atendendo tráfego.
-O pipeline Hub espera as Rules e preserva uma revisão de recuperação.
-O pipeline Journey verifica hash canônico, release exato nos dois domínios e rollback.
+Preflight do apply:15542 leituras/1890 escritas nas24h;94158199 bytes;
+freeQuotaHeadroom=true. Isso é evidência observada, não garantia de cobrança zero.
 
-Primeiro plano somente leitura: run39322376790, job118299410967.
-Resultado:26 organizações elegíveis,18 ignoradas,36 fontes de contas e0 Journey
-nas elegíveis. Uso observado:14144 leituras/1773 escritas nas24h,94158199 bytes;
-freeQuotaHeadroom=true. Isso não é teto nem promessa sobre cobrança futura.
+## Modelo implementado e limites
 
-IMPORTANTE: revisar o plano ampliado antes de ativar. Ele conta Journey em TODAS as
-organizações antes de descartar, relata fontes ignoradas e usa somente administrador
-LOCAL preexistente/ativo quando o proprietário original não é utilizável. Nunca cria
-permissão nem usa papel global. Se houver fonte Journey em organização ativa sem ator
-local válido, apply para. O delta recebeu revisão independente.
+Uma pessoa canônica por organização, separada da conta de login; igrejas e aplicativos
+mantêm participações/permissões próprias. Cadastro manual não exige e-mail fictício,
+CPF ou conta. Nomes/telefones são pistas, nunca prova para mesclar. Vínculos e
+desvínculos exigem revisão, são auditados/reversíveis e não movem histórico ou acesso.
+Duas contas de login distintas não são fundidas por esta funcionalidade.
 
-## Sequência restante
+Concorrência usa transações, locks e recibos idempotentes. Fontes são revalidadas
+na transação final. O cliente reutiliza participação existente sem resetar visitas,
+consentimento ou tarefas. Diretório privado, papéis locais e escopo de igreja são
+verificados pelo servidor; papel global sozinho não autoriza acesso.
 
-1. Verificar Hub production218cb84: Cloud Run image SHA, revisão pronta100% tráfego,
-   Hosting e Rules publicadas com hash acima. Jobs com falha exigem diagnóstico;
-   não burlar os gates. Não solicitar novo login CLI: WIF existente já funciona.
-2. Publicar PR133 somente após o passo1. Ler workflow Hosting e comprobar releaseSha
-   em https://nestjourney.millionsnest.com/connect-release.json e no domínio web.app.
-3. Executar/revisar plano ampliado de scripts/reconcile_people_directory.ts usando
-   workflow people-directory-reconcile.yml. Confirmar contagens completas e margem.
-4. Somente então editar ops/people-directory-activation.json via PR para mode=apply,
-   schemaVersion=1, hubReleaseSha e journeyReleaseSha dos MERGES realmente publicados,
-   rulesSha256 exato acima. O push desse arquivo em production dispara reconciliação.
-5. Inspecionar logs agregados: PEOPLE_DIRECTORY_PRODUCTION_RECONCILED, contagens de
-   identidades/políticas/candidatos. O script verifica deployments e cria journal
-   privado ANTES da política. Nenhum registro original ou fato é apagado/mesclado.
-6. Comprovar produção; conferir fontes ignoradas antes de declarar cobertura completa.
-   Não unir os vários Lucas por nome; permitir revisão pela tela do diretório.
-7. Sincronizar a funcionalidade com main em ambos repositórios por PRs pequenas,
-   sem mesclar/reescrever mudanças divergentes de outras funcionalidades. Existem
-   patches preparados nos worktrees hub-main e journey-main; testar antes de publicar.
-8. Atualizar este handoff com resultados finais e SHAs. Relatar somente o que foi
-   comprovado ao usuário, com caminho da tela Hub Organização → Membros & Convites.
+A versão atual faz leitura linear por fonte para compatibilidade com writers legados:
+até6000 registros/tipo/organização; importação de até75 membros. Limites e recuperação
+em docs/CENTRAL_PEOPLE_DIRECTORY.md. Não adicionar cron/trigger pago como atalho.
+Próxima otimização técnica: índices incrementais transacionais em todos os writers.
 
-## Operação, custo e recuperação
+Testes: Hub44 Rules + testes centrais (concorrência/replay/alteração de fonte),
+114 adulterações de autoridade negadas; Journey183 testes e78 Rules;
+main preserva diferenças preexistentes. Builds/types/CI verdes e revisão
+independente de segurança aprovada. Nenhum dado pessoal foi incluído neste documento.
 
-- Infra existente: Firebase millionsnest, DB Standard/default nam5; Hub Cloud Run
-  millionsnest-api/us-central1; Hosting Journey mn-nestjourney-555464791734.
-- Autenticação de deploy: workflows existentes usam Google WIF. Não copiar tokens,
-  códigos OAuth do chat, service-account keys ou credenciais para código/logs.
-- Apply exige margem conservadora na franquia em métricas existentes. Ausência de
-  dados/permissão ou margem insuficiente bloqueia; não ampliar IAM ou plano pago.
-- Sem trigger pago/cron/novo banco. Reconciliação é aditiva; registro verifica fontes
-  transacionalmente até6000 por tipo/tenant. Limite e custo linear documentados em
-  docs/CENTRAL_PEOPLE_DIRECTORY.md; não prometer consumo zero acima das franquias.
-- Policies de rollout: people_directory_policies/{orgId}, servidor apenas. Não ativar
-  antes do novo cliente Journey. Journal: people_directory_releases/{releaseCommit}.
-- Em regressão: recuperar releases anteriores e SOMENTE policies introduzidas pelo
-  release usando o journal. Preservar diretório/auditoria e todas as fontes/históricos.
+## Passos restantes, em ordem
 
-## Para um chat comum
+1. Resolver a autorização Firestore com o administrador. Não ampliar IAM/plano ou
+   buscar outra credencial sem nova autorização explícita.
+2. Revalidar plano completo, journal e métricas de franquia; conferir Hub, Journey
+   e Rules realmente servidos. Se mudou qualquer release, atualizar os SHAs.
+3. PR pequena muda mode de plan para apply com os valores publicados exatos.
+   O push em production dispara o workflow WIF existente. Não solicitar OAuth CLI.
+4. Exigir SUCCESS e PEOPLE_DIRECTORY_PRODUCTION_RECONCILED; registrar contagens reais
+   e journal completed. Falha parcial exige diagnóstico, não apagar diretório/fontes.
+5. Publicar Journey135, verificar release nos domínios custom e web.app.
+6. Desarmar manifesto para plan, atualizar este documento com resultados e remover
+   o status de pendência apenas quando comprovado. Não declarar sincronização antes.
 
-O código e esta continuidade estão no GitHub, não dependem do workspace temporário.
-Um chat com acesso conectado ao GitHub pode conferir PRs/workflows e prosseguir pelos
-pipelines já autenticados. Se não dispuser de ferramentas de escrita/execução, deve
-informar essa limitação; não fingir deploy ou solicitar compartilhamento de segredos.
+## Continuidade em um chat comum
+
+Repositórios: https://github.com/prdanielcunha/millionsnest e
+https://github.com/prdanielcunha/nestjourney.
+Ler este arquivo, docs/CENTRAL_PEOPLE_DIRECTORY.md, PR430 e seu workflow de apply.
+Tudo necessário de código está no GitHub, não depende do workspace temporário.
+Um chat conectado ao GitHub pode inspecionar PRs/workflows e continuar pelo fluxo
+autorizado. Sem ferramentas de escrita/execução, deve dizer que não pode publicar.
+Nunca solicitar tokens, códigos OAuth, chaves de service account ou senhas no chat.
