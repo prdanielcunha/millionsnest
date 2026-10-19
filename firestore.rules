@@ -804,13 +804,13 @@ service cloud.firestore {
           let apps = orgDoc != null ? orgDoc.data.get('apps', {}) : {};
           let nestJourney = apps is map ? apps.get('nestjourney', {}) : {};
           let legacyJourney = apps is map ? apps.get('raiz_e_mesa', {}) : {};
-          return isSystemAdmin() || (
+          return (
             orgDoc != null &&
             (
               (nestJourney is map && nestJourney.get('status', '') in ['active', 'trialing']) ||
               (legacyJourney is map && legacyJourney.get('status', '') in ['active', 'trialing'])
             )
-          );
+          ) || isSystemAdmin();
         }
 
         function journeyHasMembership(orgId) {
@@ -826,8 +826,14 @@ service cloud.firestore {
         }
 
         function journeyRoleAllowed(orgId, allowed) {
-          return journeyHasMembership(orgId) &&
-            (isSystemAdmin() || journeyRole(orgId) in allowed);
+          // Resolve once; repeated nested role/member checks exceeded the
+          // Firestore expression budget after canonical authority hardening.
+          let member = getMemberPermissions(orgId);
+          let active = isAuthenticated() && member != null && member.get('status', 'active') in ['active', 'ativo'];
+          let owner = journeyOwner(orgId);
+          let role = active ? member.get('organizationRole', member.get('role', '')) : (owner ? 'owner' : '');
+          let global = isSystemAdmin();
+          return journeyProductEnabled(orgId) && (active || owner || global) && (global || role in allowed);
         }
 
         function journeyHasPermission(orgId, permission) {
@@ -1054,15 +1060,18 @@ service cloud.firestore {
         function journeyAssignedToCongregation(orgId, congregationId) {
           let memberData = getMemberPermissions(orgId);
           let ids = memberData != null ? memberData.get('congregationIds', []) : [];
-          return journeyMemberActive(orgId) &&
+          return isAuthenticated() && memberData != null && memberData.get('status', 'active') in ['active', 'ativo'] &&
             congregationId is string &&
             ids is list &&
             congregationId in ids;
         }
 
         function journeyCanAccessCongregation(orgId, congregationId) {
-          return journeyProductEnabled(orgId) &&
-            (journeyIsOrgAdmin(orgId) || journeyAssignedToCongregation(orgId, congregationId));
+          let member = getMemberPermissions(orgId);
+          let active = isAuthenticated() && member != null && member.get('status', 'active') in ['active', 'ativo'];
+          let role = active ? member.get('organizationRole', member.get('role', '')) : (journeyOwner(orgId) ? 'owner' : '');
+          let ids = active ? member.get('congregationIds', []) : [];
+          return journeyProductEnabled(orgId) && (isSystemAdmin() || role in ['owner','admin','pastor','data_admin'] || (active && congregationId is string && ids is list && congregationId in ids));
         }
 
 
@@ -1508,12 +1517,15 @@ service cloud.firestore {
           }
           allow read: if journeyCanAccessCongregation(orgId, resource.data.get('congregationId', ''));
           allow create: if journeyTenantCreate(orgId) &&
+            !exists(/databases/$(database)/documents/people_directory_policies/$(orgId)) &&
+            request.resource.data.get('centralPersonId', '') == '' &&
             request.resource.data.get('deletedAt', null) == null &&
             journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
             journeyCanManagePeople(orgId) &&
             journeyPersonBondEmptyOnCreate();
           allow update: if journeyTenantUnchanged(orgId) &&
             journeyCongregationUnchanged() &&
+            request.resource.data.get('centralPersonId', '') == resource.data.get('centralPersonId', '') &&
             journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
             journeyCanManagePeople(orgId) &&
             journeyPersonBondUnchanged();
@@ -2808,14 +2820,14 @@ service cloud.firestore {
         // This product uses authenticated server-mediated reads and writes.
         // Firestore ORs overlapping allow rules. Sensitive subcollections with
         // narrower policies must never inherit this generic tenant-wide access.
-        allow read: if !app.matches('^finance.*') && !(app in ['connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
+        allow read: if !app.matches('^peopleDirectory.*') && !app.matches('^finance.*') && !(app in ['connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && isAuthenticated() && checkOrgReadAccess(orgId) && isOrgActive(orgId);
         // NestLocal product records are server-owned. A MusicScale subscription
         // must never grant Firestore SDK writes to an expired NestLocal tenant.
         // Likewise, Hub entitlement grants are emitted only by the backend.
         // Firestore ORs overlapping allows: exclude these namespaces HERE,
         // rather than adding a separate deny match that can be overridden.
-        allow create: if !app.matches('^finance.*') && !(app in ['members', 'audit_logs', 'connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if !app.matches('^finance.*') && !(app in ['members', 'audit_logs', 'connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if !app.matches('^peopleDirectory.*') && !app.matches('^finance.*') && !(app in ['members', 'audit_logs', 'connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if !app.matches('^peopleDirectory.*') && !app.matches('^finance.*') && !(app in ['members', 'audit_logs', 'connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 

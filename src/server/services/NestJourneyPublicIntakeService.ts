@@ -4,6 +4,9 @@ import {getAuth} from 'firebase-admin/auth';
 import {FieldValue, FieldPath, getFirestore, type Firestore} from 'firebase-admin/firestore';
 import {resolveEcosystemAppAccess} from './EcosystemAccessResolver.js';
 import {canManageTenantMembers} from '../../lib/permissionService.js';
+import {assertDirectoryAdmin,assertNoDirectoryConflict,contactKey,DirectoryError,planSource} from './PeopleDirectory.js';
+import {synchronizeDirectory} from './PeopleDirectoryService.js';
+import {assertSourceSnapshot} from './PeopleDirectory.js';
 
 /** A public link never creates a member or grants access to the Hub. */
 const LINKS = 'nestjourney_public_intake_links';
@@ -166,7 +169,10 @@ export async function approveJourneyIntake(req:Request,res:Response){
     const requestRef=db.doc(paths(actor.orgId)+'/intakeRequests/'+intakeId);
     const inputPersonId=trim(req.body?.existingPersonId);
     if(inputPersonId&&!ID.test(inputPersonId))return res.status(400).json({success:false,reasonCode:'INVALID_PERSON'});
+    const directorySnapshot=await synchronizeDirectory(db,actor.orgId,actor.uid);
     const response=await db.runTransaction(async tx=>{
+      await assertDirectoryAdmin(tx,db,actor.orgId,actor.uid);
+      await assertSourceSnapshot(tx,db,actor.orgId,directorySnapshot);
       const record=await tx.get(requestRef);
       if(!record.exists)return {status:404,reasonCode:'NOT_FOUND'};
       const data=record.data()||{};
@@ -178,6 +184,7 @@ export async function approveJourneyIntake(req:Request,res:Response){
         if(!before.exists||before.data()?.congregationId!==data.congregationId)return {status:409,reasonCode:'PERSON_SCOPE_MISMATCH'};
       }else{
         if(before.exists)return {status:409,reasonCode:'PERSON_EXISTS'};
+        await assertNoDirectoryConflict(tx,db,actor.orgId,data.name,data.consentContact?contactKey('phone',data.phone):'');
         const candidates=await tx.get(db.collection(paths(actor.orgId)+'/people')
           .where('congregationId','==',data.congregationId)
           .where('phone','==',data.phone).limit(1));
@@ -187,7 +194,10 @@ export async function approveJourneyIntake(req:Request,res:Response){
           .where('name','==',data.name).limit(25));
         if(sameName.docs.some(x=>x.data()?.congregationId===data.congregationId))
           return {status:409,reasonCode:'POSSIBLE_DUPLICATE'};
+        const directory=await planSource(tx,db,actor.orgId,{kind:'journey',id:personId,name:data.name,unitId:data.congregationId,contactKeys:data.consentContact?[contactKey('phone',data.phone)]:[]},actor.uid);
+        directory.apply();
         tx.create(ref,{
+          centralPersonId:directory.id,
           organizationId:actor.orgId,congregationId:data.congregationId,
           name:data.name,preferredName:'',communityStatus:'visitor',
           phone:data.consentContact?data.phone:'',consent:data.consentContact===true,
@@ -211,7 +221,7 @@ export async function approveJourneyIntake(req:Request,res:Response){
     });
     if(response.status!==200)return res.status(response.status).json({success:false,reasonCode:response.reasonCode});
     return res.status(200).json({success:true,personId:response.personId});
-  }catch{return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
+  }catch(error){if(error instanceof DirectoryError)return res.status(error.status).json({success:false,reasonCode:error.code});return res.status(500).json({success:false,reasonCode:'INTERNAL_ERROR'});}
 }
 
 

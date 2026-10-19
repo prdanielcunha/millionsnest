@@ -1,5 +1,6 @@
 import {ECOSYSTEM_TRIAL_POLICY_VERSION} from './src/lib/ecosystemTrialPolicy.js';
 import express from 'express';
+import {peopleDirectoryHandler} from './src/server/services/PeopleDirectoryService.js';
 import { bootstrapUserContext, acceptInvitation, setActiveOrganization } from './src/server/services/TenantContextMutationService.js';
 import { createInvitation } from "./src/server/services/InvitationCreationService.js";
 import { deliverInvitationEmail } from './src/server/services/InvitationEmailService.js';
@@ -3063,6 +3064,8 @@ async function startServer() {
   app.get('/api/v1/organizations/:organizationId/nestjourney/support-candidates', (req, res) => listNestJourneySupportCandidates(req, res));
   app.post('/api/v1/organizations/:organizationId/nestjourney/support-assignments', express.json({ limit: '4kb' }), (req, res) => createNestJourneySupportAssignment(req, res));
   app.patch('/api/v1/organizations/:organizationId/nestjourney/support-assignments/:taskId', express.json({ limit: '2kb' }), (req, res) => changeNestJourneySupportAssignment(req, res));
+  app.get('/api/v1/organizations/:organizationId/people-directory', (req,res)=>peopleDirectoryHandler(req,res));
+  app.post('/api/v1/organizations/:organizationId/people-directory', express.json({limit:'64kb'}), (req,res)=>peopleDirectoryHandler(req,res));
   app.put('/api/v1/organizations/:organizationId/nestjourney/people/:personId/bond-host', express.json({ limit: '4kb' }), (req, res) => claimNestJourneyRelationshipHost(req, res));
   app.post('/api/v1/organizations/:organizationId/nestjourney/intake-links', express.json({ limit: '3kb' }), createJourneyIntakeLink);
   app.get('/api/v1/organizations/:organizationId/nestjourney/intake-links', listJourneyIntakeLinks);

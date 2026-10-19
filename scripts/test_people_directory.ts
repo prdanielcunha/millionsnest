@@ -1,0 +1,98 @@
+import assert from 'node:assert/strict';
+import {requireInvitationEmulator,clearInvitationEmulator} from './helpers/p0HandlerTestHarness.js';
+import type {Request,Response} from 'express';
+import {contactKey,keyFor,linkDirectoryPeople,listDirectory,rootFor,synchronizeDirectoryPage,unlinkDirectoryPeople} from '../src/server/services/PeopleDirectory.js';
+import {peopleDirectoryHandler,registerDirectory,synchronizeDirectory} from '../src/server/services/PeopleDirectoryService.js';
+
+const db=requireInvitationEmulator();
+const deps={db,verify:async(token:string)=>({uid:token}),access:async()=>true};
+async function call(body:any,uid='owner',org='demo-org'){
+  let statusCode=200,result:any={};
+  const req={headers:{authorization:'Bearer '+uid},params:{organizationId:org},body,method:'POST'} as unknown as Request;
+  const res={setHeader(){},status(code:number){statusCode=code;return this;},json(value:any){result=value;return this;}} as unknown as Response;
+  await peopleDirectoryHandler(req,res,deps);
+  return {statusCode,body:result};
+}
+await clearInvitationEmulator();
+await db.doc('organizations/demo-org').set({status:'active',ownerUid:'owner',apps:{nestjourney:{status:'active'}}});
+for(const uid of ['owner','account-a','account-b','host','outsider'])await db.doc('users/'+uid).set({uid,displayName:uid.startsWith('account')?'Synthetic Lucas':'Synthetic '+uid});
+for(const uid of ['owner','account-a','account-b','host'])await db.doc('organizations/demo-org/members/'+uid).set({organizationId:'demo-org',status:'active',role:uid==='owner'?'owner':'member',congregationIds:['unit-a'],permissions:uid==='host'?{canManagePeople:true}:{}});
+for(const id of ['unit-a','unit-b'])await db.doc('organizations/demo-org/products/raiz_e_mesa/congregations/'+id).set({organizationId:'demo-org',active:true});
+await db.doc('organizations/demo-org/products/raiz_e_mesa/people/legacy').set({organizationId:'demo-org',congregationId:'unit-a',name:'Synthetic Lucas',consent:false,visits:7});
+await synchronizeDirectoryPage(db,'demo-org','owner','account');
+await synchronizeDirectoryPage(db,'demo-org','owner','journey');
+const all=await db.collection('organizations/demo-org/peopleDirectory').get();
+assert.equal(all.size,5,'Different sources remain distinct until a human verifies identity');
+const personA=keyFor('account','account-a'),personB=keyFor('account','account-b');
+const base={action:'register',kind:'member',unitId:'unit-a',requestId:'test-request-001',rows:[{name:'Synthetic Lucas'}]};
+let response=await call(base);
+assert.equal(response.statusCode,409,'Name collision asks for human review');
+response=await call({...base,rows:[{name:'Synthetic Lucas',personId:personA}]});
+assert.equal(response.statusCode,200);const created=response.body.people[0];
+assert.equal(created.personId,personA);
+const replay=await call({...base,rows:[{name:'Synthetic Lucas',personId:personA}]});
+assert.deepEqual(replay.body.people,response.body.people,'Replay uses the same identity and participation');
+const otherUnit=await call({...base,unitId:'unit-b',requestId:'test-request-002',rows:[{name:'Synthetic Lucas',personId:personA}]});
+assert.equal(otherUnit.statusCode,200);assert.equal(otherUnit.body.people[0].personId,personA);assert.notEqual(otherUnit.body.people[0].id,created.id);
+const again=await call({...base,requestId:'test-request-003',rows:[{name:'Synthetic Lucas',personId:personA}]});
+assert.equal(again.body.people[0].id,created.id,'Same-unit participation is reused');
+assert.deepEqual((await db.doc('organizations/demo-org/members/account-a').get()).data()?.permissions,{},'Identity registration grants no permissions');
+await assert.rejects(()=>linkDirectoryPeople(db,'demo-org','owner',personA,personB,'Synthetic human review reason',1),/TWO_LOGIN_ACCOUNTS/);
+const legacyId=keyFor('journey','legacy');
+await linkDirectoryPeople(db,'demo-org','owner',legacyId,personA,'Identity verified by the organization administrator',1);
+assert.equal((await db.doc('organizations/demo-org/products/raiz_e_mesa/people/legacy').get()).data()?.visits,7,'Historical facts are untouched');
+assert.equal((await db.doc(rootFor('demo-org')+'/peopleDirectory/'+legacyId).get()).data()?.mergedInto,personA);
+await unlinkDirectoryPeople(db,'demo-org','owner',legacyId,'Correction after checking independent identity information',2);
+assert.equal((await db.doc(rootFor('demo-org')+'/peopleDirectory/'+legacyId).get()).data()?.mergedInto,undefined);
+assert.equal((await call({...base,requestId:'bad-request-004'},'outsider')).statusCode,403);
+assert.equal((await call({...base,requestId:'bad-request-005'},'host')).statusCode,403);
+assert.equal((await call({...base,requestId:'bad-request-006',rows:[{name:'Other',personId:'not-in-this-tenant'}]})).statusCode,404);
+const concurrent={...base,requestId:'concurrent-id-001',rows:[{name:'Synthetic Unique'}]};
+const same=await Promise.all([call(concurrent),call(concurrent)]);
+assert(same.every(x=>x.statusCode===200));assert.equal(same[0].body.people[0].id,same[1].body.people[0].id);
+const racing=await Promise.all([call({...concurrent,requestId:'race-first-001',rows:[{name:'Synthetic Race'}]}),call({...concurrent,requestId:'race-second-002',rows:[{name:'Synthetic Race'}]})]);
+assert.deepEqual(racing.map(x=>x.statusCode).sort(),[200,409]);
+const repeated=await call({...concurrent,rows:[{name:'Different payload'}]});
+assert.equal(repeated.statusCode,409);
+
+// A merged source's existing participation must be found via its alias.
+await db.doc('organizations/demo-org/products/raiz_e_mesa/people/alias-only').set({organizationId:'demo-org',congregationId:'unit-b',name:'Synthetic Alias Only',consent:false});
+await synchronizeDirectoryPage(db,'demo-org','owner','journey');
+const aliasOnly=keyFor('journey','alias-only');
+await linkDirectoryPeople(db,'demo-org','owner',aliasOnly,personB,'Administrator independently verified the same individual',1);
+assert((await listDirectory(db,'demo-org','Synthetic Alias Only')).people.some(p=>p.id===personB),'An old name resolves to the linked canonical identity in search');
+const aliasReuse=await call({...base,unitId:'unit-b',requestId:'alias-reuse-0001',rows:[{name:'Synthetic Lucas',personId:personB}]});
+assert.equal(aliasReuse.statusCode,200);
+assert.equal(aliasReuse.body.people[0].id,'alias-only','Merged source participation is reused');
+await unlinkDirectoryPeople(db,'demo-org','owner',aliasOnly,'Administrator corrected the earlier identity association',2);
+assert.deepEqual((await db.doc(rootFor('demo-org')+'/peopleDirectory/'+personB).get()).data()?.unitIds,[],'Unlink removes units solely contributed by the alias');
+
+// Revoked/deleted source records cannot retain a directory contact fingerprint.
+const sourcePath='organizations/demo-org/products/raiz_e_mesa/people/consent-removal';
+await db.doc(sourcePath).set({organizationId:'demo-org',congregationId:'unit-a',name:'Synthetic Consent Removal',phone:'43912345678',consent:true});
+await synchronizeDirectoryPage(db,'demo-org','owner','journey');
+const sourceRef=db.doc(rootFor('demo-org')+'/peopleDirectorySources/'+keyFor('journey','consent-removal'));
+assert((await sourceRef.get()).data()?.contactKeys.includes(contactKey('phone','43912345678')));
+await db.doc(sourcePath).update({consent:false,phone:'',deletedAt:new Date()});
+await synchronizeDirectoryPage(db,'demo-org','owner','journey');
+assert.deepEqual((await sourceRef.get()).data()?.contactKeys,[],'Deleted or inactive sources relinquish contact fingerprints');
+console.log('PEOPLE_DIRECTORY_SECURITY_AND_CONCURRENCY_OK');
+
+const manualBody={action:'create',requestId:'manual-person-0001',row:{name:'Synthetic Central Only'}};
+const manual=await call(manualBody);
+assert.equal(manual.statusCode,200);
+assert.equal((await call(manualBody)).body.personId,manual.body.personId);
+assert.equal((await call({...manualBody,requestId:'manual-person-0002'})).statusCode,409);
+assert.equal((await call({...manualBody,requestId:'manual-person-0003'},'host')).statusCode,403);
+assert.equal((await db.collection('organizations/demo-org/members').get()).size,4,'Manual people never create a login or membership');
+const snapshot=await synchronizeDirectory(db,'demo-org','owner');
+await db.doc('users/account-a').update({displayName:'Synthetic Concurrent Account Change'});
+await assert.rejects(()=>registerDirectory(db,{org:'demo-org',uid:'owner',admin:true,units:[]},{unitId:'unit-a',requestId:'snapshot-race-0001',kind:'member',rows:[{name:'Synthetic Snapshot Race',preferredName:'',personId:'',distinctReason:'',phone:'',consent:false,channel:''}]},snapshot),/DIRECTORY_REFRESH_REQUIRED/,'A source changed after synchronization cannot slip through the final transaction');
+await db.doc(sourcePath).delete();
+await synchronizeDirectory(db,'demo-org','owner');
+assert.deepEqual((await sourceRef.get()).data()?.contactKeys,[],'Physical deletion also removes contact fingerprints');
+const lateUid='late-account';
+await db.doc('users/'+lateUid).set({displayName:'Synthetic Late Account'});
+await db.doc('organizations/demo-org/members/'+lateUid).set({organizationId:'demo-org',status:'active',role:'member'});
+assert.equal((await call({action:'register',kind:'visitor',unitId:'unit-a',requestId:'host-late-account-001',rows:[{name:'Synthetic Late Account',consent:false}]},'host')).statusCode,409,'Scoped hosts cannot miss newly added account identities');
+console.log('PEOPLE_DIRECTORY_MANUAL_AND_SOURCE_SNAPSHOT_OK');
