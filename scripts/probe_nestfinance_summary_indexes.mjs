@@ -5,7 +5,7 @@ const token = readFileSync(0, 'utf8').trim();
 if (!token) throw Error('ACCESS_TOKEN_REQUIRED_ON_STDIN');
 const base = 'https://firestore.googleapis.com/v1/projects/millionsnest/databases/(default)';
 const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-const parent = '/documents/organizations/__nestfinance_index_probe_no_documents__';
+const parent = '/documents/organizations/nf-probe-no-documents-20261019-4d739e20';
 const field = (fieldPath, op, stringValue) => ({ fieldFilter: { field: { fieldPath }, op, value: { stringValue } } });
 const specs = [
   { name: 'status_count', key: 'listQueryKeys.status', sum: false },
