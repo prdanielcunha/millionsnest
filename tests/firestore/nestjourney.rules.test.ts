@@ -129,15 +129,25 @@ test('central person identities, source indexes, receipts and audit are server-o
   }
 });
 
-test('central identity cannot be forged or changed and activated policy stops legacy parallel creates', async()=>{
+test('central identity is immutable and all current/future person creates require the server gateway', async()=>{
   const db=env.authenticatedContext('admin-a').firestore();
   const base={organizationId:'org-a',congregationId:'unit-a',name:'Synthetic Central',consent:false};
   await assertFails(setDoc(doc(db,'organizations/org-a/products/raiz_e_mesa/people/forged-central'),{...base,centralPersonId:'another-identity'}));
   const ref=doc(db,'organizations/org-a/products/raiz_e_mesa/people/person-a');
   await assertFails(updateDoc(ref,{centralPersonId:'another-identity'}));
+  await assertFails(setDoc(doc(db,'organizations/org-a/products/raiz_e_mesa/people/without-policy'),base));
+  await env.withSecurityRulesDisabled(async c=>{
+    await setDoc(doc(c.firestore(),'organizations/org-central-future'),{status:'active',ownerUid:'future-owner',apps:{nestjourney:{status:'active'}}});
+    await setDoc(doc(c.firestore(),'organizations/org-central-future/members/admin-a'),{organizationId:'org-central-future',status:'active',role:'admin',congregationIds:['unit-a']});
+    await setDoc(doc(c.firestore(),'organizations/org-central-future/products/raiz_e_mesa/people/existing'),{...base,organizationId:'org-central-future'});
+  });
+  await assertSucceeds(getDoc(doc(db,'organizations/org-central-future/products/raiz_e_mesa/people/existing')));
+  await assertFails(setDoc(doc(db,'organizations/org-central-future/products/raiz_e_mesa/people/parallel-create'),{...base,organizationId:'org-central-future'}));
   await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'people_directory_policies/org-a'),{enabled:true}));
   try{
     await assertFails(setDoc(doc(db,'organizations/org-a/products/raiz_e_mesa/people/parallel-create'),base));
+    await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'people_directory_policies/org-a'),{enabled:false}));
+    await assertFails(setDoc(doc(db,'organizations/org-a/products/raiz_e_mesa/people/disabled-policy'),base));
     await assertSucceeds(updateDoc(ref,{preferredName:'Synthetic safe edit'}));
   }finally{await env.withSecurityRulesDisabled(c=>deleteDoc(doc(c.firestore(),'people_directory_policies/org-a')));}
 });
