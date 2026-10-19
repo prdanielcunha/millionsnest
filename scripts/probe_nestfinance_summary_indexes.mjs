@@ -1,6 +1,7 @@
 // Read-only production query certification. Never reads a real tenant path,
 // prints response documents, writes data/indexes, or changes IAM/billing.
 import { readFileSync } from 'node:fs';
+import { summarizeProbeResult } from './finance_summary_probe_result.mjs';
 const token = readFileSync(0, 'utf8').trim();
 if (!token) throw Error('ACCESS_TOKEN_REQUIRED_ON_STDIN');
 const base = 'https://firestore.googleapis.com/v1/projects/millionsnest/databases/(default)';
@@ -24,7 +25,8 @@ if (metadataResponse.ok) {
         scope: index.queryScope, fields: fields.map(field => [field.fieldPath, field.order]) }));
     }
   }
-} else console.log('FINANCE_INDEX_METADATA_HTTP=' + metadataResponse.status);
+} else console.log('FINANCE_INDEX_METADATA_ERROR=' + JSON.stringify(
+  summarizeProbeResult(await metadataResponse.json(), metadataResponse.status)));
 let failures = 0;
 for (const spec of specs) {
   const structuredQuery = {
@@ -42,10 +44,8 @@ for (const spec of specs) {
     } }),
   });
   const payload = await response.json();
-  const error = payload?.error;
   console.log('FINANCE_SUMMARY_QUERY_PROBE=' + JSON.stringify({ name: spec.name,
-    http: response.status, code: error?.status ?? 'OK',
-    requiresIndex: /requires an index|index.*required/i.test(String(error?.message ?? '')) }));
+    ...summarizeProbeResult(payload, response.status) }));
   if (!response.ok) failures++;
 }
 if (failures) process.exitCode = 1;
