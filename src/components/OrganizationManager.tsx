@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import {PeopleDirectoryPanel} from './PeopleDirectoryPanel.js';
 import { useTranslation } from 'react-i18next';
 import { Building2, Users, LayoutGrid, CreditCard, ShieldCheck, Settings, Check, X, Loader2, Link, Copy, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -115,7 +116,7 @@ export function OrganizationManager({
   appExperiences = [],
   onOpenApp
 }: any) {
-  const { t } = useTranslation(['dashboard']);
+  const { t,i18n } = useTranslation(['dashboard']);
   const isGlobalAdmin = isGlobalPrivilegedUser(profile);
   const canCrossTenantAccess = canEnterAnyOrganization(profile);
   const ecosystemPrivilegePolicy = resolveEcosystemPrivilegePolicy(profile?.systemRole);
@@ -844,6 +845,7 @@ export function OrganizationManager({
 
           {activeTab === 'members' && (
             <motion.div key="members" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+               {organization?.id&&(organization.ownerUid===user?.uid||organization.ownerId===user?.uid||organization.ownerUserId===user?.uid||['owner','admin','pastor','data_admin'].includes(currentUserRole))&&!isCrossTenantSupportSession?<PeopleDirectoryPanel key={organization.id} org={organization.id} locale={i18n.language?.startsWith('en')?'en':i18n.language?.startsWith('es')?'es':'pt-BR'} units={[]}/>:null}
                <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                  <h3 className="text-lg font-semibold text-[#F5F7FA]">Membros & Convites</h3>
                  

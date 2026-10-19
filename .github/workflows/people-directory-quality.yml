@@ -1,0 +1,28 @@
+name: Central People Directory Quality
+on:
+  pull_request:
+    paths: ['src/server/services/PeopleDirectory*', 'src/server/services/NestJourneyPublicIntakeService.ts', 'scripts/test_people_directory.ts', 'firestore.rules', '.github/workflows/people-directory-quality.yml']
+  push:
+    branches: [main, production]
+    paths: ['src/server/services/PeopleDirectory*', 'src/server/services/NestJourneyPublicIntakeService.ts', 'scripts/test_people_directory.ts', 'firestore.rules', '.github/workflows/people-directory-quality.yml']
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run build
+      - name: Prove isolated identities, replay, concurrency and source freshness
+        run: npx firebase emulators:exec --config firebase.rules-test.json --only firestore --project demo-millionsnest-invitations-p0 "node --import tsx scripts/test_people_directory.ts"

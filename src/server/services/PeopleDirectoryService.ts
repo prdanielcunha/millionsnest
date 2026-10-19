@@ -3,6 +3,7 @@ import {getAuth} from 'firebase-admin/auth';
 import {FieldValue,Timestamp,getFirestore,type Firestore} from 'firebase-admin/firestore';
 import {createHash} from 'node:crypto';
 import {resolveEcosystemAppAccess} from './EcosystemAccessResolver.js';
+import {assertDirectoryAdmin,assertSourceSnapshot,clearOrphanDirectorySources,type DirectorySnapshot} from './PeopleDirectory.js';
 import {active,assertNoDirectoryConflict,contactKey,DirectoryError,journeyFor,keyFor,linkDirectoryPeople,listDirectory,nameKey,planSource,resolvePerson,rootFor,safeId,sourcesForPerson,synchronizeDirectoryPage,unlinkDirectoryPeople} from './PeopleDirectory.js';
 
 type Actor={org:string;uid:string;admin:boolean;units:string[]};
@@ -10,16 +11,20 @@ type Dependencies={db?:Firestore;verify?:(token:string)=>Promise<{uid:string}>;a
 type Row={name:string;preferredName:string;personId:string;distinctReason:string;phone:string;consent:boolean;channel:string};
 const clean=(v:unknown)=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
 const isAdmin=(org:any,member:any,uid:string)=>org?.ownerUid===uid||org?.ownerId===uid||org?.ownerUserId===uid||active(member)&&['owner','admin','pastor','data_admin'].includes(String(member.organizationRole||member.role||'').trim().toLowerCase());
-export async function synchronizeDirectory(db:Firestore,org:string,uid:string){
+export async function synchronizeDirectory(db:Firestore,org:string,uid:string,registrationUnit?:string){
+  const snapshot:DirectorySnapshot={account:[],journey:[]};
   for(const kind of ['account','journey'] as const){
     let cursor:string|undefined;
     for(let page=0;page<100;page++){
-      const result=await synchronizeDirectoryPage(db,org,uid,kind,cursor);
+      const result=await synchronizeDirectoryPage(db,org,uid,kind,cursor,registrationUnit);
+      snapshot[kind].push(...result.versions);
       if(!result.nextCursor)break;
       cursor=result.nextCursor;
       if(page===99)throw new DirectoryError('DIRECTORY_SYNC_PAGE_LIMIT');
     }
   }
+  await clearOrphanDirectorySources(db,org,uid,registrationUnit);
+  return snapshot;
 }
 
 async function authorize(req:Request,db:Firestore,deps:Dependencies):Promise<Actor>{
@@ -50,9 +55,9 @@ function parseRow(row:any):Row{
 }
 
 /** Registration is atomic across directory, app participation, audit and replay receipt. */
-export async function registerDirectory(db:Firestore,actor:Actor,input:{unitId:string;requestId:string;kind:'member'|'visitor';rows:Row[]}){
+export async function registerDirectory(db:Firestore,actor:Actor,input:{unitId:string;requestId:string;kind:'member'|'visitor';rows:Row[]},snapshot:DirectorySnapshot){
   const {unitId,requestId,kind,rows}=input;
-  if(!safeId(unitId)||!safeId(requestId)||requestId.length<8||!rows.length||rows.length>60||kind==='visitor'&&rows.length!==1)throw new DirectoryError('INVALID_REGISTRATION',400);
+  if(!safeId(unitId)||!safeId(requestId)||requestId.length<8||!rows.length||rows.length>75||kind==='visitor'&&rows.length!==1)throw new DirectoryError('INVALID_REGISTRATION',400);
   if(!actor.admin&&(kind!=='visitor'||!actor.units.includes(unitId)))throw new DirectoryError('SCOPE_DENIED',403);
   if(new Set(rows.map(r=>nameKey(r.name))).size!==rows.length)throw new DirectoryError('IMPORT_NAMES_REQUIRE_INDIVIDUAL_REVIEW');
   const receiptRef=db.doc(rootFor(actor.org)+'/peopleDirectoryRequests/'+keyFor('request',actor.uid+':'+requestId));
@@ -62,9 +67,10 @@ export async function registerDirectory(db:Firestore,actor:Actor,input:{unitId:s
       tx.get(receiptRef),tx.get(db.doc(rootFor(actor.org))),tx.get(db.doc(rootFor(actor.org)+'/members/'+actor.uid)),tx.get(db.doc('users/'+actor.uid)),tx.get(db.doc(journeyFor(actor.org)+'/congregations/'+unitId)),
     ]);
     // Revalidate authority in the same transaction that commits the records.
-    if(!active(org.data())||!active(user.data())||actor.admin&&!isAdmin(org.data(),member.data(),actor.uid)||!actor.admin&&(!active(member.data())||!member.data()?.congregationIds?.includes(unitId)||!(member.data()?.permissions?.canManagePeople===true||member.data()?.journeyRole==='presence_host')))throw new DirectoryError('ACCESS_CHANGED',403);
+    if(!active(org.data())||!active(user.data())||member.data()?.organizationId&&member.data()?.organizationId!==actor.org||actor.admin&&!isAdmin(org.data(),member.data(),actor.uid)||!actor.admin&&(!active(member.data())||!member.data()?.congregationIds?.includes(unitId)||!(member.data()?.permissions?.canManagePeople===true||member.data()?.journeyRole==='presence_host')))throw new DirectoryError('ACCESS_CHANGED',403);
     if(!unit.exists||unit.data()?.active===false||unit.data()?.organizationId&&unit.data()?.organizationId!==actor.org)throw new DirectoryError('UNIT_UNAVAILABLE',404);
     if(receipt.exists){if(receipt.data()?.payloadHash!==payloadHash)throw new DirectoryError('REQUEST_ID_REUSED');return receipt.data()!.result;}
+    await assertSourceSnapshot(tx,db,actor.org,snapshot);
     const plans:Array<()=>void>=[],people:Array<{id:string;personId:string;reused:boolean;name:string}>=[];
     for(let i=0;i<rows.length;i++){
       const row=rows[i],normalized=nameKey(row.name),lock=db.doc(rootFor(actor.org)+'/peopleDirectoryNameLocks/'+keyFor('name',normalized));
@@ -78,6 +84,7 @@ export async function registerDirectory(db:Firestore,actor:Actor,input:{unitId:s
       const localRef=db.doc(journeyFor(actor.org)+'/people/'+localId);
       const existing=await tx.get(localRef);
       const sources=canonicalId?await sourcesForPerson(tx,db,actor.org,canonicalId):null;
+      if(sources?.empty)throw new DirectoryError('PERSON_UNAVAILABLE',404);
       if(sources&&sources.size>100)throw new DirectoryError('PERSON_PARTICIPATION_REVIEW_REQUIRED');
       const prior=sources?.docs.find(d=>d.data().kind==='journey'&&d.data().unitId===unitId);
       if(prior){const p=await tx.get(db.doc(journeyFor(actor.org)+'/people/'+prior.data().sourceId));if(p.exists&&!p.data()?.deletedAt){people.push({id:p.id,personId:canonicalId,name:p.data()!.name,reused:true});continue;}}
@@ -121,16 +128,42 @@ export async function peopleDirectoryHandler(req:Request,res:Response,deps:Depen
     }
     if(req.method!=='POST')return res.status(405).json({success:false});
     const b=req.body||{};
+    if(b.action==='create'){
+      if(!actor.admin)throw new DirectoryError('ADMIN_REQUIRED',403);
+      if(!safeId(b.requestId)||b.requestId.length<8||!b.row||Object.keys(b.row).some(k=>!['name','distinctReason'].includes(k))||Object.keys(b).some(k=>!['action','requestId','row'].includes(k)))throw new DirectoryError('INVALID_REGISTRATION',400);
+      const row=parseRow(b.row),snapshot=await synchronizeDirectory(db,actor.org,actor.uid);
+      const receiptRef=db.doc(rootFor(actor.org)+'/peopleDirectoryRequests/'+keyFor('request',actor.uid+':'+b.requestId));
+      const payloadHash=createHash('sha256').update(JSON.stringify({action:'create',row})).digest('hex');
+      const result=await db.runTransaction(async tx=>{
+        await assertDirectoryAdmin(tx,db,actor.org,actor.uid);
+        const prior=await tx.get(receiptRef);
+        if(prior.exists){if(prior.data()?.payloadHash!==payloadHash)throw new DirectoryError('REQUEST_ID_REUSED');return prior.data()!.result;}
+        await assertSourceSnapshot(tx,db,actor.org,snapshot);
+        if(row.distinctReason.length<15)await assertNoDirectoryConflict(tx,db,actor.org,row.name);
+        const source=await planSource(tx,db,actor.org,{kind:'manual',id:keyFor('manual',actor.uid+':'+b.requestId),name:row.name},actor.uid);
+        const result={personId:source.id};source.apply();
+        tx.create(receiptRef,{organizationId:actor.org,actorId:actor.uid,payloadHash,result,createdAt:FieldValue.serverTimestamp()});
+        tx.create(db.collection(rootFor(actor.org)+'/peopleDirectoryEvents').doc(),{organizationId:actor.org,actorId:actor.uid,action:'people.created',personId:source.id,distinctReason:row.distinctReason,createdAt:FieldValue.serverTimestamp()});
+        return result;
+      });
+      return res.json({success:true,...result});
+    }
     if(b.action==='register'){
       if(!['member','visitor'].includes(b.kind)||!Array.isArray(b.rows)||Object.keys(b).some(k=>!['action','kind','unitId','requestId','rows'].includes(k)))throw new DirectoryError('INVALID_REGISTRATION',400);
       const rows=b.rows.map(parseRow);
-      if(actor.admin)await synchronizeDirectory(db,actor.org,actor.uid);
-      return res.json({success:true,...await registerDirectory(db,actor,{unitId:b.unitId,requestId:b.requestId,kind:b.kind,rows})});
+      if(!safeId(b.unitId)||b.rows.length>75)throw new DirectoryError('INVALID_REGISTRATION',400);
+      for(let attempt=0;attempt<3;attempt++){
+        const snapshot=await synchronizeDirectory(db,actor.org,actor.uid,actor.admin?undefined:b.unitId);
+        try{return res.json({success:true,...await registerDirectory(db,actor,{unitId:b.unitId,requestId:b.requestId,kind:b.kind,rows},snapshot)});}
+        catch(error){if(!(error instanceof DirectoryError)||error.code!=='DIRECTORY_REFRESH_REQUIRED'||attempt===2)throw error;}
+      }
     }
     if(!actor.admin)throw new DirectoryError('ADMIN_REQUIRED',403);
     if(b.action==='sync'){
       if(!['account','journey'].includes(b.kind)||b.cursor&&!safeId(b.cursor)||Object.keys(b).some(k=>!['action','kind','cursor'].includes(k)))throw new DirectoryError('INVALID_SYNC',400);
-      return res.json({success:true,...await synchronizeDirectoryPage(db,actor.org,actor.uid,b.kind,b.cursor)});
+      const page=await synchronizeDirectoryPage(db,actor.org,actor.uid,b.kind,b.cursor);
+      if(!page.nextCursor)await clearOrphanDirectorySources(db,actor.org,actor.uid);
+      return res.json({success:true,processed:page.processed,nextCursor:page.nextCursor});
     }
     const reason=clean(b.reason);
     if(!['link','unlink'].includes(b.action)||!safeId(b.fromId)||b.action==='link'&&!safeId(b.toId)||reason.length<15||reason.length>300||!Number.isSafeInteger(b.revision)||b.revision<1||Object.keys(b).some(k=>!['action','fromId','toId','reason','revision'].includes(k)))throw new DirectoryError('IDENTITY_CONFIRMATION_REQUIRED',400);
