@@ -4,18 +4,36 @@
       "collectionGroup": "financeTransactions",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "financeEntityId", "order": "ASCENDING" },
-        { "fieldPath": "listQueryKeys.direction", "order": "ASCENDING" },
-        { "fieldPath": "amountCents", "order": "ASCENDING" }
+        {
+          "fieldPath": "financeEntityId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "listQueryKeys.direction",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amountCents",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "financeTransactions",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "financeEntityId", "order": "ASCENDING" },
-        { "fieldPath": "listQueryKeys.directionStatus", "order": "ASCENDING" },
-        { "fieldPath": "amountCents", "order": "ASCENDING" }
+        {
+          "fieldPath": "financeEntityId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "listQueryKeys.directionStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "amountCents",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
@@ -346,34 +364,6 @@
       "fields": [
         {
           "fieldPath": "uid",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "personBirthdays",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "congregationId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "shareWithTeam",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "nestjourney_calendar_feeds",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "organizationId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
           "order": "ASCENDING"
         }
       ]
