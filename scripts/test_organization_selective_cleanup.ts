@@ -15,7 +15,7 @@ function makeDb(name:string,ageDays:number,opts:{origin?:string,billing?:boolean
   };
   const query={get:async()=>empty,limit(){return this},where(){return this}};
   const org:any={
-    id,data:()=>data,
+    id,exists:true,data:()=>data,
     ref:{
       collection(field:string) {
         if(field==='members')return {...query,get:async()=>({docs:[{id:'owner-01',data:()=>({role:'owner'})}],size:1,empty:false})};
