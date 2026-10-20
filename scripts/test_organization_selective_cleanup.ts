@@ -51,6 +51,26 @@ assert.equal(technical.organizations[0].eligibleForDeletion,true);
 assert.equal(technical.deleteCandidates,1);
 assert.equal(technical.organizations[0].id,'org_test_001');
 
+// Last sign-in belongs to the account, not the organization. Timestamp evidence
+// must stay unknown when Firebase Auth cannot provide a valid record.
+const loginAt = '2026-10-17T14:35:00.000Z';
+const auth: any = { getUser: async(uid:string) => {
+  assert.equal(uid,'owner-01');
+  return {metadata:{lastSignInTime:loginAt}};
+}};
+const withLogin = (await previewEcosystemOrganizationCleanup({
+  db:makeDb('Old Test Org',90,{origin:'fixture'}).db,auth
+})).preview.organizations[0];
+assert.equal(withLogin.lastOwnerSignInAtMs,Date.parse(loginAt));
+assert.equal(withLogin.lastRecordedActivityAtMs,null);
+assert.equal(withLogin.eligibleForDeletion,true);
+
+const unavailable = (await previewEcosystemOrganizationCleanup({
+  db:makeDb('Old Test Org',90,{origin:'fixture'}).db,
+  auth:{getUser:async()=>{throw Error('No Firebase metadata')}}
+})).preview.organizations[0];
+assert.equal(unavailable.lastOwnerSignInAtMs,null);
+
 const paid=await preview('Test Org',90,{origin:'fixture',billing:true});
 assert.equal(paid.organizations[0].billingProtected,true);
 assert.equal(paid.organizations[0].eligibleForDeletion,false);
