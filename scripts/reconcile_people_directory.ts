@@ -64,6 +64,51 @@ const [reads24h,writes24h,storageBytes]=await Promise.all([usage('document/read_
 // not a billing cap or a promise about future tenant traffic.
 const freeQuotaHeadroom=reads24h!==null&&writes24h!==null&&storageBytes!==null&&reads24h+sources*30+5000<50000&&writes24h+sources*5+5000<20000&&storageBytes+sources*20000<800000000;
 console.log(JSON.stringify({usagePreflight:{reads24h,writes24h,storageBytes,freeQuotaHeadroom}}));
+// Read-only preflight for the failed 19-Oct activation. Do not copy private journal data
+// into job logs. If any recovery state exists, require explicit inspection first.
+const previousRelease=db.doc('people_directory_releases/1efb6939e7ed5525d9eed7378811df6928a3c752');
+const [previousJournal,previousChildren]=await Promise.all([
+  previousRelease.get(),previousRelease.collection('organizations').limit(1).get()
+]);
+console.log(JSON.stringify({previousActivationJournalPresent:previousJournal.exists,
+  previousActivationRecoveryEntriesPresent:!previousChildren.empty}));
+if(previousJournal.exists||!previousChildren.empty)throw Error('PREVIOUS_DIRECTORY_RECOVERY_JOURNAL_REQUIRES_PRIVATE_REVIEW');
+
+// Independent read-only completion proof of the successful production apply.
+const completedRelease=db.doc('people_directory_releases/88365d3941ba7cb4b0ca4f16a334ffb82ad10f2b');
+const [completedJournal,completedOrgRecoveries]=await Promise.all([
+  completedRelease.get(),completedRelease.collection('organizations').get()
+]);
+const proof=completedJournal.data()||{};
+const completedRecoveries=completedOrgRecoveries.docs.filter(doc=>!!doc.data().completedAt).length;
+console.log(JSON.stringify({completionJournalStatus:proof.status||'absent',
+  sourcesAtApply:proof.sourceCount??null,identitiesAtApply:proof.identityCount??null,
+  organizationRecoveries:completedOrgRecoveries.size,completedRecoveries,
+  automaticMerges:0,originalRecordsDeleted:0}));
+if(!completedJournal.exists||proof.status!=='completed'||proof.sourceCount!==36||
+    proof.identityCount!==36||completedOrgRecoveries.size!==26||completedRecoveries!==26||
+    !proof.completedAt)throw Error('PEOPLE_DIRECTORY_APPLY_JOURNAL_INCOMPLETE_OR_CHANGED');
+
+// Check the exact Workload Identity principal's project-level authority without
+// granting a role or writing any document. Missing privileges stop both plan and apply.
+const expectedPermissions=['datastore.databases.get','datastore.entities.get',
+  'datastore.entities.list','datastore.entities.create','datastore.entities.update'];
+const iamCheck=await fetch('https://cloudresourcemanager.googleapis.com/v1/projects/millionsnest:testIamPermissions',{
+  method:'POST',
+  headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+  body:JSON.stringify({permissions:expectedPermissions}),
+  signal:AbortSignal.timeout(30000)
+});
+if(!iamCheck.ok)throw Error('FIRESTORE_IAM_READONLY_CHECK_UNAVAILABLE_'+iamCheck.status);
+const granted=new Set<string>((await iamCheck.json()).permissions||[]);
+const missing=expectedPermissions.filter(permission=>!granted.has(permission));
+console.log(JSON.stringify({authorityCheck:'PROJECT_IAM_READONLY',
+  requiredPermissionCount:expectedPermissions.length,grantedPermissionCount:expectedPermissions.length-missing.length,
+  missingPermissions:missing}));
+// Planning stays read-only and valid after the temporary migration role is revoked.
+// Actual production apply still fails closed if any write permission is missing.
+if(missing.length && apply)throw Error('FIRESTORE_WRITER_IAM_NOT_YET_AUTHORIZED');
+
 if(!apply)process.exit(0);
 if(unresolvedActiveJourneyPeople)throw Error('ACTIVE_JOURNEY_SOURCES_REQUIRE_VALID_LOCAL_ADMINISTRATOR');
 if(!freeQuotaHeadroom)throw Error('ZERO_COST_HEADROOM_UNVERIFIED_OR_INSUFFICIENT');
