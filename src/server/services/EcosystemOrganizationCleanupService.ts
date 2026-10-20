@@ -177,6 +177,7 @@ export type EcosystemCleanupApplyResult = EcosystemCleanupPreview & {
   topLevelDocumentsDeleted: number;
   skippedBecauseBillingChanged: number;
   maintenanceRunId: string;
+  ownerAccountsDeleted: number;
 };
 
 function normalizeText(value: unknown): string {
@@ -837,6 +838,62 @@ async function deleteOrganization(
   return deletedTopLevelDocs;
 }
 
+// Cross-app sign-in is shared. Only a verifiably isolated, non-privileged owner
+// can be removed from Firebase Auth. Any incomplete scan blocks the full request.
+async function assertOwnerAccountIsolation(params: {
+  db: Firestore; auth: Auth; ownerUid: string | null;
+  organizationId: string; actorUid: string;
+}): Promise<string> {
+  const {db,auth,ownerUid,organizationId,actorUid}=params;
+  if (!ownerUid || ownerUid === actorUid) throw Error('OWNER_ACCOUNT_SHARED_OR_PRIVILEGED');
+  const user = await db.collection('users').doc(ownerUid).get();
+  if (!user.exists) throw Error('OWNER_ACCOUNT_NOT_VERIFIED');
+  const data = user.data() || {};
+  if (PRIVILEGED_SYSTEM_ROLES.has(normalizeText(data.systemRole)) ||
+      data.stripeCustomerId || data.stripe_customer_id || data.stripeSubscriptionId ||
+      data.subscriptionId || data.subscriptions?.length ||
+      (data.apps && Object.keys(data.apps).length > 0)) {
+    throw Error('OWNER_ACCOUNT_SHARED_OR_PRIVILEGED');
+  }
+  for (const key of ['organizationId','activeOrganizationId','primaryOrganizationId']) {
+    if (data[key] && data[key] !== organizationId) throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+  }
+  for (const key of ['organizations','organizationIds','memberships']) {
+    const value=data[key];
+    if (value != null && !Array.isArray(value)) throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+    if (Array.isArray(value) && value.some((v:any) =>
+      (typeof v === 'string' ? v : (v?.organizationId || v?.orgId)) !== organizationId)) {
+      throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+    }
+  }
+  const owned = await db.collection('organizations').limit(201).get();
+  if (owned.size > 200) throw Error('OWNER_ACCOUNT_ORG_SCAN_UNBOUNDED');
+  for (const org of owned.docs) {
+    if (org.id === organizationId) continue;
+    const d=org.data();
+    if ([d.ownerUid,d.ownerId,d.ownerUserId,d.owner_user_id,d.createdByUid,d.createdBy]
+      .includes(ownerUid)) throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+    if ((await org.ref.collection('members').doc(ownerUid).get()).exists) {
+      throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+    }
+  }
+  // Historical billing and legacy relationships must not be silently erased.
+  if ((await db.collection('subscriptions').doc(organizationId).get()).exists) {
+    throw Error('OWNER_ACCOUNT_HAS_BILLING_HISTORY');
+  }
+  for (const field of ['uid','userId','user_id']) {
+    const legacy=await db.collection('organization_members').where(field,'==',ownerUid).limit(101).get();
+    if (legacy.size>100 || legacy.docs.some(doc =>
+      firstString(doc.data().organizationId,doc.data().orgId)!==organizationId)) {
+      throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+    }
+  }
+  const extraCollections=await user.ref.listCollections();
+  if (extraCollections.length) throw Error('OWNER_ACCOUNT_HAS_OTHER_DATA');
+  await auth.getUser(ownerUid);
+  return ownerUid;
+}
+
 export async function applyEcosystemOrganizationCleanup(params: {
   db: Firestore;
   auth: Auth;
@@ -844,6 +901,7 @@ export async function applyEcosystemOrganizationCleanup(params: {
   actorSystemRole: string;
   confirmation: string;
   organizationIds: string[];
+  deleteOwnerAccountsForOrgIds?: string[];
   nowMs?: number;
   minAbandonedAgeDays?: number;
   technicalRecentDays?: number;
@@ -857,6 +915,10 @@ export async function applyEcosystemOrganizationCleanup(params: {
   if (!Array.isArray(ids) || ids.length === 0 || ids.length > 20 ||
       ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) ||
       new Set(ids).size !== ids.length) throw new Error('INVALID_ORGANIZATION_SELECTION');
+
+  const ownerChoices = params.deleteOwnerAccountsForOrgIds ?? [];
+  if (!Array.isArray(ownerChoices) || new Set(ownerChoices).size !== ownerChoices.length ||
+      ownerChoices.some(id => !ids.includes(id))) throw Error('INVALID_OWNER_ACCOUNT_SELECTION');
 
   const role = normalizeText(params.actorSystemRole);
   if (!['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(role)) {
@@ -876,7 +938,15 @@ export async function applyEcosystemOrganizationCleanup(params: {
   if (selected.length !== ids.length || selected.some(item => !item.delete || item.protected || item.billingProtected)) {
     throw new Error('ORGANIZATION_SELECTION_NOT_ELIGIBLE');
   }
+  const ownerDeletionByOrg=new Map<string,string>();
+  for(const item of selected.filter(item=>ownerChoices.includes(item.id))) {
+    const ownerUid=await assertOwnerAccountIsolation({db:params.db,auth:params.auth,
+      ownerUid:item.ownerUid,organizationId:item.id,actorUid:params.actorUid});
+    ownerDeletionByOrg.set(item.id,ownerUid);
+  }
+
   let organizationsDeleted = 0;
+  let ownerAccountsDeleted = 0;
   let leadsCaptured = 0;
   let topLevelDocumentsDeleted = 0;
   let skippedBecauseBillingChanged = 0;
@@ -925,6 +995,16 @@ export async function applyEcosystemOrganizationCleanup(params: {
 
     topLevelDocumentsDeleted += await deleteOrganization(params.db, analysis);
     organizationsDeleted += 1;
+    const ownerUid=ownerDeletionByOrg.get(analysis.id);
+    if(ownerUid) {
+      // A lost race never deletes a newly-shared account. Deletion failures surface
+      // for manual recovery; they are not hidden as successful owner removal.
+      await assertOwnerAccountIsolation({db:params.db,auth:params.auth,
+        ownerUid,organizationId:analysis.id,actorUid:params.actorUid});
+      await params.auth.deleteUser(ownerUid);
+      await params.db.collection('users').doc(ownerUid).delete();
+      ownerAccountsDeleted += 1;
+    }
   }
 
   const maintenanceRunId = `ecosystem-org-cleanup-${new Date(nowMs).toISOString().replace(/[:.]/g, '-')}`;
@@ -937,6 +1017,7 @@ export async function applyEcosystemOrganizationCleanup(params: {
     activeBillingOrganizations: preview.activeBillingOrganizations,
     deleteCandidates: preview.deleteCandidates,
     organizationsDeleted,
+    ownerAccountsDeleted,
     potentialRemarketingLeads: preview.potentialRemarketingLeads,
     leadsCaptured,
     topLevelDocumentsDeleted,
@@ -960,6 +1041,7 @@ export async function applyEcosystemOrganizationCleanup(params: {
   return {
     ...preview,
     organizationsDeleted,
+    ownerAccountsDeleted,
     leadsCaptured,
     topLevelDocumentsDeleted,
     skippedBecauseBillingChanged,
