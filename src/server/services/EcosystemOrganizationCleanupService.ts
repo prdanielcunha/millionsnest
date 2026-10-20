@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Auth } from 'firebase-admin/auth';
+import { keyFor, rootFor } from './PeopleDirectory.js';
 import {
   FieldValue,
   Timestamp,
@@ -885,6 +886,10 @@ async function assertOwnerAccountIsolation(params: {
     if ((await org.ref.collection('members').doc(ownerUid).get()).exists) {
       throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
     }
+    // The canonical person directory can reference an account even when the
+    // legacy membership document is absent.
+    const source=await db.doc(rootFor(org.id)+'/peopleDirectorySources/'+keyFor('account',ownerUid)).get();
+    if(source.exists) throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
   }
   // Historical billing and legacy relationships must not be silently erased.
   if ((await db.collection('subscriptions').doc(organizationId).get()).exists) {
