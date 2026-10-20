@@ -5,7 +5,6 @@ import {
   FieldValue,
   Timestamp,
   type Firestore,
-  type QueryDocumentSnapshot,
   type DocumentSnapshot,
 } from 'firebase-admin/firestore';
 
