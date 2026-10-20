@@ -3,7 +3,7 @@ import { collection, query, getDocs, doc, setDoc, updateDoc } from "firebase/fir
 import { db } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
 import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp, Pencil, Database, Layers } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { EcosystemShell } from "../components/EcosystemShell.js";
 import { ASSIGNABLE_SYSTEM_ROLES, canChangeSystemRole, getSystemRoleLabel } from "../lib/roleResolver.js";
 import { isGlobalPrivilegedUser } from "../lib/permissionService.js";
@@ -134,12 +134,19 @@ const formatDate = (dateObj: any) => {
 export function EcosystemAdmin() {
   const { user, profile, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [users, setUsers] = useState<any[]>([]);
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [analyticsEvents, setAnalyticsEvents] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState<'users' | 'organizations' | 'analytics'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'organizations' | 'analytics'>(
+    () => location.pathname === '/admin/ecosystem/organizations' ? 'organizations' : 'users'
+  );
+  // A direct mobile link must arrive on the organizations tab, not the default users tab.
+  useEffect(() => {
+    if (location.pathname === '/admin/ecosystem/organizations') setActiveTab('organizations');
+  }, [location.pathname]);
   const [diagnosticOrg, setDiagnosticOrg] = useState<any>(null);
   const [isMigratingRoles, setIsMigratingRoles] = useState(false);
   const [ownerSearchTerm, setOwnerSearchTerm] = useState("");
@@ -763,7 +770,7 @@ export function EcosystemAdmin() {
     <EcosystemShell activeAppId="core">
       {/* Header */}
       <header className="border-b border-white/5 bg-[#0B0F19]">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex flex-wrap items-center justify-between gap-4">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:min-h-20 sm:px-6">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-[#2B85EB]/10 flex items-center justify-center">
               <Shield className="w-5 h-5 text-[#2B85EB]" />
@@ -773,14 +780,14 @@ export function EcosystemAdmin() {
               <p className="text-xs text-[#A0A7B5]">Painel de Controle Global ({profile?.systemRole?.toUpperCase()})</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <button
                onClick={handleMigrateRoles}
                disabled={isMigratingRoles}
                className="px-4 py-2 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 disabled:opacity-50 transition-colors rounded-lg text-xs font-semibold border border-purple-500/20 flex items-center gap-2 mr-2"
             >
                <Layers className="w-4 h-4" />
-               Migrar Arquitetura de Permissões
+               <span className="sm:hidden">Migrar permissões</span><span className="hidden sm:inline">Migrar Arquitetura de Permissões</span>
             </button>
             <button
                onClick={handleBackfillUsers}
@@ -788,34 +795,34 @@ export function EcosystemAdmin() {
                className="px-4 py-2 bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 disabled:opacity-50 transition-colors rounded-lg text-xs font-semibold border border-yellow-500/20 flex items-center gap-2"
             >
                <Database className="w-4 h-4" />
-               Forçar Backfill de Identidades
+               <span className="sm:hidden">Reparar identidades</span><span className="hidden sm:inline">Forçar Backfill de Identidades</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        <div className="grid md:grid-cols-4 gap-8">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10">
+        <div className="grid gap-5 md:grid-cols-4 md:gap-8">
           
           {/* Sidebar */}
-          <div className="md:col-span-1 space-y-2">
+          <div className="flex gap-2 overflow-x-auto pb-2 md:col-span-1 md:block md:space-y-2 md:overflow-visible md:pb-0">
             <button 
               onClick={() => setActiveTab('users')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-sm transition-colors ${activeTab === 'users' ? 'bg-[#2B85EB]/10 text-[#2B85EB]' : 'text-[#A0A7B5] hover:bg-white/5'}`}
+              className={`flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-medium transition-colors md:w-full md:whitespace-normal ${activeTab === 'users' ? 'bg-[#2B85EB]/10 text-[#2B85EB]' : 'text-[#A0A7B5] hover:bg-white/5'}`}
             >
               <Users className="w-4 h-4" />
               Usuários e Acessos
             </button>
             <button 
-              onClick={() => setActiveTab('organizations')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-sm transition-colors ${activeTab === 'organizations' ? 'bg-[#2B85EB]/10 text-[#2B85EB]' : 'text-[#A0A7B5] hover:bg-white/5'}`}
+              onClick={() => { setActiveTab('organizations'); navigate('/admin/ecosystem/organizations'); }}
+              className={`flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-medium transition-colors md:w-full md:whitespace-normal ${activeTab === 'organizations' ? 'bg-[#2B85EB]/10 text-[#2B85EB]' : 'text-[#A0A7B5] hover:bg-white/5'}`}
             >
               <Building className="w-4 h-4" />
               Organizações e Suporte
             </button>
             <button 
               onClick={() => setActiveTab('analytics')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-sm transition-colors ${activeTab === 'analytics' ? 'bg-[#2B85EB]/10 text-[#2B85EB]' : 'text-[#A0A7B5] hover:bg-white/5'}`}
+              className={`flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-3 text-sm font-medium transition-colors md:w-full md:whitespace-normal ${activeTab === 'analytics' ? 'bg-[#2B85EB]/10 text-[#2B85EB]' : 'text-[#A0A7B5] hover:bg-white/5'}`}
             >
               <ActivityIcon className="w-4 h-4" />
               Analytics e Growth
