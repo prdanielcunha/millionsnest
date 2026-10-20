@@ -448,7 +448,13 @@ async function analyzeOrganization(params: {
     createdAtMs;
   const ageDays = createdAtMs == null ? null : Math.floor((nowMs - createdAtMs) / 86_400_000);
 
-  const technical = isTechnicalName(normalizedName);
+  // Explicit system/test provenance is stronger than a name, but only a
+  // *suggestion*. The protection/activity/billing checks still decide safety.
+  const technical = isTechnicalName(normalizedName) ||
+    data.isTest === true || data.testOrganization === true ||
+    data.metadata?.isTest === true ||
+    ['test','testing','seed','fixture','synthetic'].includes(getStatus(data.origin));
+
   const explicitJunk = isExplicitJunkName(normalizedName);
   const memberCount = Math.max(membersSnap.size, linkedUserIds.size);
   // Missing reads are uncertainty, not evidence of an empty tenant.
