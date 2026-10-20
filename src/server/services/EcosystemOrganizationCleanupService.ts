@@ -800,6 +800,27 @@ async function recursiveDeleteByOrganizationId(
   return deleted;
 }
 
+// This is intentionally limited to the final destructive path, not the
+// dashboard preview. Any unknown tenant reference in another application
+// blocks deletion rather than silently leaving orphaned records.
+async function assertNoUnknownTenantReferences(db: Firestore, orgId: string): Promise<void> {
+  const managed = new Set([
+    ...ORG_SCOPED_COLLECTIONS_TO_DELETE,
+    'organizations','organization_members','subscriptions','users',
+    'remarketing_prospects',
+  ]);
+  const allCollections=await db.listCollections();
+  // New root collections require review. Never optimistically assume an
+  // unfamiliar collection is unrelated to an organization.
+  for (const collection of allCollections) {
+    if (managed.has(collection.id)) continue;
+    for (const field of ['organizationId','orgId','tenantId','organization_id']) {
+      const found=await collection.where(field,'==',orgId).limit(1).get();
+      if (!found.empty) throw Error('TENANT_HAS_UNMAPPED_APP_REFERENCES');
+    }
+  }
+}
+
 async function deleteOrganization(
   db: Firestore,
   analysis: EcosystemCleanupAnalysis,
@@ -1024,6 +1045,7 @@ export async function applyEcosystemOrganizationCleanup(params: {
       await itemJournal.set({status:'skipped_eligibility_changed'},{merge:true});
       continue;
     }
+    await assertNoUnknownTenantReferences(params.db,analysis.id);
     // Billing safety is checked again immediately before deletion.
     const subDoc = await params.db.collection('subscriptions').doc(analysis.id).get();
     const latestSubscription = subDoc.exists ? (subDoc.data() || {}) : null;
