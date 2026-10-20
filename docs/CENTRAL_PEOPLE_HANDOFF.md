@@ -20,15 +20,15 @@ No Hub: **Organização → Membros & Convites → cadastro central**. Novo Jour
 
 Limites conservadores: até 6.000 fontes de cada tipo por organização no scanner legado, importação atômica de até 75 membros, limites de preflight de 200 organizações / 2.000 fontes iniciais. A melhoria futura sugerida é índice transacional incremental nos writers legados; não ativar triggers ou cron pagos.
 
-## Ação operacional remanescente: revogar papel temporário
+## IAM temporário revogado e comprovado
 
-O administrador concedeu temporariamente à conta `mn-web-deployer@millionsnest.iam.gserviceaccount.com` um papel personalizado para permitir a sincronização aditiva. **Agora que a migração e o journal foram certificados, é preciso REMOVER APENAS esse papel de migração da conta de serviço no IAM do projeto MillionsNest.** Não apagar a conta, não excluir o papel personalizado caso esteja em uso por outros principais e não remover seus quatro papéis operacionais existentes (Cloud Run, índice, Firestore Rules, Hosting).
+O administrador confirmou a remoção do papel temporário `MillionsNest People Migration Writer` da identidade `mn-web-deployer@millionsnest.iam.gserviceaccount.com`. O workflow de produção [39355762360](https://github.com/prdanielcunha/millionsnest/actions/runs/39355762360) **SUCCESS** revalidou de forma somente leitura o estado real: `mode=plan`, `authorityCheck=PROJECT_IAM_READONLY`, `grantedPermissionCount=3/5` e `missingPermissions=["datastore.entities.create","datastore.entities.update"]`. O journal de migração permaneceu `completed`, com 26/26 organizações e 36 identidades. Não houve novo `apply` e não há autorização residual de criação/atualização pelo principal de deploy nesta checagem.
 
-Após revogação, a conta ficará sem a autorização de escrita de migração; a verificação `mode=plan` aceita esse estado por design. Não é necessário repetir o apply.
+O manifesto ficou em `mode=plan`, `planRevision=6`. Não recriar o papel nem reexecutar a migração; qualquer migração futura exigiria nova aprovação administrativa, preflight e revisão de segurança.
 
 ## Limites da certificação
 
-O build, o smoke sintético de API sem login, as Rules e os testes de fluxos locais passaram nos respectivos runs. **Não houve navegação autenticada com uma conta de usuário real no Hub/Journey em diferentes aparelhos** nesta execução; não confundir isso com o sucesso comprovado do apply. A remoção do papel IAM temporário também depende do administrador e ainda precisa de confirmação. Essas duas ações são as únicas pendências de fechamento operacional não comprovadas por esta trilha.
+O build, o smoke sintético de API sem login, as Rules e os testes de fluxos locais passaram nos respectivos runs. **Não houve navegação autenticada com uma conta de usuário real no Hub/Journey em diferentes aparelhos** nesta execução; não confundir isso com o sucesso comprovado do apply. A revogação do IAM temporário já foi comprovada no workflow de 20/10/2026. A única pendência de homologação operacional não comprovada por esta trilha é a navegação autenticada real em celular e computador.
 
 Os branches `main` e `production` do Hub têm histórico de divergência legítima de outros recursos; não forçar merge total/reset para “sincronizar”. Mudanças de cadastro central necessárias para main devem ser reconciliadas por PR separada com revisão de diferenças e QA.
 
