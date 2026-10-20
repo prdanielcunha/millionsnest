@@ -507,11 +507,14 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
                    {isGlobalPrivilegedUser(profile) && (
                      <>
                        <div className="h-px bg-white/5 my-1" />
+                       <Link to="/admin/ecosystem/organizations" onClick={() => setProfileMenuOpen(false)} className="flex min-h-11 items-center gap-2 rounded-lg bg-[#2B85EB]/10 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#2B85EB]/20">
+                         <Building2 className="h-4 w-4 text-[#65AFFF]" /> Gerenciar organizações
+                       </Link>
                        <Link to="/admin/ecosystem-data" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-[#2B85EB]/80 hover:text-white hover:bg-white/5 rounded-lg transition-all font-semibold">
                          <Database className="w-4 h-4 text-[#2B85EB]" /> Banco de Dados
                        </Link>
                        <Link to="/admin/ecosystem" onClick={() => setProfileMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-[#A0A7B5] hover:text-[#F5F7FA] hover:bg-white/5 rounded-lg transition-colors">
-                         <Shield className="w-4 h-4" /> Painel Geral Admin
+                         <Shield className="w-4 h-4" /> Administração do ecossistema
                        </Link>
                      </>
                    )}
@@ -526,7 +529,24 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
           </div>
         </div>
       </header>
-      
+
+      {/* A visible global-admin entry on mobile; organization admins never receive it. */}
+      {isGlobalPrivilegedUser(profile) && (
+        <nav aria-label="Acessos administrativos do ecossistema"
+          className="mx-2 mt-2 flex gap-2 md:hidden">
+          <Link to="/admin/ecosystem/organizations"
+            className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#2B85EB]/30 bg-[#2B85EB]/15 px-2 text-xs font-semibold text-white transition-colors active:bg-[#2B85EB]/25">
+            <Building2 className="h-4 w-4 shrink-0" />
+            Gerenciar organizações
+          </Link>
+          <Link to="/admin/ecosystem"
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-xs font-semibold text-[#F5F7FA] transition-colors active:bg-white/10">
+            <Shield className="h-4 w-4 shrink-0" />
+            Administração
+          </Link>
+        </nav>
+      )}
+
       {/* App Launch Transition Orchestrator */}
       <AnimatePresence>
         {launchingApp && (
