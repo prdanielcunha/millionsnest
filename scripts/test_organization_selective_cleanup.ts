@@ -26,7 +26,7 @@ function makeDb(name:string,ageDays:number,opts:{origin?:string,billing?:boolean
   };
   const db:any={
     collection(field:string) {
-      if(field==='organizations')return {get:async()=>({docs:[org],size:1}),doc:()=>({get:async()=>({exists:true,data:()=>data})})};
+      if(field==='organizations')return {get:async()=>({docs:[org],size:1}),doc:()=>({get:async()=>({exists:true,data:()=>data}),listCollections:async()=>[]})};
       if(field==='subscriptions')return {doc:()=>({get:async()=>({exists:false})})};
       return query;
     }
