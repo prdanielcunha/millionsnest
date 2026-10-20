@@ -141,6 +141,7 @@ export type EcosystemCleanupAnalysis = {
   subscriptionStatus: string | null;
   createdAtMs: number | null;
   updatedAtMs: number | null;
+  lastRecordedActivityAtMs: number | null;
   ageDays: number | null;
   technical: boolean;
   explicitJunk: boolean;
@@ -169,7 +170,9 @@ export type EcosystemCleanupPreview = {
   organizations: Array<{ id: string; name: string; reason: EcosystemCleanupReason;
     ageDays: number | null; memberCount: number; subscriptionStatus: string | null;
     protected: boolean; billingProtected: boolean; eligibleForDeletion: boolean;
-    suggestedTest: boolean; hasMeaningfulActivity: boolean; ownerUid: string | null }>;
+    suggestedTest: boolean; hasMeaningfulActivity: boolean; ownerUid: string | null;
+    lastOwnerSignInAtMs: number | null; lastRecordedActivityAtMs: number | null;
+    updatedAtMs: number | null }>;
 };
 
 export type EcosystemCleanupApplyResult = EcosystemCleanupPreview & {
@@ -458,6 +461,9 @@ async function analyzeOrganization(params: {
     toMillis(data.updated_at) ??
     toMillis(data.lastUpdatedAt) ??
     createdAtMs;
+  const lastRecordedActivityAtMs =
+    toMillis(data.lastActivityAt) ?? toMillis(data.last_activity_at) ??
+    toMillis(data.lastUsedAt) ?? toMillis(data.lastAccessAt) ?? null;
   const ageDays = createdAtMs == null ? null : Math.floor((nowMs - createdAtMs) / 86_400_000);
 
   // Explicit system/test provenance is stronger than a name, but only a
@@ -518,6 +524,7 @@ async function analyzeOrganization(params: {
     subscriptionStatus: collectBillingStatuses(subscription)[0] || null,
     createdAtMs,
     updatedAtMs,
+    lastRecordedActivityAtMs,
     ageDays,
     technical,
     explicitJunk,
@@ -528,7 +535,7 @@ async function analyzeOrganization(params: {
   };
 }
 
-function buildPreview(analyses: EcosystemCleanupAnalysis[]): EcosystemCleanupPreview {
+function buildPreview(analyses: EcosystemCleanupAnalysis[], lastSignInByOwner: Map<string, number | null> = new Map()): EcosystemCleanupPreview {
   const countsByReason = analyses.reduce<Record<string, number>>((acc, analysis) => {
     acc[analysis.reason] = (acc[analysis.reason] || 0) + 1;
     return acc;
@@ -564,6 +571,9 @@ function buildPreview(analyses: EcosystemCleanupAnalysis[]): EcosystemCleanupPre
       eligibleForDeletion: analysis.delete, suggestedTest: analysis.technical,
       hasMeaningfulActivity: analysis.hasMeaningfulActivity,
       ownerUid: analysis.ownerUid,
+      lastOwnerSignInAtMs: analysis.ownerUid ? (lastSignInByOwner.get(analysis.ownerUid) ?? null) : null,
+      lastRecordedActivityAtMs: analysis.lastRecordedActivityAtMs,
+      updatedAtMs: analysis.updatedAtMs,
     })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
   };
 }
@@ -574,6 +584,7 @@ export async function previewEcosystemOrganizationCleanup(params: {
   minAbandonedAgeDays?: number;
   technicalRecentDays?: number;
   extraProtectedOrgIds?: string[];
+  auth?: Pick<Auth, 'getUser'>;
 }): Promise<{ preview: EcosystemCleanupPreview; analyses: EcosystemCleanupAnalysis[] }> {
   const nowMs = params.nowMs ?? Date.now();
   const minAbandonedAgeDays = params.minAbandonedAgeDays ?? 14;
@@ -596,7 +607,24 @@ export async function previewEcosystemOrganizationCleanup(params: {
     );
   }
 
-  return { preview: buildPreview(analyses), analyses };
+  // Auth's lastSignInTime is the owner's last Firebase login, NOT the last
+  // organization access. Keep the two concepts separate in the UI.
+  // A failed lookup means "unknown", never "inactive". No credential is exposed.
+  const lastSignInByOwner = new Map<string, number | null>();
+  if (params.auth) {
+    const ownerUids = [...new Set(analyses.map(item => item.ownerUid).filter((uid): uid is string => !!uid))];
+    for (let i = 0; i < ownerUids.length; i += 6) {
+      await Promise.all(ownerUids.slice(i, i + 6).map(async uid => {
+        try {
+          const owner = await params.auth!.getUser(uid);
+          lastSignInByOwner.set(uid, toMillis(owner.metadata.lastSignInTime));
+        } catch {
+          lastSignInByOwner.set(uid, null);
+        }
+      }));
+    }
+  }
+  return { preview: buildPreview(analyses, lastSignInByOwner), analyses };
 }
 
 function resolveMarketingConsent(userData: Record<string, any>) {
