@@ -897,9 +897,24 @@ async function assertOwnerAccountIsolation(params: {
       throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
     }
   }
+  const allowedUserKeys=new Set([
+    'name','displayName','fullName','email','phone','phoneNumber','whatsapp',
+    'photoURL','avatarUrl','locale','language','preferredLanguage',
+    'createdAt','created_at','updatedAt','updated_at','lastLoginAt',
+    'systemRole','role','status','onboardingCompleted','marketingConsent',
+    'marketingOptIn','emailMarketingConsent','consents',
+    'organizations','organizationIds','memberships','organizationId',
+    'activeOrganizationId','primaryOrganizationId',
+  ]);
+  if (Object.keys(data).some(key=>!allowedUserKeys.has(key))) {
+    throw Error('OWNER_ACCOUNT_HAS_OTHER_DATA');
+  }
   const extraCollections=await user.ref.listCollections();
   if (extraCollections.length) throw Error('OWNER_ACCOUNT_HAS_OTHER_DATA');
-  await auth.getUser(ownerUid);
+  const account=await auth.getUser(ownerUid);
+  if (account.customClaims && Object.keys(account.customClaims).length) {
+    throw Error('OWNER_ACCOUNT_SHARED_OR_PRIVILEGED');
+  }
   return ownerUid;
 }
 
