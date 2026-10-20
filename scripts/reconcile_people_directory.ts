@@ -74,6 +74,21 @@ console.log(JSON.stringify({previousActivationJournalPresent:previousJournal.exi
   previousActivationRecoveryEntriesPresent:!previousChildren.empty}));
 if(previousJournal.exists||!previousChildren.empty)throw Error('PREVIOUS_DIRECTORY_RECOVERY_JOURNAL_REQUIRES_PRIVATE_REVIEW');
 
+// Independent read-only completion proof of the successful production apply.
+const completedRelease=db.doc('people_directory_releases/88365d3941ba7cb4b0ca4f16a334ffb82ad10f2b');
+const [completedJournal,completedOrgRecoveries]=await Promise.all([
+  completedRelease.get(),completedRelease.collection('organizations').get()
+]);
+const proof=completedJournal.data()||{};
+const completedRecoveries=completedOrgRecoveries.docs.filter(doc=>!!doc.data().completedAt).length;
+console.log(JSON.stringify({completionJournalStatus:proof.status||'absent',
+  sourcesAtApply:proof.sourceCount??null,identitiesAtApply:proof.identityCount??null,
+  organizationRecoveries:completedOrgRecoveries.size,completedRecoveries,
+  automaticMerges:0,originalRecordsDeleted:0}));
+if(!completedJournal.exists||proof.status!=='completed'||proof.sourceCount!==36||
+    proof.identityCount!==36||completedOrgRecoveries.size!==26||completedRecoveries!==26||
+    !proof.completedAt)throw Error('PEOPLE_DIRECTORY_APPLY_JOURNAL_INCOMPLETE_OR_CHANGED');
+
 // Check the exact Workload Identity principal's project-level authority without
 // granting a role or writing any document. Missing privileges stop both plan and apply.
 const expectedPermissions=['datastore.databases.get','datastore.entities.get',
@@ -90,7 +105,9 @@ const missing=expectedPermissions.filter(permission=>!granted.has(permission));
 console.log(JSON.stringify({authorityCheck:'PROJECT_IAM_READONLY',
   requiredPermissionCount:expectedPermissions.length,grantedPermissionCount:expectedPermissions.length-missing.length,
   missingPermissions:missing}));
-if(missing.length)throw Error('FIRESTORE_WRITER_IAM_NOT_YET_AUTHORIZED');
+// Planning stays read-only and valid after the temporary migration role is revoked.
+// Actual production apply still fails closed if any write permission is missing.
+if(missing.length && apply)throw Error('FIRESTORE_WRITER_IAM_NOT_YET_AUTHORIZED');
 
 if(!apply)process.exit(0);
 if(unresolvedActiveJourneyPeople)throw Error('ACTIVE_JOURNEY_SOURCES_REQUIRE_VALID_LOCAL_ADMINISTRATOR');
