@@ -1101,13 +1101,13 @@ export function EcosystemAdmin() {
                               </label>
                               {chosen && (
                                 <label className="ml-7 mt-3 flex items-start gap-2 text-xs text-amber-200">
-                                  <input type="checkbox" className="mt-0.5" checked={ownerChosen}
+                                  <input type="checkbox" className="mt-0.5" disabled={!candidate.ownerUid || isRunningCleanup} checked={ownerChosen}
                                     onChange={e => {
                                       setCleanupConfirmation('');
                                       setOwnerRemovalIds(ids => e.target.checked
                                         ? [...ids, candidate.id] : ids.filter(id => id !== candidate.id));
                                     }}/>
-                                  <span>Excluir também a conta do dono (somente se comprovadamente exclusiva,
+                                  <span>Excluir também a conta do dono {candidate.ownerUid ? `(${candidate.ownerUid.slice(0,12)}…)` : '(não identificado)'} (somente se comprovadamente exclusiva,
                                     sem outros aplicativos, organizações ou histórico de assinatura).</span>
                                 </label>
                               )}
