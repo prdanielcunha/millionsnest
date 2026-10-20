@@ -163,6 +163,10 @@ export function EcosystemAdmin() {
   const [cleanupPreview, setCleanupPreview] = useState<any | null>(null);
   const [loadingCleanupPreview, setLoadingCleanupPreview] = useState(false);
   const [isRunningCleanup, setIsRunningCleanup] = useState(false);
+  const [selectedCleanupIds, setSelectedCleanupIds] = useState<string[]>([]);
+  const [ownerRemovalIds, setOwnerRemovalIds] = useState<string[]>([]);
+  const [cleanupConfirmation, setCleanupConfirmation] = useState("");
+
   const [isExportingRemarketing, setIsExportingRemarketing] = useState(false);
 
   const loadOrganizationCleanupPreview = async () => {
@@ -178,6 +182,9 @@ export function EcosystemAdmin() {
       if (!res.ok) throw new Error(data?.error || 'Falha ao analisar organizações.');
 
       setCleanupPreview(data.preview);
+      setSelectedCleanupIds([]);
+      setOwnerRemovalIds([]);
+      setCleanupConfirmation('');
       return data.preview;
     } catch (e: any) {
       customAlert('Erro', 'Não foi possível gerar a prévia da limpeza: ' + e.message, 'error');
@@ -188,53 +195,56 @@ export function EcosystemAdmin() {
   };
 
   const runOrganizationCleanup = async () => {
-    const preview = cleanupPreview || await loadOrganizationCleanupPreview();
-    if (!preview) return;
-
-    const protectedNames = (preview.protected || [])
-      .map((item: any) => item.name)
-      .filter(Boolean)
-      .join(', ');
-
-    const warning =
-      `A limpeza encontrou ${preview.deleteCandidates || 0} organização(ões) candidatas à exclusão.\n\n` +
-      `Protegidas explicitamente: ${protectedNames || 'nenhuma encontrada nesta leitura'}.\n` +
-      `Organizações com faturamento ativo: ${preview.activeBillingOrganizations || 0}.\n` +
-      `Contatos potenciais para remarketing: ${preview.potentialRemarketingLeads || 0}.\n\n` +
-      'Antes de excluir, o sistema salva os contatos disponíveis em uma lista privada de remarketing, preserva organizações protegidas, com assinatura ativa ou com sinais de uso, e revalida o faturamento imediatamente antes de cada exclusão. Deseja executar agora?';
-
-    customConfirm(warning, async () => {
-      setIsRunningCleanup(true);
-      try {
-        const token = await user?.getIdToken();
-        if (!token) throw new Error('Sessão de administrador indisponível.');
-
-        const res = await fetch('/api/admin/organizations/cleanup', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ confirmation: 'LIMPAR_ORGANIZACOES' })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || 'Falha ao executar limpeza.');
-
-        const result = data.result || {};
-        customAlert(
-          'Limpeza concluída',
-          `${result.organizationsDeleted || 0} organização(ões) excluída(s). ${result.leadsCaptured || 0} contato(s) preservado(s) para remarketing. ${result.skippedBecauseBillingChanged || 0} organização(ões) foram preservadas porque o faturamento mudou durante a execução.`,
-          'success'
-        );
-
-        await loadEcosystemData();
-        await loadOrganizationCleanupPreview();
-      } catch (e: any) {
-        customAlert('Erro', 'A limpeza não foi concluída: ' + e.message, 'error');
-      } finally {
-        setIsRunningCleanup(false);
+    const ids = selectedCleanupIds;
+    if (!ids.length || ids.length > 20) {
+      customAlert('Seleção necessária', 'Selecione entre 1 e 20 organizações elegíveis.', 'error');
+      return;
+    }
+    const previewRows = Array.isArray(cleanupPreview?.organizations) ? cleanupPreview.organizations : [];
+    if (ids.some(id => !previewRows.some((row: any) => row.id === id && row.eligibleForDeletion))) {
+      customAlert('Análise desatualizada', 'Atualize a análise antes de continuar.', 'error');
+      return;
+    }
+    if (cleanupConfirmation.trim() !== 'EXCLUIR') {
+      customAlert('Confirmação necessária', 'Digite EXCLUIR no campo para confirmar.', 'error');
+      return;
+    }
+    const removingOwners = ownerRemovalIds.filter(id => ids.includes(id));
+    customConfirm(
+      `Confirma a exclusão DEFINITIVA de ${ids.length} organização(ões)? ` +
+      `Conta(s) de dono marcada(s) para exclusão: ${removingOwners.length}. ` +
+      'O servidor bloqueará contas compartilhadas, organizações protegidas, com assinatura ou uso comprovado. ' +
+      'Essa operação não pode ser desfeita automaticamente.',
+      async () => {
+        setIsRunningCleanup(true);
+        try {
+          const token = await user?.getIdToken();
+          if (!token) throw new Error('Sessão de administrador indisponível.');
+          const res = await fetch('/api/admin/organizations/cleanup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+              confirmation: 'EXCLUIR_ORGANIZACOES_SELECIONADAS',
+              organizationIds: ids,
+              deleteOwnerAccountsForOrgIds: removingOwners
+            })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || 'Exclusão não autorizada pelo servidor.');
+          const result = data.result || {};
+          customAlert('Exclusão processada',
+            `${result.organizationsDeleted || 0} organização(ões) excluída(s); ` +
+            `${result.ownerAccountsDeleted || 0} conta(s) de dono excluída(s); ` +
+            `${result.skippedBecauseBillingChanged || 0} bloqueada(s) pela revalidação.`, 'success');
+          await loadEcosystemData();
+          await loadOrganizationCleanupPreview();
+        } catch (e: any) {
+          customAlert('Exclusão não concluída', e.message || 'Verifique o resultado antes de tentar novamente.', 'error');
+        } finally {
+          setIsRunningCleanup(false);
+        }
       }
-    });
+    );
   };
 
   const exportRemarketingProspects = async () => {
@@ -1016,11 +1026,11 @@ export function EcosystemAdmin() {
                       </button>
                       <button
                         onClick={runOrganizationCleanup}
-                        disabled={isRunningCleanup || loadingCleanupPreview}
+                        disabled={isRunningCleanup || loadingCleanupPreview || selectedCleanupIds.length === 0 || cleanupConfirmation !== 'EXCLUIR'}
                         className="inline-flex items-center gap-2 rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {isRunningCleanup ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <AlertCircle className="h-3.5 w-3.5" />}
-                        Executar limpeza
+                        Excluir selecionadas
                       </button>
                     </div>
                   </div>
@@ -1046,19 +1056,76 @@ export function EcosystemAdmin() {
                     </div>
                   )}
 
-                  {cleanupPreview?.candidates?.length > 0 && (
-                    <div className="mt-4 rounded-xl border border-white/5 bg-black/20 p-3">
-                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#788392]">
-                        Prévia das organizações que seriam excluídas
-                      </p>
-                      <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                        {cleanupPreview.candidates.map((candidate: any) => (
-                          <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-xs hover:bg-white/[0.03]">
-                            <span className="truncate text-[#F5F7FA]">{candidate.name}</span>
-                            <span className="shrink-0 text-[10px] text-[#788392]">{candidate.reason}</span>
-                          </div>
-                        ))}
+                  {cleanupPreview && (
+                    <div className="mt-4 space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-[#F5F7FA]">Organizações analisadas · selecione até 20 por vez</p>
+                        <button type="button" className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#A0A7B5] hover:text-white"
+                          onClick={() => { setSelectedCleanupIds([]); setOwnerRemovalIds([]); setCleanupConfirmation(''); }}>
+                          Limpar seleção
+                        </button>
                       </div>
+                      <p className="text-xs text-[#A0A7B5]">
+                        O sistema sugere possíveis testes; nomes parecidos, sozinhos, nunca autorizam exclusão.
+                        Organizações com histórico relevante, faturamento ou dados incertos ficam bloqueadas.
+                      </p>
+                      <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+                        {(cleanupPreview.organizations || []).map((candidate: any) => {
+                          const chosen = selectedCleanupIds.includes(candidate.id);
+                          const ownerChosen = ownerRemovalIds.includes(candidate.id);
+                          const classification = candidate.protected ? 'Protegida'
+                            : candidate.billingProtected ? 'Faturamento / assinatura'
+                            : candidate.eligibleForDeletion ? 'Elegível após verificação'
+                            : candidate.hasMeaningfulActivity ? 'Possui dados de uso'
+                            : 'Preservar / revisar';
+                          return (
+                            <div key={candidate.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                              <label className="flex items-start gap-3">
+                                <input type="checkbox" className="mt-1 h-4 w-4" checked={chosen}
+                                  disabled={!candidate.eligibleForDeletion || isRunningCleanup ||
+                                    (!chosen && selectedCleanupIds.length >= 20)}
+                                  onChange={e => {
+                                    setCleanupConfirmation('');
+                                    setSelectedCleanupIds(current => e.target.checked
+                                      ? [...current, candidate.id] : current.filter(id => id !== candidate.id));
+                                    if (!e.target.checked) setOwnerRemovalIds(current => current.filter(id => id !== candidate.id));
+                                  }}/>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium text-[#F5F7FA]">{candidate.name}</span>
+                                  <span className="block break-all text-[10px] text-[#788392]">{candidate.id}</span>
+                                  <span className="mt-1 block text-xs text-[#A0A7B5]">
+                                    {classification}{candidate.suggestedTest ? ' · possível teste automatizado' : ''}
+                                    {candidate.memberCount > 0 ? ` · ${candidate.memberCount} vínculo(s)` : ''}
+                                  </span>
+                                </span>
+                              </label>
+                              {chosen && (
+                                <label className="ml-7 mt-3 flex items-start gap-2 text-xs text-amber-200">
+                                  <input type="checkbox" className="mt-0.5" checked={ownerChosen}
+                                    onChange={e => {
+                                      setCleanupConfirmation('');
+                                      setOwnerRemovalIds(ids => e.target.checked
+                                        ? [...ids, candidate.id] : ids.filter(id => id !== candidate.id));
+                                    }}/>
+                                  <span>Excluir também a conta do dono (somente se comprovadamente exclusiva,
+                                    sem outros aplicativos, organizações ou histórico de assinatura).</span>
+                                </label>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {selectedCleanupIds.length > 0 && (
+                        <div className="space-y-2 border-t border-white/10 pt-3">
+                          <p className="text-xs text-[#A0A7B5]">
+                            Selecionadas: {selectedCleanupIds.length}. Para prosseguir, digite EXCLUIR.
+                          </p>
+                          <input className="w-full rounded-lg border border-red-400/20 bg-black/40 px-3 py-2 text-sm text-white"
+                            aria-label="Confirmação de exclusão" placeholder="Digite EXCLUIR"
+                            value={cleanupConfirmation} onChange={e => setCleanupConfirmation(e.target.value)}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </section>
