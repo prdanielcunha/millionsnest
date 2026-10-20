@@ -444,7 +444,8 @@ async function analyzeOrganization(params: {
     if (ownerMember) ownerUid = ownerMember.id;
   }
 
-  if (!ownerUid && linkedUserIds.size === 1) ownerUid = [...linkedUserIds][0];
+  // Do not infer an account owner from being the tenant's sole member.
+  // Only an explicit owner field or owner-role membership is authoritative.
   if (ownerUid) linkedUserIds.add(ownerUid);
 
   const createdAtMs =
