@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Auth } from 'firebase-admin/auth';
 import {
   FieldValue,
@@ -954,6 +954,14 @@ export async function applyEcosystemOrganizationCleanup(params: {
     ownerDeletionByOrg.set(item.id,ownerUid);
   }
 
+  const maintenanceRunId = `ecosystem-org-cleanup-${randomUUID()}`;
+  const runRef=params.db.collection('maintenance_runs').doc(maintenanceRunId);
+  // Persist the private recovery journal before any lead capture or removal.
+  await runRef.create({
+    type:'ecosystem_organization_cleanup',status:'started',actorUid:params.actorUid,
+    selectedOrganizationIds:ids,ownerAccountRemovalIds:ownerChoices,
+    startedAt:FieldValue.serverTimestamp(),
+  });
   let organizationsDeleted = 0;
   let ownerAccountsDeleted = 0;
   let leadsCaptured = 0;
@@ -978,6 +986,9 @@ export async function applyEcosystemOrganizationCleanup(params: {
   }
 
   for (const analysis of selected) {
+    const itemJournal=runRef.collection('organizations').doc(analysis.id);
+    await itemJournal.create({status:'checking',ownerAccountRequested:ownerChoices.includes(analysis.id),
+      startedAt:FieldValue.serverTimestamp()});
     // Re-check current activity, age and members as well as billing.
     const fresh = await previewEcosystemOrganizationCleanup({db:params.db,nowMs:Date.now(),
       minAbandonedAgeDays:params.minAbandonedAgeDays,technicalRecentDays:params.technicalRecentDays,
@@ -985,6 +996,7 @@ export async function applyEcosystemOrganizationCleanup(params: {
     const latest = fresh.analyses.find(item => item.id === analysis.id);
     if (!latest?.delete || latest.protected || latest.billingProtected) {
       skippedBecauseBillingChanged += 1;
+      await itemJournal.set({status:'skipped_eligibility_changed'},{merge:true});
       continue;
     }
     // Billing safety is checked again immediately before deletion.
@@ -999,25 +1011,36 @@ export async function applyEcosystemOrganizationCleanup(params: {
       hasActiveOrganizationEntitlement(latestOrgData)
     ) {
       skippedBecauseBillingChanged += 1;
+      await itemJournal.set({status:'skipped_billing_changed'},{merge:true});
       continue;
     }
 
+    await itemJournal.set({status:'deleting_organization',updatedAt:FieldValue.serverTimestamp()},{merge:true});
+    try {
     topLevelDocumentsDeleted += await deleteOrganization(params.db, analysis);
     organizationsDeleted += 1;
+    await itemJournal.set({status:'organization_deleted',updatedAt:FieldValue.serverTimestamp()},{merge:true});
     const ownerUid=ownerDeletionByOrg.get(analysis.id);
     if(ownerUid) {
       // A lost race never deletes a newly-shared account. Deletion failures surface
       // for manual recovery; they are not hidden as successful owner removal.
       await assertOwnerAccountIsolation({db:params.db,auth:params.auth,
         ownerUid,organizationId:analysis.id,actorUid:params.actorUid});
+      await itemJournal.set({status:'deleting_owner',updatedAt:FieldValue.serverTimestamp()},{merge:true});
       await params.auth.deleteUser(ownerUid);
       await params.db.collection('users').doc(ownerUid).delete();
       ownerAccountsDeleted += 1;
     }
+    await itemJournal.set({status:'completed',completedAt:FieldValue.serverTimestamp()},{merge:true});
+    } catch(error) {
+      await itemJournal.set({status:'requires_manual_review',failedAt:FieldValue.serverTimestamp()},{merge:true});
+      await runRef.set({status:'requires_manual_review',failedAt:FieldValue.serverTimestamp()},{merge:true});
+      throw error;
+    }
   }
 
-  const maintenanceRunId = `ecosystem-org-cleanup-${new Date(nowMs).toISOString().replace(/[:.]/g, '-')}`;
-  await params.db.collection('maintenance_runs').doc(maintenanceRunId).set({
+  await runRef.set({
+    status:'completed',
     type: 'ecosystem_organization_cleanup',
     actorUid: params.actorUid,
     actorSystemRole: params.actorSystemRole,
@@ -1033,7 +1056,7 @@ export async function applyEcosystemOrganizationCleanup(params: {
     skippedBecauseBillingChanged,
     countsByReason: preview.countsByReason,
     completedAt: FieldValue.serverTimestamp(),
-  });
+  },{merge:true});
 
   await params.db.collection('audit_logs').add({
     action: 'system.organization.cleanup.completed',
