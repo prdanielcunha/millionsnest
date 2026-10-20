@@ -4042,6 +4042,8 @@ async function startServer() {
         actorUid: decoded.uid,
         actorSystemRole: actorData.systemRole || 'user',
         confirmation: String(req.body?.confirmation || ''),
+        organizationIds: req.body?.organizationIds,
+        deleteOwnerAccountsForOrgIds: req.body?.deleteOwnerAccountsForOrgIds,
       });
 
       return res.json({ success: true, result });
@@ -4051,6 +4053,12 @@ async function startServer() {
       }
       if (err?.message === 'FORBIDDEN_CLEANUP_ROLE') {
         return res.status(403).json({ error: 'Forbidden' });
+      }
+      if (['INVALID_ORGANIZATION_SELECTION','INVALID_OWNER_ACCOUNT_SELECTION'].includes(err?.message)) {
+        return res.status(400).json({ error: 'Seleção inválida. Atualize a análise e selecione organizações elegíveis.' });
+      }
+      if (err?.message === 'ORGANIZATION_SELECTION_NOT_ELIGIBLE' || String(err?.message || '').startsWith('OWNER_ACCOUNT_')) {
+        return res.status(409).json({ error: 'Exclusão bloqueada por vínculos, uso, assinatura ou incerteza na conta do proprietário. Nenhuma exclusão desse pedido foi iniciada.' });
       }
       console.error('[API Admin Organization Cleanup Apply]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
