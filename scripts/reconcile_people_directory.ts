@@ -105,7 +105,9 @@ const missing=expectedPermissions.filter(permission=>!granted.has(permission));
 console.log(JSON.stringify({authorityCheck:'PROJECT_IAM_READONLY',
   requiredPermissionCount:expectedPermissions.length,grantedPermissionCount:expectedPermissions.length-missing.length,
   missingPermissions:missing}));
-if(missing.length)throw Error('FIRESTORE_WRITER_IAM_NOT_YET_AUTHORIZED');
+// Planning stays read-only and valid after the temporary migration role is revoked.
+// Actual production apply still fails closed if any write permission is missing.
+if(missing.length && apply)throw Error('FIRESTORE_WRITER_IAM_NOT_YET_AUTHORIZED');
 
 if(!apply)process.exit(0);
 if(unresolvedActiveJourneyPeople)throw Error('ACTIVE_JOURNEY_SOURCES_REQUIRE_VALID_LOCAL_ADMINISTRATOR');
