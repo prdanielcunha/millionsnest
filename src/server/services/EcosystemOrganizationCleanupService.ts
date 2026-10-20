@@ -6,6 +6,7 @@ import {
   Timestamp,
   type Firestore,
   type QueryDocumentSnapshot,
+  type DocumentSnapshot,
 } from 'firebase-admin/firestore';
 
 export const ECOSYSTEM_CLEANUP_PROTECTED_NAMES = [
@@ -289,7 +290,13 @@ function hasActiveOrganizationEntitlement(organization: Record<string, any>): bo
     }
   }
 
-  return false;
+  return Boolean(
+    organization.stripeCustomerId || organization.stripe_customer_id ||
+    organization.billingCustomerId || organization.stripeSubscriptionId ||
+    organization.stripe_subscription_id || organization.subscriptionId ||
+    organization.latestInvoiceId || organization.paidInvoiceCount ||
+    organization.hasPaymentHistory || organization.billingHistory
+  );
 }
 
 function isTechnicalName(normalizedName: string): boolean {
@@ -372,7 +379,7 @@ async function loadLegacyMembers(db: Firestore, orgId: string) {
 
 async function analyzeOrganization(params: {
   db: Firestore;
-  orgDoc: QueryDocumentSnapshot;
+  orgDoc: DocumentSnapshot;
   nowMs: number;
   minAbandonedAgeDays: number;
   technicalRecentDays: number;
@@ -386,6 +393,7 @@ async function analyzeOrganization(params: {
     technicalRecentDays,
     extraProtectedOrgIds,
   } = params;
+  if (!orgDoc.exists) throw Error('ORGANIZATION_NO_LONGER_EXISTS');
   const data = orgDoc.data() || {};
   const id = orgDoc.id;
   const name = getOrgName(data);
@@ -1037,10 +1045,13 @@ export async function applyEcosystemOrganizationCleanup(params: {
     await itemJournal.create({status:'checking',ownerAccountRequested:ownerChoices.includes(analysis.id),
       startedAt:FieldValue.serverTimestamp()});
     // Re-check current activity, age and members as well as billing.
-    const fresh = await previewEcosystemOrganizationCleanup({db:params.db,nowMs:Date.now(),
-      minAbandonedAgeDays:params.minAbandonedAgeDays,technicalRecentDays:params.technicalRecentDays,
-      extraProtectedOrgIds:params.extraProtectedOrgIds});
-    const latest = fresh.analyses.find(item => item.id === analysis.id);
+    const freshOrg=await params.db.collection('organizations').doc(analysis.id).get();
+    const latest = freshOrg.exists ? await analyzeOrganization({
+      db:params.db, orgDoc:freshOrg, nowMs:Date.now(),
+      minAbandonedAgeDays:params.minAbandonedAgeDays ?? 14,
+      technicalRecentDays:params.technicalRecentDays ?? 30,
+      extraProtectedOrgIds:new Set(params.extraProtectedOrgIds || []),
+    }) : null;
     if (!latest?.delete || latest.protected || latest.billingProtected) {
       skippedBecauseBillingChanged += 1;
       await itemJournal.set({status:'skipped_eligibility_changed'},{merge:true});
