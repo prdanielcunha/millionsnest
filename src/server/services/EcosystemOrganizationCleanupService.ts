@@ -1,10 +1,11 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Auth } from 'firebase-admin/auth';
+import { keyFor, rootFor } from './PeopleDirectory.js';
 import {
   FieldValue,
   Timestamp,
   type Firestore,
-  type QueryDocumentSnapshot,
+  type DocumentSnapshot,
 } from 'firebase-admin/firestore';
 
 export const ECOSYSTEM_CLEANUP_PROTECTED_NAMES = [
@@ -33,7 +34,8 @@ const ACTIVE_BILLING_STATUSES = new Set([
   'paused',
 ]);
 
-const EXPLICIT_JUNK_NAME_TOKENS = ['daniel', 'cunha', 'kept'];
+// A person's name alone is never evidence that an organization is disposable.
+const EXPLICIT_JUNK_NAME_TOKENS: readonly string[] = [];
 
 const TECHNICAL_NAME_PATTERNS = [
   /^integration org$/,
@@ -164,6 +166,10 @@ export type EcosystemCleanupPreview = {
     subscriptionStatus: string | null;
   }>;
   protected: Array<{ id: string; name: string }>;
+  organizations: Array<{ id: string; name: string; reason: EcosystemCleanupReason;
+    ageDays: number | null; memberCount: number; subscriptionStatus: string | null;
+    protected: boolean; billingProtected: boolean; eligibleForDeletion: boolean;
+    suggestedTest: boolean; hasMeaningfulActivity: boolean; ownerUid: string | null }>;
 };
 
 export type EcosystemCleanupApplyResult = EcosystemCleanupPreview & {
@@ -172,6 +178,7 @@ export type EcosystemCleanupApplyResult = EcosystemCleanupPreview & {
   topLevelDocumentsDeleted: number;
   skippedBecauseBillingChanged: number;
   maintenanceRunId: string;
+  ownerAccountsDeleted: number;
 };
 
 function normalizeText(value: unknown): string {
@@ -282,7 +289,13 @@ function hasActiveOrganizationEntitlement(organization: Record<string, any>): bo
     }
   }
 
-  return false;
+  return Boolean(
+    organization.stripeCustomerId || organization.stripe_customer_id ||
+    organization.billingCustomerId || organization.stripeSubscriptionId ||
+    organization.stripe_subscription_id || organization.subscriptionId ||
+    organization.latestInvoiceId || organization.paidInvoiceCount ||
+    organization.hasPaymentHistory || organization.billingHistory
+  );
 }
 
 function isTechnicalName(normalizedName: string): boolean {
@@ -310,7 +323,7 @@ async function hasNestedOrganizationActivity(db: Firestore, orgId: string): Prom
 
     for (const nested of nestedCollections) {
       // These collections are structural or independently checked below.
-      if (['members', 'invites', 'audit_logs', 'monthly_usage', 'notifications'].includes(nested.id)) {
+      if (['members', 'invites'].includes(nested.id)) {
         continue;
       }
 
@@ -365,7 +378,7 @@ async function loadLegacyMembers(db: Firestore, orgId: string) {
 
 async function analyzeOrganization(params: {
   db: Firestore;
-  orgDoc: QueryDocumentSnapshot;
+  orgDoc: DocumentSnapshot;
   nowMs: number;
   minAbandonedAgeDays: number;
   technicalRecentDays: number;
@@ -379,6 +392,7 @@ async function analyzeOrganization(params: {
     technicalRecentDays,
     extraProtectedOrgIds,
   } = params;
+  if (!orgDoc.exists) throw Error('ORGANIZATION_NO_LONGER_EXISTS');
   const data = orgDoc.data() || {};
   const id = orgDoc.id;
   const name = getOrgName(data);
@@ -394,7 +408,10 @@ async function analyzeOrganization(params: {
   ]);
 
   const subscription = subscriptionDoc.exists ? (subscriptionDoc.data() || {}) : null;
+  // Even a cancelled Stripe subscription can carry invoices or retention
+  // obligations. Historical billing must be reviewed outside bulk cleanup.
   const billingProtected =
+    subscription !== null ||
     hasActiveBilling(subscription) ||
     hasActiveOrganizationEntitlement(data);
 
@@ -442,10 +459,18 @@ async function analyzeOrganization(params: {
     createdAtMs;
   const ageDays = createdAtMs == null ? null : Math.floor((nowMs - createdAtMs) / 86_400_000);
 
-  const technical = isTechnicalName(normalizedName);
+  // Explicit system/test provenance is stronger than a name, but only a
+  // *suggestion*. The protection/activity/billing checks still decide safety.
+  const technical = isTechnicalName(normalizedName) ||
+    data.isTest === true || data.testOrganization === true ||
+    data.metadata?.isTest === true ||
+    ['test','testing','seed','fixture','synthetic'].includes(getStatus(data.origin));
+
   const explicitJunk = isExplicitJunkName(normalizedName);
   const memberCount = Math.max(membersSnap.size, linkedUserIds.size);
-  const hasPendingInvites = Boolean(pendingInvitesSnap && !pendingInvitesSnap.empty);
+  // Missing reads are uncertainty, not evidence of an empty tenant.
+  const hasPendingInvites = pendingInvitesSnap === null || !pendingInvitesSnap.empty;
+  const hasUnknownMembership = legacyMembersSnap === null;
 
   let activity = false;
   let reason: EcosystemCleanupReason = 'keep_nonbillable_other';
@@ -455,9 +480,6 @@ async function analyzeOrganization(params: {
     reason = 'protected';
   } else if (billingProtected) {
     reason = 'active_billing';
-  } else if (explicitJunk) {
-    reason = 'explicit_junk_name';
-    deleteOrg = true;
   } else {
     const referenceMs = updatedAtMs ?? createdAtMs;
     const recentTechnical =
@@ -472,7 +494,7 @@ async function analyzeOrganization(params: {
 
       if (activity) {
         reason = 'keep_has_activity';
-      } else if (memberCount > 1 || hasPendingInvites) {
+      } else if (memberCount > 1 || hasPendingInvites || hasUnknownMembership) {
         reason = 'keep_has_members_or_invites';
       } else if (ageDays == null || ageDays < minAbandonedAgeDays) {
         reason = 'keep_recent_or_unknown_age';
@@ -533,6 +555,15 @@ function buildPreview(analyses: EcosystemCleanupAnalysis[]): EcosystemCleanupPre
       .filter(analysis => analysis.protected)
       .map(analysis => ({ id: analysis.id, name: analysis.name || 'Sem nome' }))
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+    organizations: analyses.map(analysis => ({
+      id: analysis.id, name: analysis.name || 'Sem nome', reason: analysis.reason,
+      ageDays: analysis.ageDays, memberCount: analysis.memberCount,
+      subscriptionStatus: analysis.subscriptionStatus,
+      protected: analysis.protected, billingProtected: analysis.billingProtected,
+      eligibleForDeletion: analysis.delete, suggestedTest: analysis.technical,
+      hasMeaningfulActivity: analysis.hasMeaningfulActivity,
+      ownerUid: analysis.ownerUid,
+    })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
   };
 }
 
@@ -777,6 +808,27 @@ async function recursiveDeleteByOrganizationId(
   return deleted;
 }
 
+// This is intentionally limited to the final destructive path, not the
+// dashboard preview. Any unknown tenant reference in another application
+// blocks deletion rather than silently leaving orphaned records.
+async function assertNoUnknownTenantReferences(db: Firestore, orgId: string): Promise<void> {
+  const managed = new Set([
+    ...ORG_SCOPED_COLLECTIONS_TO_DELETE,
+    'organizations','organization_members','subscriptions','users',
+    'remarketing_prospects',
+  ]);
+  const allCollections=await db.listCollections();
+  // New root collections require review. Never optimistically assume an
+  // unfamiliar collection is unrelated to an organization.
+  for (const collection of allCollections) {
+    if (managed.has(collection.id)) continue;
+    for (const field of ['organizationId','orgId','tenantId','organization_id']) {
+      const found=await collection.where(field,'==',orgId).limit(1).get();
+      if (!found.empty) throw Error('TENANT_HAS_UNMAPPED_APP_REFERENCES');
+    }
+  }
+}
+
 async function deleteOrganization(
   db: Firestore,
   analysis: EcosystemCleanupAnalysis,
@@ -825,20 +877,109 @@ async function deleteOrganization(
   return deletedTopLevelDocs;
 }
 
+// Cross-app sign-in is shared. Only a verifiably isolated, non-privileged owner
+// can be removed from Firebase Auth. Any incomplete scan blocks the full request.
+async function assertOwnerAccountIsolation(params: {
+  db: Firestore; auth: Auth; ownerUid: string | null;
+  organizationId: string; actorUid: string;
+}): Promise<string> {
+  const {db,auth,ownerUid,organizationId,actorUid}=params;
+  if (!ownerUid || ownerUid === actorUid) throw Error('OWNER_ACCOUNT_SHARED_OR_PRIVILEGED');
+  const user = await db.collection('users').doc(ownerUid).get();
+  if (!user.exists) throw Error('OWNER_ACCOUNT_NOT_VERIFIED');
+  const data = user.data() || {};
+  if (PRIVILEGED_SYSTEM_ROLES.has(normalizeText(data.systemRole)) ||
+      data.stripeCustomerId || data.stripe_customer_id || data.stripeSubscriptionId ||
+      data.subscriptionId || data.subscriptions?.length ||
+      (data.apps && Object.keys(data.apps).length > 0)) {
+    throw Error('OWNER_ACCOUNT_SHARED_OR_PRIVILEGED');
+  }
+  for (const key of ['organizationId','activeOrganizationId','primaryOrganizationId']) {
+    if (data[key] && data[key] !== organizationId) throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+  }
+  for (const key of ['organizations','organizationIds','memberships']) {
+    const value=data[key];
+    if (value != null && !Array.isArray(value)) throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+    if (Array.isArray(value) && value.some((v:any) =>
+      (typeof v === 'string' ? v : (v?.organizationId || v?.orgId)) !== organizationId)) {
+      throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+    }
+  }
+  const owned = await db.collection('organizations').limit(201).get();
+  if (owned.size > 200) throw Error('OWNER_ACCOUNT_ORG_SCAN_UNBOUNDED');
+  for (const org of owned.docs) {
+    if (org.id === organizationId) continue;
+    const d=org.data();
+    if ([d.ownerUid,d.ownerId,d.ownerUserId,d.owner_user_id,d.createdByUid,d.createdBy]
+      .includes(ownerUid)) throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+    if ((await org.ref.collection('members').doc(ownerUid).get()).exists) {
+      throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+    }
+    // The canonical person directory can reference an account even when the
+    // legacy membership document is absent.
+    const source=await db.doc(rootFor(org.id)+'/peopleDirectorySources/'+keyFor('account',ownerUid)).get();
+    if(source.exists) throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+  }
+  // Historical billing and legacy relationships must not be silently erased.
+  if ((await db.collection('subscriptions').doc(organizationId).get()).exists) {
+    throw Error('OWNER_ACCOUNT_HAS_BILLING_HISTORY');
+  }
+  for (const field of ['uid','userId','user_id']) {
+    const legacy=await db.collection('organization_members').where(field,'==',ownerUid).limit(101).get();
+    if (legacy.size>100 || legacy.docs.some(doc =>
+      firstString(doc.data().organizationId,doc.data().orgId)!==organizationId)) {
+      throw Error('OWNER_ACCOUNT_REFERENCES_OTHER_ORG');
+    }
+  }
+  const allowedUserKeys=new Set([
+    'name','displayName','fullName','email','phone','phoneNumber','whatsapp',
+    'photoURL','avatarUrl','locale','language','preferredLanguage',
+    'createdAt','created_at','updatedAt','updated_at','lastLoginAt',
+    'systemRole','role','status','onboardingCompleted','marketingConsent',
+    'marketingOptIn','emailMarketingConsent','consents',
+    'organizations','organizationIds','memberships','organizationId',
+    'activeOrganizationId','primaryOrganizationId',
+  ]);
+  if (Object.keys(data).some(key=>!allowedUserKeys.has(key))) {
+    throw Error('OWNER_ACCOUNT_HAS_OTHER_DATA');
+  }
+  const marketingLeads=await db.collection('remarketing_prospects')
+    .where('userId','==',ownerUid).limit(1).get();
+  if (!marketingLeads.empty) throw Error('OWNER_ACCOUNT_HAS_OTHER_DATA');
+  const extraCollections=await user.ref.listCollections();
+  if (extraCollections.length) throw Error('OWNER_ACCOUNT_HAS_OTHER_DATA');
+  const account=await auth.getUser(ownerUid);
+  if (account.customClaims && Object.keys(account.customClaims).length) {
+    throw Error('OWNER_ACCOUNT_SHARED_OR_PRIVILEGED');
+  }
+  return ownerUid;
+}
+
 export async function applyEcosystemOrganizationCleanup(params: {
   db: Firestore;
   auth: Auth;
   actorUid: string;
   actorSystemRole: string;
   confirmation: string;
+  organizationIds: string[];
+  deleteOwnerAccountsForOrgIds?: string[];
   nowMs?: number;
   minAbandonedAgeDays?: number;
   technicalRecentDays?: number;
   extraProtectedOrgIds?: string[];
 }): Promise<EcosystemCleanupApplyResult> {
-  if (params.confirmation !== 'LIMPAR_ORGANIZACOES') {
+  if (params.confirmation !== 'EXCLUIR_ORGANIZACOES_SELECIONADAS') {
     throw new Error('CONFIRMATION_REQUIRED');
   }
+
+  const ids = params.organizationIds;
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 20 ||
+      ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) ||
+      new Set(ids).size !== ids.length) throw new Error('INVALID_ORGANIZATION_SELECTION');
+
+  const ownerChoices = params.deleteOwnerAccountsForOrgIds ?? [];
+  if (!Array.isArray(ownerChoices) || new Set(ownerChoices).size !== ownerChoices.length ||
+      ownerChoices.some(id => !ids.includes(id))) throw Error('INVALID_OWNER_ACCOUNT_SELECTION');
 
   const role = normalizeText(params.actorSystemRole);
   if (!['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(role)) {
@@ -854,13 +995,35 @@ export async function applyEcosystemOrganizationCleanup(params: {
     extraProtectedOrgIds: params.extraProtectedOrgIds,
   });
 
+  const selected = analyses.filter(item => ids.includes(item.id));
+  if (selected.length !== ids.length || selected.some(item => !item.delete || item.protected || item.billingProtected)) {
+    throw new Error('ORGANIZATION_SELECTION_NOT_ELIGIBLE');
+  }
+  const ownerDeletionByOrg=new Map<string,string>();
+  for(const item of selected.filter(item=>ownerChoices.includes(item.id))) {
+    const ownerUid=await assertOwnerAccountIsolation({db:params.db,auth:params.auth,
+      ownerUid:item.ownerUid,organizationId:item.id,actorUid:params.actorUid});
+    ownerDeletionByOrg.set(item.id,ownerUid);
+  }
+
+  const maintenanceRunId = `ecosystem-org-cleanup-${randomUUID()}`;
+  const runRef=params.db.collection('maintenance_runs').doc(maintenanceRunId);
+  // Persist the private recovery journal before any lead capture or removal.
+  await runRef.create({
+    type:'ecosystem_organization_cleanup',status:'started',actorUid:params.actorUid,
+    selectedOrganizationIds:ids,ownerAccountRemovalIds:ownerChoices,
+    startedAt:FieldValue.serverTimestamp(),
+  });
   let organizationsDeleted = 0;
+  let ownerAccountsDeleted = 0;
   let leadsCaptured = 0;
   let topLevelDocumentsDeleted = 0;
   let skippedBecauseBillingChanged = 0;
 
   // Capture remarketing contacts before any destructive operation.
-  for (const analysis of analyses.filter(item => item.shouldCaptureLead)) {
+  // A request to erase the owner account must never copy their contact details
+  // into a new marketing lead before deleting that account.
+  for (const analysis of selected.filter(item => item.shouldCaptureLead && !ownerChoices.includes(item.id))) {
     try {
       if (
         await captureRemarketingLead({
@@ -876,7 +1039,24 @@ export async function applyEcosystemOrganizationCleanup(params: {
     }
   }
 
-  for (const analysis of analyses.filter(item => item.delete)) {
+  for (const analysis of selected) {
+    const itemJournal=runRef.collection('organizations').doc(analysis.id);
+    await itemJournal.create({status:'checking',ownerAccountRequested:ownerChoices.includes(analysis.id),
+      startedAt:FieldValue.serverTimestamp()});
+    // Re-check current activity, age and members as well as billing.
+    const freshOrg=await params.db.collection('organizations').doc(analysis.id).get();
+    const latest = freshOrg.exists ? await analyzeOrganization({
+      db:params.db, orgDoc:freshOrg, nowMs:Date.now(),
+      minAbandonedAgeDays:params.minAbandonedAgeDays ?? 14,
+      technicalRecentDays:params.technicalRecentDays ?? 30,
+      extraProtectedOrgIds:new Set(params.extraProtectedOrgIds || []),
+    }) : null;
+    if (!latest?.delete || latest.protected || latest.billingProtected) {
+      skippedBecauseBillingChanged += 1;
+      await itemJournal.set({status:'skipped_eligibility_changed'},{merge:true});
+      continue;
+    }
+    await assertNoUnknownTenantReferences(params.db,analysis.id);
     // Billing safety is checked again immediately before deletion.
     const subDoc = await params.db.collection('subscriptions').doc(analysis.id).get();
     const latestSubscription = subDoc.exists ? (subDoc.data() || {}) : null;
@@ -889,15 +1069,36 @@ export async function applyEcosystemOrganizationCleanup(params: {
       hasActiveOrganizationEntitlement(latestOrgData)
     ) {
       skippedBecauseBillingChanged += 1;
+      await itemJournal.set({status:'skipped_billing_changed'},{merge:true});
       continue;
     }
 
+    await itemJournal.set({status:'deleting_organization',updatedAt:FieldValue.serverTimestamp()},{merge:true});
+    try {
     topLevelDocumentsDeleted += await deleteOrganization(params.db, analysis);
     organizationsDeleted += 1;
+    await itemJournal.set({status:'organization_deleted',updatedAt:FieldValue.serverTimestamp()},{merge:true});
+    const ownerUid=ownerDeletionByOrg.get(analysis.id);
+    if(ownerUid) {
+      // A lost race never deletes a newly-shared account. Deletion failures surface
+      // for manual recovery; they are not hidden as successful owner removal.
+      await assertOwnerAccountIsolation({db:params.db,auth:params.auth,
+        ownerUid,organizationId:analysis.id,actorUid:params.actorUid});
+      await itemJournal.set({status:'deleting_owner',updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      await params.auth.deleteUser(ownerUid);
+      await params.db.collection('users').doc(ownerUid).delete();
+      ownerAccountsDeleted += 1;
+    }
+    await itemJournal.set({status:'completed',completedAt:FieldValue.serverTimestamp()},{merge:true});
+    } catch(error) {
+      await itemJournal.set({status:'requires_manual_review',failedAt:FieldValue.serverTimestamp()},{merge:true});
+      await runRef.set({status:'requires_manual_review',failedAt:FieldValue.serverTimestamp()},{merge:true});
+      throw error;
+    }
   }
 
-  const maintenanceRunId = `ecosystem-org-cleanup-${new Date(nowMs).toISOString().replace(/[:.]/g, '-')}`;
-  await params.db.collection('maintenance_runs').doc(maintenanceRunId).set({
+  await runRef.set({
+    status:'completed',
     type: 'ecosystem_organization_cleanup',
     actorUid: params.actorUid,
     actorSystemRole: params.actorSystemRole,
@@ -906,13 +1107,14 @@ export async function applyEcosystemOrganizationCleanup(params: {
     activeBillingOrganizations: preview.activeBillingOrganizations,
     deleteCandidates: preview.deleteCandidates,
     organizationsDeleted,
+    ownerAccountsDeleted,
     potentialRemarketingLeads: preview.potentialRemarketingLeads,
     leadsCaptured,
     topLevelDocumentsDeleted,
     skippedBecauseBillingChanged,
     countsByReason: preview.countsByReason,
     completedAt: FieldValue.serverTimestamp(),
-  });
+  },{merge:true});
 
   await params.db.collection('audit_logs').add({
     action: 'system.organization.cleanup.completed',
@@ -929,6 +1131,7 @@ export async function applyEcosystemOrganizationCleanup(params: {
   return {
     ...preview,
     organizationsDeleted,
+    ownerAccountsDeleted,
     leadsCaptured,
     topLevelDocumentsDeleted,
     skippedBecauseBillingChanged,

@@ -23,18 +23,13 @@ async function main() {
     return;
   }
 
-  const result = await applyEcosystemOrganizationCleanup({
-    db,
-    auth,
-    actorUid: 'github-maintenance',
-    actorSystemRole: 'ecosystem_owner',
-    confirmation: 'LIMPAR_ORGANIZACOES',
-  });
-
-  console.log(`CLEANUP_SUMMARY_JSON=${JSON.stringify({ mode: 'apply', projectId, ...result })}`);
+  // Never run destructive tenant removal from a generic CLI flag.
+  // Individual choices and the owner-account option require authenticated
+  // administrative review with fresh eligibility checks through the Hub.
+  throw new Error('USE_AUTHENTICATED_SELECTIVE_ORGANIZATION_CLEANUP');
 }
 
 main().catch(error => {
-  console.error('CLEANUP_FATAL', error?.stack || error);
+  console.error('CLEANUP_FATAL', error?.message || 'Unexpected failure');
   process.exit(1);
 });
