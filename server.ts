@@ -4011,7 +4011,7 @@ async function startServer() {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
-      const { preview } = await previewEcosystemOrganizationCleanup({ db: db! });
+      const { preview } = await previewEcosystemOrganizationCleanup({ db: db!, auth: admin.auth() });
       return res.json({ success: true, preview });
     } catch (err) {
       console.error('[API Admin Organization Cleanup Preview]', err);

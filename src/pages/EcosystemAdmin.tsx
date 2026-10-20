@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { collection, query, getDocs, doc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
-import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp, Pencil, Database, Layers } from "lucide-react";
+import { Shield, Users, Search, AlertCircle, Building, Check, Loader2, User, TrendingUp, Pencil, Database, Layers, LockKeyhole } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { EcosystemShell } from "../components/EcosystemShell.js";
 import { ASSIGNABLE_SYSTEM_ROLES, canChangeSystemRole, getSystemRoleLabel } from "../lib/roleResolver.js";
@@ -173,6 +173,8 @@ export function EcosystemAdmin() {
   const [selectedCleanupIds, setSelectedCleanupIds] = useState<string[]>([]);
   const [ownerRemovalIds, setOwnerRemovalIds] = useState<string[]>([]);
   const [cleanupConfirmation, setCleanupConfirmation] = useState("");
+  const [cleanupFilter, setCleanupFilter] = useState<"all" | "eligible" | "tests" | "blocked">("all");
+  const [cleanupSearch, setCleanupSearch] = useState("");
 
   const [isExportingRemarketing, setIsExportingRemarketing] = useState(false);
 
@@ -761,6 +763,20 @@ export function EcosystemAdmin() {
     );
   }
 
+  const cleanupCandidates = Array.isArray(cleanupPreview?.organizations)
+    ? [...cleanupPreview.organizations].filter((org: any) => {
+        const query = cleanupSearch.trim().toLocaleLowerCase("pt-BR");
+        const matchesQuery = !query || `${org.name || ""} ${org.id || ""}`.toLocaleLowerCase("pt-BR").includes(query);
+        return matchesQuery && (cleanupFilter === "all" ||
+          (cleanupFilter === "eligible" && org.eligibleForDeletion) ||
+          (cleanupFilter === "tests" && org.suggestedTest) ||
+          (cleanupFilter === "blocked" && !org.eligibleForDeletion));
+      }).sort((a: any, b: any) => Number(b.eligibleForDeletion) - Number(a.eligibleForDeletion) || a.name.localeCompare(b.name, "pt-BR"))
+    : [];
+  const formatAuditDate = (value: number | null | undefined) => value && Number.isFinite(value)
+    ? new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+    : "Sem registro";
+
   const filteredUsers = users.filter(u => 
     (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (u.displayName || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -801,8 +817,8 @@ export function EcosystemAdmin() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10">
-        <div className="grid gap-5 md:grid-cols-4 md:gap-8">
+      <main className="mx-auto w-full min-w-0 max-w-7xl overflow-x-clip px-3 py-5 sm:px-6 sm:py-10">
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-4 md:gap-8">
           
           {/* Sidebar */}
           <div className="flex gap-2 overflow-x-auto pb-2 md:col-span-1 md:block md:space-y-2 md:overflow-visible md:pb-0">
@@ -830,7 +846,7 @@ export function EcosystemAdmin() {
           </div>
 
           {/* Main Content */}
-          <div className="md:col-span-3 space-y-6">
+          <div className="min-w-0 max-w-full space-y-6 md:col-span-3">
             
             {activeTab === 'users' && (
               <>
@@ -1000,7 +1016,7 @@ export function EcosystemAdmin() {
 
             {activeTab === 'organizations' && (
               <>
-                <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-5">
+                <section className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-3 sm:p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="max-w-2xl">
                       <div className="flex items-center gap-2">
@@ -1014,7 +1030,7 @@ export function EcosystemAdmin() {
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex min-w-0 w-full flex-wrap gap-2 lg:w-auto">
                       <button
                         onClick={loadOrganizationCleanupPreview}
                         disabled={loadingCleanupPreview || isRunningCleanup}
@@ -1043,7 +1059,7 @@ export function EcosystemAdmin() {
                   </div>
 
                   {cleanupPreview && (
-                    <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
                       <div className="rounded-xl border border-white/5 bg-black/20 p-3">
                         <p className="text-[10px] uppercase tracking-wider text-[#788392]">Total analisado</p>
                         <p className="mt-1 text-xl font-semibold text-[#F5F7FA]">{cleanupPreview.totalOrganizationsScanned || 0}</p>
@@ -1064,7 +1080,7 @@ export function EcosystemAdmin() {
                   )}
 
                   {cleanupPreview && (
-                    <div className="mt-4 space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div className="mt-4 min-w-0 max-w-full space-y-3 overflow-hidden rounded-xl border border-white/10 bg-black/20 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-xs font-semibold text-[#F5F7FA]">Organizações analisadas · selecione até 20 por vez</p>
                         <button type="button" className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#A0A7B5] hover:text-white"
@@ -1076,51 +1092,118 @@ export function EcosystemAdmin() {
                         O sistema sugere possíveis testes; nomes parecidos, sozinhos, nunca autorizam exclusão.
                         Organizações com histórico relevante, faturamento ou dados incertos ficam bloqueadas.
                       </p>
-                      <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
-                        {(cleanupPreview.organizations || []).map((candidate: any) => {
+                      <div className="grid min-w-0 gap-2">
+                        <label className="block min-w-0">
+                          <span className="mb-1 block text-xs font-medium text-[#A0A7B5]">Buscar nesta análise</span>
+                          <input type="search" value={cleanupSearch}
+                            onChange={e => setCleanupSearch(e.target.value)}
+                            placeholder="Nome ou ID da organização"
+                            className="h-11 w-full min-w-0 rounded-lg border border-white/15 bg-[#0B0F19] px-3 text-sm text-white outline-none focus:border-[#2B85EB]" />
+                        </label>
+                        <div className="flex min-w-0 gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar organizações">
+                          {([
+                            ['all', 'Todas'],
+                            ['eligible', 'Elegíveis'],
+                            ['tests', 'Possíveis testes'],
+                            ['blocked', 'Bloqueadas']
+                          ] as const).map(([filter, label]) => (
+                            <button key={filter} type="button" onClick={() => setCleanupFilter(filter)}
+                              aria-pressed={cleanupFilter === filter}
+                              className={`min-h-11 shrink-0 rounded-lg border px-3 text-xs font-semibold transition-colors ${cleanupFilter === filter
+                                ? 'border-[#2B85EB] bg-[#2B85EB]/20 text-white'
+                                : 'border-white/10 bg-white/5 text-[#A0A7B5]'}`}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p aria-live="polite" className="text-xs text-[#A0A7B5]">
+                        {cleanupCandidates.length} organização(ões) nesta visualização · {cleanupPreview.deleteCandidates || 0} elegível(is) no total.
+                        Os itens bloqueados não podem ser selecionados.
+                      </p>
+                      <div className="max-h-[min(60vh,32rem)] min-w-0 space-y-2 overflow-y-auto overflow-x-hidden pr-1">
+                        {cleanupCandidates.map((candidate: any) => {
                           const chosen = selectedCleanupIds.includes(candidate.id);
                           const ownerChosen = ownerRemovalIds.includes(candidate.id);
-                          const classification = candidate.protected ? 'Protegida'
-                            : candidate.billingProtected ? 'Faturamento / assinatura'
-                            : candidate.eligibleForDeletion ? 'Elegível após verificação'
-                            : candidate.hasMeaningfulActivity ? 'Possui dados de uso'
-                            : 'Preservar / revisar';
+                          const classification = candidate.protected ? 'Protegida por política'
+                            : candidate.billingProtected ? 'Histórico financeiro ou assinatura'
+                            : candidate.eligibleForDeletion ? 'Elegível para seleção'
+                            : candidate.hasMeaningfulActivity ? 'Existem dados de uso'
+                            : candidate.reason === 'keep_has_members_or_invites' ? 'Membros, convites ou dados incertos'
+                            : candidate.reason === 'technical_recent' ? 'Teste recente'
+                            : candidate.reason === 'keep_recent_or_unknown_age' ? 'Nova ou sem data de criação'
+                            : 'Revisão necessária';
                           return (
-                            <div key={candidate.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-                              <label className="flex items-start gap-3">
-                                <input type="checkbox" className="mt-1 h-4 w-4" checked={chosen}
-                                  disabled={!candidate.eligibleForDeletion || isRunningCleanup ||
-                                    (!chosen && selectedCleanupIds.length >= 20)}
-                                  onChange={e => {
-                                    setCleanupConfirmation('');
-                                    setSelectedCleanupIds(current => e.target.checked
-                                      ? [...current, candidate.id] : current.filter(id => id !== candidate.id));
-                                    if (!e.target.checked) setOwnerRemovalIds(current => current.filter(id => id !== candidate.id));
-                                  }}/>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-medium text-[#F5F7FA]">{candidate.name}</span>
-                                  <span className="block break-all text-[10px] text-[#788392]">{candidate.id}</span>
-                                  <span className="mt-1 block text-xs text-[#A0A7B5]">
-                                    {classification}{candidate.suggestedTest ? ' · possível teste automatizado' : ''}
-                                    {candidate.memberCount > 0 ? ` · ${candidate.memberCount} vínculo(s)` : ''}
+                            <div key={candidate.id} className={`min-w-0 max-w-full rounded-xl border p-3 ${candidate.eligibleForDeletion
+                              ? 'border-[#2B85EB]/40 bg-[#2B85EB]/5'
+                              : 'border-white/10 bg-white/[0.02]'}`}>
+                              <div className="flex min-w-0 items-start gap-3">
+                                {candidate.eligibleForDeletion ? (
+                                  <input type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-[#2B85EB]"
+                                    aria-label={`Selecionar organização ${candidate.name}`}
+                                    checked={chosen} disabled={isRunningCleanup || (!chosen && selectedCleanupIds.length >= 20)}
+                                    onChange={e => {
+                                      setCleanupConfirmation('');
+                                      setSelectedCleanupIds(current => e.target.checked
+                                        ? [...current, candidate.id] : current.filter(id => id !== candidate.id));
+                                      if (!e.target.checked) setOwnerRemovalIds(current => current.filter(id => id !== candidate.id));
+                                    }}/>
+                                ) : (
+                                  <LockKeyhole aria-label="Exclusão bloqueada" className="mt-1 h-5 w-5 shrink-0 text-[#A0A7B5]" />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                    <span className="break-words text-sm font-semibold text-[#F5F7FA]">{candidate.name}</span>
+                                    {candidate.suggestedTest && <span className="rounded-md border border-amber-400/20 px-2 py-0.5 text-[10px] text-amber-200">Possível teste</span>}
+                                  </div>
+                                  <span className="mt-0.5 block break-all text-[10px] text-[#788392]">{candidate.id}</span>
+                                  <span className={`mt-2 block break-words text-xs font-medium ${candidate.eligibleForDeletion ? 'text-[#65AFFF]' : 'text-amber-200'}`}>
+                                    {classification}
                                   </span>
-                                </span>
-                              </label>
+                                  <span className="mt-1 block text-xs text-[#A0A7B5]">{candidate.memberCount || 0} vínculo(s)</span>
+                                  <div className="mt-2 grid min-w-0 grid-cols-1 gap-1.5 rounded-lg bg-black/20 p-2 text-[11px] text-[#A0A7B5] sm:grid-cols-2">
+                                    <span>Último login do dono: <strong className="font-medium text-white">{formatAuditDate(candidate.lastOwnerSignInAtMs)}</strong></span>
+                                    <span>Última atividade registrada na org.: <strong className="font-medium text-white">{formatAuditDate(candidate.lastRecordedActivityAtMs)}</strong></span>
+                                    <span>Atualização cadastral: <strong className="font-medium text-white">{formatAuditDate(candidate.updatedAtMs)}</strong></span>
+                                    <span>Idade da organização: <strong className="font-medium text-white">{candidate.ageDays == null ? 'Desconhecida' : `${candidate.ageDays} dias`}</strong></span>
+                                  </div>
+                                  {!candidate.eligibleForDeletion && (
+                                    <details className="mt-2 text-xs text-[#A0A7B5]">
+                                      <summary className="min-h-9 cursor-pointer py-2 font-medium text-[#65AFFF]">Por que não posso excluir?</summary>
+                                      <p className="break-words pb-1">
+                                        {candidate.protected ? 'Organização protegida por política do ecossistema.'
+                                          : candidate.billingProtected ? 'Existe assinatura ou histórico financeiro. A ausência de pagamento recente não autoriza apagar registros contábeis.'
+                                          : candidate.hasMeaningfulActivity ? 'Há registros de uso, auditoria ou aplicativos. A exclusão exige revisar essas dependências.'
+                                          : candidate.reason === 'keep_has_members_or_invites' ? 'Existem vínculos, convites ou verificações inconclusivas.'
+                                          : 'A organização é recente ou faltam evidências para confirmar abandono.'}
+                                        {' '}Acesso recente ao dono não comprova uso desta organização, e a ausência de login não comprova abandono.
+                                      </p>
+                                    </details>
+                                  )}
+                                </div>
+                              </div>
                               {chosen && (
-                                <label className="ml-7 mt-3 flex items-start gap-2 text-xs text-amber-200">
-                                  <input type="checkbox" className="mt-0.5" disabled={!candidate.ownerUid || isRunningCleanup} checked={ownerChosen}
+                                <label className="ml-8 mt-3 flex min-w-0 items-start gap-2 text-xs text-amber-200">
+                                  <input type="checkbox" className="mt-0.5 shrink-0" disabled={!candidate.ownerUid || isRunningCleanup}
+                                    checked={ownerChosen}
                                     onChange={e => {
                                       setCleanupConfirmation('');
                                       setOwnerRemovalIds(ids => e.target.checked
                                         ? [...ids, candidate.id] : ids.filter(id => id !== candidate.id));
                                     }}/>
-                                  <span>Excluir também a conta do dono {candidate.ownerUid ? `(${candidate.ownerUid.slice(0,12)}…)` : '(não identificado)'} (somente se comprovadamente exclusiva,
-                                    sem outros aplicativos, organizações ou histórico de assinatura).</span>
+                                  <span className="min-w-0 break-words">Excluir também a conta do dono
+                                    {candidate.ownerUid ? ` (${candidate.ownerUid.slice(0,12)}…)` : ' (não identificado)'}.
+                                    Só será permitido se a conta for exclusiva, sem outros aplicativos, organizações ou histórico de assinatura.</span>
                                 </label>
                               )}
                             </div>
                           );
                         })}
+                        {cleanupCandidates.length === 0 && (
+                          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-5 text-sm text-[#A0A7B5]">
+                            Nenhuma organização encontrada com estes filtros. Use “Todas” ou ajuste a busca.
+                          </div>
+                        )}
                       </div>
                       {selectedCleanupIds.length > 0 && (
                         <div className="space-y-2 border-t border-white/10 pt-3">
