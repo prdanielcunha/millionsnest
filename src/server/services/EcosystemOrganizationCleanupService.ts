@@ -33,7 +33,8 @@ const ACTIVE_BILLING_STATUSES = new Set([
   'paused',
 ]);
 
-const EXPLICIT_JUNK_NAME_TOKENS = ['daniel', 'cunha', 'kept'];
+// A person's name alone is never evidence that an organization is disposable.
+const EXPLICIT_JUNK_NAME_TOKENS: readonly string[] = [];
 
 const TECHNICAL_NAME_PATTERNS = [
   /^integration org$/,
@@ -164,6 +165,10 @@ export type EcosystemCleanupPreview = {
     subscriptionStatus: string | null;
   }>;
   protected: Array<{ id: string; name: string }>;
+  organizations: Array<{ id: string; name: string; reason: EcosystemCleanupReason;
+    ageDays: number | null; memberCount: number; subscriptionStatus: string | null;
+    protected: boolean; billingProtected: boolean; eligibleForDeletion: boolean;
+    suggestedTest: boolean; hasMeaningfulActivity: boolean }>;
 };
 
 export type EcosystemCleanupApplyResult = EcosystemCleanupPreview & {
@@ -445,7 +450,9 @@ async function analyzeOrganization(params: {
   const technical = isTechnicalName(normalizedName);
   const explicitJunk = isExplicitJunkName(normalizedName);
   const memberCount = Math.max(membersSnap.size, linkedUserIds.size);
-  const hasPendingInvites = Boolean(pendingInvitesSnap && !pendingInvitesSnap.empty);
+  // Missing reads are uncertainty, not evidence of an empty tenant.
+  const hasPendingInvites = pendingInvitesSnap === null || !pendingInvitesSnap.empty;
+  const hasUnknownMembership = legacyMembersSnap === null;
 
   let activity = false;
   let reason: EcosystemCleanupReason = 'keep_nonbillable_other';
@@ -455,9 +462,6 @@ async function analyzeOrganization(params: {
     reason = 'protected';
   } else if (billingProtected) {
     reason = 'active_billing';
-  } else if (explicitJunk) {
-    reason = 'explicit_junk_name';
-    deleteOrg = true;
   } else {
     const referenceMs = updatedAtMs ?? createdAtMs;
     const recentTechnical =
@@ -472,7 +476,7 @@ async function analyzeOrganization(params: {
 
       if (activity) {
         reason = 'keep_has_activity';
-      } else if (memberCount > 1 || hasPendingInvites) {
+      } else if (memberCount > 1 || hasPendingInvites || hasUnknownMembership) {
         reason = 'keep_has_members_or_invites';
       } else if (ageDays == null || ageDays < minAbandonedAgeDays) {
         reason = 'keep_recent_or_unknown_age';
@@ -533,6 +537,14 @@ function buildPreview(analyses: EcosystemCleanupAnalysis[]): EcosystemCleanupPre
       .filter(analysis => analysis.protected)
       .map(analysis => ({ id: analysis.id, name: analysis.name || 'Sem nome' }))
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+    organizations: analyses.map(analysis => ({
+      id: analysis.id, name: analysis.name || 'Sem nome', reason: analysis.reason,
+      ageDays: analysis.ageDays, memberCount: analysis.memberCount,
+      subscriptionStatus: analysis.subscriptionStatus,
+      protected: analysis.protected, billingProtected: analysis.billingProtected,
+      eligibleForDeletion: analysis.delete, suggestedTest: analysis.technical,
+      hasMeaningfulActivity: analysis.hasMeaningfulActivity,
+    })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
   };
 }
 
@@ -831,14 +843,20 @@ export async function applyEcosystemOrganizationCleanup(params: {
   actorUid: string;
   actorSystemRole: string;
   confirmation: string;
+  organizationIds: string[];
   nowMs?: number;
   minAbandonedAgeDays?: number;
   technicalRecentDays?: number;
   extraProtectedOrgIds?: string[];
 }): Promise<EcosystemCleanupApplyResult> {
-  if (params.confirmation !== 'LIMPAR_ORGANIZACOES') {
+  if (params.confirmation !== 'EXCLUIR_ORGANIZACOES_SELECIONADAS') {
     throw new Error('CONFIRMATION_REQUIRED');
   }
+
+  const ids = params.organizationIds;
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 20 ||
+      ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) ||
+      new Set(ids).size !== ids.length) throw new Error('INVALID_ORGANIZATION_SELECTION');
 
   const role = normalizeText(params.actorSystemRole);
   if (!['ceo', 'global_admin', 'ecosystem_owner', 'founder'].includes(role)) {
@@ -854,13 +872,17 @@ export async function applyEcosystemOrganizationCleanup(params: {
     extraProtectedOrgIds: params.extraProtectedOrgIds,
   });
 
+  const selected = analyses.filter(item => ids.includes(item.id));
+  if (selected.length !== ids.length || selected.some(item => !item.delete || item.protected || item.billingProtected)) {
+    throw new Error('ORGANIZATION_SELECTION_NOT_ELIGIBLE');
+  }
   let organizationsDeleted = 0;
   let leadsCaptured = 0;
   let topLevelDocumentsDeleted = 0;
   let skippedBecauseBillingChanged = 0;
 
   // Capture remarketing contacts before any destructive operation.
-  for (const analysis of analyses.filter(item => item.shouldCaptureLead)) {
+  for (const analysis of selected.filter(item => item.shouldCaptureLead)) {
     try {
       if (
         await captureRemarketingLead({
@@ -876,7 +898,16 @@ export async function applyEcosystemOrganizationCleanup(params: {
     }
   }
 
-  for (const analysis of analyses.filter(item => item.delete)) {
+  for (const analysis of selected) {
+    // Re-check current activity, age and members as well as billing.
+    const fresh = await previewEcosystemOrganizationCleanup({db:params.db,nowMs:Date.now(),
+      minAbandonedAgeDays:params.minAbandonedAgeDays,technicalRecentDays:params.technicalRecentDays,
+      extraProtectedOrgIds:params.extraProtectedOrgIds});
+    const latest = fresh.analyses.find(item => item.id === analysis.id);
+    if (!latest?.delete || latest.protected || latest.billingProtected) {
+      skippedBecauseBillingChanged += 1;
+      continue;
+    }
     // Billing safety is checked again immediately before deletion.
     const subDoc = await params.db.collection('subscriptions').doc(analysis.id).get();
     const latestSubscription = subDoc.exists ? (subDoc.data() || {}) : null;
