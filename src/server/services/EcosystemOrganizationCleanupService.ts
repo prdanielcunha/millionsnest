@@ -169,7 +169,7 @@ export type EcosystemCleanupPreview = {
   organizations: Array<{ id: string; name: string; reason: EcosystemCleanupReason;
     ageDays: number | null; memberCount: number; subscriptionStatus: string | null;
     protected: boolean; billingProtected: boolean; eligibleForDeletion: boolean;
-    suggestedTest: boolean; hasMeaningfulActivity: boolean }>;
+    suggestedTest: boolean; hasMeaningfulActivity: boolean; ownerUid: string | null }>;
 };
 
 export type EcosystemCleanupApplyResult = EcosystemCleanupPreview & {
@@ -555,6 +555,7 @@ function buildPreview(analyses: EcosystemCleanupAnalysis[]): EcosystemCleanupPre
       protected: analysis.protected, billingProtected: analysis.billingProtected,
       eligibleForDeletion: analysis.delete, suggestedTest: analysis.technical,
       hasMeaningfulActivity: analysis.hasMeaningfulActivity,
+      ownerUid: analysis.ownerUid,
     })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
   };
 }
