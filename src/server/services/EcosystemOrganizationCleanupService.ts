@@ -914,6 +914,9 @@ async function assertOwnerAccountIsolation(params: {
   if (Object.keys(data).some(key=>!allowedUserKeys.has(key))) {
     throw Error('OWNER_ACCOUNT_HAS_OTHER_DATA');
   }
+  const marketingLeads=await db.collection('remarketing_prospects')
+    .where('userId','==',ownerUid).limit(1).get();
+  if (!marketingLeads.empty) throw Error('OWNER_ACCOUNT_HAS_OTHER_DATA');
   const extraCollections=await user.ref.listCollections();
   if (extraCollections.length) throw Error('OWNER_ACCOUNT_HAS_OTHER_DATA');
   const account=await auth.getUser(ownerUid);
@@ -989,7 +992,9 @@ export async function applyEcosystemOrganizationCleanup(params: {
   let skippedBecauseBillingChanged = 0;
 
   // Capture remarketing contacts before any destructive operation.
-  for (const analysis of selected.filter(item => item.shouldCaptureLead)) {
+  // A request to erase the owner account must never copy their contact details
+  // into a new marketing lead before deleting that account.
+  for (const analysis of selected.filter(item => item.shouldCaptureLead && !ownerChoices.includes(item.id))) {
     try {
       if (
         await captureRemarketingLead({
