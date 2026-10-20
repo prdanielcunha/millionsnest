@@ -316,7 +316,7 @@ async function hasNestedOrganizationActivity(db: Firestore, orgId: string): Prom
 
     for (const nested of nestedCollections) {
       // These collections are structural or independently checked below.
-      if (['members', 'invites', 'audit_logs', 'monthly_usage', 'notifications'].includes(nested.id)) {
+      if (['members', 'invites'].includes(nested.id)) {
         continue;
       }
 
@@ -400,7 +400,10 @@ async function analyzeOrganization(params: {
   ]);
 
   const subscription = subscriptionDoc.exists ? (subscriptionDoc.data() || {}) : null;
+  // Even a cancelled Stripe subscription can carry invoices or retention
+  // obligations. Historical billing must be reviewed outside bulk cleanup.
   const billingProtected =
+    subscription !== null ||
     hasActiveBilling(subscription) ||
     hasActiveOrganizationEntitlement(data);
 
