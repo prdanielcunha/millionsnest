@@ -87,6 +87,7 @@ export default function App() {
                 <Route path="/dashboard/billing/success" element={<BillingSuccess />} />
                 <Route path="/admin/debug/organization" element={<AdminDebug />} />
                 <Route path="/admin/ecosystem" element={<EcosystemAdmin />} />
+                <Route path="/admin/ecosystem/organizations" element={<EcosystemAdmin />} />
                 <Route path="/admin/ecosystem-data" element={<EcosystemDataConsole />} />
                 <Route path="/admin/trials" element={<TrialManagement />} />
                 <Route path="/admin/database" element={<EcosystemDataConsole />} />
