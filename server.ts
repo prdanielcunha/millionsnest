@@ -4058,7 +4058,7 @@ async function startServer() {
         return res.status(400).json({ error: 'Seleção inválida. Atualize a análise e selecione organizações elegíveis.' });
       }
       if (err?.message === 'ORGANIZATION_SELECTION_NOT_ELIGIBLE' || String(err?.message || '').startsWith('OWNER_ACCOUNT_')) {
-        return res.status(409).json({ error: 'Exclusão bloqueada por vínculos, uso, assinatura ou incerteza na conta do proprietário. Nenhuma exclusão desse pedido foi iniciada.' });
+        return res.status(409).json({ error: 'Exclusão bloqueada por vínculo, uso ou faturamento. Se o processamento já tiver começado, consulte o journal de manutenção para verificar cada organização antes de tentar novamente.' });
       }
       console.error('[API Admin Organization Cleanup Apply]', err);
       return res.status(500).json({ error: 'Internal Server Error' });
