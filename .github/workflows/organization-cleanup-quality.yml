@@ -1,0 +1,31 @@
+name: Organization Cleanup Safety QA
+on:
+  pull_request:
+    branches: [main, production]
+    paths:
+      - 'src/server/services/EcosystemOrganizationCleanupService.ts'
+      - 'src/pages/EcosystemAdmin.tsx'
+      - 'server.ts'
+      - 'scripts/test_organization_selective_cleanup.ts'
+      - '.github/workflows/organization-cleanup-quality.yml'
+  push:
+    branches: [chatgpt/org-selective-deletion-review-20261019]
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Selection and owner account safety contracts
+        run: node --import tsx scripts/test_organization_selective_cleanup.ts
+      - name: Typecheck
+        run: npm run lint
+      - name: Production build
+        run: npm run build
