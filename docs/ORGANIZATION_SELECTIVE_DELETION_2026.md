@@ -1,6 +1,6 @@
 # Organização: revisão e exclusão seletiva
 
-Status: **proposta de implementação, PR #442 em revisão**. Não disponível em produção até CI, revisão de segurança e release explícito.
+Status: **publicado em produção**. PR #442 integrada em `main`; PR #445 reforçou a prova de titularidade; PR #444 integrada em `production`, commit `e5cdcf54df6394c57a309ad7a65867740d235d48`. Cloud Run e Firebase Hosting publicados e testados no [workflow #39361868823](https://github.com/prdanielcunha/millionsnest/actions/runs/39361868823), com SHA servido confirmado, smoke de produção e auditoria do MusicScale antes/depois do deploy. Nenhuma exclusão real foi executada no release. Navegação autenticada em aparelho e execução destrutiva real com dados de cliente não foram simuladas.
 
 ## Tela administrativa
 
@@ -30,5 +30,5 @@ Selecionar uma ou até 20 por operação; marcar opcionalmente **Excluir também
 2. Verificar retenção de comprovantes financeiros e obrigações legais/Stripe em todos os apps; qualquer dúvida deve bloquear exclusão definitiva. Não apagar registros fiscais, pagamentos ou históricos sob obrigação de retenção.
 3. Executar teste autenticado com organização sintética autorizada, sem dados de clientes, no desktop e no celular.
 4. Provar proteção entre organizações, preservação de usuários compartilhados e comportamento de exclusão com e sem dono, assim como nenhum regresso no Hub, MusicScale, NestFinance, NestJourney e Connect.
-5. Merge seletivo main → production apenas após revisão independente e autorização de release. **Esta PR não exclui organizações reais e não deve disparar limpeza.**
+5. **Concluído:** merge seletivo e deploy exato da versão `e5cdcf54` em Cloud Run/Hosting, com testes automatizados aprovados. O release não excluiu organizações reais. Para qualquer exclusão irreversível, a escolha e confirmação cabem ao administrador autenticado; casos com vínculos ou obrigações de retenção devem ser bloqueados.
 
