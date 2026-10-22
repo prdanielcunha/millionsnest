@@ -83,9 +83,14 @@ export default function TrialStart(){
   const {i18n}=useTranslation();
   const c=copy[String(i18n.language).slice(0,2) as keyof typeof copy]||copy.pt;
   const navigate=useNavigate();
+  // After first Google login, bootstrap creates a real owner organization but
+  // AuthContext may still have a null canonical snapshot. Use the profile only
+  // as a candidate; the server independently verifies actual ownership.
+  const profileOrgId=profile?.activeOrganizationId||profile?.primaryOrganizationId||profile?.organizationId;
   const owned=Array.isArray(canonicalContext?.ownedOrganizations)
     ? canonicalContext.ownedOrganizations.filter((org:any)=>org&&typeof org.id==='string'&&org.status!=='archived')
-    : [];
+    : typeof profileOrgId==='string'&&profileOrgId.trim()
+      ? [{id:profileOrgId,name:'Minha organização'}] : [];
   const activeOrgId=canonicalContext?.activeOrganizationId||profile?.activeOrganizationId||'';
   const [selectedOrgId,setSelectedOrgId]=useState('');
   const orgId=owned.some((org:any)=>org.id===selectedOrgId)?selectedOrgId:
