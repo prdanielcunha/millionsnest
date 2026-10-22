@@ -12,6 +12,7 @@ const ActionOsShowcase = lazy(() => import("../components/ActionOsShowcase.js").
 const Flagship = lazy(() => import("../components/Flagship.js").then((module) => ({ default: module.Flagship })));
 const Ecosystem = lazy(() => import("../components/Ecosystem.js").then((module) => ({ default: module.Ecosystem })));
 const Vision = lazy(() => import("../components/Vision.js").then((module) => ({ default: module.Vision })));
+const CustomerSuccess = lazy(() => import("../components/CustomerSuccess.js").then((module) => ({ default: module.CustomerSuccess })));
 const FAQ = lazy(() => import("../components/FAQ.js").then((module) => ({ default: module.FAQ })));
 const Guarantee = lazy(() => import("../components/Guarantee.js").then((module) => ({ default: module.Guarantee })));
 const Footer = lazy(() => import("../components/Footer.js").then((module) => ({ default: module.Footer })));
@@ -60,6 +61,7 @@ export function Home() {
         <Problem />
         <ActionOsShowcase />
         <Flagship />
+        <CustomerSuccess />
         <Ecosystem />
         <Vision />
         <FAQ />

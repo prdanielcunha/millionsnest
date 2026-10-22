@@ -96,6 +96,7 @@ export function Hero() {
             <span className="h-1 w-1 rounded-full bg-white/20" />
             <span>{t('hero_scope_note')}</span>
           </motion.div>
+          <p className="mx-auto mt-4 max-w-xl text-center text-xs leading-relaxed text-[#9DAABD]">{t('hero_support_note')}</p>
         </div>
 
         <motion.div

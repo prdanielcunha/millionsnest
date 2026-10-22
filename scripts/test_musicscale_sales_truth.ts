@@ -81,4 +81,14 @@ for (const visual of ['CreateScaleVisual', 'RepertoireVisual', 'NotificationsVis
 assert.match(guidedDemo, /lg:hidden/, 'guided demo must provide a dedicated compact mobile step navigator');
 assert.match(guidedDemo, /overflow-x-auto/, 'mobile guided demo controls must scroll horizontally instead of overflowing the viewport');
 
+assert.match(landing, /support_eyebrow/, 'MusicScale landing must explain guided setup');
+assert.match(landing, /support_premium_note/, 'premium setup must remain separate from standard support');
+assert.match(landing, /<SalesChat \/>/, 'MusicScale landing must offer existing pre-sales contact');
+assert.match(landing, /faq_q9/, 'MusicScale must address onboarding and support objections');
+for (const [lang, source] of [['pt', pt], ['en', en], ['es', es]] as const) {
+  for (const key of ['support_hero', 'support_title', 'support_step1_title', 'support_step2_title', 'support_step3_title', 'support_trial_title', 'support_premium_note', 'faq_q9', 'faq_a9']) {
+    assert.match(source, new RegExp(`\\b${key}:`), `${lang} must translate MusicScale onboarding ${key}`);
+  }
+}
+
 console.log('PASS MusicScale sales truth and i18n contract');
