@@ -16,7 +16,8 @@ export function Login() {
   const location = useLocation();
   const { t } = useTranslation(['auth']);
   
-  const [isLogin, setIsLogin] = useState(() => !Boolean(sessionStorage.getItem('purchase_intent')));
+  const [isLogin, setIsLogin] = useState(() =>
+    resolveSafePostLoginPath(location.search) !== '/trial' && !Boolean(sessionStorage.getItem('purchase_intent')));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");

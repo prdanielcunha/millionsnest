@@ -111,10 +111,8 @@ export function MusicScaleLanding() {
       metadata: { action: 'choose_plan', source: 'sales_landing_primary' }
     });
 
-    // The trial always follows the plan explicitly chosen by the customer.
-    // Never preselect Pro from a generic landing CTA.
     sessionStorage.removeItem("purchase_intent");
-    document.getElementById('precos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    navigate('/trial');
   };
 
   const scrollToDemo = () => {
