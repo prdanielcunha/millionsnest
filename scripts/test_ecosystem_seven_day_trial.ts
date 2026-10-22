@@ -47,6 +47,10 @@ assert.equal(Date.parse(created.expiresAt),now+7*DAY);
 assert.equal(db.docs.has('subscriptions/new-org'),false,'trial must never create billing records');
 const grant=db.docs.get('musicscale_internal_trials/new-org');
 assert.equal(grant.grantVersion,3);
+const projection=db.docs.get('organizations/new-org');
+assert.equal(projection['apps.musicscale.plan'],'pro');
+for(const feature of ['aiImport','aiStructuring','aiSuggestions','aiSetlistAnalysis'])
+  assert.equal(projection['apps.musicscale.features'][feature],true);
 assert.equal(trialWindow('musicscale',grant,now+7*DAY-1,'new-org').active,true);
 assert.equal(trialWindow('musicscale',grant,now+7*DAY,'new-org').expired,true);
 const retry=await activateMusicScaleHubTrial({...args,nowMs:now+DAY});
