@@ -1,0 +1,45 @@
+name: Publish Approved NestTuner Brand Refresh
+on:
+  push:
+    branches: [production]
+    paths: [".github/workflows/nesttuner-approved-brand-release-20261022.yml"]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: millionsnest-nesttuner-brand-hosting
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact reviewed NestTuner visual release
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: prdanielcunha/nesttuner
+          ref: 1d93daa1778d1b3760a946cbbe871d2c962df088
+          persist-credentials: false
+      - name: Setup Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Validate audio, UI and immutable embedded release
+        run: npm run check
+      - name: Authenticate using the existing production Hosting publisher
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - name: Publish only the existing NestTuner Firebase Hosting target
+        run: npx -y firebase-tools@15.27.0 deploy --only hosting:nesttuner --project millionsnest --non-interactive
+      - name: Verify canonical public brand asset and entry
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://nesttuner.millionsnest.com/brand/millionsnest/v1/mark-192.png -o /tmp/nesttuner-brand.png
+          test -s /tmp/nesttuner-brand.png
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://nesttuner.millionsnest.com/pt -o /tmp/nesttuner-entry.html
+          grep -Eiq '<!doctype html|<html' /tmp/nesttuner-entry.html
