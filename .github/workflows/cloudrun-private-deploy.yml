@@ -87,6 +87,10 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --no-audit --no-fund
+          npm run lint
+          npx tsx scripts/test_trial_first_acquisition.ts
+          npx tsx scripts/test_ecosystem_seven_day_trial.ts
+          npx tsx scripts/test_musicscale_live_ai_gateway.ts
           npx tsx scripts/audit_music_data_integrity_readonly.ts | tee /tmp/music-integrity-before.log
           npx tsx scripts/audit_trial_policy_readonly.ts
           grep -q '^MUSICSCALE_AGGREGATE_READ_ONLY_AUDIT=' /tmp/music-integrity-before.log
@@ -160,7 +164,7 @@ jobs:
             --concurrency 80 \
             --timeout 60 \
             --no-allow-unauthenticated \
-            --update-env-vars "FIREBASE_PROJECT_ID=millionsnest,FIREBASE_STORAGE_BUCKET=millionsnest.firebasestorage.app,NESTAFFILIATE_REFERENCE_MEDIA_ENABLED=true,NODE_ENV=production,VITE_APP_URL=https://www.millionsnest.com,NESTFINANCE_APP_URL=https://nestfinance.millionsnest.com,NESTFINANCE_HANDOFF_ENABLED=true,MUSICSCALE_DEFAULT_CURRENCY=brl,MUSICSCALE_PRO_ACTIVE_PRICE=launch,STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY=price_1TURaNPmDx20joKa3MDtwOro,STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY=price_1TYR1sPmDx20joKaJZGdyzgE,STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY=price_1Tdb8LPmDx20joKaBoD4IR9T,STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY=price_1Tdb8LPmDx20joKayRHKzW2k,STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY=price_1TYXhCPmDx20joKamBd9nkti,STRIPE_PRICE_MUSICSCALE_PRO_YEARLY=price_1TYXitPmDx20joKaJMTXffLZ,STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY=price_1TYXhCPmDx20joKamBd9nkti,STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY=price_1TYXitPmDx20joKaJMTXffLZ,STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY=price_1TdpfnPmDx20joKakj9v2zVu,STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY=price_1TdphzPmDx20joKaL9S4FkYZ,STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM=price_1TYXkVPmDx20joKa2LwXB2ei,STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS=price_1TYXl9PmDx20joKaYs0DrfQt,STRIPE_PRICE_MUSICSCALE_WORSHIP_100=price_1TYXorPmDx20joKaBZyaIfOQ,STRIPE_PRICE_MUSICSCALE_PACK_10=price_1TYXvlPmDx20joKatAGawTgL" \
+            --update-env-vars "FIREBASE_PROJECT_ID=millionsnest,FIREBASE_STORAGE_BUCKET=millionsnest.firebasestorage.app,NESTAFFILIATE_REFERENCE_MEDIA_ENABLED=true,MUSICSCALE_INTERNAL_TRIAL_ENABLED=true,MUSICSCALE_INTERNAL_TRIAL_PUBLIC_ENABLED=true,NODE_ENV=production,VITE_APP_URL=https://www.millionsnest.com,NESTFINANCE_APP_URL=https://nestfinance.millionsnest.com,NESTFINANCE_HANDOFF_ENABLED=true,MUSICSCALE_DEFAULT_CURRENCY=brl,MUSICSCALE_PRO_ACTIVE_PRICE=launch,STRIPE_PRICE_MUSICSCALE_STARTER_MONTHLY=price_1TURaNPmDx20joKa3MDtwOro,STRIPE_PRICE_MUSICSCALE_STARTER_YEARLY=price_1TYR1sPmDx20joKaJZGdyzgE,STRIPE_PRICE_MUSICSCALE_ADVANCED_MONTHLY=price_1Tdb8LPmDx20joKaBoD4IR9T,STRIPE_PRICE_MUSICSCALE_ADVANCED_YEARLY=price_1Tdb8LPmDx20joKayRHKzW2k,STRIPE_PRICE_MUSICSCALE_PRO_MONTHLY=price_1TYXhCPmDx20joKamBd9nkti,STRIPE_PRICE_MUSICSCALE_PRO_YEARLY=price_1TYXitPmDx20joKaJMTXffLZ,STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_MONTHLY=price_1TYXhCPmDx20joKamBd9nkti,STRIPE_PRICE_MUSICSCALE_PRO_LAUNCH_YEARLY=price_1TYXitPmDx20joKaJMTXffLZ,STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_MONTHLY=price_1TdpfnPmDx20joKakj9v2zVu,STRIPE_PRICE_MUSICSCALE_PRO_STANDARD_YEARLY=price_1TdphzPmDx20joKaL9S4FkYZ,STRIPE_PRICE_MUSICSCALE_SETUP_PREMIUM=price_1TYXkVPmDx20joKa2LwXB2ei,STRIPE_PRICE_MUSICSCALE_TRAINING_EXPRESS=price_1TYXl9PmDx20joKaYs0DrfQt,STRIPE_PRICE_MUSICSCALE_WORSHIP_100=price_1TYXorPmDx20joKaBZyaIfOQ,STRIPE_PRICE_MUSICSCALE_PACK_10=price_1TYXvlPmDx20joKatAGawTgL" \
             --update-secrets "STRIPE_SECRET_KEY=millionsnest-stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=millionsnest-stripe-webhook-secret:latest,NESTAI_SIGNING_PRIVATE_JWK=millionsnest-nestai-signing-private-jwk:latest" \
             --quiet
 

@@ -32,3 +32,13 @@ O deploy Hub cria a revisão sem tráfego. Quando o commit altera Rules, o tráf
 `test_ecosystem_seven_day_trial.ts` cobre duração, criação/repetição/vencimento, extensão, prevenção de avaliação no Stripe em todos os apps, idempotência dos checkouts e zero writes em contas pagas/legadas. Os testes existentes verificam resolução de assinatura, handoff, RBAC, contas inativas e isolamento por organização. As suítes Firestore de ambos os repositórios verificam sete dias, compatibilidade de 14 dias, prazo adulterado, cliente pago e tentativa de outro tenant.
 
 O relato de que não existem trials internos ainda não substitui uma consulta ao banco de produção. A implementação é compatível com eles mesmo se o inventário encontrar algum.
+
+## Entrada pública corrigida em 2026-10-22
+
+A oferta MusicScale abre `/trial`, independente do plano de preço consultado. Cadastro retorna a esse destino interno fixo, sem Checkout. Ativação expressa usa a API canônica existente, confirma titular/histórico, concede Pro por 168h e lança o produto via handoff autorizado. A projeção inclui plano e features Pro para os leitores de IA, sem criar assinatura Stripe. Descoberta informa grant ativo e considera histórico do titular; retries não reiniciam o prazo. Clientes pagos/legados não recebem writes.
+
+Importações da Biblioteca Viva mantêm o limite já existente de 20 por avaliação no backend MusicScale. Consultas assistidas do gateway Live AI têm 10 execuções por avaliação, em bucket transacional independente do mês; cache não cobra nova execução e os orçamentos pagos permanecem intactos. Outros recursos de IA mantêm suas cotas/controles existentes. Não prometer IA ilimitada.
+
+URLs antigas de Checkout levam novos clientes elegíveis à avaliação. `intent=paid` identifica contratação paga expressa; a conversão continua sem segundo trial. Falha da oferta/ativação mostra retry sem iniciar pagamento. A publicação usa os workflows atuais Firebase Hosting/Cloud Run, preservando Cloudflare/DNS. O workflow Cloud Run habilita somente as duas flags públicas MusicScale; NestLocal permanece com seu rollout existente.
+
+Validação adicional: `test_trial_first_acquisition.ts` e `test_musicscale_live_ai_gateway.ts` (limite durante virada de mês e conversão para orçamento pago).

@@ -41,6 +41,9 @@ export function resolveSafeConnectReturnTo(candidate?: string | null): string | 
 
 function isSafeLaunchNext(next: string): boolean {
   if (!next.startsWith('/') || next.startsWith('//') || next.includes('\\')) return false;
+  // A fixed, internal acquisition destination. No arbitrary redirects or app URLs.
+  if (next === '/trial') return true;
+  if (/^\/checkout\?app=musicscale&intent=paid(?:&plan=musicscale_(?:(?:starter|advanced|pro)_(?:monthly|yearly)|setup_premium|training_express|worship_100|music_pack_10))?$/.test(next)) return true;
 
   const questionMark = next.indexOf('?');
   const pathname = questionMark >= 0 ? next.slice(0, questionMark) : next;

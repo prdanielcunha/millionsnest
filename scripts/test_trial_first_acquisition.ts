@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {resolveSafePostLoginPath} from '../src/lib/connectLaunchPolicy.js';
+assert.equal(resolveSafePostLoginPath('?next=%2Ftrial'),'/trial');
+for(const next of ['//evil.com','/trial?next=https://evil.com','/trial/../admin','https://evil.com','/checkout?intent=free'])
+  assert.equal(resolveSafePostLoginPath('?next='+encodeURIComponent(next)),null);
+const page=readFileSync('src/pages/TrialStart.tsx','utf8');
+assert.ok(page.includes('/api/v1/billing/trial/activate'));
+assert.ok(!page.includes('unified-checkout'));
+assert.ok(!page.includes('checkout.stripe.com'));
+assert.ok(page.includes('/apps/musicscale/launch'));
+assert.ok(page.includes('intent=paid'));
+const pricing=readFileSync('src/components/Pricing.tsx','utf8');
+const entry=pricing.slice(pricing.indexOf('const handlePurchase'),pricing.indexOf('const starterFeatures'));
+assert.ok(entry.includes("navigate('/trial')"));
+assert.ok(entry.includes("getProductByLookupKey(lookupKey)?.type==='addon'"),'paid add-ons preserve explicit purchase');
+const checkout=readFileSync('src/pages/Checkout.tsx','utf8');
+assert.ok(checkout.includes("navigate('/trial',{replace:true})"));
+const server=readFileSync('server.ts','utf8');
+assert.ok(server.includes('!ownerTrialDoc.exists'));
+assert.ok(server.includes('active:!!active'));
+console.log('PASS trial-first acquisition, fixed safe login return, no Stripe call, explicit paid choice, owner-history discovery');

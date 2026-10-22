@@ -274,6 +274,21 @@ async function main() {
     assert.equal(model, 'nestai-managed');
   }
 
+  {
+    const store=fakeDb();
+    for(let i=0;i<11;i++){
+      const recorder=response();
+      const deps=dependencies({db:store.db});
+      deps.resolveAccess=async()=>({accessible:true,entitlement:{subscriptionStatus:'internal_trial_active'}}) as any;
+      deps.now=()=>Date.parse(i<5?'2026-10-31T23:00:00Z':'2026-11-01T01:00:00Z');
+      await handleMusicScaleLiveAiRequest(request({token:'token',organizationId:'trial-cap-test',body:{unique:i}}),recorder.res,deps);
+      assert.equal(recorder.read().statusCode,i<10?200:429,'trial has 10 calls total across months');
+    }
+    assert.equal(store.usage.get('organizations/trial-cap-test/musicscaleLiveAiUsage/trial'),10);
+    const paid=response();
+    await handleMusicScaleLiveAiRequest(request({token:'token',organizationId:'trial-cap-test',body:{unique:'paid'}}),paid.res,dependencies({db:store.db}));
+    assert.equal(paid.read().statusCode,200,'conversion to paid uses existing paid budget, not exhausted trial');
+  }
   console.log('MUSICSCALE_LIVE_AI_GATEWAY_QA_OK');
 }
 
