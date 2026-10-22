@@ -2822,8 +2822,8 @@ service cloud.firestore {
         // Likewise, Hub entitlement grants are emitted only by the backend.
         // Firestore ORs overlapping allows: exclude these namespaces HERE,
         // rather than adding a separate deny match that can be overridden.
-        allow create: if !app.matches('^peopleDirectory.*') && !app.matches('^finance.*') && !(app in ['members', 'audit_logs', 'connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
-        allow update, delete: if !app.matches('^peopleDirectory.*') && !app.matches('^finance.*') && !(app in ['members', 'audit_logs', 'connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow create: if !app.matches('^peopleDirectory.*') && !app.matches('^finance.*') && !(app in ['members', 'audit_logs', 'connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'trial_usage' && app != 'musicscaleLiveAiUsage' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
+        allow update, delete: if !app.matches('^peopleDirectory.*') && !app.matches('^finance.*') && !(app in ['members', 'audit_logs', 'connectAgentProfiles', 'products', 'join_requests', 'actionCenterUsers', 'actionCenter', '_commandReceipts', 'financeIdempotency']) && app != 'notifications' && app != 'analytics' && app != 'trial_usage' && app != 'musicscaleLiveAiUsage' && app != 'app_entitlements' && !app.matches('^nestlocal_.*') && isAuthenticated() && checkOrgAccess(orgId) && isOrgActive(orgId);
       }
     }
 

@@ -42,3 +42,5 @@ Importações da Biblioteca Viva mantêm o limite já existente de 20 por avalia
 URLs antigas de Checkout levam novos clientes elegíveis à avaliação. `intent=paid` identifica contratação paga expressa; a conversão continua sem segundo trial. Falha da oferta/ativação mostra retry sem iniciar pagamento. A publicação usa os workflows atuais Firebase Hosting/Cloud Run, preservando Cloudflare/DNS. O workflow Cloud Run habilita somente as duas flags públicas MusicScale; NestLocal permanece com seu rollout existente.
 
 Validação adicional: `test_trial_first_acquisition.ts` e `test_musicscale_live_ai_gateway.ts` (limite durante virada de mês e conversão para orçamento pago).
+
+As dez consultas IA da avaliação usam o mesmo contador transacional `organizations/{orgId}/musicscaleLiveAiUsage/trial` no gateway Hub e no proxy MusicScale, depois da autorização canônica. As Rules impedem reset de `trial_usage` e `musicscaleLiveAiUsage` pelo SDK do navegador. O contador de biblioteca continua separado; esgotar IA não bloqueia o restante do teste. Solicitações reservadas contam mesmo se o provedor falhar, protegendo o custo.
