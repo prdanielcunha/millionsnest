@@ -56,6 +56,7 @@ export default function Checkout() {
   const checkoutApp: 'musicscale' | 'nestlocal' = new URLSearchParams(window.location.search).get('app') === 'nestlocal'
     ? 'nestlocal'
     : 'musicscale';
+  const explicitPaidChoice = new URLSearchParams(window.location.search).get('intent') === 'paid';
 
   const activeOrganizationId = canonicalContext?.activeOrganizationId 
     || profile?.activeOrganizationId 
@@ -64,7 +65,16 @@ export default function Checkout() {
     || null;
 
   useEffect(() => {
+    // Existing marketing/bookmark URLs must never masquerade as a free trial checkout.
+    if(checkoutApp==='musicscale'&&!explicitPaidChoice){
+      navigate('/trial',{replace:true});
+      return;
+    }
     if (!authLoading && !user) {
+      if(checkoutApp==='musicscale'&&!explicitPaidChoice){
+        navigate('/trial',{replace:true});
+        return;
+      }
       const params = new URLSearchParams(window.location.search);
       const requestedPlan = params.get('plan');
       if (requestedPlan) sessionStorage.setItem('purchase_intent', requestedPlan);
@@ -127,11 +137,17 @@ export default function Checkout() {
         });
         if(!response.ok)return;
         const data=await response.json();
-        if(!cancelled&&data.available===true)setTrialOffer({available:true,days:Number(data.days)||0});
+        if(!cancelled&&data.available===true){
+          if(checkoutApp==='musicscale'&&!explicitPaidChoice){
+            navigate('/trial',{replace:true});
+            return;
+          }
+          setTrialOffer({available:true,days:Number(data.days)||0});
+        }
       }catch{/* A failed pilot lookup never interferes with existing paid checkout. */}
     })();
     return ()=>{cancelled=true};
-  },[user,activeOrganizationId,checkoutApp]);
+  },[user,activeOrganizationId,checkoutApp,explicitPaidChoice,navigate]);
 
   useEffect(()=>{
     let cancelled=false;
@@ -424,7 +440,7 @@ export default function Checkout() {
     }
   };
 
-  if (loading) {
+  if (loading || (checkoutApp==='musicscale'&&!explicitPaidChoice)) {
     return (
       <div className="min-h-screen bg-[#0E1015] flex items-center justify-center font-sans">
         <motion.div 

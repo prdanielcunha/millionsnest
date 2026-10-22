@@ -23,7 +23,7 @@ export function Pricing() {
 
   // Use CATALOG as root fallback
   const fallbackPrices = PRODUCT_CATALOG.reduce((acc: any, p) => {
-     const key = p.lookupKey.replace('musicscale_', '');
+     const key = p.lookupKey.replace('musicscale_', '').replace('_yearly','_annual');
      acc[key] = p.priceInCents / 100;
      return acc;
   }, {});
@@ -67,12 +67,13 @@ export function Pricing() {
   }, []);
 
   const handlePurchase = (lookupKey: string) => {
-    sessionStorage.setItem('purchase_intent', lookupKey);
-    if (user) {
-      navigate(`/checkout?plan=${lookupKey}`);
-    } else {
-      navigate('/login');
+    if(getProductByLookupKey(lookupKey)?.type==='addon'){
+      navigate(`/checkout?app=musicscale&intent=paid&plan=${encodeURIComponent(lookupKey)}`);
+      return;
     }
+    // Pricing is informational before evaluation; payment is an explicit later choice.
+    sessionStorage.removeItem('purchase_intent');
+    navigate('/trial');
   };
 
   const starterFeatures = [

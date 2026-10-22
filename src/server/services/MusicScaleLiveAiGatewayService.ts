@@ -277,10 +277,12 @@ async function consumeBudget(
   db: Firestore,
   organizationId: string,
   task: MusicScaleLiveAiTask,
-  nowMs: number
+  nowMs: number,
+  internalTrial = false
 ): Promise<{ allowed: true; used: number; limit: number } | { allowed: false; used: number; limit: number }> {
-  const limit = Math.floor(readPositiveNumber('MUSICSCALE_LIVE_AI_MONTHLY_REQUEST_LIMIT', 200));
-  const ref = db.doc(`organizations/${organizationId}/musicscaleLiveAiUsage/${monthKey(nowMs)}`);
+  const limit = internalTrial ? 10 : Math.floor(readPositiveNumber('MUSICSCALE_LIVE_AI_MONTHLY_REQUEST_LIMIT', 200));
+  // A lifetime trial bucket cannot reset when a seven-day trial crosses a month.
+  const ref = db.doc(`organizations/${organizationId}/musicscaleLiveAiUsage/${internalTrial?'trial':monthKey(nowMs)}`);
   return db.runTransaction(async transaction => {
     const snapshot = await transaction.get(ref);
     const current = Number(snapshot.data()?.requests || 0);
@@ -380,6 +382,7 @@ export async function handleMusicScaleLiveAiRequest(
   }
 
   let db: Firestore;
+  let internalTrial=false;
   try {
     db = (dependencies.getFirestore ?? getFirestore)();
     const resolveAccess = dependencies.resolveAccess ?? resolveEcosystemAppAccess;
@@ -392,6 +395,7 @@ export async function handleMusicScaleLiveAiRequest(
     if (!access.accessible) {
       return res.status(403).json({ success: false, reasonCode: 'MUSICSCALE_ACCESS_DENIED' });
     }
+    internalTrial=access.entitlement?.subscriptionStatus==='internal_trial_active';
   } catch (error) {
     console.error('[MusicScaleLiveAI] Authorization failed', error);
     return res.status(503).json({ success: false, reasonCode: 'AI_AUTHORIZATION_UNAVAILABLE' });
@@ -431,7 +435,7 @@ export async function handleMusicScaleLiveAiRequest(
     });
   }
 
-  const budget = await consumeBudget(db, organizationId, task, nowMs).catch(() => null);
+  const budget = await consumeBudget(db, organizationId, task, nowMs, internalTrial).catch(() => null);
   if (!budget) {
     return res.status(503).json({ success: false, reasonCode: 'AI_BUDGET_STATE_UNAVAILABLE' });
   }
