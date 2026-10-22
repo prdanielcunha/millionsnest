@@ -286,6 +286,7 @@ async function consumeBudget(
   return db.runTransaction(async transaction => {
     const snapshot = await transaction.get(ref);
     const current = Number(snapshot.data()?.requests || 0);
+    if (!Number.isSafeInteger(current) || current < 0) throw Error('AI_USAGE_INVALID');
     if (current >= limit) return { allowed: false as const, used: current, limit };
 
     transaction.set(ref, {
