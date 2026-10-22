@@ -5,6 +5,7 @@ import { useTranslation, Trans } from "react-i18next";
 import { Navbar } from "../components/Navbar.js";
 import { MusicScaleGuidedDemo } from "../components/MusicScaleGuidedDemo.js";
 import { Footer } from "../components/Footer.js";
+import { SalesChat } from "../components/SalesChat.js";
 import { Pricing } from "../components/Pricing.js";
 import { Play, CheckCircle2, CalendarDays, Music, Bell, Library, Mic2, Instagram, ArrowRight, XCircle, LayoutDashboard, ChevronRight, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.js";
@@ -843,6 +844,7 @@ export function MusicScaleLanding() {
       </section>
 
       <Footer />
+      <SalesChat />
     </div>
   );
 }
