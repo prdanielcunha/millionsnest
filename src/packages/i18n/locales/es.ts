@@ -620,6 +620,8 @@ export default {
     addon_pack_cta: "Comprar Paquete"
   },
   auth: {
+    trial_signup_title: "Comienza tus 7 días gratis",
+    trial_signup_subtitle: "Crea una cuenta para conocer MusicScale sin tarjeta. Los siete días solo comienzan cuando actives la prueba en tu organización.",
     welcome_back: "Bienvenido de nuevo",
     create_account: "Crea tu cuenta",
     access_central: "Accede a la central MillionsNest",
