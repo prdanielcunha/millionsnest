@@ -46,8 +46,18 @@ assert.equal(
 );
 assert.match(
   navbar,
-  /navigate\('\/musicscale#pricing-section'\)/,
-  'generic trial CTA must take the visitor to explicit plan selection'
+  /navigate\('\\/checkout\\?app=musicscale&trial=1'\)/,
+  'generic trial CTA must enter the no-card journey without selecting a paid plan'
+);
+assert.match(
+  hero,
+  /navigate\('\\/checkout\\?app=musicscale&trial=1'\)/,
+  'public hero CTA must lead to no-card trial activation instead of pricing'
+);
+assert.equal(
+  navbar.includes('purchase_intent'),
+  false,
+  'generic trial CTAs must never preselect a paid Stripe plan'
 );
 
 assert.match(server, /parsePublicHomeAnalyticsPayload/, 'backend must validate public analytics before writing');
@@ -83,4 +93,4 @@ assert.match(
   'anonymous Firestore analytics must remain limited to the explicit MusicScale public funnel'
 );
 
-console.log('PASS public home funnel attribution, explicit-plan routing, and backend-mediated analytics security');
+console.log('PASS public home funnel attribution, trial-first routing, and backend-mediated analytics security');
