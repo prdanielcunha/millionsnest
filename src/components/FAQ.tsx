@@ -5,7 +5,7 @@ import { useTranslation, Trans } from 'react-i18next';
 
 export function FAQ() {
   const { t } = useTranslation(['landing']);
-  const faqs = [1, 2, 3, 4, 5].map((n) => ({
+  const faqs = [1, 2, 3, 4, 5, 6, 7].map((n) => ({
     question: t(`faq_q${n}`),
     answer: t(`faq_a${n}`)
   }));
