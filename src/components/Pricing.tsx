@@ -184,6 +184,17 @@ export function Pricing() {
             </div>
           </motion.div>
 
+
+          <div className="mt-5 flex flex-col items-center gap-4 rounded-2xl border border-[#6EAFFF]/25 bg-gradient-to-r from-[#122239] via-[#0C1422] to-[#0A0F18] px-5 py-6 text-center sm:px-7">
+            <div>
+              <h3 className="text-lg font-semibold tracking-tight text-white">{t('pricing_trial_intro_title')}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-[#A9B5C5]">{t('pricing_trial_intro_desc')}</p>
+            </div>
+            <button type="button" onClick={() => navigate('/checkout?app=musicscale&trial=1')}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#EAF3FF] px-6 py-3 text-sm font-semibold text-[#091222] transition hover:bg-white"
+            >{t('pricing_trial_intro_cta')}</button>
+          </div>
+
           <p className="mt-4 text-xs text-[#A0A7B5]">
             {t('pricing_trial_plan_note', 'O teste usa os recursos do plano escolhido. Limites específicos da avaliação aparecem em cada plano.')}
           </p>

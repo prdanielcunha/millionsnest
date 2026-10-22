@@ -47,6 +47,13 @@ function isSafeLaunchNext(next: string): boolean {
   const search = questionMark >= 0 ? next.slice(questionMark) : '';
   const ecosystemMatch = pathname.match(ECOSYSTEM_LAUNCH_PATH);
 
+  // Keep authentication return paths strictly local and never preselect a paid plan.
+  if (pathname === '/checkout') {
+    const params = new URLSearchParams(search);
+    return params.size === 2 && params.get('trial') === '1' &&
+      (params.get('app') === 'musicscale' || params.get('app') === 'nestlocal');
+  }
+
   if (pathname !== CONNECT_HUB_LAUNCH_PATH && !ecosystemMatch) {
     return false;
   }

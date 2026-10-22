@@ -36,7 +36,7 @@ export function Flagship() {
             </div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
-            <Link to="/musicscale#musicscale-demo" onClick={() => trackHomeMusicScaleInterest('flagship_primary')} className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:-translate-y-0.5">
+            <Link to="/checkout?app=musicscale&trial=1" onClick={() => trackHomeMusicScaleInterest('flagship_primary')} className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:-translate-y-0.5">
               {t('flagship_cta')} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
             </Link>
             <a href="/musicscale#pricing-section" onClick={() => trackHomeMusicScaleInterest('flagship_pricing')} className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] px-5 py-3 text-sm font-medium text-[#E7EBF2] transition hover:bg-white/[0.06]">

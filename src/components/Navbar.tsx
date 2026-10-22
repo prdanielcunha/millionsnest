@@ -333,7 +333,7 @@ export function Navbar() {
               </Link>
               <button onClick={() => {
                 trackHomeMusicScaleInterest('nav_trial');
-                navigate('/musicscale#pricing-section');
+                navigate('/checkout?app=musicscale&trial=1');
               }} className="text-sm font-medium px-6 py-2.5 rounded-lg bg-white text-black hover:bg-gray-100 transition-all shadow-md hover:shadow-lg active:scale-95">
                 {t('common:nav_try_musicscale', 'Experimentar MusicScale')}
               </button>
@@ -416,7 +416,7 @@ export function Navbar() {
                 <button onClick={() => { 
                   trackHomeMusicScaleInterest('nav_trial');
                   setMobileMenuOpen(false);
-                  navigate('/musicscale#pricing-section');
+                  navigate('/checkout?app=musicscale&trial=1');
                 }} className="text-lg font-bold w-full bg-white text-black hover:bg-gray-100 text-center py-4 rounded-xl shadow-lg active:scale-95 transition-all">
                   {t('common:nav_try_musicscale', 'Experimentar MusicScale')}
                 </button>

@@ -16,7 +16,8 @@ export function Login() {
   const location = useLocation();
   const { t } = useTranslation(['auth']);
   
-  const [isLogin, setIsLogin] = useState(() => !Boolean(sessionStorage.getItem('purchase_intent')));
+  const isTrialSignupFlow = resolveSafePostLoginPath(location.search) === '/checkout?app=musicscale&trial=1';
+  const [isLogin, setIsLogin] = useState(() => !Boolean(sessionStorage.getItem('purchase_intent') || isTrialSignupFlow));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -181,14 +182,18 @@ export function Login() {
         </div>
         
         <h2 className="text-2xl font-semibold text-[#F5F7FA] text-center tracking-tight mb-2">
-          {isPurchaseFlow
-            ? t("purchase_flow_title", "Continue para ativar seu teste")
-            : (isLogin ? t("welcome_back") : t("create_account"))}
+          {isTrialSignupFlow
+            ? t("trial_signup_title", "Comece seus 7 dias grátis")
+            : isPurchaseFlow
+              ? t("purchase_flow_title", "Continue para ativar seu teste")
+              : (isLogin ? t("welcome_back") : t("create_account"))}
         </h2>
         <p className="text-center text-[#A0A7B5] text-sm font-normal mb-8">
-          {isPurchaseFlow
-            ? t("purchase_flow_subtitle", "Use o Google ou seu e-mail. Se for seu primeiro acesso, sua conta será criada e o plano escolhido continuará selecionado.")
-            : t("access_central")}
+          {isTrialSignupFlow
+            ? t("trial_signup_subtitle", "Crie sua conta para conhecer o MusicScale sem cartão. Seus 7 dias começam quando você ativar o teste na organização.")
+            : isPurchaseFlow
+              ? t("purchase_flow_subtitle", "Use o Google ou seu e-mail. Se for seu primeiro acesso, sua conta será criada e o plano escolhido continuará selecionado.")
+              : t("access_central")}
         </p>
 
         {error && (
