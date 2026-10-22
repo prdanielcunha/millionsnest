@@ -1,5 +1,7 @@
 # MillionsNest
 
+NestAffiliate Pinterest Trial has an authenticated Sandbox-only OAuth broker; see [setup and security contract](docs/NESTAFFILIATE_PINTEREST_TRIAL.md). Public API publishing remains unavailable pending Standard approval.
+
 **MillionsNest** é o hub central do ecossistema e atua como o sistema operacional da plataforma (Auth Central, Tenant Central, Billing Central, RBAC e App Launcher) para os aplicativos parceiros (ex: MusicScale).
 
 ## Visão Geral
