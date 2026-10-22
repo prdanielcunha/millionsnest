@@ -90,7 +90,7 @@ const esCopy = readFileSync('src/packages/i18n/locales/es.ts', 'utf8');
 assert.match(home, /<CustomerSuccess \/>/, 'public home must explain guided start and support');
 assert.match(customerSuccess, /success_trial_title/, 'assisted start must explain the no-card trial');
 assert.match(hero, /hero_support_note/, 'primary CTA must clarify support and no automatic charge');
-for (const [lang, copy] of [['pt', ptCopy], ['en', enCopy], ['es', esCopy']] as const) {
+for (const [lang, copy] of [['pt', ptCopy], ['en', enCopy], ['es', esCopy]] as const) {
   for (const key of ['success_step1_title', 'success_step2_title', 'success_step3_title', 'success_service_note', 'hero_support_note', 'faq_q6', 'faq_q7']) {
     assert.match(copy, new RegExp(`\\b${key}:`), `${lang} must translate ${key}`);
   }
