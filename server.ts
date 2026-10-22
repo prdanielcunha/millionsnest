@@ -9664,7 +9664,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const decoded=await admin.auth().verifyIdToken(token.slice(7));
       const context=await resolveUserOrganizationContext(decoded.uid);
       if(!context.ownedOrganizations.some((o:any)=>o.id===organizationId))
-        return res.status(403).json({error:'Apenas o titular pode ativar a avaliação.'});
+        return res.status(403).json({error:'Apenas o titular pode ativar a avaliação.',code:'OWNER_REQUIRED'});
       const offered=appId==='nestlocal'?nestLocalTrialEnabledForOrganization(organizationId):
         musicScaleTrialEnabledForOrganization(organizationId);
       if(!offered)return res.json({available:false,appId,organizationId,code:'TRIAL_COHORT_DISABLED'});
@@ -9688,7 +9688,17 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const active=!blockedUser&&!blockedOrg&&trialDoc.exists&&
         trialWindow(appId,trialDoc.data(),Date.now(),organizationId).active;
       const available=!blockedUser&&!blockedOrg&&!trialDoc.exists&&!ownerTrialDoc.exists&&!priorSubscription&&!existingApp;
-      return res.json({available:!!available,active:!!active,appId,organizationId,
+      // Discovery is informative, never an entitlement. The activation endpoint
+      // independently rechecks Stripe history and all Firestore guardrails.
+      const reason = blockedUser ? 'USER_INACTIVE'
+        : blockedOrg ? 'ORGANIZATION_INACTIVE'
+        : active ? 'TRIAL_ACTIVE'
+        : trialDoc.exists ? 'TRIAL_USED'
+        : ownerTrialDoc.exists ? 'OWNER_TRIAL_USED'
+        : priorSubscription ? 'PRIOR_SUBSCRIPTION'
+        : existingApp ? 'PRIOR_ACCESS'
+        : available ? 'TRIAL_AVAILABLE' : 'TRIAL_REVIEW';
+      return res.json({available:!!available,active:!!active,code:reason,appId,organizationId,
         days:TRIAL_BASE_DAYS[appId],requiresCard:false,
         message:available?'Disponível após verificação do histórico Stripe.':'Avaliação indisponível para esta organização.'});
     }catch(error:any){
@@ -9732,7 +9742,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       // Only a verified owner can start the organization's irreversible lifetime trial.
       const context = await resolveUserOrganizationContext(userId);
       const isOwner = context.ownedOrganizations.some((org: any) => org.id === organizationId);
-      if (!isOwner) return res.status(403).json({ error: 'Somente o proprietário pode ativar a avaliação.' });
+      if (!isOwner) return res.status(403).json({ error: 'Somente o proprietário pode ativar a avaliação.', code: 'OWNER_REQUIRED' });
       const [userSnap, subSnap] = await Promise.all([
         db.collection('users').doc(userId).get(),
         db.collection('subscriptions').doc(organizationId).get(),
