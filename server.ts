@@ -91,7 +91,7 @@ import {validateFoundersCoupon,NESTLOCAL_FOUNDERS_COUPONS} from './src/lib/nestL
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
 import { syncNestLocalPaidInvoiceFromWebhook } from './src/server/services/NestLocalPaidInvoiceWebhookSync.js';
 import { TRIAL_BASE_DAYS, extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
-import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization, hasPriorMusicScaleSubscription } from './src/server/services/MusicScaleNoCardTrialService.js';
+import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization, hasPriorMusicScaleSubscription, hasActiveStripeMusicScaleContract } from './src/server/services/MusicScaleNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } from './src/server/services/EcosystemSessionVersionService.js';
@@ -9690,8 +9690,10 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const available=!blockedUser&&!blockedOrg&&!trialDoc.exists&&!ownerTrialDoc.exists&&!priorSubscription&&!existingApp;
       // Discovery is informative, never an entitlement. The activation endpoint
       // independently rechecks Stripe history and all Firestore guardrails.
+      const paidAccessRecorded=appId==='musicscale'&&hasActiveStripeMusicScaleContract(sub);
       const reason = blockedUser ? 'USER_INACTIVE'
         : blockedOrg ? 'ORGANIZATION_INACTIVE'
+        : paidAccessRecorded ? 'PAID_ACCESS_RECORDED'
         : active ? 'TRIAL_ACTIVE'
         : trialDoc.exists ? 'TRIAL_USED'
         : ownerTrialDoc.exists ? 'OWNER_TRIAL_USED'
