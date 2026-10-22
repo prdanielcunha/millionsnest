@@ -260,8 +260,7 @@ export function Navbar() {
       >
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
-          <MillionsNestLogo className="h-9 md:h-10 w-auto transition-transform group-hover:scale-[1.02]" />
-          <span className="font-semibold text-lg tracking-tight text-[#F5F7FA] hidden sm:block">MillionsNest</span>
+          <MillionsNestLogo className="h-7 sm:h-8 w-auto transition-transform group-hover:scale-[1.02]" />
         </Link>
 
         {/* Desktop Nav */}
