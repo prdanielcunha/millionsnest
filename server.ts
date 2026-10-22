@@ -1,5 +1,6 @@
 import {ECOSYSTEM_TRIAL_POLICY_VERSION} from './src/lib/ecosystemTrialPolicy.js';
 import express from 'express';
+import {registerNestAffiliatePinterestRoutes} from './src/server/services/NestAffiliatePinterestService.js';
 import {peopleDirectoryHandler} from './src/server/services/PeopleDirectoryService.js';
 import { bootstrapUserContext, acceptInvitation, setActiveOrganization } from './src/server/services/TenantContextMutationService.js';
 import { createInvitation } from "./src/server/services/InvitationCreationService.js";
@@ -2207,6 +2208,7 @@ async function startServer() {
   app.post('/api/v1/nestaffiliate/mercadolivre/resolve', express.json({limit:'4kb'}), handleNestAffiliateMeliResolve);
   app.post('/api/v1/nestaffiliate/shopee/resolve', express.json({limit:'4kb'}), handleNestAffiliateShopeeResolve);
   app.get('/api/v1/nestaffiliate/shopee/status', handleNestAffiliateShopeeStatus);
+  registerNestAffiliatePinterestRoutes(app, resolveNestAffiliateShopeeContext);
   app.post('/api/v1/nestaffiliate/shopee/credentials', express.json({ limit: '8kb' }), handleNestAffiliateShopeeCredentials);
   app.get('/api/v1/nestaffiliate/shopee/search', handleNestAffiliateShopeeSearch);
   app.post('/api/v1/support/whatsapp-link', express.json({ limit: '8kb' }), createSupportWhatsAppLink);
