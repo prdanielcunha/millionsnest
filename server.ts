@@ -9638,7 +9638,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         return res.status(403).json({error:'Apenas o titular pode ativar a avaliação.'});
       const offered=appId==='nestlocal'?nestLocalTrialEnabledForOrganization(organizationId):
         musicScaleTrialEnabledForOrganization(organizationId);
-      if(!offered)return res.json({available:false,appId,organizationId});
+      if(!offered)return res.json({available:false,appId,organizationId,reason:'offer_disabled'});
       const [userDoc,orgDoc,subDoc,trialDoc]=await Promise.all([
         db.collection('users').doc(decoded.uid).get(),
         db.collection('organizations').doc(organizationId).get(),
@@ -9655,8 +9655,13 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const previousApp=org.apps?.[appId];
       const existingApp=previousApp&&(previousApp.trialUsed||previousApp.stripeSubscriptionId||
         ['active','trialing','expired','canceled','past_due','unpaid'].includes(String(previousApp.status||'')));
+      const window=trialDoc.exists?trialWindow(appId,trialDoc.data(),Date.now(),organizationId):null;
+      const trialActive=!blockedUser&&!blockedOrg&&window?.active===true;
       const available=!blockedUser&&!blockedOrg&&!trialDoc.exists&&!priorSubscription&&!existingApp;
-      return res.json({available:!!available,appId,organizationId,
+      res.setHeader('Cache-Control','private, no-store');
+      return res.json({available:!!available,appId,organizationId,trialActive,
+        expiresAt:trialActive?new Date(window!.endsAt).toISOString():null,
+        reason:available?'eligible':trialActive?'trial_active':'not_eligible',
         days:TRIAL_BASE_DAYS[appId],requiresCard:false,
         message:available?'Disponível após verificação do histórico Stripe.':'Avaliação indisponível para esta organização.'});
     }catch(error:any){

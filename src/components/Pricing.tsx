@@ -67,6 +67,12 @@ export function Pricing() {
   }, []);
 
   const handlePurchase = (lookupKey: string) => {
+    if (['musicscale_starter_', 'musicscale_advanced_', 'musicscale_pro_'].some(prefix => lookupKey.startsWith(prefix))) {
+      sessionStorage.removeItem('purchase_intent');
+      sessionStorage.removeItem('purchase_app');
+      navigate('/start-trial?app=musicscale');
+      return;
+    }
     sessionStorage.setItem('purchase_intent', lookupKey);
     if (user) {
       navigate(`/checkout?plan=${lookupKey}`);

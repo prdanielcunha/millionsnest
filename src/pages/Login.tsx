@@ -16,13 +16,14 @@ export function Login() {
   const location = useLocation();
   const { t } = useTranslation(['auth']);
   
-  const [isLogin, setIsLogin] = useState(() => !Boolean(sessionStorage.getItem('purchase_intent')));
+  const [isLogin, setIsLogin] = useState(() => !(Boolean(sessionStorage.getItem('purchase_intent')) || resolveSafePostLoginPath(location.search)?.startsWith('/start-trial?')));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const purchaseIntent = sessionStorage.getItem('purchase_intent');
-  const isPurchaseFlow = Boolean(purchaseIntent);
+  const isTrialFlow = resolveSafePostLoginPath(location.search)?.startsWith('/start-trial?') === true;
+  const isPurchaseFlow = Boolean(purchaseIntent) || isTrialFlow;
 
   useEffect(() => {
     if (!auth) return;
@@ -53,6 +54,10 @@ export function Login() {
       if (profile) {
           const safeNext = resolveSafePostLoginPath(location.search);
           if (safeNext) {
+            if (safeNext.startsWith('/start-trial?')) {
+              sessionStorage.removeItem('purchase_intent');
+              sessionStorage.removeItem('purchase_app');
+            }
             navigate(safeNext, { replace: true });
             return;
           }
@@ -187,7 +192,7 @@ export function Login() {
         </h2>
         <p className="text-center text-[#A0A7B5] text-sm font-normal mb-8">
           {isPurchaseFlow
-            ? t("purchase_flow_subtitle", "Use o Google ou seu e-mail. Se for seu primeiro acesso, sua conta será criada e o plano escolhido continuará selecionado.")
+            ? t(isTrialFlow ? "trial_flow_subtitle" : "purchase_flow_subtitle", "Use o Google ou seu e-mail. Se for seu primeiro acesso, sua conta será criada e o plano escolhido continuará selecionado.")
             : t("access_central")}
         </p>
 

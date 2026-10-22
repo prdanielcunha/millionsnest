@@ -1,6 +1,6 @@
 import { before, beforeEach, after, test } from 'node:test';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { readFile } from 'node:fs/promises';
 
 let env: RulesTestEnvironment;
@@ -119,4 +119,16 @@ test('legacy version-2 14-day grant retains its original deadline',async()=>{
 test('new grants cannot claim the legacy 14-day allowance',async()=>{
  await seed({scope:true,daysLeft:5,legacy:true,grantVersion:3});
  await assertFails(get('songs/music'));
+});
+
+
+test('trial counters are server-owned even for an active tenant owner',async()=>{
+ await seed({scope:true,daysLeft:5,withoutStripeDoc:true});
+ const path='organizations/org-1/trial_usage/ai';
+ await env.withSecurityRulesDisabled(async context=>{
+   await setDoc(doc(context.firestore(),path),{organizationId:'org-1',requests:5});
+ });
+ await assertFails(updateDoc(doc(msDb(),path),{requests:0}));
+ await assertFails(deleteDoc(doc(msDb(),path)));
+ await assertFails(setDoc(doc(msDb(),'organizations/org-1/trial_usage/new-counter'),{requests:0}));
 });

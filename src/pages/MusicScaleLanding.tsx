@@ -111,10 +111,8 @@ export function MusicScaleLanding() {
       metadata: { action: 'choose_plan', source: 'sales_landing_primary' }
     });
 
-    // The trial always follows the plan explicitly chosen by the customer.
-    // Never preselect Pro from a generic landing CTA.
-    sessionStorage.removeItem("purchase_intent");
-    document.getElementById('precos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    sessionStorage.removeItem('purchase_intent');
+    navigate('/start-trial?app=musicscale');
   };
 
   const scrollToDemo = () => {
@@ -234,7 +232,7 @@ export function MusicScaleLanding() {
                 transition={{ delay: 0.5 }}
                 className="mt-4 text-sm text-[#A0A7B5]"
               >
-                {t('musicscale:trial_microcopy', 'Escolha seu plano e teste por 7 dias. Starter e Advanced mantêm seus próprios limites; no teste Pro, a Biblioteca Viva permite até 20 importações. Pro pago é ilimitado.')}
+                {t('musicscale:trial_microcopy', '7 dias sem cartão, com recursos Pro e até 20 importações da Biblioteca Viva. Escolha seu plano depois de experimentar.')}
               </motion.p>
             )}
 

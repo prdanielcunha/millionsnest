@@ -45,6 +45,11 @@ function isSafeLaunchNext(next: string): boolean {
   const questionMark = next.indexOf('?');
   const pathname = questionMark >= 0 ? next.slice(0, questionMark) : next;
   const search = questionMark >= 0 ? next.slice(questionMark) : '';
+  if (pathname === '/start-trial') {
+    const trialParams = new URLSearchParams(search);
+    return [...trialParams.keys()].every(key => key === 'app') &&
+      trialParams.getAll('app').length === 1 && ['musicscale', 'nestlocal'].includes(trialParams.get('app') || '');
+  }
   const ecosystemMatch = pathname.match(ECOSYSTEM_LAUNCH_PATH);
 
   if (pathname !== CONNECT_HUB_LAUNCH_PATH && !ecosystemMatch) {

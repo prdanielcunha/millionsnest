@@ -107,6 +107,19 @@ function dependencies(input: {
 
 async function main() {
   {
+    const fixture = fakeDb();
+    const deps:any = dependencies({db:fixture.db});
+    deps.resolveAccess = async () => ({accessible:true,entitlement:{subscriptionStatus:'internal_trial_active'}});
+    for (let i=0;i<6;i++) {
+      deps.now = () => Date.parse(i<3?'2026-10-31T12:00:00Z':'2026-11-01T12:00:00Z');
+      const recorder=response();
+      await handleMusicScaleLiveAiRequest(request({token:'trial',organizationId:'trial-budget-org',body:{request:i}}),recorder.res,deps);
+      assert.equal(recorder.read().statusCode,i<5?200:429,'trial quota must survive month boundary');
+    }
+    assert.equal(fixture.usage.get('organizations/trial-budget-org/trial_usage/ai'),5);
+  }
+
+  {
     const recorder = response();
     await handleMusicScaleLiveAiRequest(
       request({ token: undefined }),

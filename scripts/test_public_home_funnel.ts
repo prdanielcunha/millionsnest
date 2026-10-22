@@ -46,8 +46,8 @@ assert.equal(
 );
 assert.match(
   navbar,
-  /navigate\('\/musicscale#pricing-section'\)/,
-  'generic trial CTA must take the visitor to explicit plan selection'
+  /navigate\('\/start-trial\?app=musicscale'\)/,
+  'generic trial CTA must take the visitor to no-card activation'
 );
 
 assert.match(server, /parsePublicHomeAnalyticsPayload/, 'backend must validate public analytics before writing');

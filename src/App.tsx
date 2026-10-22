@@ -28,6 +28,7 @@ const Cancellation = lazy(() => import('./pages/Cancellation.js').then(module =>
 const Login = lazy(() => import('./pages/Login.js').then(module => ({ default: module.Login })));
 const Join = lazy(() => import('./pages/Join.js').then(module => ({ default: module.Join })));
 const Dashboard = lazy(() => import('./pages/Dashboard.js').then(module => ({ default: module.Dashboard })));
+const StartTrial = lazy(() => import('./pages/StartTrial.js'));
 const Checkout = lazy(() => import('./pages/Checkout.js'));
 const BillingSuccess = lazy(() => import('./pages/BillingSuccess.js'));
 const AdminDebug = lazy(() => import('./pages/AdminDebug.js'));
@@ -93,6 +94,7 @@ export default function App() {
                 <Route path="/admin/database" element={<EcosystemDataConsole />} />
                 <Route path="/ecosystem/data-console" element={<EcosystemDataConsole />} />
                 <Route path="/upgrade" element={<Checkout />} />
+                <Route path="/start-trial" element={<StartTrial />} />
                 <Route path="/checkout" element={<Checkout />} />
                 <Route path="/connect/launch" element={<ConnectLaunch />} />
                 <Route path="/apps/:appId/launch" element={<EcosystemAppLaunch />} />
