@@ -69,7 +69,7 @@ export function Hero() {
             <button
               onClick={() => {
                 trackHomeMusicScaleInterest('hero_primary');
-                navigate('/musicscale#musicscale-demo');
+                navigate('/checkout?app=musicscale&trial=1');
               }}
               className="group inline-flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3.5 text-sm font-semibold text-[#05070A] shadow-[0_18px_60px_rgba(255,255,255,.10)] transition hover:-translate-y-0.5 sm:w-auto"
             >
@@ -83,6 +83,7 @@ export function Hero() {
               {t('hero_cta_secondary')}
             </a>
           </motion.div>
+          <p className="mx-auto mt-4 max-w-xl text-center text-xs leading-relaxed text-[#9DAABE]">{t('hero_trial_reassurance')}</p>
 
           <motion.div
             initial={{ opacity: 0 }}
