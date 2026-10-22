@@ -81,3 +81,5 @@ jobs:
           echo "HUB_MARKETING_FIREBASE_PUBLISHED"
 
 # Approved transparent MillionsNest brand refresh, 2026-10-22.
+
+# Refresh remaining legacy MillionsNest image aliases with the approved identity.
