@@ -102,18 +102,17 @@ export function MusicScaleLanding() {
     });
   };
 
-  const handleChoosePlan = () => {
+  const handleStartTrial = () => {
     analytics.track('trial_cta_clicked', {
       app: 'musicscale',
       userId: user?.uid,
       organizationId: organization?.id,
-      metadata: { action: 'choose_plan', source: 'sales_landing_primary' }
+      metadata: { action: 'start_no_card_trial', source: 'sales_landing_primary' }
     });
 
-    // The trial always follows the plan explicitly chosen by the customer.
-    // Never preselect Pro from a generic landing CTA.
+    // The free-trial CTA never selects a paid plan or creates a Stripe checkout.
     sessionStorage.removeItem("purchase_intent");
-    document.getElementById('precos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    navigate('/checkout?app=musicscale&trial=1');
   };
 
   const scrollToDemo = () => {
@@ -187,6 +186,12 @@ export function MusicScaleLanding() {
               {t('musicscale:hero_subtitle', 'Escalas, repertório, confirmações, notificações e preparação do culto em uma experiência premium para ministérios de louvor.')}
             </motion.p>
 
+            {!isSubscribed && (
+              <p className="mb-6 rounded-full border border-[#6EAFFF]/25 bg-[#6EAFFF]/[0.06] px-4 py-2 text-xs font-semibold tracking-[0.03em] text-[#BEDAFF]">
+                {t('musicscale:trial_badge', '7 dias grátis. Sem cartão.')}
+              </p>
+            )}
+
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -206,7 +211,7 @@ export function MusicScaleLanding() {
                 </button>
               ) : (
                 <button 
-                  onClick={handleChoosePlan}
+                  onClick={handleStartTrial}
                   className="group relative w-full sm:w-auto px-8 py-4 bg-[#2B85EB] text-white text-lg font-bold rounded-2xl shadow-[0_0_40px_rgba(43,133,235,0.4)] hover:shadow-[0_0_60px_rgba(43,133,235,0.6)] transition-all overflow-hidden"
                 >
                   <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
@@ -430,7 +435,7 @@ export function MusicScaleLanding() {
                </button>
              ) : (
                <button 
-                 onClick={handleChoosePlan}
+                 onClick={handleStartTrial}
                  className="group relative px-8 py-4 bg-white/5 border border-white/10 text-white text-lg font-semibold rounded-2xl hover:bg-white/10 transition-all shadow-[0_0_20px_rgba(255,255,255,0.02)] flex items-center justify-center gap-3 backdrop-blur-md"
                >
                  {t('musicscale:chaos_cta', 'Quero organizar minha próxima escala')}
@@ -778,7 +783,7 @@ export function MusicScaleLanding() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6 w-full sm:w-auto">
             <button 
-              onClick={handleChoosePlan}
+              onClick={handleStartTrial}
               className="group relative w-full sm:w-auto px-10 py-5 bg-[#2B85EB] text-white text-lg font-bold rounded-2xl shadow-[0_0_50px_rgba(43,133,235,0.3)] hover:shadow-[0_0_80px_rgba(43,133,235,0.6)] transition-all overflow-hidden"
             >
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
