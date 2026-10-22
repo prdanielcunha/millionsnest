@@ -46,12 +46,12 @@ assert.equal(
 );
 assert.match(
   navbar,
-  /navigate\('\\/checkout\\?app=musicscale&trial=1'\)/,
+  /navigate\('\/checkout\?app=musicscale&trial=1'\)/,
   'generic trial CTA must enter the no-card journey without selecting a paid plan'
 );
 assert.match(
   hero,
-  /navigate\('\\/checkout\\?app=musicscale&trial=1'\)/,
+  /navigate\('\/checkout\?app=musicscale&trial=1'\)/,
   'public hero CTA must lead to no-card trial activation instead of pricing'
 );
 assert.equal(
