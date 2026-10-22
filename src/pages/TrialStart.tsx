@@ -22,7 +22,7 @@ const copy={
     errorTitle:'Não conseguimos verificar sua conta agora',error:'Houve uma dificuldade de conexão ou verificação. Nenhum pagamento foi iniciado. Tente novamente.',
     newTitle:'Vamos preparar sua igreja',newOrg:'Para começar os 7 dias gratuitos, cadastre primeiro a sua organização no painel. Depois volte à avaliação.',
     choose:'Organização para usar o MusicScale',open:'Abrir meu MusicScale',dashboard:'Ir ao painel',plans:'Conhecer os planos',
-    retry:'Tentar novamente',startNew:'Continuar com a avaliação',
+    retry:'Tentar novamente',account:'Minha conta',startNew:'Continuar com a avaliação',
     end:'Ao final dos 7 dias, você escolhe se quer assinar. Seus dados são preservados. Não há cobrança automática.',
     back:'Voltar ao site',days:'dias',
   },
@@ -42,7 +42,7 @@ const copy={
     errorTitle:'We could not check your account',error:'There was a temporary connection or verification problem. No payment was started. Please retry.',
     newTitle:'Set up your church',newOrg:'Register your organization in the dashboard first, then return to start your 7 free days.',
     choose:'Organization for MusicScale',open:'Open my MusicScale',dashboard:'Open dashboard',plans:'View subscription plans',
-    retry:'Try again',startNew:'Continue to free trial',end:'After 7 days, choose whether to subscribe. Your data stays safe, and there are no automatic charges.',back:'Back to website',days:'days',
+    retry:'Try again',account:'My account',startNew:'Continue to free trial',end:'After 7 days, choose whether to subscribe. Your data stays safe, and there are no automatic charges.',back:'Back to website',days:'days',
   },
   es:{
     headline:'Conoce MusicScale durante 7 días.',sub:'Sin tarjeta. Sin pago inicial. Sin cobro automático.',
@@ -60,7 +60,7 @@ const copy={
     errorTitle:'No pudimos verificar tu cuenta',error:'Hubo un problema temporal de conexión o verificación. No se inició ningún pago. Inténtalo de nuevo.',
     newTitle:'Preparemos tu iglesia',newOrg:'Registra tu organización desde el panel y luego vuelve para activar los 7 días gratis.',
     choose:'Organización de MusicScale',open:'Abrir mi MusicScale',dashboard:'Abrir panel',plans:'Ver planes',
-    retry:'Intentar de nuevo',startNew:'Continuar con la prueba',
+    retry:'Intentar de nuevo',account:'Mi cuenta',startNew:'Continuar con la prueba',
     end:'Al terminar los 7 días, decides si deseas suscribirte. Tus datos se conservan sin cobros automáticos.',back:'Volver al sitio',days:'días',
   },
 };
@@ -70,6 +70,7 @@ const HISTORICAL=new Set(['TRIAL_USED','OWNER_TRIAL_USED','PRIOR_SUBSCRIPTION','
   'TRIAL_ALREADY_CONSUMED','OWNER_TRIAL_ALREADY_CONSUMED','PRIOR_MUSICSCALE_SUBSCRIPTION',
   'PRIOR_MUSICSCALE_ACCESS','PRIOR_MUSICSCALE_ENTITLEMENT']);
 function reasonToProblem(code?:string,status?:number):Problem{
+  if(code==='PAID_ACCESS_RECORDED')return null;
   if(code==='OWNER_REQUIRED'||status===403&&code==='NO_ORGANIZATION_ACCESS')return 'owner';
   if(code==='TRIAL_COHORT_DISABLED')return 'unavailable';
   if(code==='ORGANIZATION_INACTIVE'||code==='USER_INACTIVE')return 'inactive';
@@ -202,7 +203,7 @@ export default function TrialStart(){
     <div className="mx-auto max-w-2xl">
       <MillionsNestLogo className="mx-auto mb-12 h-9 w-auto"/>
       <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#152237] to-[#0e131d] p-6 shadow-2xl sm:p-10">
-        <p className="mb-4 text-sm font-semibold tracking-widest text-emerald-300">MusicScale · {view==='history'||paidAccess?'Minha conta':('7 '+c.days)}</p>
+        <p className="mb-4 text-sm font-semibold tracking-widest text-emerald-300">MusicScale · {view==='history'||paidAccess?c.account:('7 '+c.days)}</p>
         <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-5xl">{title}</h1>
         {!view&&!offer?.active&&!paidAccess&&<p className="mt-5 text-lg text-emerald-200">{c.sub}</p>}
         <p className="mt-6 leading-relaxed text-slate-300" role={view?'status':undefined}>{message}</p>
