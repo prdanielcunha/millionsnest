@@ -79,3 +79,5 @@ jobs:
             grep -Eiq '<!doctype html|<html' /tmp/hub-release-page.html
           done
           echo "HUB_MARKETING_FIREBASE_PUBLISHED"
+
+# Approved transparent MillionsNest brand refresh, 2026-10-22.
