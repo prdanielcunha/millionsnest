@@ -1,3 +1,4 @@
+import { MillionsNestLogo } from './MillionsNestLogo.js';
 import React, { useState, useEffect, ReactNode, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, LayoutGrid, LayoutDashboard, Building2, ChevronDown, Check, LogOut, ArrowRight, Loader2, User, AlertTriangle, Music, Calendar, Users, QrCode, Database, Shield } from 'lucide-react';
@@ -195,10 +196,7 @@ export function EcosystemShell({ children, activeAppId = 'core', breadcrumbList,
         {/* Left: Ecosystem Identity & Context */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0 min-w-0">
           <Link to="/dashboard/overview" aria-label="Ir para o início do MillionsNest" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors shrink-0">
-            <svg className="w-5 h-5 text-[#F5F7FA]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              <polyline points="9 22 9 12 15 12 15 22"></polyline>
-            </svg>
+            <MillionsNestLogo markOnly className="w-8 h-8" />
           </Link>
           
           <div className="hidden md:flex border-l border-white/10 h-4 mx-1" />

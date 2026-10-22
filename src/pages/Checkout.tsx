@@ -460,7 +460,6 @@ export default function Checkout() {
             </button>
             <div className="mx-auto flex items-center gap-3">
                 <MillionsNestLogo className="h-8 w-auto" />
-                <span className="font-semibold tracking-tight text-lg text-[#F5F7FA]">MillionsNest</span>
             </div>
             <div className="w-32" /> {/* Spacer */}
         </nav>
