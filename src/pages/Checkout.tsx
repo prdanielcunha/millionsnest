@@ -450,18 +450,19 @@ export default function Checkout() {
   return (
     <div className="min-h-screen bg-[#0B0D11] text-[#F5F7FA] font-sans selection:bg-[#2B85EB]/30 overflow-x-hidden">
         {/* Top Navbar */}
-        <nav className="w-full h-20 flex items-center px-8 border-b border-white/5 bg-[#0b0d11]/80 backdrop-blur-md sticky top-0 z-50">
+        <nav className="grid w-full h-20 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-4 sm:px-8 border-b border-white/5 bg-[#0b0d11]/80 backdrop-blur-md sticky top-0 z-50">
             <button 
                 onClick={() => navigate('/dashboard')}
-                className="flex items-center gap-2 text-[#A0A7B5] hover:text-white transition-colors text-sm font-medium tracking-wide"
+                aria-label={t('back', 'Voltar ao Dashboard')}
+                className="justify-self-start flex items-center gap-2 text-[#A0A7B5] hover:text-white transition-colors text-sm font-medium tracking-wide"
             >
                 <ChevronLeft className="w-4 h-4" />
-                {t('back', 'Voltar ao Dashboard')}
+                <span className="hidden sm:inline">{t('back', 'Voltar ao Dashboard')}</span>
             </button>
             <div className="mx-auto flex items-center gap-3">
-                <MillionsNestLogo className="h-8 w-auto" />
+                <MillionsNestLogo className="h-6 w-auto sm:h-8" />
             </div>
-            <div className="w-32" /> {/* Spacer */}
+            <div aria-hidden="true" />
         </nav>
 
         <main className="max-w-7xl mx-auto px-6 lg:px-8 py-16 grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-16 relative">
