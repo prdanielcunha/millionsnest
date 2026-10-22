@@ -5,6 +5,7 @@ import { useTranslation, Trans } from "react-i18next";
 import { Navbar } from "../components/Navbar.js";
 import { MusicScaleGuidedDemo } from "../components/MusicScaleGuidedDemo.js";
 import { Footer } from "../components/Footer.js";
+import { SalesChat } from "../components/SalesChat.js";
 import { Pricing } from "../components/Pricing.js";
 import { Play, CheckCircle2, CalendarDays, Music, Bell, Library, Mic2, Instagram, ArrowRight, XCircle, LayoutDashboard, ChevronRight, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.js";
@@ -236,6 +237,10 @@ export function MusicScaleLanding() {
                 {t('musicscale:trial_microcopy', 'Escolha seu plano e teste por 7 dias. Starter e Advanced mantêm seus próprios limites; no teste Pro, a Biblioteca Viva permite até 20 importações. Pro pago é ilimitado.')}
               </motion.p>
             )}
+
+            <p className="mt-3 max-w-2xl text-center text-xs leading-relaxed text-[#B7C5D7]">
+              {t('musicscale:support_hero')}
+            </p>
 
             <motion.div
               initial={{ opacity: 0, y: 15 }}
@@ -700,6 +705,43 @@ export function MusicScaleLanding() {
         </div>
       </section>
 
+
+      {/* Guided onboarding & support — factual promises, plan-specific premium services remain separate */}
+      <section id="comece-com-ajuda" className="border-t border-white/5 bg-[#080C14] px-6 py-24 md:py-28" aria-labelledby="music-help-heading">
+        <div className="mx-auto max-w-6xl">
+          <div className="max-w-3xl">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#8BC1FF]">{t('musicscale:support_eyebrow')}</p>
+            <h2 id="music-help-heading" className="mt-4 text-4xl font-semibold leading-tight tracking-tight text-white md:text-5xl">
+              {t('musicscale:support_title')}
+            </h2>
+            <p className="mt-5 text-lg leading-relaxed text-[#A0AFC2]">{t('musicscale:support_description')}</p>
+          </div>
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            {([
+              ['support_step1_title', 'support_step1_desc'],
+              ['support_step2_title', 'support_step2_desc'],
+              ['support_step3_title', 'support_step3_desc']
+            ] as const).map(([titleKey, descKey], index) => (
+              <div key={titleKey} className="rounded-3xl border border-white/[0.09] bg-white/[0.025] p-7">
+                <div className="text-xs font-bold tracking-widest text-[#6EAFFF]">0{index + 1}</div>
+                <h3 className="mt-6 text-lg font-semibold text-white">{t(`musicscale:${titleKey}`)}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-[#9BA8B9]">{t(`musicscale:${descKey}`)}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-9 flex flex-col gap-5 rounded-2xl border border-[#2B85EB]/20 bg-[#2B85EB]/[0.06] p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-white">{t('musicscale:support_trial_title')}</p>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#AAB6C7]">{t('musicscale:support_trial_desc')}</p>
+            </div>
+            <button onClick={handleChoosePlan} type="button" className="min-h-12 shrink-0 rounded-xl bg-[#2B85EB] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#4297F1]">
+              {t('musicscale:support_cta')}
+            </button>
+          </div>
+          <p className="mt-4 text-xs leading-relaxed text-[#8794A5]">{t('musicscale:support_premium_note')}</p>
+        </div>
+      </section>
+
       {/* FAQ Específico */}
       <section className="py-32 bg-[#050505] relative border-t border-white/5">
         <div className="absolute top-0 right-1/4 w-[800px] h-[400px] bg-[#2B85EB]/5 blur-[120px] rounded-full pointer-events-none z-0" />
@@ -745,6 +787,10 @@ export function MusicScaleLanding() {
             <FAQItem
               question={t('musicscale:faq_q8', 'Cada músico ou vocal precisa pagar uma assinatura?')}
               answer={t('musicscale:faq_a8', 'Não. A cobrança é da organização, não de cada pessoa. A igreja ou ministério escolhe um plano e convida os integrantes incluídos naquele limite. Cada pessoa usa seu próprio login sem pagar outra assinatura. No Pro, o número de pessoas é ilimitado.')}
+            />
+            <FAQItem
+              question={t('musicscale:faq_q9')}
+              answer={t('musicscale:faq_a9')}
             />
           </div>
         </div>
@@ -798,6 +844,7 @@ export function MusicScaleLanding() {
       </section>
 
       <Footer />
+      <SalesChat />
     </div>
   );
 }
