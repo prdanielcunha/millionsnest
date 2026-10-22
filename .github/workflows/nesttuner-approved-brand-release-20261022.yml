@@ -39,7 +39,7 @@ jobs:
       - name: Verify canonical public brand asset and entry
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://nesttuner.millionsnest.com/brand/millionsnest/v1/mark-192.png -o /tmp/nesttuner-brand.png
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 2 https://nesttuner.millionsnest.com/brand/millionsnest/v1/mark-192.png -o /tmp/nesttuner-brand.png
           test -s /tmp/nesttuner-brand.png
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://nesttuner.millionsnest.com/pt -o /tmp/nesttuner-entry.html
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 2 https://nesttuner.millionsnest.com/pt/ -o /tmp/nesttuner-entry.html
           grep -Eiq '<!doctype html|<html' /tmp/nesttuner-entry.html
