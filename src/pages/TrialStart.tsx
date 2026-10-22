@@ -101,6 +101,7 @@ export default function TrialStart(){
         if(cancelled)return;
         if(!response.ok){setProblem(reasonToProblem(data.code,response.status));return;}
         setOffer(data);
+        if(!data.available)sessionStorage.removeItem(TRIAL_LOGIN_INTENT);
         if(data.code==='TRIAL_COHORT_DISABLED')setProblem('unavailable');
         else if(!data.available&&!data.active)setProblem(reasonToProblem(data.code));
       }catch{if(!cancelled)setProblem('network');}
@@ -169,6 +170,12 @@ export default function TrialStart(){
     sessionStorage.removeItem(TRIAL_LOGIN_INTENT);
     void start();
   },[user,orgId,offer?.available]);
+
+  useEffect(()=>{
+    // An existing member without an owner organization cannot silently start a
+    // later trial just because a previous login left a pending session flag.
+    if(user&&!loading&&owned.length===0)sessionStorage.removeItem(TRIAL_LOGIN_INTENT);
+  },[user,loading,owned.length]);
 
   const hasOtherMembership=Boolean(user&&canonicalContext?.hasOrganization);
   const noOwner=Boolean(user&&!loading&&owned.length===0);
