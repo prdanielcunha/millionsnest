@@ -13,6 +13,8 @@ const copy={
     start:'Começar meus 7 dias grátis',signup:'Entrar com Google para experimentar',
     loading:'Conferindo sua conta com segurança…',working:'Ativando sua avaliação…',
     activeTitle:'Sua avaliação já está ativa',active:'Você já pode continuar usando o MusicScale. Seus dias restantes não serão reiniciados.',
+    paidTitle:'Seu MusicScale já tem assinatura',paid:'Encontramos um registro de assinatura ativa. Entre no aplicativo para continuar com a sua equipe.',
+    historicalEnd:'Seus dados permanecem preservados. Uma nova contratação só acontece quando você escolher e confirmar um plano.',
     historyTitle:'Você já conhece o MusicScale',history:'Encontramos um cadastro, acesso ou avaliação anterior nesta organização ou conta. Seus dados continuam preservados. Confira seu acesso e, se desejar, escolha um plano para continuar.',
     ownerTitle:'Esta conta já participa de uma organização',owner:'A avaliação pode ser iniciada somente pelo titular da organização. Você pode abrir o MusicScale com seu acesso atual ou pedir ao titular para ativá-la.',
     inactiveTitle:'Sua organização precisa de atenção',inactive:'Não foi possível oferecer uma avaliação para esta conta ou organização. Consulte seu painel para conferir o cadastro.',
@@ -31,6 +33,8 @@ const copy={
     start:'Start my 7 free days',signup:'Continue with Google to try',
     loading:'Checking your account securely…',working:'Activating your free trial…',
     activeTitle:'Your trial is already active',active:'You can continue using MusicScale. Your remaining days will not restart.',
+    paidTitle:'Your MusicScale has a subscription',paid:'We found an active subscription record. Open the app to continue with your team.',
+    historicalEnd:'Your data is preserved. A new purchase happens only when you select and confirm a plan.',
     historyTitle:'Welcome back to MusicScale',history:'We found previous access, registration or a trial for this account or organization. Your data is preserved. Review your access or choose a plan to continue.',
     ownerTitle:'You already belong to an organization',owner:'Only an organization owner can start its trial. Open MusicScale with your existing access or ask the owner to activate it.',
     inactiveTitle:'Your organization needs attention',inactive:'A trial cannot be offered for this account or organization. Check your dashboard.',
@@ -47,6 +51,8 @@ const copy={
     start:'Comenzar mis 7 días gratis',signup:'Continuar con Google para probar',
     loading:'Verificando tu cuenta…',working:'Activando tu prueba gratuita…',
     activeTitle:'Tu prueba ya está activa',active:'Puedes seguir usando MusicScale. Los días restantes no volverán a comenzar.',
+    paidTitle:'Tu MusicScale tiene suscripción',paid:'Encontramos un registro de suscripción activa. Abre la aplicación para continuar con tu equipo.',
+    historicalEnd:'Tus datos siguen guardados. Una nueva contratación solo ocurre al elegir y confirmar un plan.',
     historyTitle:'Bienvenido de nuevo a MusicScale',history:'Encontramos un acceso, registro o prueba anterior en esta cuenta u organización. Conservamos tus datos. Revisa tu acceso o elige un plan.',
     ownerTitle:'Ya perteneces a una organización',owner:'Solo el titular de la organización puede activar la prueba. Abre MusicScale o solicita al titular que la active.',
     inactiveTitle:'Tu organización necesita atención',inactive:'No podemos ofrecer la prueba a esta cuenta u organización. Revisa tu panel.',
@@ -181,25 +187,26 @@ export default function TrialStart(){
   const noOwner=Boolean(user&&!loading&&owned.length===0);
   const checking=loading||Boolean(user&&orgId&&!offer&&!problem);
   const view:Problem=noOwner?(hasOtherMembership?'owner':'inactive'):problem;
-  const title=offer?.active?c.activeTitle:
+  const paidAccess=offer?.code==='PAID_ACCESS_RECORDED';
+  const title=paidAccess?c.paidTitle:offer?.active?c.activeTitle:
     view==='history'?c.historyTitle:view==='owner'?c.ownerTitle:
     view==='unavailable'?c.unavailableTitle:view==='inactive'?(noOwner&&!hasOtherMembership?c.newTitle:c.inactiveTitle):
     view==='network'?c.errorTitle:c.headline;
-  const message=offer?.active?c.active:
+  const message=paidAccess?c.paid:offer?.active?c.active:
     view==='history'?c.history:view==='owner'?c.owner:
     view==='unavailable'?c.unavailable:view==='inactive'?(noOwner&&!hasOtherMembership?c.newOrg:c.inactive):
     view==='network'?c.error:c.description;
   const showPlans=Boolean(user&&view==='history');
-  const showOpen=Boolean(user&&(offer?.active||view==='history'||view==='owner'));
+  const showOpen=Boolean(user&&(paidAccess||offer?.active||view==='owner'));
   return <main className="min-h-screen bg-[#090c12] px-5 py-8 text-white sm:py-12">
     <div className="mx-auto max-w-2xl">
       <MillionsNestLogo className="mx-auto mb-12 h-9 w-auto"/>
       <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#152237] to-[#0e131d] p-6 shadow-2xl sm:p-10">
-        <p className="mb-4 text-sm font-semibold tracking-widest text-emerald-300">MusicScale · 7 {c.days}</p>
+        <p className="mb-4 text-sm font-semibold tracking-widest text-emerald-300">MusicScale · {view==='history'||paidAccess?'Minha conta':('7 '+c.days)}</p>
         <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-5xl">{title}</h1>
-        {!view&&!offer?.active&&<p className="mt-5 text-lg text-emerald-200">{c.sub}</p>}
+        {!view&&!offer?.active&&!paidAccess&&<p className="mt-5 text-lg text-emerald-200">{c.sub}</p>}
         <p className="mt-6 leading-relaxed text-slate-300" role={view?'status':undefined}>{message}</p>
-        {!view&&!offer?.active&&<p className="mt-4 rounded-2xl border border-white/10 p-4 text-sm leading-relaxed text-slate-400">{c.limits}</p>}
+        {!view&&!offer?.active&&!paidAccess&&<p className="mt-4 rounded-2xl border border-white/10 p-4 text-sm leading-relaxed text-slate-400">{c.limits}</p>}
         {user&&owned.length>1&&<label className="mt-6 block text-sm text-slate-200">
           <span className="mb-2 block">{c.choose}</span>
           <select value={orgId} onChange={e=>{setSelectedOrgId(e.target.value);autoAttempted.current=true;sessionStorage.removeItem(TRIAL_LOGIN_INTENT);}}
@@ -211,14 +218,15 @@ export default function TrialStart(){
           {checking?<p role="status" className="py-4 text-center text-slate-300">{c.loading}</p>:
             busy?<p role="status" className="py-4 text-center text-slate-300">{c.working}</p>:
             showOpen?<button onClick={()=>void openApp()} className="w-full rounded-xl bg-emerald-300 px-5 py-4 font-semibold text-emerald-950">{c.open}</button>:
+            showPlans?<button onClick={()=>navigate('/checkout?app=musicscale&intent=paid')} className="w-full rounded-xl bg-emerald-300 px-5 py-4 font-semibold text-emerald-950">{c.plans}</button>:
             noOwner?<button onClick={()=>navigate('/dashboard')} className="w-full rounded-xl bg-white px-5 py-4 font-semibold text-black">{c.dashboard}</button>:
             view==='network'?<button onClick={()=>{setProblem(null);setAttempt(n=>n+1);}} className="w-full rounded-xl bg-white px-5 py-4 font-semibold text-black">{c.retry}</button>:
             view==='unavailable'||view==='inactive'?<button onClick={()=>navigate('/dashboard')} className="w-full rounded-xl bg-white px-5 py-4 font-semibold text-black">{c.dashboard}</button>:
             <button onClick={()=>void start()} className="w-full rounded-xl bg-emerald-300 px-5 py-4 font-semibold text-emerald-950">{user?c.start:c.signup}</button>}
-          {showPlans&&<button onClick={()=>navigate('/checkout?app=musicscale&intent=paid')} className="w-full py-3 text-sm text-slate-300 underline">{c.plans}</button>}
+          {showPlans&&<button onClick={()=>navigate('/dashboard')} className="w-full py-3 text-sm text-slate-300 underline">{c.dashboard}</button>}
           {view==='owner'&&owned.length>0&&<button onClick={()=>navigate('/dashboard')} className="w-full py-3 text-sm text-slate-300 underline">{c.dashboard}</button>}
         </div>
-        <p className="mt-5 text-center text-xs leading-relaxed text-slate-400">{c.end}</p>
+        <p className="mt-5 text-center text-xs leading-relaxed text-slate-400">{view==='history'||paidAccess?c.historicalEnd:c.end}</p>
       </section>
       <button onClick={()=>navigate('/musicscale')} className="mt-6 py-2 text-sm text-slate-400">{c.back}</button>
     </div>
