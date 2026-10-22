@@ -53,6 +53,7 @@ export default function Checkout() {
   const [foundersOffer,setFoundersOffer]=useState<{available:boolean;remaining?:number;endsAt?:string;
     plans?:Record<string,{regularCents:number;foundersCents:number;creditsPerMonth:number}>}|null>(null);
   const [useFoundersOffer,setUseFoundersOffer]=useState(false);
+  const isTrialEntry = new URLSearchParams(window.location.search).get('trial') === '1';
   const checkoutApp: 'musicscale' | 'nestlocal' = new URLSearchParams(window.location.search).get('app') === 'nestlocal'
     ? 'nestlocal'
     : 'musicscale';
@@ -475,10 +476,10 @@ export default function Checkout() {
                 {/* Header */}
                 <div className="space-y-4">
                     <h1 className="text-4xl lg:text-5xl font-semibold tracking-tight text-white leading-tight">
-                        {checkoutApp === 'nestlocal' ? t('nestlocal.title') : t('title', 'Evolua com o plano ideal para você.')}
+                        {trialOffer?.available ? trialCopy.title : checkoutApp === 'nestlocal' ? t('nestlocal.title') : t('title', 'Evolua com o plano ideal para você.')}
                     </h1>
                     <p className="text-[#A0A7B5] text-lg font-light max-w-2xl">
-                        {checkoutApp === 'nestlocal'
+                        {trialOffer?.available ? trialCopy.description : checkoutApp === 'nestlocal'
                           ? t('nestlocal.subtitle')
                           : t('purchase_journey.subtitle')}
                     </p>
@@ -509,9 +510,16 @@ export default function Checkout() {
                   </section>
                 )}
 
+                {isTrialEntry && user && !activeOrganizationId && (
+                  <section className="rounded-2xl border border-[#6EAFFF]/25 bg-[#6EAFFF]/[0.06] p-5">
+                    <h2 className="text-lg font-semibold text-white">{String(i18n.language).startsWith('en')?'Set up your organization to start':String(i18n.language).startsWith('es')?'Prepara tu organización para comenzar':'Prepare sua organização para começar'}</h2>
+                    <p className="mt-2 text-sm text-[#A9B5C5]">{String(i18n.language).startsWith('en')?'Your free trial starts when an eligible organization activates it. No card needed.':String(i18n.language).startsWith('es')?'La prueba comienza cuando una organización elegible la activa. Sin tarjeta.':'O teste começa quando uma organização elegível o ativa. Não precisa cadastrar cartão.'}</p>
+                    <button type="button" onClick={()=>navigate('/dashboard/overview')} className="mt-4 rounded-xl bg-[#EAF3FF] px-5 py-3 text-sm font-semibold text-[#091222]">{String(i18n.language).startsWith('en')?'Continue setup':String(i18n.language).startsWith('es')?'Continuar configuración':'Continuar cadastro'}</button>
+                  </section>
+                )}
                 {trialOffer?.available && (
                   <section aria-label={trialCopy.title}
-                    className="rounded-[1.75rem] border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 to-blue-500/5 p-5 sm:p-6 shadow-[0_16px_50px_rgba(0,0,0,.12)]">
+                    className="rounded-[1.75rem] border border-[#6EAFFF]/25 bg-gradient-to-br from-[#2B85EB]/15 to-[#0B1B32]/50 p-5 sm:p-6 shadow-[0_16px_50px_rgba(0,0,0,.12)]">
                     <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                       <div className="max-w-xl space-y-2">
                         <p className="text-[11px] font-semibold uppercase tracking-[.18em] text-emerald-300">
@@ -522,7 +530,7 @@ export default function Checkout() {
                         <p className="text-xs leading-relaxed text-slate-400">{trialCopy.note}</p>
                       </div>
                       <button type="button" onClick={beginNoCardTrial} disabled={trialStarting}
-                        className="w-full shrink-0 rounded-xl bg-emerald-400 px-5 py-3.5 text-sm font-bold text-emerald-950 shadow-lg transition hover:bg-emerald-300 disabled:opacity-50 sm:w-auto">
+                        className="w-full shrink-0 rounded-xl bg-[#EAF3FF] px-5 py-3.5 text-sm font-bold text-[#091222] shadow-lg transition hover:bg-white disabled:opacity-50 sm:w-auto">
                         {trialStarting?trialCopy.starting:trialCopy.action}
                       </button>
                     </div>
