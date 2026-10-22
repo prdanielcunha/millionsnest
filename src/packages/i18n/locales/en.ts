@@ -611,6 +611,8 @@ export default {
     addon_pack_cta: "Get Music Pack"
   },
   auth: {
+    trial_signup_title: "Start your 7 free days",
+    trial_signup_subtitle: "Create an account to explore MusicScale without a card. Your seven days begin only when you activate the trial for your organization.",
     welcome_back: "Welcome back",
     create_account: "Create your account",
     access_central: "Access MillionsNest central",
