@@ -183,12 +183,12 @@ export function Login() {
           {isTrialFlow ? <MusicScaleEntryBrand /> : <MillionsNestLogo className="h-10 w-auto opacity-100" />}
         </div>
         
-        <h2 className="text-2xl font-semibold text-[#F5F7FA] text-center tracking-tight mb-2">
+        <h2 className="text-balance text-2xl font-semibold text-[#F5F7FA] text-center tracking-tight mb-2">
           {isTrialFlow ? t(isLogin ? "trial_login_title" : "trial_create_title") : isPurchaseFlow
             ? t("purchase_flow_title", "Continue para ativar seu teste")
             : (isLogin ? t("welcome_back") : t("create_account"))}
         </h2>
-        <p className="text-center text-[#A0A7B5] text-sm font-normal mb-8">
+        <p className="text-balance text-center text-[#A0A7B5] text-sm font-normal mb-8">
           {isTrialFlow ? t("trial_subtitle") : isPurchaseFlow
             ? t("purchase_flow_subtitle", "Use o Google ou seu e-mail. Se for seu primeiro acesso, sua conta será criada e o plano escolhido continuará selecionado.")
             : t("access_central")}
