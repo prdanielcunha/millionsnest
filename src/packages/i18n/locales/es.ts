@@ -649,6 +649,12 @@ export default {
     addon_pack_cta: "Comprar Paquete"
   },
   auth: {
+    trial_create_title: "Crea tu cuenta y pruébalo",
+    trial_login_title: "Entra para continuar en MusicScale",
+    trial_subtitle: "7 días gratis, sin tarjeta. Continúa con Google o correo electrónico.",
+    trial_assurance: "Al terminar, tú decides si deseas suscribirte. Sin cobros automáticos.",
+    trial_terms: "Términos de uso",
+    trial_privacy: "Privacidad",
     welcome_back: "Bienvenido de nuevo",
     create_account: "Crea tu cuenta",
     access_central: "Accede a la central MillionsNest",

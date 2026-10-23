@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { signInWithPopup, getRedirectResult, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider } from "../lib/firebase.js";
 import { useAuth } from "../contexts/AuthContext.js";
@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { parseInvitationRedirectPath } from "../lib/InvitationRedirectPolicy.js";
 import { useTranslation } from "react-i18next";
 import { MillionsNestLogo } from "../components/MillionsNestLogo.js";
+import { MusicScaleEntryBrand } from "../components/MusicScaleEntryBrand.js";
 import { resolveSafePostLoginPath } from "../lib/connectLaunchPolicy.js";
 
 export function Login() {
@@ -24,6 +25,7 @@ export function Login() {
   const [loading, setLoading] = useState(false);
   const purchaseIntent = sessionStorage.getItem('purchase_intent');
   const isPurchaseFlow = Boolean(purchaseIntent);
+  const isTrialFlow = resolveSafePostLoginPath(location.search) === '/trial';
 
   useEffect(() => {
     if (!auth) return;
@@ -167,7 +169,7 @@ export function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6 relative overflow-hidden [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-4 [&_button]:focus-visible:outline-[#2B85EB] [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-4 [&_a]:focus-visible:outline-[#2B85EB]">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl h-[400px] bg-[#2B85EB]/10 rounded-[100%] blur-[120px] pointer-events-none" />
       
       <motion.div 
@@ -177,23 +179,23 @@ export function Login() {
       >
         <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none rounded-[2rem]" />
         
-        <div className="flex justify-center mb-10">
-          <MillionsNestLogo className="h-10 w-auto opacity-100" />
+        <div className="flex justify-center mb-8">
+          {isTrialFlow ? <MusicScaleEntryBrand /> : <MillionsNestLogo className="h-10 w-auto opacity-100" />}
         </div>
         
         <h2 className="text-2xl font-semibold text-[#F5F7FA] text-center tracking-tight mb-2">
-          {isPurchaseFlow
+          {isTrialFlow ? t(isLogin ? "trial_login_title" : "trial_create_title") : isPurchaseFlow
             ? t("purchase_flow_title", "Continue para ativar seu teste")
             : (isLogin ? t("welcome_back") : t("create_account"))}
         </h2>
         <p className="text-center text-[#A0A7B5] text-sm font-normal mb-8">
-          {isPurchaseFlow
+          {isTrialFlow ? t("trial_subtitle") : isPurchaseFlow
             ? t("purchase_flow_subtitle", "Use o Google ou seu e-mail. Se for seu primeiro acesso, sua conta será criada e o plano escolhido continuará selecionado.")
             : t("access_central")}
         </p>
 
         {error && (
-          <div className="bg-[#EF4444]/10 border border-[#EF4444]/20 text-[#EF4444] p-3 rounded-xl text-sm mb-6 text-center">
+          <div role="alert" className="bg-[#EF4444]/10 border border-[#EF4444]/20 text-[#EF4444] p-3 rounded-xl text-sm mb-6 text-center">
             {error}
           </div>
         )}
@@ -219,33 +221,39 @@ export function Login() {
 
         <form onSubmit={handleEmailAuth} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#A0A7B5] mb-2 uppercase tracking-wide">{t("email")}</label>
+            <label htmlFor="mn-auth-email" className="block text-xs font-medium text-[#A0A7B5] mb-2 uppercase tracking-wide">{t("email")}</label>
             <input 
+              id="mn-auth-email"
+              name="email"
+              autoComplete="email"
               type="email" 
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:outline-none focus:ring-1 focus:ring-[#2B85EB] focus:border-[#2B85EB] transition-all text-sm text-[#F5F7FA] placeholder-white/20 shadow-inner"
+              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:outline-none focus:ring-1 focus:ring-[#2B85EB] focus:border-[#2B85EB] transition-all text-base text-[#F5F7FA] placeholder-white/20 shadow-inner"
               placeholder={t("email_placeholder")}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#A0A7B5] mb-2 uppercase tracking-wide">{t("password")}</label>
+            <label htmlFor="mn-auth-password" className="block text-xs font-medium text-[#A0A7B5] mb-2 uppercase tracking-wide">{t("password")}</label>
             <input 
+              id="mn-auth-password"
+              name="password"
+              autoComplete={isLogin ? "current-password" : "new-password"}
               type="password" 
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:outline-none focus:ring-1 focus:ring-[#2B85EB] focus:border-[#2B85EB] transition-all text-sm text-[#F5F7FA] placeholder-white/20 shadow-inner"
+              className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:outline-none focus:ring-1 focus:ring-[#2B85EB] focus:border-[#2B85EB] transition-all text-base text-[#F5F7FA] placeholder-white/20 shadow-inner"
               placeholder={t("password_placeholder")}
             />
           </div>
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full py-3 bg-[#F5F7FA] text-[#050505] rounded-xl font-semibold text-sm hover:bg-white transition-all disabled:opacity-50 mt-4 flex items-center justify-center shadow-sm active:scale-95"
+            className={`w-full py-3 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 mt-4 flex items-center justify-center shadow-sm active:scale-95 ${isTrialFlow ? 'bg-[#2475D1] text-white hover:bg-[#1F6FC9]' : 'bg-[#F5F7FA] text-[#050505] hover:bg-white'}`}
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin text-[#050505]" /> : (isLogin ? t("login_button") : t("create_button"))}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isLogin ? t("login_button") : t("create_button"))}
           </button>
         </form>
 
@@ -257,6 +265,14 @@ export function Login() {
             {isLogin ? t("no_account") : t("has_account")}
           </button>
         </div>
+        {isTrialFlow && <footer className="mt-6 border-t border-white/10 pt-5 text-center text-sm leading-relaxed text-[#A0A7B5]">
+          <p>{t("trial_assurance")}</p>
+          <div className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-1">
+            <Link to="/terms" className="rounded py-2 underline underline-offset-4 hover:text-white">{t("trial_terms")}</Link>
+            <Link to="/privacy" className="rounded py-2 underline underline-offset-4 hover:text-white">{t("trial_privacy")}</Link>
+          </div>
+          <MillionsNestLogo className="mx-auto mt-4 h-6 w-auto" />
+        </footer>}
       </motion.div>
     </div>
   );
