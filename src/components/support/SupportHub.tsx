@@ -1,3 +1,4 @@
+import { officialSupportUrl } from '../../lib/officialSupport.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CircleHelp, Mail, MessageCircle, Info, ChevronDown, ChevronUp } from 'lucide-react';
@@ -9,7 +10,7 @@ import { resolveSupportGuide } from '../../lib/supportGuideRegistry.js';
 import { useLocation } from 'react-router-dom';
 
 export function SupportHub() {
-  const { t } = useTranslation(['dashboard']);
+  const { t, i18n } = useTranslation(['dashboard']);
   const { hubOpen, openHub, closeHub, toggleHub, openRequest, openWhatsApp, openCurrentGuide, appId, requestOpen, whatsappOpen, guideOpen } = useSupportHub();
   const { user } = useAuth();
   const { organization } = useOrganization();
@@ -220,6 +221,10 @@ export function SupportHub() {
               </div>
             </button>
 
+            <a role="menuitem" href={officialSupportUrl(i18n.resolvedLanguage || i18n.language, appId === 'core' ? 'hub' : appId, 'hub')} target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 rounded-xl p-3 min-h-[44px] hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-green-500">
+              <MessageCircle className="mt-1 h-5 w-5 shrink-0 text-green-400" />
+              <span className="text-sm font-semibold text-white">{i18n.language.startsWith('en') ? 'Official WhatsApp · help and support' : i18n.language.startsWith('es') ? 'WhatsApp oficial · ayuda y soporte' : 'WhatsApp oficial · ajuda e suporte'}</span>
+            </a>
             {loading ? (
               <div className="flex items-start gap-3 p-3 min-h-[44px]">
                  <div className="w-8 h-8 rounded-lg bg-white/5 motion-reduce:animate-none animate-pulse shrink-0" />

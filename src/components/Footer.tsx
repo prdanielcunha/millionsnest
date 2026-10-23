@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MillionsNestLogo } from "./MillionsNestLogo.js";
 import { getAvailableApps } from '../lib/apps.js';
-import { createPublicSalesWhatsAppLink, resolvePublicContactLocale } from '../services/publicContactClient.js';
+import { officialSupportUrl } from '../lib/officialSupport.js';
 import { Loader2 } from 'lucide-react';
 
 export function Footer() {
@@ -39,12 +39,9 @@ export function Footer() {
 
     try {
       setIsContacting(true);
-      const url = await createPublicSalesWhatsAppLink({
-        intent: 'general',
-        locale: resolvePublicContactLocale(i18n.resolvedLanguage ?? i18n.language),
-        pagePath: location.pathname
-      });
-      if (url.startsWith('https://wa.me/')) {
+      const product = location.pathname.toLowerCase().includes('musicscale') ? 'musicscale' : 'hub';
+      const url = officialSupportUrl(i18n.resolvedLanguage ?? i18n.language, product);
+      if (url.startsWith('https://connect.millionsnest.com/')) {
         popup.location.href = url;
       } else {
         throw new Error('Invalid URL');
