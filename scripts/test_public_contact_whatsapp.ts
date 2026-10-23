@@ -108,6 +108,12 @@ async function runTests() {
   const prevSalesWhatsAppNumber = process.env.SALES_WHATSAPP_NUMBER;
   const prevSupportWhatsAppNumber = process.env.SUPPORT_WHATSAPP_NUMBER;
 
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const endpoint = new URL(String(input));
+    const marker = `[mn-support:v1:${endpoint.searchParams.get('product')}:${endpoint.searchParams.get('source')}:${endpoint.searchParams.get('topic')}]`;
+    return new Response(null, { status: 302, headers: { location: 'https://wa.me/16505550100?text=' + encodeURIComponent(marker) } });
+  };
   try {
     process.env.SALES_WHATSAPP_NUMBER = '5511999999999';
     
@@ -224,6 +230,7 @@ async function runTests() {
     res = await runApi({ intent: 'pricing', locale: 'pt' });
     assert(res.statusCode === 503, "503 when SALES_WHATSAPP_NUMBER invalid");
   } finally {
+    globalThis.fetch = previousFetch;
     if (prevSalesWhatsAppNumber !== undefined) {
       process.env.SALES_WHATSAPP_NUMBER = prevSalesWhatsAppNumber;
     } else {
@@ -241,7 +248,7 @@ async function runTests() {
   const footerContent = fs.readFileSync(path.join(rootDir, 'src', 'components', 'Footer.tsx'), 'utf8');
   const salesChatContent = fs.readFileSync(path.join(rootDir, 'src', 'components', 'SalesChat.tsx'), 'utf8');
 
-  assert(footerContent.includes('resolvePublicContactLocale'), "Footer uses locale resolver");
+  assert(footerContent.includes('officialSupportUrl'), "Footer uses central official support URL");
   assert(salesChatContent.includes('resolvePublicContactLocale'), "SalesChat uses locale resolver");
   assert(!footerContent.includes('alert('), "Footer does not use alert");
   assert(!salesChatContent.includes('alert('), "SalesChat does not use alert");

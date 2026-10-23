@@ -1,3 +1,7 @@
 # Public official support entry
 
 Footer contact and the dashboard support menu link to the existing Connect provider through the public subject selector. It passes only product, source and locale enums. Public help is independent of login/plan; existing Pro priority support, email and capabilities remain unchanged. No credentials, organization or page query are shared. Publish Connect and verify its provider redirect before these links. See prdanielcunha/millionsnest-connect docs/OFFICIAL_SUPPORT_INTAKE_20261023.md for full routing, privacy, validation and external delivery limits.
+
+Existing premium support and public sales link APIs also resolve the official destination through the same fixed Connect GET-only redirect. Their existing authorization/plan checks and typed user message are preserved; obsolete configured fallback numbers are no longer used to choose their destination. Page queries/fragments are stripped from public sales draft context. Invalid/unavailable upstream metadata fails safely with 503.
+
+Validation note: the focused runtime destination test passes. Legacy source-text suites contain pre-existing assertions against untouched SalesChat/SupportHubContext behavior (four sales assertions and three support-widget assertions); these are not certified as passing and those unrelated components were not rewritten. All runtime sales endpoint scenarios and the new Footer assertion pass. TypeScript and build are required separately.
