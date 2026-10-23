@@ -374,7 +374,7 @@ async function runAll() {
     assert(nestfinance.status === 'coming_soon', 'nestfinance continua coming_soon');
     
     assert(nestfinance.primaryAction === 'disabled', 'nestfinance continua disabled');
-    assert(nestfinance.iconAsset === '/brand/nestfinance/nest-flow-signature/v1/symbols/nestfinance-symbol-vector-gradient-compact.svg', 'catálogo usa o asset compacto');
+    assert(nestfinance.iconAsset === '/brand/nestfinance/nf-continuous/v2/symbols/nestfinance-gradient.svg', 'catálogo usa o nf contínuo aprovado');
     
     // Check SVGs
     const fsMod = await import('fs');
@@ -383,9 +383,10 @@ async function runAll() {
     assert(fsMod.existsSync(compactPath), 'SVG compacto existe');
     
     const compactContent = fsMod.readFileSync(compactPath, 'utf8');
-    assert(compactContent.includes('viewBox="133 90 366 366"'), 'o viewBox é exatamente 133 90 366 366');
+    assert(compactContent.includes('viewBox="0 0 512 512"'), 'símbolo aprovado usa viewport quadrado');
+    assert(!/<(?:rect|image)\b/.test(compactContent), 'símbolo do catálogo tem transparência real sem imagem de fundo');
     
-    const origPath = compactPath.replace('-compact.svg', '.svg');
+    const origPath = path.resolve(process.cwd(), 'public/brand/nestfinance/nest-flow-signature/v1/symbols/nestfinance-symbol-vector-gradient.svg');
     assert(fsMod.existsSync(origPath), 'o SVG original continua existindo');
     
     const origContent = fsMod.readFileSync(origPath, 'utf8');

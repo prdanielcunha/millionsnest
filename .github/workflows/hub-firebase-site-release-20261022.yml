@@ -1,4 +1,4 @@
-# One-time site publication for the approved 7-day no-card trial marketing copy.
+# Publish the approved lowercase NestFinance nf identity using the existing Hosting pipeline.
 # Triggered only when this workflow file is first merged into production.
 name: Hub Firebase Site Release - Assisted Trial
 
@@ -38,6 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           npm run lint
+          node --import tsx scripts/test_nestfinance_approved_brand.ts
           npx tsx scripts/test_public_home_funnel.ts
           npx tsx scripts/test_musicscale_sales_truth.ts
           npx tsx scripts/test_firebase_hosting_cloudrun_policy.ts
@@ -79,6 +80,13 @@ jobs:
             grep -Eiq '<!doctype html|<html' /tmp/hub-release-page.html
           done
           echo "HUB_MARKETING_FIREBASE_PUBLISHED"
+
+      - name: Verify approved NestFinance symbol bytes on canonical site
+        run: |
+          set -euo pipefail
+          ASSET=brand/nestfinance/nf-continuous/v2/symbols/nestfinance-gradient.svg
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 3 "https://www.millionsnest.com/$ASSET" -o /tmp/hub-approved-nf.svg
+          cmp "public/$ASSET" /tmp/hub-approved-nf.svg
 
 # Approved transparent MillionsNest brand refresh, 2026-10-22.
 
