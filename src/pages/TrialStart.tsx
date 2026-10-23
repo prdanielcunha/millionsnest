@@ -214,7 +214,7 @@ export default function TrialStart(){
       <section aria-labelledby="trial-title" className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#101827] to-[#0B0F19] p-6 shadow-2xl shadow-black/30 sm:p-10">
         <MusicScaleEntryBrand/>
         <p className="mb-4 mt-7 text-center text-xs font-semibold uppercase tracking-[0.16em] text-[#8DBFF7]">{view==='history'||paidAccess?c.account:('7 '+c.days)}</p>
-        <h1 id="trial-title" className="text-center text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">{title}</h1>
+        <h1 id="trial-title" className="text-balance text-center text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">{title}</h1>
         {!view&&!offer?.active&&!paidAccess&&<p className="mt-4 text-center text-base font-medium text-emerald-200">{c.sub}</p>}
         <p className="mt-6 leading-relaxed text-slate-300" role={view?'status':undefined}>{message}</p>
         {!view&&!offer?.active&&!paidAccess&&<p className="mt-4 rounded-2xl border border-[#2B85EB]/20 bg-[#2B85EB]/5 p-4 text-sm leading-relaxed text-slate-300">{c.limits}</p>}
