@@ -640,6 +640,12 @@ export default {
     addon_pack_cta: "Get Music Pack"
   },
   auth: {
+    trial_create_title: "Create your account and try it",
+    trial_login_title: "Sign in to continue to MusicScale",
+    trial_subtitle: "7 free days, no card required. Continue with Google or email.",
+    trial_assurance: "After the trial, you decide whether to subscribe. No automatic charges.",
+    trial_terms: "Terms of use",
+    trial_privacy: "Privacy",
     welcome_back: "Welcome back",
     create_account: "Create your account",
     access_central: "Access MillionsNest central",
