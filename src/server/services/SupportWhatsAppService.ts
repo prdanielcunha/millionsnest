@@ -1,3 +1,4 @@
+import { officialSupportDestination } from './OfficialSupportDestination.js';
 import { Request, Response } from 'express';
 import { resolveAuthenticatedSupportContext } from './SupportCapabilitiesService.js';
 import { getSupportConfig } from '../config/supportConfig.js';
@@ -135,8 +136,9 @@ Minha dúvida:
 ${cleanMessage}`;
     }
 
-    const encodedText = encodeURIComponent(textTemplate);
-    const url = `https://wa.me/${config.whatsappNumber}?text=${encodedText}`;
+    let url: string;
+    try { url = await officialSupportDestination({ product: appId || 'hub', source: 'hub', topic: 'help', locale }, textTemplate); }
+    catch { return res.status(503).json({ success: false, reasonCode: 'WHATSAPP_NOT_CONFIGURED' }); }
 
     return res.status(200).json({
       success: true,

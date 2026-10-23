@@ -1,3 +1,4 @@
+import { officialSupportDestination } from './OfficialSupportDestination.js';
 import { Request, Response } from 'express';
 import { getSupportConfig } from '../config/supportConfig.js';
 import { 
@@ -105,7 +106,7 @@ export const createPublicSalesWhatsAppLink = async (req: Request, res: Response)
         res.status(400).json(response);
         return;
       }
-      finalMessage += `\n\n${sourceLabel} ${trimmedPath.split('#')[0]}`;
+      finalMessage += `\n\n${sourceLabel} ${trimmedPath.split('#')[0].split('?')[0]}`;
     }
 
     if (payload.message !== undefined) {
@@ -126,7 +127,10 @@ export const createPublicSalesWhatsAppLink = async (req: Request, res: Response)
       finalMessage += `\n\n${userMessage}`;
     }
 
-    const url = `https://wa.me/${config.salesWhatsappNumber}?text=${encodeURIComponent(finalMessage)}`;
+    const product = typeof payload.pagePath === 'string' && /^\/musicscale(?:[/?#]|$)/i.test(payload.pagePath) ? 'musicscale' : 'hub';
+    let url: string;
+    try { url = await officialSupportDestination({ product, source: 'website', topic: 'sales', locale: payload.locale }, finalMessage); }
+    catch { res.status(503).json({ success: false, reasonCode: 'SALES_WHATSAPP_NOT_CONFIGURED' }); return; }
 
     const response: PublicSalesWhatsAppSuccessResponse = {
       success: true,
