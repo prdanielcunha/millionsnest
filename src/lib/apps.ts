@@ -61,7 +61,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
   {
     id: 'nestfinance',
     name: 'NestFinance',
-    iconAsset: '/brand/nestfinance/nest-flow-signature/v1/symbols/nestfinance-symbol-vector-gradient-compact.svg',
+    iconAsset: '/brand/nestfinance/nf-continuous/v2/symbols/nestfinance-gradient.svg',
     description: 'Gestão financeira, contagem, conciliação, relatórios e auditoria para igrejas.',
     shortDescription: 'Finanças claras e auditáveis',
     icon: 'Wallet',

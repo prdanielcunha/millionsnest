@@ -1,6 +1,9 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Check, CircleDot, Clock3, Music2, Radio, UsersRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { ECOSYSTEM_APPS } from "../lib/apps.js";
+
+const productIconAssets = Object.fromEntries(ECOSYSTEM_APPS.map(app => [app.name, app.iconAsset]));
 
 const demoRows = [
   { icon: Music2, key: "hero_demo_scale", metaKey: "hero_demo_scale_meta" },
@@ -48,7 +51,9 @@ export function ProductMotionStage() {
                   ? "border-[#2B85EB]/25 bg-[#2B85EB]/10"
                   : "border-white/[0.05] bg-white/[0.018]"}`}
               >
-                <span className={`h-2 w-2 shrink-0 rounded-full ${active ? "bg-[#66A8FF]" : "bg-white/15"}`} />
+                {productIconAssets[String(name)] ? (
+                  <img src={productIconAssets[String(name)]} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain" />
+                ) : <span className={`h-2 w-2 shrink-0 rounded-full ${active ? "bg-[#66A8FF]" : "bg-white/15"}`} />}
                 <span className={`truncate text-[10px] font-semibold ${active ? "text-white" : "text-[#697484]"}`}>
                   {name}
                 </span>
