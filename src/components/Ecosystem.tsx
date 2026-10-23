@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowUpRight, BarChart3, MapPin, Network, Route, Sparkles, UsersRound, WalletCards } from "lucide-react";
+import { ArrowUpRight, BarChart3, MapPin, Network, Route, Sparkles, UsersRound } from "lucide-react";
 import { useTranslation, Trans } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { ECOSYSTEM_APPS, type EcosystemApp } from "../lib/apps.js";
@@ -60,13 +60,14 @@ function ProductPreview({ appId }: { appId: string }) {
     );
   }
 
-  const Icon = appId === "nestfinance" ? WalletCards : appId === "nestlocal" ? BarChart3 : Route;
+  const Icon = appId === "nestlocal" ? BarChart3 : Route;
+  const app = ECOSYSTEM_APPS.find(product => product.id === appId);
   return (
     <div className="relative min-h-[210px] overflow-hidden rounded-[22px] border border-white/[0.06] bg-[#06090E] p-4">
       <div className="absolute right-[-15%] top-[-25%] h-40 w-40 rounded-full bg-[#2B85EB]/10 blur-[70px]" />
       <div className="relative">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.025] text-[#7BB8FF]">
-          <Icon className="h-4 w-4" />
+          {app?.iconAsset ? <ProductIcon app={app} /> : <Icon className="h-4 w-4" />}
         </div>
         <div className="mt-8 grid grid-cols-3 gap-2">
           {[64, 82, 48].map((width, index) => (
