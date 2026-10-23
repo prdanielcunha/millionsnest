@@ -1,16 +1,18 @@
 import {useEffect,useRef,useState} from 'react';
-import {useNavigate} from 'react-router-dom';
+import {Link,useNavigate} from 'react-router-dom';
 import {useTranslation} from 'react-i18next';
 import {useAuth} from '../contexts/AuthContext.js';
 import {MillionsNestLogo} from '../components/MillionsNestLogo.js';
+import {MusicScaleEntryBrand} from '../components/MusicScaleEntryBrand.js';
 
 const TRIAL_LOGIN_INTENT='mn_musicscale_trial_after_login';
 const copy={
   pt:{
-    headline:'Conheça o MusicScale por 7 dias.',sub:'Sem cartão. Sem pagamento para começar. Sem cobrança automática.',
+    headline:'Conheça o MusicScale por 7 dias.',sub:'Grátis para começar. Sem cartão.',
     description:'Experimente os recursos Pro para organizar o louvor: escalas, repertórios, cifras, ferramentas musicais e inteligência artificial com limites de uso.',
     limits:'Até 20 importações da Biblioteca Viva e até 10 consultas assistidas por IA durante os 7 dias.',
-    start:'Começar meus 7 dias grátis',signup:'Entrar com Google para experimentar',
+    start:'Começar meus 7 dias grátis',signup:'Começar meus 7 dias grátis',
+    terms:'Termos de uso',privacy:'Privacidade',existing:'Já tem acesso? Abrir MusicScale',
     loading:'Conferindo sua conta com segurança…',working:'Ativando sua avaliação…',
     activeTitle:'Sua avaliação já está ativa',active:'Você já pode continuar usando o MusicScale. Seus dias restantes não serão reiniciados.',
     paidTitle:'Seu MusicScale já tem assinatura',paid:'Encontramos um registro de assinatura ativa. Entre no aplicativo para continuar com a sua equipe.',
@@ -27,10 +29,11 @@ const copy={
     back:'Voltar ao site',days:'dias',
   },
   en:{
-    headline:'Discover MusicScale for 7 days.',sub:'No card. No payment to start. No automatic charge.',
+    headline:'Discover MusicScale for 7 days.',sub:'Free to start. No card required.',
     description:'Explore Pro features for worship teams: schedules, setlists, chords, music tools and AI with usage limits.',
     limits:'Up to 20 Live Library imports and 10 AI-assisted queries during the 7-day trial.',
-    start:'Start my 7 free days',signup:'Continue with Google to try',
+    start:'Start my 7 free days',signup:'Start my 7 free days',
+    terms:'Terms of use',privacy:'Privacy',existing:'Already have access? Open MusicScale',
     loading:'Checking your account securely…',working:'Activating your free trial…',
     activeTitle:'Your trial is already active',active:'You can continue using MusicScale. Your remaining days will not restart.',
     paidTitle:'Your MusicScale has a subscription',paid:'We found an active subscription record. Open the app to continue with your team.',
@@ -45,10 +48,11 @@ const copy={
     retry:'Try again',account:'My account',startNew:'Continue to free trial',end:'After 7 days, choose whether to subscribe. Your data stays safe, and there are no automatic charges.',back:'Back to website',days:'days',
   },
   es:{
-    headline:'Conoce MusicScale durante 7 días.',sub:'Sin tarjeta. Sin pago inicial. Sin cobro automático.',
+    headline:'Conoce MusicScale durante 7 días.',sub:'Gratis para empezar. Sin tarjeta.',
     description:'Explora las funciones Pro para alabanza: turnos, repertorios, acordes, herramientas musicales e IA con límites de uso.',
     limits:'Hasta 20 importaciones de Biblioteca Viva y 10 consultas asistidas por IA durante los 7 días.',
-    start:'Comenzar mis 7 días gratis',signup:'Continuar con Google para probar',
+    start:'Comenzar mis 7 días gratis',signup:'Comenzar mis 7 días gratis',
+    terms:'Términos de uso',privacy:'Privacidad',existing:'¿Ya tienes acceso? Abrir MusicScale',
     loading:'Verificando tu cuenta…',working:'Activando tu prueba gratuita…',
     activeTitle:'Tu prueba ya está activa',active:'Puedes seguir usando MusicScale. Los días restantes no volverán a comenzar.',
     paidTitle:'Tu MusicScale tiene suscripción',paid:'Encontramos un registro de suscripción activa. Abre la aplicación para continuar con tu equipo.',
@@ -204,37 +208,43 @@ export default function TrialStart(){
     view==='network'?c.error:c.description;
   const showPlans=Boolean(user&&view==='history');
   const showOpen=Boolean(user&&(paidAccess||offer?.active||view==='owner'));
-  return <main className="min-h-screen bg-[#090c12] px-5 py-8 text-white sm:py-12">
-    <div className="mx-auto max-w-2xl">
-      <MillionsNestLogo className="mx-auto mb-12 h-9 w-auto"/>
-      <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#152237] to-[#0e131d] p-6 shadow-2xl sm:p-10">
-        <p className="mb-4 text-sm font-semibold tracking-widest text-emerald-300">MusicScale · {view==='history'||paidAccess?c.account:('7 '+c.days)}</p>
-        <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-5xl">{title}</h1>
-        {!view&&!offer?.active&&!paidAccess&&<p className="mt-5 text-lg text-emerald-200">{c.sub}</p>}
+  return <main className="min-h-screen bg-[#050505] px-5 py-8 text-[#F5F7FA] sm:py-12 [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-4 [&_button]:focus-visible:outline-[#2B85EB] [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-4 [&_a]:focus-visible:outline-[#2B85EB]">
+    <div className="mx-auto max-w-xl">
+      <Link to="/" aria-label="MillionsNest" className="mx-auto mb-8 flex w-fit rounded-lg"><MillionsNestLogo className="h-7 w-auto"/></Link>
+      <section aria-labelledby="trial-title" className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#101827] to-[#0B0F19] p-6 shadow-2xl shadow-black/30 sm:p-10">
+        <MusicScaleEntryBrand/>
+        <p className="mb-4 mt-7 text-center text-xs font-semibold uppercase tracking-[0.16em] text-[#8DBFF7]">{view==='history'||paidAccess?c.account:('7 '+c.days)}</p>
+        <h1 id="trial-title" className="text-center text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">{title}</h1>
+        {!view&&!offer?.active&&!paidAccess&&<p className="mt-4 text-center text-base font-medium text-emerald-200">{c.sub}</p>}
         <p className="mt-6 leading-relaxed text-slate-300" role={view?'status':undefined}>{message}</p>
-        {!view&&!offer?.active&&!paidAccess&&<p className="mt-4 rounded-2xl border border-white/10 p-4 text-sm leading-relaxed text-slate-400">{c.limits}</p>}
+        {!view&&!offer?.active&&!paidAccess&&<p className="mt-4 rounded-2xl border border-[#2B85EB]/20 bg-[#2B85EB]/5 p-4 text-sm leading-relaxed text-slate-300">{c.limits}</p>}
         {user&&owned.length>1&&<label className="mt-6 block text-sm text-slate-200">
           <span className="mb-2 block">{c.choose}</span>
           <select value={orgId} onChange={e=>{setSelectedOrgId(e.target.value);autoAttempted.current=true;sessionStorage.removeItem(TRIAL_LOGIN_INTENT);}}
-            className="w-full rounded-xl border border-white/20 bg-[#111827] p-3 text-white">
+            className="w-full rounded-xl border border-white/20 bg-[#111827] p-3 text-base text-white focus-visible:outline-2 focus-visible:outline-[#2B85EB]">
             {owned.map((org:any)=><option key={org.id} value={org.id}>{org.name||org.id}</option>)}
           </select>
         </label>}
         <div className="mt-7 space-y-3">
           {checking?<p role="status" className="py-4 text-center text-slate-300">{c.loading}</p>:
             busy?<p role="status" className="py-4 text-center text-slate-300">{c.working}</p>:
-            showOpen?<button onClick={()=>void openApp()} className="w-full rounded-xl bg-emerald-300 px-5 py-4 font-semibold text-emerald-950">{c.open}</button>:
-            showPlans?<button onClick={()=>navigate('/checkout?app=musicscale&intent=paid')} className="w-full rounded-xl bg-emerald-300 px-5 py-4 font-semibold text-emerald-950">{c.plans}</button>:
+            showOpen?<button onClick={()=>void openApp()} className="w-full rounded-xl bg-[#2475D1] px-5 py-4 font-semibold text-white transition hover:bg-[#1F6FC9]">{c.open}</button>:
+            showPlans?<button onClick={()=>navigate('/checkout?app=musicscale&intent=paid')} className="w-full rounded-xl bg-[#2475D1] px-5 py-4 font-semibold text-white transition hover:bg-[#1F6FC9]">{c.plans}</button>:
             noOwner?<button onClick={()=>navigate('/dashboard')} className="w-full rounded-xl bg-white px-5 py-4 font-semibold text-black">{c.dashboard}</button>:
             view==='network'?<button onClick={()=>{setProblem(null);setAttempt(n=>n+1);}} className="w-full rounded-xl bg-white px-5 py-4 font-semibold text-black">{c.retry}</button>:
             view==='unavailable'||view==='inactive'?<button onClick={()=>navigate('/dashboard')} className="w-full rounded-xl bg-white px-5 py-4 font-semibold text-black">{c.dashboard}</button>:
-            <button onClick={()=>void start()} className="w-full rounded-xl bg-emerald-300 px-5 py-4 font-semibold text-emerald-950">{user?c.start:c.signup}</button>}
+            <button onClick={()=>void start()} className="w-full rounded-xl bg-[#2475D1] px-5 py-4 font-semibold text-white transition hover:bg-[#1F6FC9]">{user?c.start:c.signup}</button>}
           {showPlans&&<button onClick={()=>navigate('/dashboard')} className="w-full py-3 text-sm text-slate-300 underline">{c.dashboard}</button>}
           {view==='owner'&&owned.length>0&&<button onClick={()=>navigate('/dashboard')} className="w-full py-3 text-sm text-slate-300 underline">{c.dashboard}</button>}
         </div>
-        <p className="mt-5 text-center text-xs leading-relaxed text-slate-400">{view==='history'||paidAccess?c.historicalEnd:c.end}</p>
+        <p className="mt-5 text-center text-sm leading-relaxed text-slate-400">{view==='history'||paidAccess?c.historicalEnd:c.end}</p>
+        {!user&&!checking&&<Link to="/apps/musicscale/launch" className="mt-5 block rounded-lg py-2 text-center text-sm font-medium text-slate-300 underline decoration-white/30 underline-offset-4 hover:text-white">{c.existing}</Link>}
       </section>
-      <button onClick={()=>navigate('/musicscale')} className="mt-6 py-2 text-sm text-slate-400">{c.back}</button>
+      <footer className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-slate-400">
+        <Link to="/musicscale" className="rounded py-2 hover:text-white">{c.back}</Link>
+        <Link to="/terms" className="rounded py-2 hover:text-white">{c.terms}</Link>
+        <Link to="/privacy" className="rounded py-2 hover:text-white">{c.privacy}</Link>
+      </footer>
     </div>
   </main>;
 }
