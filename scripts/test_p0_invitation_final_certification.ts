@@ -100,6 +100,10 @@ async function run() {
     db.doc('users/verified-ceo').set({ systemRole: 'ceo', marker: 'keep-owner' }),
     seedInvite('ceo-owned-org', 'ceo-invite', 'ceo-link-token', 'ceo-guest@example.com'),
   ]);
+  // Match the production case: a shareable link not bound to an email.
+  await db.doc('organizations/ceo-owned-org/invites/ceo-invite').set({
+    inviteMode: 'link', identityBound: false, email: null, emailNormalized: null,
+  }, { merge: true });
   const ceoAccepted = await accept('ceo-guest-token', 'ceo-link-token', 'ceo-owned-org');
   const [ceoMember, ceoInvite, ceoProfile] = await Promise.all([
     db.doc('organizations/ceo-owned-org/members/ceo-guest').get(),
