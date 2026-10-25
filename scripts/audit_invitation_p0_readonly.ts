@@ -61,10 +61,20 @@ async function main() {
   });
   const ownerCandidatesAreDifferent = new Set(ownerAliases).size > 1;
   const firstOwnerIsCEO = ownerStates.length ? ownerStates[0].isCEO : false;
+  const acceptedUid = typeof invitation?.acceptedBy === 'string' ? invitation.acceptedBy : '';
+  const [acceptedMember, acceptedUser, acceptedMusicProfile] = acceptedUid
+    ? await Promise.all([
+        org.ref.collection('members').doc(acceptedUid).get(),
+        db.collection('users').doc(acceptedUid).get(),
+        org.ref.collection('musicscale_members').doc(acceptedUid).get(),
+      ])
+    : [null, null, null];
+  const linkedOrgs = acceptedUser?.data()?.organizations;
   const result: Record<string,unknown> = {
     readOnly: true,
     organizationMatch: 1,
-    organizationActive: ['active','trialing'].includes(String(data.status || '').toLowerCase()),
+    organizationStatus: typeof data.status === 'string' ? data.status.trim().toLowerCase().slice(0,32) : 'missing',
+    organizationLifecycleActive: (await import('../src/lib/organizationLifecycle.js')).isOrganizationLifecycleActive(data),
     ownerAliasCount: ownerAliases.length,
     conflictingOwnerAliases: ownerCandidatesAreDifferent,
     selectedOwnerExists: ownerStates[0]?.exists === true,
@@ -83,6 +93,18 @@ async function main() {
     inviteRevoked: invitation ? invitation.status === 'revoked' || !!invitation.revokedAt : null,
     inviteUseCount: invitation && Number.isInteger(invitation.useCount) ? invitation.useCount : null,
     inviteMaxUses: invitation && Number.isInteger(invitation.maxUses) ? invitation.maxUses : null,
+    acceptedByRecorded: Boolean(acceptedUid),
+    acceptedMemberExists: acceptedMember?.exists === true,
+    acceptedMemberStatus: typeof acceptedMember?.data()?.status === 'string' ? acceptedMember.data()?.status : null,
+    acceptedMemberRole: typeof acceptedMember?.data()?.role === 'string' ? acceptedMember.data()?.role : null,
+    acceptedUserExists: acceptedUser?.exists === true,
+    acceptedUserLinkedToOrg: Array.isArray(linkedOrgs) && linkedOrgs.includes(org.id),
+    acceptedUserActiveContext: acceptedUser?.data()?.activeOrganizationId === org.id,
+    acceptedMusicScaleProjectionPresent: acceptedMusicProfile?.exists === true,
+    acceptedMusicScaleRoleIdPresent: Boolean(acceptedMusicProfile?.data()?.roleId),
+    acceptedLegacyProjectionExists: acceptedUid
+      ? (await db.collection('organization_members').doc(`${acceptedUid}_${org.id}`).get()).exists
+      : false,
   };
   if (invitation?.inviteMode === 'link' || invitation?.identityBound === false) {
     // Pure, no-write assessment, using dummy user identity to avoid reading private invitee data.
