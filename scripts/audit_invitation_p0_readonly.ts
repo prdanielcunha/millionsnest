@@ -59,6 +59,11 @@ async function main() {
     },
     memberStatuses: memberSnap.docs.map(s=>s.data()?.status),
   });
+  const tokenIntentSnap = await org.ref.collection('musicscale_invite_role_intents')
+    .doc('token_' + INVITE_TOKEN_FINGERPRINT).get();
+  const tokenIntent = tokenIntentSnap.data() || {};
+  const tokenIntentRole = typeof tokenIntent.roleId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(tokenIntent.roleId)
+    ? await db.collection('roles').doc(tokenIntent.roleId).get() : null;
   const ownerCandidatesAreDifferent = new Set(ownerAliases).size > 1;
   const firstOwnerIsCEO = ownerStates.length ? ownerStates[0].isCEO : false;
   const acceptedUid = typeof invitation?.acceptedBy === 'string' ? invitation.acceptedBy : '';
@@ -82,7 +87,7 @@ async function main() {
     someRecordedOwnerIsCEO: ownerStates.some(x=>x.isCEO),
     subscriptionExists: sub.exists,
     canonicalSubscriptionStatus: String(subData.apps?.musicscale?.status ?? subData.status ?? 'missing').slice(0,32),
-    capacityResult: cap.success ? (cap.capacity.mode === 'unlimited' ? 'UNLIMITED' : 'LIMITED') : cap.reasonCode,
+    capacityResult: cap.success === false ? cap.reasonCode : (cap.capacity.mode === 'unlimited' ? 'UNLIMITED' : 'LIMITED'),
     matchingInviteCount: invites.size,
     inviteStatus: invitation ? String(invitation.status ?? 'missing').slice(0,32) : null,
     inviteMode: invitation ? String(invitation.inviteMode ?? 'missing').slice(0,32) : null,
@@ -93,6 +98,14 @@ async function main() {
     inviteRevoked: invitation ? invitation.status === 'revoked' || !!invitation.revokedAt : null,
     inviteUseCount: invitation && Number.isInteger(invitation.useCount) ? invitation.useCount : null,
     inviteMaxUses: invitation && Number.isInteger(invitation.maxUses) ? invitation.maxUses : null,
+    musicScaleInviteRoleIntentExists: tokenIntentSnap.exists,
+    musicScaleInviteRoleIntentStatus: tokenIntentSnap.exists ? String(tokenIntent.status ?? 'missing').slice(0,32) : null,
+    musicScaleInviteRoleIntentSchemaVersion: tokenIntentSnap.exists ? (tokenIntent.schemaVersion ?? null) : null,
+    musicScaleInviteRoleIntentHasRoleId: typeof tokenIntent.roleId === 'string' && tokenIntent.roleId.trim() !== '',
+    musicScaleInviteRoleIntentMatchesOrg: tokenIntentSnap.exists ? tokenIntent.organizationId === org.id : null,
+    musicScaleInviteRoleDocExists: tokenIntentRole?.exists === true,
+    musicScaleInviteRoleBelongsToOrg: tokenIntentRole?.exists === true && tokenIntentRole.data()?.organizationId === org.id,
+    musicScaleInviteRoleIntentAppliedToRecipient: tokenIntentSnap.exists && !!acceptedUid && tokenIntent.appliedToUid === acceptedUid,
     acceptedByRecorded: Boolean(acceptedUid),
     acceptedMemberExists: acceptedMember?.exists === true,
     acceptedMemberStatus: typeof acceptedMember?.data()?.status === 'string' ? acceptedMember.data()?.status : null,
