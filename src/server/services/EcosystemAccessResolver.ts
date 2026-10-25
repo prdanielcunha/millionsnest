@@ -20,7 +20,8 @@ export type MusicScaleIndividualAccessSource =
   | 'explicit_enabled'
   | 'membership_compatibility'
   | 'explicit_disabled'
-  | 'global_system_role';
+  | 'global_system_role'
+  | 'ceo_owned_organization';
 
 export type MusicScaleEntitlementDecision = {
   subscriptionStatus: string | null;
@@ -408,6 +409,45 @@ export async function resolveEcosystemAppAccess(params: {
       };
     } else if (memData.appAccess?.musicscale?.enabled === true) {
       individualAccessSource = 'explicit_enabled';
+    }
+
+    // An organization owned by a verified MillionsNest CEO inherits the
+    // ecosystem's MusicScale product entitlement. This is a TENANT benefit,
+    // not an individual global role. The invitee still needs an active,
+    // authorized membership and any explicit member app disable still wins.
+    // Do not rewrite Stripe/subscription state or grant wildcard permissions.
+    const recordedOwners = [
+      orgData.ownerUid, orgData.ownerUserId, orgData.ownerId, orgData.owner_user_id,
+    ].filter((value): value is string =>
+      typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value)
+    );
+    if (recordedOwners.length && new Set(recordedOwners).size === 1) {
+      const ownerDoc = await db.collection('users').doc(recordedOwners[0]).get();
+      const ownerData = ownerDoc.data() || {};
+      const ceoActive = ownerDoc.exists && ownerData.systemRole === 'ceo' &&
+        ownerData.disabled !== true &&
+        !['inactive', 'suspended', 'disabled', 'deleted'].includes(ownerData.status);
+      if (ceoActive) {
+        const memberMusicAccess = memData.appAccess?.musicscale;
+        return {
+          appId, organizationId, accessible: true,
+          isGlobalAccess: false,
+          accessSource: 'organization_membership',
+          systemRole, organizationRole,
+          roles: memberMusicAccess?.roles || [],
+          permissions: memberMusicAccess?.permissions || [],
+          scopes: memberMusicAccess?.scopes || {},
+          decisionState: 'granted',
+          entitlement: {
+            subscriptionStatus: 'ceo_owner_entitlement',
+            organizationAppStatus: String(orgData.apps?.musicscale?.status || '') || null,
+            canonicalStatus: 'active',
+            cancellationScheduled: false,
+            currentPeriodEndMs: null,
+            individualAccessSource: 'ceo_owned_organization'
+          }
+        };
+      }
     }
 
     const subRef = db.collection('subscriptions').doc(organizationId);
