@@ -437,6 +437,77 @@ async function runAllTests() {
     if (res.accessible) throw new Error('Expected denial');
   });
 
+  // CEO-owned tenant: the MusicScale product benefit belongs to the verified
+  // organization owner, but an ordinary invitee remains a non-global member.
+  await runTest('CEO-owned organization grants MusicScale access to active ordinary member with canceled subscription', 'u1','org1','musicscale',db => {
+    setupUserAndOrg(db, 'user', 'canceled', 'active', true, 'canceled', 'canceled');
+    db.setMockData('organizations/org1', {
+      status: 'canceled',
+      ownerUid: 'ceo-owner', ownerUserId: 'ceo-owner', ownerId: 'ceo-owner',
+      owner_user_id: 'ceo-owner',
+      apps: { musicscale: { status: 'canceled' } }
+    });
+    db.setMockData('users/ceo-owner', { systemRole: 'ceo', status: 'active' });
+    db.setMockData('organizations/org1/members/u1', {
+      role: 'member', status: 'active',
+      appAccess: { musicscale: { enabled: true, roles: ['member'], permissions: ['songs.read'] } }
+    });
+  }, (res, db) => {
+    if (!res.accessible || res.isGlobalAccess ||
+        res.accessSource !== 'organization_membership' ||
+        res.entitlement?.individualAccessSource !== 'ceo_owned_organization' ||
+        res.entitlement?.canonicalStatus !== 'active' ||
+        res.permissions.join(',') !== 'songs.read' || res.permissions.includes('*') ||
+        db.writeAttempts > 0) throw Error('CEO owner benefit must unlock only existing membership permissions');
+  });
+
+  await runTest('CEO-owned organization does not override explicitly disabled MusicScale member', 'u1','org1','musicscale',db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', false, 'canceled', 'canceled');
+    db.setMockData('organizations/org1', { status:'active', ownerUid:'ceo-owner' });
+    db.setMockData('users/ceo-owner', { systemRole:'ceo' });
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.MEMBER_APP_ACCESS_DISABLED)
+      throw Error('Explicit member app denial must win');
+  });
+
+  await runTest('CEO owner cannot give organization access to unaffiliated account', 'u1','org1','musicscale',db => {
+    db.setMockData('users/u1', { status:'active' });
+    db.setMockData('organizations/org1', { status:'active', ownerUid:'ceo-owner' });
+    db.setMockData('users/ceo-owner', { systemRole:'ceo' });
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.MEMBERSHIP_NOT_FOUND)
+      throw Error('Organization membership remains required');
+  });
+
+  await runTest('Non-owner CEO on organization does not bypass canceled subscription', 'u1','org1','musicscale',db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'canceled', 'canceled');
+    db.setMockData('organizations/org1', { status:'active', ownerUid:'regular-owner' });
+    db.setMockData('users/regular-owner', { systemRole:'member' });
+    db.setMockData('organizations/org1/members/ceo-owner', { role:'admin', status:'active' });
+    db.setMockData('users/ceo-owner', { systemRole:'ceo' });
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.SUBSCRIPTION_INACTIVE)
+      throw Error('Only a verified CEO OWNER may grant tenant entitlement');
+  });
+
+  await runTest('Conflicting ownership metadata fails closed for CEO benefit', 'u1','org1','musicscale',db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'canceled', 'canceled');
+    db.setMockData('organizations/org1', { status:'active', ownerUid:'ceo-owner', ownerId:'different-owner' });
+    db.setMockData('users/ceo-owner', { systemRole:'ceo' });
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.SUBSCRIPTION_INACTIVE)
+      throw Error('Conflicting owner aliases cannot grant entitlement');
+  });
+
+  await runTest('Disabled CEO owner cannot grant tenant entitlement', 'u1','org1','musicscale',db => {
+    setupUserAndOrg(db, 'user', 'active', 'active', true, 'canceled', 'canceled');
+    db.setMockData('organizations/org1', { status:'active', ownerUid:'ceo-owner' });
+    db.setMockData('users/ceo-owner', { systemRole:'ceo', disabled:true });
+  }, res => {
+    if (res.accessible || res.denialReason !== DENIAL_REASONS.SUBSCRIPTION_INACTIVE)
+      throw Error('Disabled CEO profile cannot grant tenant entitlement');
+  });
+
   // ACESSO INDIVIDUAL
   await runTest('31. appAccess.musicscale.enabled false nega', 'u1', 'org1', 'musicscale', db => {
     setupUserAndOrg(db, 'user', 'active', 'active', false);

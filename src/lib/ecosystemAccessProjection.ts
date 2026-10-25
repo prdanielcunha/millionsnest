@@ -23,7 +23,7 @@ export interface MusicScaleAccessProjection {
     canonicalStatus: 'active' | 'trialing' | 'inactive' | 'missing' | 'unknown';
     cancellationScheduled: boolean;
     currentPeriodEndMs: number | null;
-    individualAccessSource: 'explicit_enabled' | 'membership_compatibility' | 'explicit_disabled' | 'global_system_role';
+    individualAccessSource: 'explicit_enabled' | 'membership_compatibility' | 'explicit_disabled' | 'global_system_role' | 'ceo_owned_organization';
   } | null;
 }
 
