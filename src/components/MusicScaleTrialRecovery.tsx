@@ -23,9 +23,10 @@ export function MusicScaleTrialRecovery({organizationId}:{organizationId:string}
  const text=lang==='en'?['Your MusicScale is ready to open','Finish entering MusicScale here. No card or automatic charge.','Continue to MusicScale']:
  lang==='es'?['Tu MusicScale está listo para abrir','Completa tu acceso aquí. Sin tarjeta ni cobro automático.','Continuar a MusicScale']:
  ['Seu MusicScale está pronto para começar','Conclua sua entrada por aqui. Sem cartão e sem cobrança automática.','Continuar para o MusicScale'];
+ const action=offer.available?(lang==='en'?'Start 7 free days and open MusicScale':lang==='es'?'Activar 7 días gratis y abrir MusicScale':'Ativar 7 dias grátis e abrir o MusicScale'):text[2];
  return <section aria-label="MusicScale" className="mb-6 rounded-2xl border border-[#2B85EB]/30 bg-[#0B1422] p-5">
   <h2 className="text-lg font-semibold text-white">{text[0]}</h2>
   <p className="mt-2 text-sm leading-relaxed text-slate-300">{text[1]}</p>
-  <Link to="/trial" className="mt-4 inline-flex min-h-12 items-center rounded-xl bg-[#2475D1] px-5 py-3 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4">{text[2]}</Link>
+  <Link to={offer.active?'/apps/musicscale/launch':'/trial'} onClick={()=>{if(offer.available)sessionStorage.setItem('mn_musicscale_trial_after_login','1');}} className="mt-4 inline-flex min-h-12 items-center rounded-xl bg-[#2475D1] px-5 py-3 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4">{action}</Link>
  </section>;
 }
