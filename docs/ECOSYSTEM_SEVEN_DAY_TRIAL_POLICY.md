@@ -47,7 +47,7 @@ As dez consultas IA da avaliação usam o mesmo contador transacional `organizat
 
 ## MusicScale: contagem no primeiro acesso confirmado (2026-10-27)
 
-Por decisão do titular, novas ativações MusicScale reservam o teste em `pending_first_access`, sem início/vencimento, mantendo consumo único da elegibilidade. O Hub permite somente lançamento, com `canWrite=false`, `canUseAI=false` e permissões vazias. A reserva não passa nas Rules nem nos backends musicais; eles continuam exigindo grant ativo.
+Por decisão do titular, novas ativações MusicScale reservam o teste em `pending_first_access`, sem início/vencimento, mantendo consumo único da elegibilidade. O resolvedor canônico mantém `accessible=false` e `launchable=true`: somente projeção de catálogo e handoff reconhecem o lançamento de bootstrap. Serviços operacionais e emissores de IA continuam negados. A reserva mantém `canWrite=false`, `canUseAI=false` e permissões vazias. A reserva não passa nas Rules nem nos backends musicais; eles continuam exigindo grant ativo.
 
 O MusicScale confirma o bootstrap autenticado ao Hub, que revalida usuário, organização, membership, bloqueio individual, titular e assinatura em transação. Somente então grava o início no relógio do servidor e o vencimento 168h depois. Repetição não reinicia. Não há trial/assinatura no Stripe; contratos pagos, avaliações legadas/ativas/vencidas e outros produtos são preservados.
 

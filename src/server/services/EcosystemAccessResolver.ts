@@ -36,6 +36,8 @@ export type ResolvedAppAccess = {
   appId: EcosystemAppId;
   organizationId: string;
   accessible: boolean;
+  /** Reserved trials may launch bootstrap but cannot use any operational API. */
+  launchable?: boolean;
   // Explicit capabilities for newer Hub clients; legacy boolean access retained.
   readOnly?: boolean;
   canWrite?: boolean;
@@ -464,9 +466,9 @@ export async function resolveEcosystemAppAccess(params: {
       const trialSnap = await db.collection('musicscale_internal_trials').doc(organizationId).get();
       if(isPendingMusicScaleHubTrial(trialSnap.data(),organizationId)) {
         // Launch only. Domain APIs and Rules still require an active grant.
-        return {appId,organizationId,accessible:true,readOnly:true,canWrite:false,canUseAI:false,
+        return {appId,organizationId,accessible:false,launchable:true,denialReason:'TRIAL_PENDING_FIRST_ACCESS',readOnly:true,canWrite:false,canUseAI:false,
           isGlobalAccess:false,accessSource:'organization_membership',systemRole,organizationRole,
-          roles:[],permissions:[],scopes:{},decisionState:'granted',
+          roles:[],permissions:[],scopes:{},decisionState:'denied',
           entitlement:{subscriptionStatus:'pending_first_access',organizationAppStatus:'pending_first_access',
             canonicalStatus:'trialing',cancellationScheduled:false,currentPeriodEndMs:null,individualAccessSource}};
       }

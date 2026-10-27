@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {activateMusicScaleHubTrial,beginMusicScaleTrialOnFirstAccess,isPendingMusicScaleHubTrial} from '../src/server/services/MusicScaleNoCardTrialService.js';
 import {resolveEcosystemAppAccess} from '../src/server/services/EcosystemAccessResolver.js';
 import {trialWindow} from '../src/server/services/HubTrialExtensionService.js';
+import {handleEcosystemAccessProjectionRequest} from '../src/server/services/EcosystemAccessProjectionService.js';
 class DB {
  docs=new Map<string,any>();writes=0;
  collection(p:string):any{return this.ref(p)}
@@ -36,8 +37,16 @@ const count=db.writes;
 await activateMusicScaleHubTrial({...args,nowMs:now+20*DAY});
 assert.equal(db.writes,count,'waiting/retry cannot start time');
 const projection=await resolveEcosystemAppAccess({db:db as any,uid:'owner',organizationId:'org-a',appId:'musicscale'});
-assert.equal(projection.accessible,true);assert.equal(projection.canWrite,false);assert.equal(projection.canUseAI,false);
+assert.equal(projection.accessible,false,'pending grants must deny ALL operational services, including AI');assert.equal(projection.launchable,true);assert.equal(projection.canWrite,false);assert.equal(projection.canUseAI,false);
 assert.deepEqual(projection.permissions,[]);
+let launchProjection:any;
+const response:any={setHeader:()=>{},status:()=>response,json:(data:any)=>{launchProjection=data;return data;}};
+await handleEcosystemAccessProjectionRequest(
+ {headers:{authorization:'Bearer token'},body:{organizationId:'org-a',appId:'musicscale'}} as any,response,
+ {verifyIdToken:async()=>({uid:'owner'}),getDb:()=>db,resolveAccess:async()=>projection,now:()=>now,logger:{log:()=>{},error:()=>{}}} as any);
+assert.equal(launchProjection.apps.musicscale.accessible,true,'catalog allows the authenticated app bootstrap');
+assert.equal(launchProjection.apps.musicscale.catalogState,'trialing');
+assert.equal(launchProjection.apps.musicscale.canReadManagedScaleResponses,false,'catalog launch is not music data authority');
 for(const [path,change] of [['users/owner',{disabled:true}],['organizations/org-a',{status:'disabled'}],
  ['organizations/org-a/members/owner',{status:'removed'}],['organizations/org-a/members/owner',{appAccess:{musicscale:{enabled:false}}}]] as const){
  const old=db.docs.get(path);db.docs.set(path,{...old,...change});
