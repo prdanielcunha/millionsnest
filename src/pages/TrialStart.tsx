@@ -94,9 +94,12 @@ export default function TrialStart(){
   // AuthContext may still have a null canonical snapshot. Use the profile only
   // as a candidate; the server independently verifies actual ownership.
   const profileOrgId=profile?.activeOrganizationId||profile?.primaryOrganizationId||profile?.organizationId;
-  const owned=Array.isArray(canonicalContext?.ownedOrganizations)
-    ? canonicalContext.ownedOrganizations.filter((org:any)=>org&&typeof org.id==='string'&&org.status!=='archived')
-    : typeof profileOrgId==='string'&&profileOrgId.trim()
+  const canonicalOwned=Array.isArray(canonicalContext?.ownedOrganizations)
+    ? canonicalContext.ownedOrganizations.filter((org:any)=>org&&typeof org.id==='string'&&org.status!=='archived') : [];
+  // Empty bootstrap snapshots can precede the new owner's canonical context.
+  // This is only a lookup candidate: the offer/activation APIs verify ownership.
+  const owned=canonicalOwned.length>0?canonicalOwned:
+    typeof profileOrgId==='string'&&profileOrgId.trim()
       ? [{id:profileOrgId,name:'Minha organização'}] : [];
   const activeOrgId=canonicalContext?.activeOrganizationId||profile?.activeOrganizationId||'';
   const [selectedOrgId,setSelectedOrgId]=useState('');
