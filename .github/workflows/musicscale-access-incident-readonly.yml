@@ -1,0 +1,31 @@
+name: MusicScale Access Incident Read-only
+on:
+  push:
+    branches: [production]
+    paths:
+      - '.github/workflows/musicscale-access-incident-readonly.yml'
+      - 'scripts/audit_musicscale_access_incident_readonly.ts'
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - run: node --import tsx scripts/audit_musicscale_access_incident_readonly.ts
+        env:
+          GOOGLE_CLOUD_PROJECT: millionsnest
