@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
 import { isNestLocalInternalTrialActive, isNestLocalInternalTrialExpired } from './NestLocalAiEntitlement.js';
 import { trialWindow } from './HubTrialExtensionService.js';
-import { hasActiveStripeMusicScaleContract } from './MusicScaleNoCardTrialService.js';
+import { hasActiveStripeMusicScaleContract, isPendingMusicScaleHubTrial } from './MusicScaleNoCardTrialService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney' | 'nestlive';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -36,6 +36,8 @@ export type ResolvedAppAccess = {
   appId: EcosystemAppId;
   organizationId: string;
   accessible: boolean;
+  /** Reserved trials may launch bootstrap but cannot use any operational API. */
+  launchable?: boolean;
   // Explicit capabilities for newer Hub clients; legacy boolean access retained.
   readOnly?: boolean;
   canWrite?: boolean;
@@ -462,6 +464,14 @@ export async function resolveEcosystemAppAccess(params: {
     if (orgData.apps?.musicscale?.trialSource === 'hub_internal_trial' &&
         !musicScalePaidContract) {
       const trialSnap = await db.collection('musicscale_internal_trials').doc(organizationId).get();
+      if(isPendingMusicScaleHubTrial(trialSnap.data(),organizationId)) {
+        // Launch only. Domain APIs and Rules still require an active grant.
+        return {appId,organizationId,accessible:false,launchable:true,denialReason:'TRIAL_PENDING_FIRST_ACCESS',readOnly:true,canWrite:false,canUseAI:false,
+          isGlobalAccess:false,accessSource:'organization_membership',systemRole,organizationRole,
+          roles:[],permissions:[],scopes:{},decisionState:'denied',
+          entitlement:{subscriptionStatus:'pending_first_access',organizationAppStatus:'pending_first_access',
+            canonicalStatus:'trialing',cancellationScheduled:false,currentPeriodEndMs:null,individualAccessSource}};
+      }
       const window = trialWindow('musicscale',trialSnap.exists?trialSnap.data():null,Date.now(),organizationId);
       if (window.valid) {
         // An expired or not-yet-started Hub grant is never a free music reader.

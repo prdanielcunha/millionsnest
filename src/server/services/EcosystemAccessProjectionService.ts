@@ -15,6 +15,7 @@ function normalizeOrganizationRole(value: unknown): string {
 }
 
 function canReadManagedScaleResponses(accessDecision: any): boolean {
+  if (accessDecision?.launchable === true && accessDecision?.accessible !== true) return false;
   if (accessDecision?.isGlobalAccess === true) return true;
 
   const permissions = Array.isArray(accessDecision?.permissions)
@@ -127,8 +128,11 @@ export async function handleEcosystemAccessProjectionRequest(
 
     let projection: any;
     if (requestedAppId === 'musicscale') {
+      // Catalog eligibility can expose a bootstrap-only launch. Operational
+      // services continue to see accessible=false from the canonical resolver.
+      const canLaunch = accessDecision.accessible || accessDecision.launchable === true;
       const catalogState = mapCanonicalDecisionToCatalogState(
-        accessDecision.accessible,
+        canLaunch,
         accessDecision.isGlobalAccess,
         accessDecision.denialReason,
         accessDecision.entitlement?.canonicalStatus,
@@ -138,10 +142,10 @@ export async function handleEcosystemAccessProjectionRequest(
       projection = {
         appId: (accessProjection?.appId || 'musicscale'),
         organizationId,
-        accessible: accessDecision.accessible,
+        accessible: canLaunch,
         isGlobalAccess: accessDecision.isGlobalAccess,
         accessSource: accessDecision.accessSource,
-        decisionState: accessDecision.accessible ? 'granted' : 'denied',
+        decisionState: canLaunch ? 'granted' : 'denied',
         denialReason: accessDecision.denialReason || null,
         catalogState,
         canReadManagedScaleResponses: canReadManagedScaleResponses(accessDecision),

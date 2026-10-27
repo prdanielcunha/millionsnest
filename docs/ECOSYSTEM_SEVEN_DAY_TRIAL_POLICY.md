@@ -44,3 +44,13 @@ URLs antigas de Checkout levam novos clientes elegíveis à avaliação. `intent
 Validação adicional: `test_trial_first_acquisition.ts` e `test_musicscale_live_ai_gateway.ts` (limite durante virada de mês e conversão para orçamento pago).
 
 As dez consultas IA da avaliação usam o mesmo contador transacional `organizations/{orgId}/musicscaleLiveAiUsage/trial` no gateway Hub e no proxy MusicScale, depois da autorização canônica. As Rules impedem reset de `trial_usage` e `musicscaleLiveAiUsage` pelo SDK do navegador. O contador de biblioteca continua separado; esgotar IA não bloqueia o restante do teste. Solicitações reservadas contam mesmo se o provedor falhar, protegendo o custo.
+
+## MusicScale: contagem no primeiro acesso confirmado (2026-10-27)
+
+Por decisão do titular, novas ativações MusicScale reservam o teste em `pending_first_access`, sem início/vencimento, mantendo consumo único da elegibilidade. O resolvedor canônico mantém `accessible=false` e `launchable=true`: somente projeção de catálogo e handoff reconhecem o lançamento de bootstrap. Serviços operacionais e emissores de IA continuam negados. A reserva mantém `canWrite=false`, `canUseAI=false` e permissões vazias. A reserva não passa nas Rules nem nos backends musicais; eles continuam exigindo grant ativo.
+
+O MusicScale confirma o bootstrap autenticado ao Hub, que revalida usuário, organização, membership, bloqueio individual, titular e assinatura em transação. Somente então grava o início no relógio do servidor e o vencimento 168h depois. Repetição não reinicia. Não há trial/assinatura no Stripe; contratos pagos, avaliações legadas/ativas/vencidas e outros produtos são preservados.
+
+Publicação coordenada: primeiro leitor MusicScale; depois emissor Hub. Não criar reservas antes de confirmar o leitor em produção. O painel oferece a retomada explícita via `/trial` para titulares elegíveis sem apps ativos.
+
+Validação: `test_musicscale_first_access_trial.ts` e MusicScale `tests/server/hub-trial-first-access.test.ts`, além de resolução, handoff, duração e isolamento existentes.
