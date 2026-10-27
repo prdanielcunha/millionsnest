@@ -3472,7 +3472,7 @@ export function Dashboard() {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
             >
-              {selectedWorkspace === 'home' && <MusicScaleTrialRecovery organizationId={String(activeContextOrgId || '')} />}
+              {selectedWorkspace === 'home' && installedApps.length === 0 && <MusicScaleTrialRecovery organizationId={String(activeContextOrgId || '')} />}
               <EcosystemWorkspaceHome 
                 organizationId={String(activeContextOrgId || '')}
                 selectedWorkspace={selectedWorkspace}
