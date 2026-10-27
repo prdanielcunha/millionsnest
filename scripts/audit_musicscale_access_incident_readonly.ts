@@ -1,5 +1,7 @@
 /** Bounded read-only MusicScale incident diagnosis; emits no personal identifiers. */
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import Stripe from 'stripe';
 import {initializeApp,applicationDefault} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import {resolveEcosystemAppAccess} from '../src/server/services/EcosystemAccessResolver.js';
@@ -43,3 +45,24 @@ for(const org of owned){
  });
 }
 console.log('MUSICSCALE_ACCESS_INCIDENT='+JSON.stringify({readOnly:true,containsIdentifiers:false,accountMatches:1,ownedOrganizationCount:owned.length,findings}));
+
+// Read-only check for a Stripe purchase whose Hub projection never arrived.
+try {
+ const key=execFileSync('gcloud',['secrets','versions','access','latest','--secret=millionsnest-stripe-secret-key','--project=millionsnest'],{stdio:['ignore','pipe','ignore']}).toString().trim();
+ const stripe=new Stripe(key);
+ const customers=await stripe.customers.list({email:String(u.email),limit:100});
+ if(customers.has_more)throw Error('INCOMPLETE_CUSTOMER_HISTORY');
+ let relevant=0,active=0,pending=0,ambiguous=0;
+ for(const customer of customers.data){
+  const subs=await stripe.subscriptions.list({customer:customer.id,status:'all',limit:100});
+  if(subs.has_more)throw Error('INCOMPLETE_SUBSCRIPTION_HISTORY');
+  for(const sub of subs.data){
+   if(sub.metadata.app==='musicscale'){relevant++;if(['active','trialing'].includes(sub.status))active++;if(['past_due','unpaid','incomplete','paused'].includes(sub.status))pending++;}
+   else if(!sub.metadata.app)ambiguous++;
+  }
+ }
+ console.log('MUSICSCALE_STRIPE_INCIDENT='+JSON.stringify({readOnly:true,verified:true,customers:customers.data.length,relevant,active,pending,ambiguous}));
+} catch {
+ console.log('MUSICSCALE_STRIPE_INCIDENT='+JSON.stringify({readOnly:true,verified:false}));
+ process.exitCode=1;
+}
