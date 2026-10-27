@@ -80,9 +80,12 @@ jobs:
           for attempt in {1..60}; do
             RESULT="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/cloudrun-private-deploy.yml/runs?head_sha=${EXPECTED_SHA}&branch=production&per_page=20" --jq '[.workflow_runs[] | select(.head_branch == "production")] | sort_by(.run_number) | reverse | .[0] | if . == null then "pending" else (.status + " " + (.conclusion // "pending")) end')"
             if [ "$RESULT" = 'completed success' ]; then
-              STATUS="$(curl --silent --show-error --max-time 30 -o /tmp/hub-first-access-smoke.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{}' https://www.millionsnest.com/api/v1/billing/trial/first-access)"
-              test "$STATUS" = '401'
-              echo HUB_FIRST_ACCESS_API_AUTH_BOUNDARY_READY
+              # Existing Hosting pins the previous revision until this release.
+              # Verify readiness through Cloud Run metadata, not that old rewrite.
+              gcloud run services describe millionsnest-api --project millionsnest --region us-central1 --format=json > /tmp/hub-first-access-ready.json
+              jq -e --arg suffix ":${EXPECTED_SHA}" '.spec.template.spec.containers[0].image | endswith($suffix)' /tmp/hub-first-access-ready.json >/dev/null
+              jq -e '. as $service | any(.status.conditions[]; .type == "Ready" and .status == "True") and any(.status.traffic[]; .percent == 100 and .revisionName == $service.status.latestReadyRevisionName)' /tmp/hub-first-access-ready.json >/dev/null
+              echo HUB_FIRST_ACCESS_API_REVISION_READY
               exit 0
             fi
             case "$RESULT" in
@@ -95,6 +98,14 @@ jobs:
 
       - name: Publish ONLY Hub Firebase Hosting (no database, Rules, Stripe or Functions)
         run: ./node_modules/.bin/firebase deploy --only hosting:hub --project millionsnest --non-interactive
+
+      - name: Verify first-access API rejects anonymous activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS="$(curl --silent --show-error --max-time 30 -o /tmp/hub-first-access-smoke.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{}' https://www.millionsnest.com/api/v1/billing/trial/first-access)"
+          test "$STATUS" = '401'
+          echo HUB_FIRST_ACCESS_API_AUTH_BOUNDARY_READY
 
       - name: Verify public routes after publication
         shell: bash
