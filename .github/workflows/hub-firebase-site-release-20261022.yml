@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -68,6 +69,29 @@ jobs:
         with:
           workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
           service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Wait for the matching Hub API before publishing its entry screen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            RESULT="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/cloudrun-private-deploy.yml/runs?head_sha=${EXPECTED_SHA}&branch=production&per_page=20" --jq '[.workflow_runs[] | select(.head_branch == "production")] | sort_by(.run_number) | reverse | .[0] | if . == null then "pending" else (.status + " " + (.conclusion // "pending")) end')"
+            if [ "$RESULT" = 'completed success' ]; then
+              STATUS="$(curl --silent --show-error --max-time 30 -o /tmp/hub-first-access-smoke.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{}' https://www.millionsnest.com/api/v1/billing/trial/first-access)"
+              test "$STATUS" = '401'
+              echo HUB_FIRST_ACCESS_API_AUTH_BOUNDARY_READY
+              exit 0
+            fi
+            case "$RESULT" in
+              'completed '*) echo "Matching API deployment did not succeed." >&2; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "Matching API deployment was not confirmed; keeping existing Hosting." >&2
+          exit 1
 
       - name: Publish ONLY Hub Firebase Hosting (no database, Rules, Stripe or Functions)
         run: ./node_modules/.bin/firebase deploy --only hosting:hub --project millionsnest --non-interactive
