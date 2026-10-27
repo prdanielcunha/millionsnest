@@ -54,7 +54,8 @@ export function Login() {
       }
       
       if (profile) {
-          const safeNext = resolveSafePostLoginPath(location.search);
+          const safeNext = resolveSafePostLoginPath(location.search) ||
+            (sessionStorage.getItem('mn_musicscale_trial_after_login') === '1' ? '/trial' : null);
           if (safeNext) {
             navigate(safeNext, { replace: true });
             return;

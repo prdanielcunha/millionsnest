@@ -91,7 +91,7 @@ import {validateFoundersCoupon,NESTLOCAL_FOUNDERS_COUPONS} from './src/lib/nestL
 import { stageNestLocalPaidInvoiceGrant } from './src/server/services/NestLocalPaidInvoiceCreditsService.js';
 import { syncNestLocalPaidInvoiceFromWebhook } from './src/server/services/NestLocalPaidInvoiceWebhookSync.js';
 import { TRIAL_BASE_DAYS, extendHubTrial, trialWindow, TrialExtensionError, type TrialApp } from './src/server/services/HubTrialExtensionService.js';
-import { activateMusicScaleHubTrial, musicScaleTrialEnabledForOrganization, hasPriorMusicScaleSubscription, hasActiveStripeMusicScaleContract } from './src/server/services/MusicScaleNoCardTrialService.js';
+import { activateMusicScaleHubTrial, beginMusicScaleTrialOnFirstAccess, isPendingMusicScaleHubTrial, musicScaleTrialEnabledForOrganization, hasPriorMusicScaleSubscription, hasActiveStripeMusicScaleContract } from './src/server/services/MusicScaleNoCardTrialService.js';
 import { resolveEcosystemAppAccess } from './src/server/services/EcosystemAccessResolver.js';
 import { handleMusicScaleHandoffRequest } from './src/server/services/MusicScaleHandoffService.js';
 import { readCanonicalEcosystemSessionVersion, revokeCurrentEcosystemSession } from './src/server/services/EcosystemSessionVersionService.js';
@@ -9686,7 +9686,8 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       const existingApp=previousApp&&(previousApp.trialUsed||previousApp.stripeSubscriptionId||
         ['active','trialing','expired','canceled','past_due','unpaid'].includes(String(previousApp.status||'')));
       const active=!blockedUser&&!blockedOrg&&trialDoc.exists&&
-        trialWindow(appId,trialDoc.data(),Date.now(),organizationId).active;
+        (trialWindow(appId,trialDoc.data(),Date.now(),organizationId).active||
+          (appId==='musicscale'&&isPendingMusicScaleHubTrial(trialDoc.data(),organizationId)));
       const available=!blockedUser&&!blockedOrg&&!trialDoc.exists&&!ownerTrialDoc.exists&&!priorSubscription&&!existingApp;
       // Discovery is informative, never an entitlement. The activation endpoint
       // independently rechecks Stripe history and all Firestore guardrails.
@@ -9702,6 +9703,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
         : available ? 'TRIAL_AVAILABLE' : 'TRIAL_REVIEW';
       return res.json({available:!!available,active:!!active,code:reason,appId,organizationId,
         days:TRIAL_BASE_DAYS[appId],requiresCard:false,
+        pendingFirstAccess:appId==='musicscale'&&isPendingMusicScaleHubTrial(trialDoc.data(),organizationId),
         message:available?'Disponível após verificação do histórico Stripe.':'Avaliação indisponível para esta organização.'});
     }catch(error:any){
       console.warn('[Trial Offer] query blocked:',error?.message||'unexpected');
@@ -9786,7 +9788,7 @@ async function autoRepairSingleOrganizationUser(uid: string) {
       }
       const result = requestedApp === 'nestlocal'
         ? await activateNestLocalHubTrial({db,organizationId,ownerUid:userId,stripeHistoricalClear:true})
-        : await activateMusicScaleHubTrial({db,organizationId,ownerUid:userId,stripeHistoricalClear:true});
+        : await activateMusicScaleHubTrial({db,organizationId,ownerUid:userId,stripeHistoricalClear:true,deferUntilFirstAccess:true});
       // Credits are an independent, recoverable operation. A successful trial
       // is NEVER rolled back because the free AI provider is unavailable.
       let creditsStatus = 'queued';
@@ -9813,6 +9815,23 @@ async function autoRepairSingleOrganizationUser(uid: string) {
     }
   });
 
+
+  /** MusicScale confirms its authenticated bootstrap; no client clock or Stripe writes. */
+  app.post('/api/v1/billing/trial/first-access', express.json(), async (req: any,res) => {
+    res.setHeader('Cache-Control','private, no-store');
+    if(!db)return res.status(503).json({code:'SERVICE_UNAVAILABLE'});
+    const bearer=req.headers.authorization;
+    if(typeof bearer!=='string'||!bearer.startsWith('Bearer '))return res.status(401).json({code:'UNAUTHORIZED'});
+    try {
+      const identity=await admin.auth().verifyIdToken(bearer.slice(7));
+      const result=await beginMusicScaleTrialOnFirstAccess({db,uid:identity.uid,
+        organizationId:typeof req.body?.organizationId==='string'?req.body.organizationId.trim():''});
+      return res.json({ok:true,...result});
+    }catch(error:any){
+      if(error instanceof HubTrialError)return res.status(error.httpStatus).json({code:error.code});
+      return res.status(503).json({code:'FIRST_ACCESS_UNAVAILABLE'});
+    }
+  });
 
   /** On-demand recovery for missed NestAI credit sync; no Stripe mutations.
    * Intentionally global-admin-only and closed while commercial flags are off.

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { MusicScaleTrialRecovery } from '../components/MusicScaleTrialRecovery.js';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext.js";
@@ -3471,6 +3472,7 @@ export function Dashboard() {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
             >
+              {selectedWorkspace === 'home' && <MusicScaleTrialRecovery organizationId={String(activeContextOrgId || '')} />}
               <EcosystemWorkspaceHome 
                 organizationId={String(activeContextOrgId || '')}
                 selectedWorkspace={selectedWorkspace}
