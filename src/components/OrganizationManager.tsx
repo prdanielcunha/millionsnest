@@ -845,7 +845,7 @@ export function OrganizationManager({
 
           {activeTab === 'members' && (
             <motion.div key="members" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-               {organization?.id&&(organization.ownerUid===user?.uid||organization.ownerId===user?.uid||organization.ownerUserId===user?.uid||['owner','admin','pastor','data_admin'].includes(currentUserRole))&&!isCrossTenantSupportSession?<PeopleDirectoryPanel key={organization.id} org={organization.id} locale={i18n.language?.startsWith('en')?'en':i18n.language?.startsWith('es')?'es':'pt-BR'} units={[]}/>:null}
+               {organization?.id&&(organization.ownerUid===user?.uid||organization.ownerId===user?.uid||organization.ownerUserId===user?.uid||['owner','admin','pastor','data_admin'].includes(currentUserRole)||currentUserPerms?.['organization.members.manage']===true)&&!isCrossTenantSupportSession?<PeopleDirectoryPanel key={organization.id} org={organization.id} locale={i18n.language?.startsWith('en')?'en':i18n.language?.startsWith('es')?'es':'pt-BR'} units={[]}/>:null}
                <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                  <h3 className="text-lg font-semibold text-[#F5F7FA]">Membros & Convites</h3>
                  
