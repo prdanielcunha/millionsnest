@@ -4,13 +4,13 @@ import {FieldValue,Timestamp,getFirestore,type Firestore} from 'firebase-admin/f
 import {createHash} from 'node:crypto';
 import {resolveEcosystemAppAccess} from './EcosystemAccessResolver.js';
 import {assertDirectoryAdmin,assertSourceSnapshot,clearOrphanDirectorySources,type DirectorySnapshot} from './PeopleDirectory.js';
-import {active,assertNoDirectoryConflict,contactKey,DirectoryError,journeyFor,keyFor,linkDirectoryPeople,listDirectory,nameKey,planSource,resolvePerson,rootFor,safeId,sourcesForPerson,synchronizeDirectoryPage,unlinkDirectoryPeople} from './PeopleDirectory.js';
+import {archiveDirectoryPerson,active,assertNoDirectoryConflict,contactKey,DirectoryError,journeyFor,keyFor,linkDirectoryPeople,listDirectory,nameKey,planSource,resolvePerson,rootFor,safeId,sourcesForPerson,synchronizeDirectoryPage,unlinkDirectoryPeople} from './PeopleDirectory.js';
 
 type Actor={org:string;uid:string;admin:boolean;units:string[]};
 type Dependencies={db?:Firestore;verify?:(token:string)=>Promise<{uid:string}>;access?:(uid:string,org:string)=>Promise<boolean>};
 type Row={name:string;preferredName:string;personId:string;distinctReason:string;phone:string;consent:boolean;channel:string};
 const clean=(v:unknown)=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
-const isAdmin=(org:any,member:any,uid:string)=>org?.ownerUid===uid||org?.ownerId===uid||org?.ownerUserId===uid||active(member)&&['owner','admin','pastor','data_admin'].includes(String(member.organizationRole||member.role||'').trim().toLowerCase());
+const isAdmin=(org:any,member:any,uid:string)=>org?.ownerUid===uid||org?.ownerId===uid||org?.ownerUserId===uid||active(member)&&['owner','admin','pastor','data_admin'].includes(String(member.organizationRole||member.role||'').trim().toLowerCase())||active(member)&&member.permissions?.['organization.members.manage']===true;
 export async function synchronizeDirectory(db:Firestore,org:string,uid:string,registrationUnit?:string){
   const snapshot:DirectorySnapshot={account:[],journey:[]};
   for(const kind of ['account','journey'] as const){
@@ -50,7 +50,8 @@ function parseRow(row:any):Row{
   if(!row||Object.keys(row).some(k=>!['name','preferredName','personId','distinctReason','phone','consent','channel'].includes(k)))throw new DirectoryError('INVALID_PERSON',400);
   const result:Row={name:clean(row.name),preferredName:clean(row.preferredName),personId:clean(row.personId),distinctReason:clean(row.distinctReason),phone:clean(row.phone),consent:row.consent===true,channel:clean(row.channel)};
   if(result.name.length<2||result.name.length>160||result.preferredName.length>120||/[<>\u0000-\u001f]/.test(result.name+result.preferredName)||result.personId&&!safeId(result.personId)||result.distinctReason.length>300||result.phone.length>40||row.consent!==undefined&&typeof row.consent!=='boolean')throw new DirectoryError('INVALID_PERSON',400);
-  if(result.consent&&(!['phone','whatsapp'].includes(result.channel)||!/^\+?[\d ()-]+$/.test(result.phone)||result.phone.replace(/\D/g,'').length<10||result.phone.replace(/\D/g,'').length>15))throw new DirectoryError('INVALID_CONTACT',400);
+  if(result.phone&&(!/^\+?[\d ()-]+$/.test(result.phone)||result.phone.replace(/\D/g,'').length<10||result.phone.replace(/\D/g,'').length>15))throw new DirectoryError('INVALID_CONTACT',400);
+  if(result.consent&&(!result.phone||!['phone','whatsapp'].includes(result.channel)))throw new DirectoryError('INVALID_CONTACT',400);
   return result;
 }
 
@@ -60,8 +61,8 @@ export async function registerDirectory(db:Firestore,actor:Actor,input:{unitId:s
   if(!safeId(unitId)||!safeId(requestId)||requestId.length<8||!rows.length||rows.length>75||kind==='visitor'&&rows.length!==1)throw new DirectoryError('INVALID_REGISTRATION',400);
   if(!actor.admin&&(kind!=='visitor'||!actor.units.includes(unitId)))throw new DirectoryError('SCOPE_DENIED',403);
   if(new Set(rows.map(r=>nameKey(r.name))).size!==rows.length)throw new DirectoryError('IMPORT_NAMES_REQUIRE_INDIVIDUAL_REVIEW');
-  if(kind==='member'&&rows.some(r=>r.consent||r.phone||r.channel))throw new DirectoryError('MEMBER_CONTACT_REQUIRES_SEPARATE_CONSENT',400);
-  const phones=rows.filter(r=>r.consent).map(r=>contactKey('phone',r.phone));
+  if(kind==='member'&&rows.some(r=>r.consent||r.channel))throw new DirectoryError('MEMBER_CONTACT_REQUIRES_SEPARATE_CONSENT',400);
+  const phones=rows.filter(r=>r.phone).map(r=>contactKey('phone',r.phone));
   if(new Set(phones).size!==phones.length)throw new DirectoryError('IMPORT_CONTACTS_REQUIRE_INDIVIDUAL_REVIEW');
   const receiptRef=db.doc(rootFor(actor.org)+'/peopleDirectoryRequests/'+keyFor('request',actor.uid+':'+requestId));
   const payloadHash=createHash('sha256').update(JSON.stringify(input)).digest('hex');
@@ -79,7 +80,7 @@ export async function registerDirectory(db:Firestore,actor:Actor,input:{unitId:s
     for(let i=0;i<rows.length;i++){
       const row=rows[i],normalized=nameKey(row.name),lock=db.doc(rootFor(actor.org)+'/peopleDirectoryNameLocks/'+keyFor('name',normalized));
       await tx.get(lock);
-      const phoneKey=row.consent?contactKey('phone',row.phone):'';
+      const phoneKey=(kind==='member'||row.consent)&&row.phone?contactKey('phone',row.phone):'';
       if(!row.personId&&(!actor.admin||row.distinctReason.length<15))await assertNoDirectoryConflict(tx,db,actor.org,row.name,phoneKey);
       let canonicalId=row.personId;
       let selected:Awaited<ReturnType<typeof resolvePerson>>|null=null;
@@ -92,16 +93,17 @@ export async function registerDirectory(db:Firestore,actor:Actor,input:{unitId:s
       if(sources&&sources.size>100)throw new DirectoryError('PERSON_PARTICIPATION_REVIEW_REQUIRED');
       const prior=sources?.docs.find(d=>d.data().kind==='journey'&&d.data().unitId===unitId);
       if(prior){const p=await tx.get(db.doc(journeyFor(actor.org)+'/people/'+prior.data().sourceId));if(p.exists&&!p.data()?.deletedAt){people.push({id:p.id,personId:canonicalId,name:p.data()!.name,reused:true});continue;}}
-      const identity=canonicalId?null:await planSource(tx,db,actor.org,{kind:'journey',id:localId,name:row.name,unitId,contactKeys:phoneKey?[phoneKey]:[]},actor.uid);
+      const identity=canonicalId?null:await planSource(tx,db,actor.org,{kind:'journey',id:localId,name:row.name,unitId,contactKeys:phoneKey?[phoneKey]:[],phone:kind==='member'||row.consent?row.phone:''},actor.uid);
       canonicalId=canonicalId||identity!.id;
       const name=selected?.data.name||row.name;
       people.push({id:localId,personId:canonicalId,name,reused:existing.exists});
       const personId=canonicalId;
+      const registrationPhone=kind==='member'?(row.phone||sources?.docs.map(source=>source.data().phone).find(Boolean)||''):row.consent?row.phone:'';
       plans.push(()=>{
         identity?.apply();
-        if(selected){tx.update(selected.ref,{unitIds:FieldValue.arrayUnion(unitId),updatedAt:FieldValue.serverTimestamp()});tx.set(db.doc(rootFor(actor.org)+'/peopleDirectorySources/'+keyFor('journey',localId)),{organizationId:actor.org,kind:'journey',sourceId:localId,personId,unitId,createdAt:FieldValue.serverTimestamp()});}
+        if(selected){tx.update(selected.ref,{unitIds:FieldValue.arrayUnion(unitId),updatedAt:FieldValue.serverTimestamp()});tx.set(db.doc(rootFor(actor.org)+'/peopleDirectorySources/'+keyFor('journey',localId)),{organizationId:actor.org,kind:'journey',sourceId:localId,personId,unitId,name,phone:registrationPhone,contactKeys:registrationPhone?[contactKey('phone',registrationPhone)]:[],createdAt:FieldValue.serverTimestamp()});}
         if(!existing.exists){
-          tx.create(localRef,{organizationId:actor.org,congregationId:unitId,centralPersonId:personId,name,preferredName:row.preferredName,communityStatus:kind,phone:kind==='visitor'&&row.consent?row.phone:'',consent:kind==='visitor'&&row.consent,preferredContactChannel:kind==='visitor'&&row.consent?row.channel:'',visits:kind==='visitor'?1:0,stage:kind==='visitor'&&row.consent?'contact_authorized':'new',createdBy:actor.uid,createdAt:FieldValue.serverTimestamp(),dataSource:'central_directory_v1',...(kind==='visitor'?{firstVisit:new Date().toISOString().slice(0,10),ownerRef:null,contactStatus:row.consent?'pending':'closed',consentGrantedAt:row.consent?FieldValue.serverTimestamp():null,nextActionCode:row.consent?'FIRST_CONTACT':'WELCOME_ON_NEXT_VISIT'}:{})});
+          tx.create(localRef,{organizationId:actor.org,congregationId:unitId,centralPersonId:personId,name,preferredName:row.preferredName,communityStatus:kind,phone:registrationPhone,consent:kind==='visitor'&&row.consent,preferredContactChannel:kind==='visitor'&&row.consent?row.channel:'',visits:kind==='visitor'?1:0,stage:kind==='visitor'&&row.consent?'contact_authorized':'new',createdBy:actor.uid,createdAt:FieldValue.serverTimestamp(),dataSource:'central_directory_v1',...(kind==='visitor'?{firstVisit:new Date().toISOString().slice(0,10),ownerRef:null,contactStatus:row.consent?'pending':'closed',consentGrantedAt:row.consent?FieldValue.serverTimestamp():null,nextActionCode:row.consent?'FIRST_CONTACT':'WELCOME_ON_NEXT_VISIT'}:{})});
           if(kind==='visitor')writeVisitorFacts(tx,db,actor,unitId,localId,row.consent);
         }
       });
@@ -128,13 +130,13 @@ export async function peopleDirectoryHandler(req:Request,res:Response,deps:Depen
       if(!actor.admin)throw new DirectoryError('ADMIN_REQUIRED',403);
       const q=clean(req.query.q),cursor=clean(req.query.cursor);
       if(q.length>160||cursor&&!safeId(cursor))throw new DirectoryError('INVALID_SEARCH',400);
-      return res.json({success:true,...await listDirectory(db,actor.org,q,cursor)});
+      return res.json({success:true,...await listDirectory(db,actor.org,q,cursor,req.query.includeArchived==='true')});
     }
     if(req.method!=='POST')return res.status(405).json({success:false});
     const b=req.body||{};
     if(b.action==='create'){
       if(!actor.admin)throw new DirectoryError('ADMIN_REQUIRED',403);
-      if(!safeId(b.requestId)||b.requestId.length<8||!b.row||Object.keys(b.row).some(k=>!['name','distinctReason'].includes(k))||Object.keys(b).some(k=>!['action','requestId','row'].includes(k)))throw new DirectoryError('INVALID_REGISTRATION',400);
+      if(!safeId(b.requestId)||b.requestId.length<8||!b.row||Object.keys(b.row).some(k=>!['name','phone','distinctReason'].includes(k))||Object.keys(b).some(k=>!['action','requestId','row'].includes(k)))throw new DirectoryError('INVALID_REGISTRATION',400);
       const row=parseRow(b.row),snapshot=await synchronizeDirectory(db,actor.org,actor.uid);
       const receiptRef=db.doc(rootFor(actor.org)+'/peopleDirectoryRequests/'+keyFor('request',actor.uid+':'+b.requestId));
       const payloadHash=createHash('sha256').update(JSON.stringify({action:'create',row})).digest('hex');
@@ -143,8 +145,8 @@ export async function peopleDirectoryHandler(req:Request,res:Response,deps:Depen
         const prior=await tx.get(receiptRef);
         if(prior.exists){if(prior.data()?.payloadHash!==payloadHash)throw new DirectoryError('REQUEST_ID_REUSED');return prior.data()!.result;}
         await assertSourceSnapshot(tx,db,actor.org,snapshot);
-        if(row.distinctReason.length<15)await assertNoDirectoryConflict(tx,db,actor.org,row.name);
-        const source=await planSource(tx,db,actor.org,{kind:'manual',id:keyFor('manual',actor.uid+':'+b.requestId),name:row.name},actor.uid);
+        if(row.distinctReason.length<15)await assertNoDirectoryConflict(tx,db,actor.org,row.name,row.phone?contactKey('phone',row.phone):'');
+        const source=await planSource(tx,db,actor.org,{kind:'manual',id:keyFor('manual',actor.uid+':'+b.requestId),name:row.name,phone:row.phone,contactKeys:row.phone?[contactKey('phone',row.phone)]:[]},actor.uid);
         const result={personId:source.id};source.apply();
         tx.create(receiptRef,{organizationId:actor.org,actorId:actor.uid,payloadHash,result,createdAt:FieldValue.serverTimestamp()});
         tx.create(db.collection(rootFor(actor.org)+'/peopleDirectoryEvents').doc(),{organizationId:actor.org,actorId:actor.uid,action:'people.created',personId:source.id,distinctReason:row.distinctReason,createdAt:FieldValue.serverTimestamp()});
@@ -170,6 +172,10 @@ export async function peopleDirectoryHandler(req:Request,res:Response,deps:Depen
       return res.json({success:true,processed:page.processed,nextCursor:page.nextCursor});
     }
     const reason=clean(b.reason);
+    if(['archive','restore'].includes(b.action)){
+      if(!safeId(b.fromId)||reason.length<15||reason.length>300||!Number.isSafeInteger(b.revision)||b.revision<1||Object.keys(b).some(k=>!['action','fromId','reason','revision'].includes(k)))throw new DirectoryError('IDENTITY_CONFIRMATION_REQUIRED',400);
+      return res.json({success:true,...await archiveDirectoryPerson(db,actor.org,actor.uid,b.fromId,b.action==='archive',reason,b.revision)});
+    }
     if(!['link','unlink'].includes(b.action)||!safeId(b.fromId)||b.action==='link'&&!safeId(b.toId)||reason.length<15||reason.length>300||!Number.isSafeInteger(b.revision)||b.revision<1||Object.keys(b).some(k=>!['action','fromId','toId','reason','revision'].includes(k)))throw new DirectoryError('IDENTITY_CONFIRMATION_REQUIRED',400);
     const result=b.action==='link'?await linkDirectoryPeople(db,actor.org,actor.uid,b.fromId,b.toId,reason,b.revision):await unlinkDirectoryPeople(db,actor.org,actor.uid,b.fromId,reason,b.revision);
     return res.json({success:true,...result});
