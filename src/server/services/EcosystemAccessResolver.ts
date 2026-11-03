@@ -3,7 +3,7 @@ import { resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionServ
 import { mayAttemptNestFinanceTenantAccess } from './NestFinanceTenantRollout.js';
 import { isNestLocalInternalTrialActive, isNestLocalInternalTrialExpired } from './NestLocalAiEntitlement.js';
 import { trialWindow } from './HubTrialExtensionService.js';
-import { hasActiveStripeMusicScaleContract } from './MusicScaleNoCardTrialService.js';
+import { hasActiveStripeMusicScaleContract, isPendingMusicScaleHubTrial } from './MusicScaleNoCardTrialService.js';
 
 export type EcosystemAppId = 'musicscale' | 'nestfinance' | 'nestlocal' | 'nestjourney' | 'nestlive';
 export type AppAccessSource = 'global_system_role' | 'organization_membership' | 'denied';
@@ -21,7 +21,8 @@ export type MusicScaleIndividualAccessSource =
   | 'explicit_enabled'
   | 'membership_compatibility'
   | 'explicit_disabled'
-  | 'global_system_role';
+  | 'global_system_role'
+  | 'ceo_owned_organization';
 
 export type MusicScaleEntitlementDecision = {
   subscriptionStatus: string | null;
@@ -36,6 +37,8 @@ export type ResolvedAppAccess = {
   appId: EcosystemAppId;
   organizationId: string;
   accessible: boolean;
+  /** Reserved trials may launch bootstrap but cannot use any operational API. */
+  launchable?: boolean;
   // Explicit capabilities for newer Hub clients; legacy boolean access retained.
   readOnly?: boolean;
   canWrite?: boolean;
@@ -129,12 +132,7 @@ export async function resolveEcosystemAppAccess(params: {
     return { ...defaultDenied, systemRole, denialReason: DENIAL_REASONS.ORGANIZATION_INACTIVE };
   }
 
-  // Release switch: development access remains the default until the NestFinance
-  // production security and billing gates have been certified. Once explicitly
-  // enabled, tenant membership, appAccess and active entitlement checks BELOW
-  // are still mandatory; this flag never grants access on its own.
-  if (appId === 'nestfinance' &&
-      !mayAttemptNestFinanceTenantAccess(systemRole, process.env.NESTFINANCE_PUBLIC_ACCESS_ENABLED)) {
+  if (appId === 'nestfinance' && !mayAttemptNestFinanceTenantAccess(systemRole, process.env.NESTFINANCE_PUBLIC_ACCESS_ENABLED)) {
     return {
       ...defaultDenied,
       systemRole,
@@ -416,6 +414,45 @@ export async function resolveEcosystemAppAccess(params: {
       individualAccessSource = 'explicit_enabled';
     }
 
+    // An organization owned by a verified MillionsNest CEO inherits the
+    // ecosystem's MusicScale product entitlement. This is a TENANT benefit,
+    // not an individual global role. The invitee still needs an active,
+    // authorized membership and any explicit member app disable still wins.
+    // Do not rewrite Stripe/subscription state or grant wildcard permissions.
+    const recordedOwners = [
+      orgData.ownerUid, orgData.ownerUserId, orgData.ownerId, orgData.owner_user_id,
+    ].filter((value): value is string =>
+      typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value)
+    );
+    if (recordedOwners.length && new Set(recordedOwners).size === 1) {
+      const ownerDoc = await db.collection('users').doc(recordedOwners[0]).get();
+      const ownerData = ownerDoc.data() || {};
+      const ceoActive = ownerDoc.exists && ownerData.systemRole === 'ceo' &&
+        ownerData.disabled !== true &&
+        !['inactive', 'suspended', 'disabled', 'deleted'].includes(ownerData.status);
+      if (ceoActive) {
+        const memberMusicAccess = memData.appAccess?.musicscale;
+        return {
+          appId, organizationId, accessible: true,
+          isGlobalAccess: false,
+          accessSource: 'organization_membership',
+          systemRole, organizationRole,
+          roles: memberMusicAccess?.roles || [],
+          permissions: memberMusicAccess?.permissions || [],
+          scopes: memberMusicAccess?.scopes || {},
+          decisionState: 'granted',
+          entitlement: {
+            subscriptionStatus: 'ceo_owner_entitlement',
+            organizationAppStatus: String(orgData.apps?.musicscale?.status || '') || null,
+            canonicalStatus: 'active',
+            cancellationScheduled: false,
+            currentPeriodEndMs: null,
+            individualAccessSource: 'ceo_owned_organization'
+          }
+        };
+      }
+    }
+
     const subRef = db.collection('subscriptions').doc(organizationId);
     const subDoc = await subRef.get();
 
@@ -428,6 +465,14 @@ export async function resolveEcosystemAppAccess(params: {
     if (orgData.apps?.musicscale?.trialSource === 'hub_internal_trial' &&
         !musicScalePaidContract) {
       const trialSnap = await db.collection('musicscale_internal_trials').doc(organizationId).get();
+      if(isPendingMusicScaleHubTrial(trialSnap.data(),organizationId)) {
+        // Launch only. Domain APIs and Rules still require an active grant.
+        return {appId,organizationId,accessible:false,launchable:true,denialReason:'TRIAL_PENDING_FIRST_ACCESS',readOnly:true,canWrite:false,canUseAI:false,
+          isGlobalAccess:false,accessSource:'organization_membership',systemRole,organizationRole,
+          roles:[],permissions:[],scopes:{},decisionState:'denied',
+          entitlement:{subscriptionStatus:'pending_first_access',organizationAppStatus:'pending_first_access',
+            canonicalStatus:'trialing',cancellationScheduled:false,currentPeriodEndMs:null,individualAccessSource}};
+      }
       const window = trialWindow('musicscale',trialSnap.exists?trialSnap.data():null,Date.now(),organizationId);
       if (window.valid) {
         // An expired or not-yet-started Hub grant is never a free music reader.

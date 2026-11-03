@@ -246,7 +246,7 @@ export async function handleMusicScaleHandoffRequest(
     });
   }
 
-  if (!access || access.accessible !== true) {
+  if (!access || (access.accessible !== true && !(appId === 'musicscale' && access.launchable === true))) {
     const reason = access?.denialReason || 'UNKNOWN_REASON';
     const retryable = reason === 'SUBSCRIPTION_NOT_FOUND' || reason === 'ENTITLEMENT_NOT_CONFIGURED';
     let error = 'Forbidden: Access denied to this organization.';

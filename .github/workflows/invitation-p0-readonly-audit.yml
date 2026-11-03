@@ -1,0 +1,36 @@
+name: Invitation P0 Read-only Incident Audit
+on:
+  push:
+    branches: [production]
+    paths:
+      - '.github/workflows/invitation-p0-readonly-audit.yml'
+      - 'scripts/audit_invitation_p0_readonly.ts'
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Authenticate for bounded read-only Firestore audit
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+      - name: Read only org and invitation metadata — no tokens or PII in logs
+        env:
+          GOOGLE_CLOUD_PROJECT: millionsnest
+          GCLOUD_PROJECT: millionsnest
+          FIREBASE_PROJECT_ID: millionsnest
+          MN_INVITATION_AUDIT_READ_ONLY: 'true'
+        run: node --import tsx scripts/audit_invitation_p0_readonly.ts

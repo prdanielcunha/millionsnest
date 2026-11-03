@@ -5,6 +5,15 @@ import {HubTrialError} from './HubNoCardTrialService.js';
 import {ECOSYSTEM_TRIAL_POLICY_VERSION} from '../../lib/ecosystemTrialPolicy.js';
 import {MUSIC_SCALE_PLANS} from '../../lib/musicScalePlans.js';
 export const MUSICSCALE_TRIAL_MS=TRIAL_BASE_DAYS.musicscale*DAY_MS;
+/** A reservation permits launching, never musical data or AI. */
+export function isPendingMusicScaleHubTrial(d:any,organizationId:string):boolean {
+  return !!d&&d.appId==='musicscale'&&d.organizationId===organizationId&&
+    d.source==='hub_internal_trial'&&d.status==='pending_first_access'&&
+    d.startsOnFirstAccess===true&&d.consumed===true&&d.revoked===false&&
+    d.grantVersion===ECOSYSTEM_TRIAL_POLICY_VERSION&&
+    typeof d.ownerUid==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(d.ownerUid)&&
+    d.beginsAt==null&&d.expiresAt==null&&d.extensionCount==null;
+}
 /** Existing NestLocal subscription must not use up a MusicScale evaluation.
  * Legacy MusicScale contracts live in the root of the subscription document.
  */
@@ -36,6 +45,7 @@ export function musicScaleTrialEnabledForOrganization(id:string,env:NodeJS.Proce
 }
 export async function activateMusicScaleHubTrial(params:{
   db:Firestore;organizationId:string;ownerUid:string;stripeHistoricalClear:boolean;nowMs?:number;
+  deferUntilFirstAccess?:boolean;
 }) {
   const {db,organizationId,ownerUid}=params,now=params.nowMs??Date.now();
   if(!/^[A-Za-z0-9_-]{1,128}$/.test(organizationId)||!/^[A-Za-z0-9_-]{1,128}$/.test(ownerUid))
@@ -56,6 +66,8 @@ export async function activateMusicScaleHubTrial(params:{
     if(org.disabled===true||['inactive','disabled','suspended','archived'].includes(String(org.status||'')))
       throw new HubTrialError('ORGANIZATION_INACTIVE');
     if(trialSnap.exists){
+      if(trialSnap.data()?.ownerUid===ownerUid&&isPendingMusicScaleHubTrial(trialSnap.data(),organizationId))
+        return {status:'already_active' as const,organizationId,expiresAt:null,canWrite:false,pendingFirstAccess:true};
       const w=trialWindow('musicscale',trialSnap.data(),now,organizationId);
       if(trialSnap.data()?.ownerUid===ownerUid&&w.active)
         return {status:'already_active' as const,organizationId,
@@ -72,19 +84,66 @@ export async function activateMusicScaleHubTrial(params:{
       throw new HubTrialError('PRIOR_MUSICSCALE_ACCESS');
     if(ent&&(ent.trialUsed||ent.stripeSubscriptionId||ent.source))
       throw new HubTrialError('PRIOR_MUSICSCALE_ENTITLEMENT');
+    const deferred=params.deferUntilFirstAccess===true;
     const beginning=Timestamp.fromMillis(now),end=Timestamp.fromMillis(now+MUSICSCALE_TRIAL_MS);
     tx.create(trialRef,{appId:'musicscale',organizationId,ownerUid,
-      source:'hub_internal_trial',status:'active',revoked:false,consumed:true,
-      grantVersion:ECOSYSTEM_TRIAL_POLICY_VERSION,beginsAt:beginning,expiresAt:end,createdAt:beginning});
+      source:'hub_internal_trial',status:deferred?'pending_first_access':'active',revoked:false,consumed:true,
+      ...(deferred?{startsOnFirstAccess:true}:{}),
+      grantVersion:ECOSYSTEM_TRIAL_POLICY_VERSION,beginsAt:deferred?null:beginning,expiresAt:deferred?null:end,createdAt:beginning});
     tx.create(ownerRef,{appId:'musicscale',organizationId,trialRef:trialRef.path,createdAt:beginning});
     tx.set(entitlementRef,{schemaVersion:3,appId:'musicscale',source:'hub_internal_trial',
-      accessState:'internal_trial_active',trialStartedAt:beginning,
-      trialEndsAt:end,trialUsed:true,canRead:true,canWrite:true,updatedAt:beginning});
-    tx.update(orgRef,{'apps.musicscale.status':'trialing',
+      accessState:deferred?'pending_first_access':'internal_trial_active',trialStartedAt:deferred?null:beginning,
+      trialEndsAt:deferred?null:end,trialUsed:true,canRead:!deferred,canWrite:!deferred,updatedAt:beginning});
+    tx.update(orgRef,{'apps.musicscale.status':deferred?'pending_first_access':'trialing',
       'apps.musicscale.plan':'pro',
       'apps.musicscale.features':{...MUSIC_SCALE_PLANS.pro.features,aiSetlistAnalysis:true},
       'apps.musicscale.trialSource':'hub_internal_trial',
-      'apps.musicscale.trialEndsAt':end,'apps.musicscale.trialUsed':true});
-    return {status:'created' as const,organizationId,expiresAt:new Date(now+MUSICSCALE_TRIAL_MS).toISOString(),canWrite:true};
+      'apps.musicscale.trialEndsAt':deferred?null:end,'apps.musicscale.trialUsed':true});
+    return {status:'created' as const,organizationId,expiresAt:deferred?null:new Date(now+MUSICSCALE_TRIAL_MS).toISOString(),canWrite:!deferred,pendingFirstAccess:deferred};
+  });
+}
+
+/** Authenticated app bootstrap, with time and eligibility owned by the Hub. */
+export async function beginMusicScaleTrialOnFirstAccess(params:{
+  db:Firestore;organizationId:string;uid:string;nowMs?:number;
+}) {
+  const {db,organizationId,uid}=params,now=params.nowMs??Date.now();
+  if(!/^[A-Za-z0-9_-]{1,128}$/.test(organizationId)||!/^[A-Za-z0-9_-]{1,128}$/.test(uid))
+    throw new HubTrialError('INVALID_TRIAL_ACTIVATION',400);
+  if(!Number.isSafeInteger(now)||now<=0)throw new HubTrialError('INVALID_SERVER_TIME',500);
+  const orgRef=db.collection('organizations').doc(organizationId);
+  const ref=db.collection('musicscale_internal_trials').doc(organizationId);
+  return db.runTransaction(async tx=>{
+    const [org,trial,user,member,sub]=await Promise.all([
+      tx.get(orgRef),tx.get(ref),tx.get(db.collection('users').doc(uid)),
+      tx.get(orgRef.collection('members').doc(uid)),tx.get(db.collection('subscriptions').doc(organizationId)),
+    ]);
+    const inactive=(d:any)=>d?.disabled===true||d?.enabled===false||
+      ['inactive','suspended','disabled','archived','removed','revoked','deleted'].includes(String(d?.status||''));
+    if(!org.exists||!user.exists||!member.exists||inactive(org.data())||inactive(user.data())||
+      inactive(member.data())||member.data()?.appAccess?.musicscale?.enabled===false)
+      throw new HubTrialError('FIRST_ACCESS_FORBIDDEN',403);
+    if(hasActiveStripeMusicScaleContract(sub.data()))return {started:false,paid:true};
+    const data=trial.data();
+    if(!isPendingMusicScaleHubTrial(data,organizationId)){
+      const w=trialWindow('musicscale',data,now,organizationId);
+      if(w.active)return {started:false,expiresAt:new Date(w.endsAt).toISOString()};
+      throw new HubTrialError('NO_PENDING_TRIAL',409);
+    }
+    if(hasPriorMusicScaleSubscription(sub.data()))throw new HubTrialError('PRIOR_MUSICSCALE_SUBSCRIPTION');
+    const ownerUid=String(data!.ownerUid);
+    const owners=[org.data()?.ownerUid,org.data()?.ownerUserId,org.data()?.ownerId,org.data()?.owner_user_id]
+      .filter(v=>typeof v==='string'&&v.length>0);
+    const owner=await tx.get(db.collection('musicscale_trial_owners').doc(ownerUid));
+    if(!owners.length||owners.some(v=>v!==ownerUid)||!owner.exists||owner.data()?.organizationId!==organizationId)
+      throw new HubTrialError('TRIAL_OWNER_MISMATCH',403);
+    const beginning=Timestamp.fromMillis(now),end=Timestamp.fromMillis(now+MUSICSCALE_TRIAL_MS);
+    tx.update(ref,{status:'active',beginsAt:beginning,expiresAt:end,firstAccessAt:beginning,firstAccessUid:uid});
+    tx.set(orgRef.collection('app_entitlements').doc('musicscale'),{
+      schemaVersion:3,appId:'musicscale',source:'hub_internal_trial',accessState:'internal_trial_active',
+      trialStartedAt:beginning,trialEndsAt:end,trialUsed:true,canRead:true,canWrite:true,updatedAt:beginning,
+    },{merge:true});
+    tx.update(orgRef,{'apps.musicscale.status':'trialing','apps.musicscale.trialEndsAt':end});
+    return {started:true,expiresAt:new Date(now+MUSICSCALE_TRIAL_MS).toISOString()};
   });
 }

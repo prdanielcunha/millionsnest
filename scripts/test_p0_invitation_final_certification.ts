@@ -89,6 +89,61 @@ async function run() {
   const inactiveUser = (await db.doc('users/inactive-user').get()).data()!;
   assert('inactive organization cannot switch ALREADY_MEMBER context', inactive.statusCode === 409 && inactiveUser.activeOrganizationId === 'safe-org');
 
+  // P0 regression: invite creation already grants verified CEOs unlimited
+  // creation capacity. Acceptance must not require the invitee to have a
+  // subscription or a global role when the organization OWNER is a CEO.
+  auth('ceo-guest-token', 'ceo-guest', 'ceo-guest@example.com');
+  await Promise.all([
+    db.doc('organizations/ceo-owned-org').set({
+      name: 'CEO-Owned Organization', status: 'active', ownerUid: 'verified-ceo',
+    }),
+    db.doc('users/verified-ceo').set({ systemRole: 'ceo', marker: 'keep-owner' }),
+    seedInvite('ceo-owned-org', 'ceo-invite', 'ceo-link-token', 'ceo-guest@example.com'),
+  ]);
+  // Match the production case: a shareable link not bound to an email.
+  await db.doc('organizations/ceo-owned-org/invites/ceo-invite').set({
+    inviteMode: 'link', identityBound: false, email: null, emailNormalized: null,
+  }, { merge: true });
+  const ceoAccepted = await accept('ceo-guest-token', 'ceo-link-token', 'ceo-owned-org');
+  const [ceoMember, ceoInvite, ceoProfile] = await Promise.all([
+    db.doc('organizations/ceo-owned-org/members/ceo-guest').get(),
+    db.doc('organizations/ceo-owned-org/invites/ceo-invite').get(),
+    db.doc('users/verified-ceo').get(),
+  ]);
+  assert('CEO-owned org accepts without subscription and without invitee global role',
+    ceoAccepted.statusCode === 200 && ceoAccepted.body?.success === true &&
+    ceoMember.data()?.role === 'member' && ceoInvite.data()?.useCount === 1);
+  assert('CEO owner role is read-only and unchanged',
+    ceoProfile.data()?.systemRole === 'ceo' && ceoProfile.data()?.marker === 'keep-owner');
+  const ceoRepeat = await accept('ceo-guest-token', 'ceo-link-token', 'ceo-owned-org');
+  assert('CEO-owned consumed invitation is idempotent for accepted member',
+    ceoRepeat.statusCode === 200 && (await db.doc('organizations/ceo-owned-org/invites/ceo-invite').get()).data()?.useCount === 1);
+
+  // Security: CEO as an inviter, arbitrary member or recipient is NOT enough.
+  // Only an organization whose authoritative owner is a current CEO qualifies.
+  auth('ordinary-guest-token', 'ordinary-guest', 'ordinary@example.com');
+  await Promise.all([
+    db.doc('organizations/ordinary-org').set({
+      name: 'Ordinary organization', status: 'active', ownerUid: 'ordinary-owner',
+    }),
+    db.doc('users/ordinary-owner').set({ systemRole: 'member' }),
+    db.doc('organizations/ordinary-org/members/verified-ceo').set({
+      uid: 'verified-ceo', role: 'admin', status: 'active',
+    }),
+    db.doc('organizations/ordinary-org/invites/ordinary-invite').set({
+      id: 'ordinary-invite', organizationId: 'ordinary-org', email: 'ordinary@example.com',
+      emailNormalized: 'ordinary@example.com', role: 'member', status: 'pending',
+      createdBy: 'verified-ceo', tokenHash: createHash('sha256').update('ordinary-token').digest('hex'),
+      expiresAt: Timestamp.fromMillis(nowMs + 60_000), maxUses: 1, useCount: 0,
+    }),
+  ]);
+  const ordinaryDenied = await accept('ordinary-guest-token', 'ordinary-token', 'ordinary-org');
+  assert('CEO member or inviter cannot bypass another organization capacity',
+    ordinaryDenied.statusCode === 503 && ordinaryDenied.body?.reasonCode === 'MEMBER_LIMIT_UNAVAILABLE');
+  assert('failed ordinary invite does not create member or consume invitation',
+    !(await db.doc('organizations/ordinary-org/members/ordinary-guest').get()).exists &&
+    (await db.doc('organizations/ordinary-org/invites/ordinary-invite').get()).data()?.useCount === 0);
+
   auth('winner-a-token', 'winner-a', 'race@example.com');
   auth('winner-b-token', 'winner-b', 'race@example.com');
   await seedInvite('race-org', 'race-invite', 'race-raw-token', 'race@example.com');

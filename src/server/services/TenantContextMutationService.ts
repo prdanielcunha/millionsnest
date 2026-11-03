@@ -586,7 +586,25 @@ export async function acceptInvitation(
       const subData = subSnap.data() || {};
       const orgData = orgSnap.data() || {};
 
-      const capacityResult = inviteData.targetAppId === 'nestjourney'
+      // Invite creation already lets the CEO issue invitations without a paid
+      // MusicScale seat limit. Acceptance must honor the same tenant authority:
+      // the invitee is not the CEO, so checking the invitee's role is incorrect.
+      // Resolve the organization's server-owned owner UID and the owner's
+      // current role inside this transaction. Do not trust invite payloads,
+      // recipient claims, email addresses or an arbitrary organization member.
+      const ownerUid = [
+        orgData.ownerUid,
+        orgData.ownerUserId,
+        orgData.ownerId,
+        orgData.owner_user_id,
+      ].find((candidate): candidate is string =>
+        typeof candidate === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(candidate)
+      );
+      const ownerSnap = ownerUid ? await t.get(db.collection('users').doc(ownerUid)) : null;
+      const isCEOOwnedOrganization =
+        !!ownerUid && ownerSnap?.exists === true && ownerSnap.data()?.systemRole === 'ceo';
+
+      const capacityResult = isCEOOwnedOrganization || inviteData.targetAppId === 'nestjourney'
         ? {
             success: true as const,
             capacity: {

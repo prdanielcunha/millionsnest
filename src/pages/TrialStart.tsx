@@ -14,6 +14,7 @@ const copy={
     start:'Começar meus 7 dias grátis',signup:'Começar meus 7 dias grátis',
     terms:'Termos de uso',privacy:'Privacidade',existing:'Já tem acesso? Abrir MusicScale',
     loading:'Conferindo sua conta com segurança…',working:'Ativando sua avaliação…',
+    readyTitle:'Seu MusicScale está pronto',ready:'Os 7 dias começam quando sua entrada no aplicativo for confirmada. Abra o MusicScale para começar.',
     activeTitle:'Sua avaliação já está ativa',active:'Você já pode continuar usando o MusicScale. Seus dias restantes não serão reiniciados.',
     paidTitle:'Seu MusicScale já tem assinatura',paid:'Encontramos um registro de assinatura ativa. Entre no aplicativo para continuar com a sua equipe.',
     historicalEnd:'Seus dados permanecem preservados. Uma nova contratação só acontece quando você escolher e confirmar um plano.',
@@ -35,6 +36,7 @@ const copy={
     start:'Start my 7 free days',signup:'Start my 7 free days',
     terms:'Terms of use',privacy:'Privacy',existing:'Already have access? Open MusicScale',
     loading:'Checking your account securely…',working:'Activating your free trial…',
+    readyTitle:'Your MusicScale is ready',ready:'Your 7 days begin when your app entry is confirmed. Open MusicScale to get started.',
     activeTitle:'Your trial is already active',active:'You can continue using MusicScale. Your remaining days will not restart.',
     paidTitle:'Your MusicScale has a subscription',paid:'We found an active subscription record. Open the app to continue with your team.',
     historicalEnd:'Your data is preserved. A new purchase happens only when you select and confirm a plan.',
@@ -54,6 +56,7 @@ const copy={
     start:'Comenzar mis 7 días gratis',signup:'Comenzar mis 7 días gratis',
     terms:'Términos de uso',privacy:'Privacidad',existing:'¿Ya tienes acceso? Abrir MusicScale',
     loading:'Verificando tu cuenta…',working:'Activando tu prueba gratuita…',
+    readyTitle:'Tu MusicScale está listo',ready:'Tus 7 días empiezan cuando se confirme tu entrada a la aplicación. Abre MusicScale para comenzar.',
     activeTitle:'Tu prueba ya está activa',active:'Puedes seguir usando MusicScale. Los días restantes no volverán a comenzar.',
     paidTitle:'Tu MusicScale tiene suscripción',paid:'Encontramos un registro de suscripción activa. Abre la aplicación para continuar con tu equipo.',
     historicalEnd:'Tus datos siguen guardados. Una nueva contratación solo ocurre al elegir y confirmar un plan.',
@@ -68,7 +71,7 @@ const copy={
     end:'Al terminar los 7 días, decides si deseas suscribirte. Tus datos se conservan sin cobros automáticos.',back:'Volver al sitio',days:'días',
   },
 };
-type Offer={available:boolean;active?:boolean;code?:string};
+type Offer={available:boolean;active?:boolean;pendingFirstAccess?:boolean;code?:string};
 type Problem='network'|'owner'|'history'|'inactive'|'unavailable'|null;
 const HISTORICAL=new Set(['TRIAL_USED','OWNER_TRIAL_USED','PRIOR_SUBSCRIPTION','PRIOR_ACCESS',
   'TRIAL_ALREADY_CONSUMED','OWNER_TRIAL_ALREADY_CONSUMED','PRIOR_MUSICSCALE_SUBSCRIPTION',
@@ -91,9 +94,12 @@ export default function TrialStart(){
   // AuthContext may still have a null canonical snapshot. Use the profile only
   // as a candidate; the server independently verifies actual ownership.
   const profileOrgId=profile?.activeOrganizationId||profile?.primaryOrganizationId||profile?.organizationId;
-  const owned=Array.isArray(canonicalContext?.ownedOrganizations)
-    ? canonicalContext.ownedOrganizations.filter((org:any)=>org&&typeof org.id==='string'&&org.status!=='archived')
-    : typeof profileOrgId==='string'&&profileOrgId.trim()
+  const canonicalOwned=Array.isArray(canonicalContext?.ownedOrganizations)
+    ? canonicalContext.ownedOrganizations.filter((org:any)=>org&&typeof org.id==='string'&&org.status!=='archived') : [];
+  // Empty bootstrap snapshots can precede the new owner's canonical context.
+  // This is only a lookup candidate: the offer/activation APIs verify ownership.
+  const owned=canonicalOwned.length>0?canonicalOwned:
+    typeof profileOrgId==='string'&&profileOrgId.trim()
       ? [{id:profileOrgId,name:'Minha organização'}] : [];
   const activeOrgId=canonicalContext?.activeOrganizationId||profile?.activeOrganizationId||'';
   const [selectedOrgId,setSelectedOrgId]=useState('');
@@ -198,11 +204,11 @@ export default function TrialStart(){
   const checking=loading||Boolean(user&&orgId&&!offer&&!problem);
   const view:Problem=noOwner?(hasOtherMembership?'owner':'inactive'):problem;
   const paidAccess=offer?.code==='PAID_ACCESS_RECORDED';
-  const title=paidAccess?c.paidTitle:offer?.active?c.activeTitle:
+  const title=paidAccess?c.paidTitle:offer?.pendingFirstAccess?c.readyTitle:offer?.active?c.activeTitle:
     view==='history'?c.historyTitle:view==='owner'?c.ownerTitle:
     view==='unavailable'?c.unavailableTitle:view==='inactive'?(noOwner&&!hasOtherMembership?c.newTitle:c.inactiveTitle):
     view==='network'?c.errorTitle:c.headline;
-  const message=paidAccess?c.paid:offer?.active?c.active:
+  const message=paidAccess?c.paid:offer?.pendingFirstAccess?c.ready:offer?.active?c.active:
     view==='history'?c.history:view==='owner'?c.owner:
     view==='unavailable'?c.unavailable:view==='inactive'?(noOwner&&!hasOtherMembership?c.newOrg:c.inactive):
     view==='network'?c.error:c.description;

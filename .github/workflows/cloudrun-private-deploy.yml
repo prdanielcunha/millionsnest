@@ -89,6 +89,7 @@ jobs:
           npm ci --no-audit --no-fund
           npm run lint
           npx tsx scripts/test_trial_first_acquisition.ts
+          node --import tsx scripts/test_musicscale_first_access_trial.ts
           npx tsx scripts/test_ecosystem_seven_day_trial.ts
           npx tsx scripts/test_musicscale_live_ai_gateway.ts
           npx tsx scripts/audit_music_data_integrity_readonly.ts | tee /tmp/music-integrity-before.log
