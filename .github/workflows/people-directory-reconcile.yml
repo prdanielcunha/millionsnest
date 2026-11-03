@@ -2,7 +2,7 @@ name: Central People Directory Reconciliation
 on:
   push:
     branches: [production]
-    paths: ['ops/people-directory-activation.json', '.github/workflows/people-directory-reconcile.yml']
+    paths: ['ops/people-directory-activation.json', '.github/workflows/people-directory-reconcile.yml', 'scripts/reconcile_people_directory.ts']
   workflow_dispatch:
 permissions:
   contents: read

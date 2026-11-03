@@ -1,4 +1,4 @@
-# One-time site publication for the approved 7-day no-card trial marketing copy.
+# Publish the assisted MusicScale first-access trial recovery using the existing Hosting pipeline.
 # Triggered only when this workflow file is first merged into production.
 name: Hub Firebase Site Release - Assisted Trial
 
@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -38,6 +39,8 @@ jobs:
         run: |
           set -euo pipefail
           npm run lint
+          node --import tsx scripts/test_musicscale_first_access_trial.ts
+          node --import tsx scripts/test_nestfinance_approved_brand.ts
           npx tsx scripts/test_public_home_funnel.ts
           npx tsx scripts/test_musicscale_sales_truth.ts
           npx tsx scripts/test_firebase_hosting_cloudrun_policy.ts
@@ -67,8 +70,42 @@ jobs:
           workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
           service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
 
+      - name: Wait for the matching Hub API before publishing its entry screen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            RESULT="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/cloudrun-private-deploy.yml/runs?head_sha=${EXPECTED_SHA}&branch=production&per_page=20" --jq '[.workflow_runs[] | select(.head_branch == "production")] | sort_by(.run_number) | reverse | .[0] | if . == null then "pending" else (.status + " " + (.conclusion // "pending")) end')"
+            if [ "$RESULT" = 'completed success' ]; then
+              # Existing Hosting pins the previous revision until this release.
+              # Verify readiness through Cloud Run metadata, not that old rewrite.
+              gcloud run services describe millionsnest-api --project millionsnest --region us-central1 --format=json > /tmp/hub-first-access-ready.json
+              jq -e --arg suffix ":${EXPECTED_SHA}" '.spec.template.spec.containers[0].image | endswith($suffix)' /tmp/hub-first-access-ready.json >/dev/null
+              jq -e '. as $service | any(.status.conditions[]; .type == "Ready" and .status == "True") and any(.status.traffic[]; .percent == 100 and .revisionName == $service.status.latestReadyRevisionName)' /tmp/hub-first-access-ready.json >/dev/null
+              echo HUB_FIRST_ACCESS_API_REVISION_READY
+              exit 0
+            fi
+            case "$RESULT" in
+              'completed '*) echo "Matching API deployment did not succeed." >&2; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "Matching API deployment was not confirmed; keeping existing Hosting." >&2
+          exit 1
+
       - name: Publish ONLY Hub Firebase Hosting (no database, Rules, Stripe or Functions)
         run: ./node_modules/.bin/firebase deploy --only hosting:hub --project millionsnest --non-interactive
+
+      - name: Verify first-access API rejects anonymous activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS="$(curl --silent --show-error --max-time 30 -o /tmp/hub-first-access-smoke.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{}' https://www.millionsnest.com/api/v1/billing/trial/first-access)"
+          test "$STATUS" = '401'
+          echo HUB_FIRST_ACCESS_API_AUTH_BOUNDARY_READY
 
       - name: Verify public routes after publication
         shell: bash
@@ -80,8 +117,19 @@ jobs:
           done
           echo "HUB_MARKETING_FIREBASE_PUBLISHED"
 
+      - name: Verify approved NestFinance symbol bytes on canonical site
+        run: |
+          set -euo pipefail
+          ASSET=brand/nestfinance/nf-continuous/v2/symbols/nestfinance-gradient.svg
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 3 "https://www.millionsnest.com/$ASSET" -o /tmp/hub-approved-nf.svg
+          cmp "public/$ASSET" /tmp/hub-approved-nf.svg
+
 # Approved transparent MillionsNest brand refresh, 2026-10-22.
 
 # Refresh remaining legacy MillionsNest image aliases with the approved identity.
 
 # Publish approved responsive brand sizing for compact navigation and checkout.
+
+# Publish official Connect public support entry after its verified release, 2026-10-23.
+
+# Publish canonical people contacts and reversible account links, 2026-11-03.
