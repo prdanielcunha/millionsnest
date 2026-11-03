@@ -80,3 +80,46 @@ using its journal. Preserve mappings and audit; do not delete source people.
 Validation: synthetic emulator data only, replay/concurrency/source-change tests,
 direct SDK tampering tests, per-tenant boundaries, independent security review,
 and exact deployed artifact checks. Production reports contain aggregate counts only.
+
+## Name, phone, login and recoverable removal (2026-11-03)
+
+`create` accepts `{name, phone?, distinctReason?}` for an organization-only person;
+`register` accepts member rows with name, optional preferredName and phone. Both
+use the same organization-scoped gateway and idempotent request receipt. Storing
+an administrative phone leaves `consent=false`, grants no app role and creates
+no care task. An administrator must separately obtain messaging authorization.
+
+Organization owners and active owner/admin/pastor/data_admin memberships retain
+management access. A current active membership with the canonical capability
+`organization.members.manage=true` may also manage this directory. Global CEO
+status alone does not grant access to church contacts. Authority is rechecked
+inside each write transaction; a revoked membership cannot retain delegation.
+
+An account joins the organization through the existing invitation/join flow
+before directory reconciliation offers it as an account target. Google and
+email/password are authentication methods, not separate person types. Account
+email and administrative phone are shown only through the authorized API. Never
+merge by matching a name or phone. Link and unlink require explicit identity
+confirmation, a reason and the current source revision. Login, membership, roles,
+financial facts, attendance evidence and care history remain in their original
+records. Two independent login accounts are never merged by this endpoint.
+
+`archive` and `restore` accept `{fromId, reason, revision}`. They remove/restore a
+canonical person from active lists and flag the existing Journey participations
+with `directoryArchived`. They do not delete an Auth user, revoke a membership,
+erase history or change consent. GET defaults to active records; authorized
+administrators can request `includeArchived=true` to restore a record. Linked
+aliases use their canonical target's archived state. Source reconciliation does
+not silently resurrect archived identities. Restore preserves the same IDs.
+
+Existing event eligibility snapshots and evidence remain factual. Consumers
+must exclude archived people from new default rosters but retain them when an
+existing event's frozen roster or checks refers to them. New Journey member
+participation may reuse the existing canonical administrative phone while still
+keeping contact consent false. Existing participation is reused without resetting
+its phone, consent, visits or historical records.
+
+No schema migration, new database, paid service, Auth merge or Rules relaxation
+is required. Test exclusively with the synthetic emulator fixture in
+`scripts/test_people_directory.ts`. Revert application revisions for code recovery;
+restore archived people through the audited API rather than deleting the audit.

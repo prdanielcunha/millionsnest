@@ -1,6 +1,6 @@
 import {auth} from './firebase.js'
 const base=''
-export type DirectoryPerson={id:string;name:string;hasAccount:boolean;unitIds:string[];revision:number;mergedInto?:string}
+export type DirectoryPerson={id:string;name:string;hasAccount:boolean;unitIds:string[];revision:number;mergedInto?:string;phone?:string;accountEmail?:string;archived?:boolean}
 export type DirectorySelection={personId?:string;distinctReason?:string}
 export class PeopleDirectoryError extends Error{code:string;constructor(code:string){super(code);this.code=code}}
 export async function directoryRequest(org:string,body?:Record<string,unknown>,query=''){
@@ -25,11 +25,11 @@ export async function refreshPeopleDirectory(org:string){
     }
   }
 }
-export async function searchPeopleDirectory(org:string,q:string):Promise<DirectoryPerson[]>{
+export async function searchPeopleDirectory(org:string,q:string,includeArchived=false):Promise<DirectoryPerson[]>{
   const people:DirectoryPerson[]=[]
   let cursor=''
   for(let page=0;page<100;page++){
-    const result=await directoryRequest(org,undefined,'?q='+encodeURIComponent(q)+(cursor?'&cursor='+encodeURIComponent(cursor):''))
+    const result=await directoryRequest(org,undefined,'?q='+encodeURIComponent(q)+(includeArchived?'&includeArchived=true':'')+(cursor?'&cursor='+encodeURIComponent(cursor):''))
     people.push(...result.people)
     if(!result.nextCursor)return [...new Map(people.map(person=>[person.id,person])).values()]
     cursor=result.nextCursor
