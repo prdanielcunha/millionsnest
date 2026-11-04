@@ -132,3 +132,5 @@ Connect agent settings at `organizations/{orgId}/connectAgentProfiles/{product}`
 Subscription evaluations follow [the ecosystem seven-day no-card policy](docs/ECOSYSTEM_SEVEN_DAY_TRIAL_POLICY.md). Stripe checkout creates a paid subscription without a new free trial; existing paid contracts and legacy deadlines are preserved.
 
 NestJourney due events have a default-OFF durable source outbox, independent IAM job and HMAC-only post-queue consent proof. See `docs/CONNECT_NESTJOURNEY_CONSENTED_OPERATOR_EVENT.md`. Neither source code nor synthetic proofs activate pastoral messaging, Push or Meta.
+
+O calendário de aniversários do NestJourney usa o entitlement global canônico somente quando há autoridade local da igreja (proprietário ou gestor autorizado). Um papel global isolado não permite ler datas. Desativação de usuário, organização, membership ou acesso ao aplicativo continua bloqueando o calendário; gravações exigem evidência de autorização e auditoria. O contrato é certificado em `tests/firestore/nestjourney.rules.test.ts`.

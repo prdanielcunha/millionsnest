@@ -1760,3 +1760,47 @@ test('birthday dates require consent audit, enforce tenant isolation and opt-in 
   await assertFails(getDoc(personBirthday));
   await assertFails(deleteDoc(personBirthday));
 });
+
+
+test('global birthday entitlement still requires church authority and honors every revocation',async()=>{
+  const org='birthday-global-fixture',base=`organizations/${org}/products/raiz_e_mesa`;
+  const users=['birthday-ceo-owner','birthday-ceo-admin','birthday-ceo-stranger','birthday-normal-admin'];
+  await env.withSecurityRulesDisabled(async c=>{
+    const db=c.firestore();
+    await setDoc(doc(db,`organizations/${org}`),{status:'active',ownerUid:users[0]});
+    for(const uid of users)await setDoc(doc(db,`users/${uid}`),{status:'active',systemRole:uid==='birthday-normal-admin'?'user':'ceo'});
+    for(const uid of [users[1],users[3]])await setDoc(doc(db,`organizations/${org}/members/${uid}`),{organizationId:org,status:'active',organizationRole:'admin',congregationIds:['unit-a']});
+    await setDoc(doc(db,base+'/congregations/unit-a'),{organizationId:org,name:'Synthetic unit',active:true});
+    await setDoc(doc(db,base+'/people/synthetic'),{organizationId:org,congregationId:'unit-a',name:'Synthetic person'});
+    await setDoc(doc(db,base+'/personBirthdays/synthetic'),{organizationId:org,congregationId:'unit-a',personId:'synthetic',month:8,day:12,shareWithTeam:false});
+  });
+  const owner=env.authenticatedContext(users[0]).firestore(),admin=env.authenticatedContext(users[1]).firestore();
+  const stranger=env.authenticatedContext(users[2]).firestore(),normal=env.authenticatedContext(users[3]).firestore();
+  const ref=(db:ReturnType<ReturnType<typeof env.authenticatedContext>['firestore']>)=>doc(db,base+'/personBirthdays/synthetic');
+  await assertSucceeds(getDocs(query(collection(owner,base+'/personBirthdays'),where('congregationId','==','unit-a'))));
+  await assertSucceeds(getDoc(ref(admin)));
+  await assertFails(getDoc(ref(stranger)));
+  await assertFails(getDoc(ref(normal)));
+  await assertFails(getDoc(doc(admin,'organizations/org-b/products/raiz_e_mesa/personBirthdays/synthetic')));
+  await assertFails(updateDoc(ref(admin),{day:13})); // No consent/audit evidence.
+  const write=writeBatch(admin);
+  write.set(doc(admin,base+'/audit/synthetic-proof'),{organizationId:org,congregationId:'unit-a',actorId:users[1],action:'person.birthday_saved',targetRef:'person:synthetic',createdAt:serverTimestamp()});
+  write.update(ref(admin),{month:8,day:13,shareWithTeam:false,permissionRecordedBy:users[1],permissionRecordedAt:serverTimestamp(),updatedBy:users[1],updatedAt:serverTimestamp(),lastAuditId:'synthetic-proof'});
+  await assertSucceeds(write.commit());
+  for(const patch of [{enabled:false},{disabled:true},{status:'revoked'},{appAccess:{nestjourney:{enabled:false}}},{organizationId:'another-org'}]){
+    await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),`organizations/${org}/members/${users[1]}`),{organizationId:org,status:'active',organizationRole:'admin',congregationIds:['unit-a'],...patch}));
+    await assertFails(getDoc(ref(admin)));
+    await assertFails(updateDoc(ref(admin),{day:14}));
+  }
+  await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),`organizations/${org}/members/${users[1]}`),{organizationId:org,status:'active',organizationRole:'admin'}));
+  for(const patch of [{disabled:true},{status:'disabled'}]){
+    await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),`users/${users[1]}`),{systemRole:'ceo',status:'active',...patch}));
+    await assertFails(getDoc(ref(admin)));
+  }
+  await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),`users/${users[1]}`),{systemRole:'ceo',status:'active'}));
+  for(const patch of [{disabled:true},{status:'inactive'}]){
+    await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),`organizations/${org}`),{status:'active',ownerUid:users[0],...patch}));
+    await assertFails(getDoc(ref(admin)));
+    await assertFails(getDoc(ref(owner)));
+  }
+});

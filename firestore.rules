@@ -1538,7 +1538,8 @@ service cloud.firestore {
             let canonical = apps is map ? apps.get('nestjourney', null) : null;
             let legacy = apps is map ? apps.get('raiz_e_mesa', null) : null;
             let selected = canonical is map ? canonical : legacy;
-            return selected is map && selected.get('status', '') in ['active','trialing'];
+            // Match canonical global entitlements; church authorization remains mandatory below.
+            return isSystemAdmin() || (selected is map && selected.get('status', '') in ['active','trialing']);
           }
           function birthdayMemberAppAllowed() {
             let userRecord = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
@@ -1554,8 +1555,9 @@ service cloud.firestore {
               orgRecord != null &&
               orgRecord.get('disabled',false) != true &&
               !(orgRecord.get('status','active') in ['archived','inactive','suspended','disabled']) &&
-              (isSystemAdmin() || (
+              ((isSystemAdmin() && journeyOwner(orgId) && member == null) || (
               member != null &&
+              member.get('organizationId', orgId) == orgId &&
               member.get('enabled', true) != false &&
               member.get('disabled', false) != true &&
               member.get('status', 'active') in ['active', 'ativo'] &&
