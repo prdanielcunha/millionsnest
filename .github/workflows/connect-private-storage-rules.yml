@@ -83,3 +83,5 @@ jobs:
         env:
           CONNECT_LIVE_RULES_FILE: /tmp/connect-live.rules
         run: npx -y firebase-tools@15.33.0 emulators:exec --project demo-connect-private-store --config firebase.connect-rules-test.json --only firestore "node --import tsx tests/firestore/connect_private_storage.test.ts"
+
+# Revalidate the published policy for the Journey contact release, 2026-11-03.
