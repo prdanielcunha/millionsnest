@@ -1309,7 +1309,20 @@ service cloud.firestore {
                 checkId is string &&
                 request.resource.data.get('evidenceRef', '') == 'presenceCheck:' + checkId &&
                 existsAfter(checkPath) &&
-                getAfter(checkPath).data.get('state', '') != 'unverified' &&
+                (
+                  getAfter(checkPath).data.get('state', '') != 'unverified'
+                  || (
+                    eventType == 'PRESENCE_CORRECTED' &&
+                    factId == 'presence-' + checkId &&
+                    getAfter(checkPath).data.get('actorId', '') == request.auth.uid &&
+                    getAfter(checkPath).data.get('recordedAt', null) == request.time &&
+                    payload.get('state', '') == 'unverified' &&
+                    payload.get('sessionId', '') == getAfter(checkPath).data.get('sessionId', '') &&
+                    payload.get('source', '') == 'retroactive_human_correction' &&
+                    payload.get('correctedFromCheckId', '') != '' &&
+                    payload.get('correctedFromCheckId', '') == getAfter(checkPath).data.get('correctedFromCheckId', '')
+                  )
+                ) &&
                 (
                   (eventType == 'PRESENCE_CONFIRMED' && getAfter(checkPath).data.get('source', '') == 'human_check')
                   ||
@@ -1721,7 +1734,6 @@ service cloud.firestore {
                 (
                   source == 'retroactive_human_correction' &&
                   correctedFromCheckId != '' &&
-                  request.resource.data.get('state', '') != 'unverified' &&
                   exists(sessionPath) &&
                   get(sessionPath).data.get('congregationId', '') == congregationId &&
                   get(sessionPath).data.get('status', '') == 'open' &&
@@ -1729,7 +1741,11 @@ service cloud.firestore {
                   get(correctionPath).data.get('congregationId', '') == congregationId &&
                   get(correctionPath).data.get('sessionId', '') == sessionId &&
                   get(correctionPath).data.get('personId', '') == personId &&
-                  get(correctionPath).data.get('state', '') != request.resource.data.get('state', '')
+                  get(correctionPath).data.get('state', '') != request.resource.data.get('state', '') &&
+                  (
+                    request.resource.data.get('state', '') != 'unverified'
+                    || get(correctionPath).data.get('state', '') in ['present_confirmed', 'absent_confirmed']
+                  )
                 )
               );
           }

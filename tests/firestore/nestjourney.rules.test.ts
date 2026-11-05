@@ -960,6 +960,39 @@ test('Presence correction is append-only, evidence-backed, and limited to an ope
   });
   await assertSucceeds(batch.commit());
 
+  const undoCheck = doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceChecks/undo-correction-a');
+  const undoFact = doc(db, 'organizations/org-a/products/raiz_e_mesa/facts/presence-undo-correction-a');
+  const undoCheckData = {
+    organizationId: 'org-a', congregationId: 'unit-a', sessionId: 'session-correction',
+    personId: 'person-a', state: 'unverified', source: 'retroactive_human_correction',
+    actorId: 'coord-a', recordedAt: serverTimestamp(), correctedFromCheckId: 'correction-a',
+    correctionReason: 'Marcação desfeita',
+  };
+  const undoFactData = {
+    eventId: 'presence-undo-correction-a', eventType: 'PRESENCE_CORRECTED',
+    occurredAt: serverTimestamp(), recordedAt: serverTimestamp(), organizationId: 'org-a',
+    actorId: 'coord-a', subjectRef: 'person:person-a', sourceApp: 'nestjourney',
+    scope: 'congregation:unit-a', evidenceRef: 'presenceCheck:undo-correction-a',
+    sensitivity: 'confidential', version: 1,
+    payload: {
+      checkId: 'undo-correction-a', sessionId: 'session-correction', state: 'unverified',
+      source: 'retroactive_human_correction', correctedFromCheckId: 'correction-a',
+    },
+  };
+  const invalidUndo = writeBatch(db);
+  invalidUndo.set(undoCheck, undoCheckData);
+  invalidUndo.set(undoFact, { ...undoFactData, payload: { ...undoFactData.payload, state: 'present_confirmed' } });
+  await assertFails(invalidUndo.commit());
+
+  const undo = writeBatch(db);
+  undo.set(undoCheck, undoCheckData);
+  undo.set(undoFact, undoFactData);
+  await assertSucceeds(undo.commit());
+  await assertSucceeds(getDoc(undoCheck));
+  await assertFails(setDoc(doc(db, 'organizations/org-a/products/raiz_e_mesa/facts/duplicate-undo'), {
+    ...undoFactData, eventId: 'duplicate-undo',
+  }));
+
   await assertFails(setDoc(
     doc(db, 'organizations/org-a/products/raiz_e_mesa/presenceChecks/correction-same-state'),
     {
@@ -988,7 +1021,7 @@ test('Presence correction is append-only, evidence-backed, and limited to an ope
       congregationId: 'unit-a',
       sessionId: 'session-correction',
       personId: 'person-a',
-      state: 'present_confirmed',
+      state: 'unverified',
       source: 'retroactive_human_correction',
       actorId: 'coord-a',
       recordedAt: serverTimestamp(),
