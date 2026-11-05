@@ -1804,3 +1804,67 @@ test('global birthday entitlement still requires church authority and honors eve
     await assertFails(getDoc(ref(owner)));
   }
 });
+
+
+// Regression: delegated attendance operators previously exceeded the 1000-expression
+// budget while opening/closing services and atomically recording canonical facts.
+test('Attendance delegates complete the lifecycle while tenant, capability and unit boundaries remain enforced', async () => {
+  const cases = [
+    {id:'attendance-delegate',role:'member',status:'active',permission:true,unit:'unit-a',allowed:true},
+    {id:'attendance-unassigned',role:'member',status:'active',permission:true,unit:'unit-b',allowed:false},
+    {id:'attendance-no-capability',role:'member',status:'active',permission:false,unit:'unit-a',allowed:false},
+    {id:'attendance-inactive',role:'admin',status:'inactive',permission:true,unit:'unit-a',allowed:false},
+    {id:'attendance-data-admin',role:'data_admin',status:'active',permission:true,unit:'unit-b',allowed:true},
+  ];
+  await env.withSecurityRulesDisabled(async context => {
+    for (const item of cases) {
+      await setDoc(doc(context.firestore(),`organizations/org-a/members/${item.id}`),{
+        status:item.status,organizationRole:item.role,congregationIds:['unit-a'],
+        permissions:{canManagePresence:item.permission},
+      });
+    }
+  });
+  for (const item of cases) {
+    const db=env.authenticatedContext(item.id).firestore();
+    const sessionId='session-'+item.id;
+    const session=doc(db,`organizations/org-a/products/raiz_e_mesa/presenceSessions/${sessionId}`);
+    const fact=doc(db,`organizations/org-a/products/raiz_e_mesa/facts/opened-${sessionId}`);
+    const batch=writeBatch(db);
+    batch.set(session,{
+      organizationId:'org-a',congregationId:item.unit,eventRef:'event:'+sessionId,eventName:'Synthetic service',
+      status:'open',openedAt:serverTimestamp(),closedAt:null,createdBy:item.id,
+      expectedPeopleCount:1,minimumCoveragePercent:90,
+    });
+    batch.set(fact,{
+      organizationId:'org-a',eventId:fact.id,eventType:'PRESENCE_SESSION_OPENED',
+      occurredAt:serverTimestamp(),recordedAt:serverTimestamp(),actorId:item.id,
+      subjectRef:'presenceSession:'+sessionId,evidenceRef:'presenceSession:'+sessionId,
+      sourceApp:'nestjourney',scope:'congregation:'+item.unit,sensitivity:'internal',version:1,
+      payload:{sessionId},
+    });
+    if(!item.allowed){await assertFails(batch.commit());continue;}
+    await assertSucceeds(batch.commit());
+    if(item.unit==='unit-a')await assertSucceeds(getDoc(session));
+    else await assertFails(getDoc(session));
+    const personId=item.unit==='unit-a'?'person-a':'person-b';
+    const check=doc(db,`organizations/org-a/products/raiz_e_mesa/presenceChecks/check-${item.id}`);
+    const checkFact=doc(db,`organizations/org-a/products/raiz_e_mesa/facts/presence-${check.id}`);
+    const confirmation=writeBatch(db);
+    confirmation.set(check,{
+      organizationId:'org-a',congregationId:item.unit,sessionId,personId,
+      actorId:item.id,state:'present_confirmed',source:'human_check',recordedAt:serverTimestamp(),
+    });
+    confirmation.set(checkFact,{
+      organizationId:'org-a',eventId:checkFact.id,eventType:'PRESENCE_CONFIRMED',
+      occurredAt:serverTimestamp(),recordedAt:serverTimestamp(),actorId:item.id,
+      subjectRef:'person:'+personId,evidenceRef:'presenceCheck:'+check.id,
+      sourceApp:'nestjourney',scope:'congregation:'+item.unit,sensitivity:'confidential',version:1,
+      payload:{checkId:check.id,sessionId,state:'present_confirmed',source:'human_check'},
+    });
+    // Data-admin's session scope remains broad, while check scope retains its
+    // separate existing contract (an assigned unit is still required).
+    if(item.unit==='unit-a')await assertSucceeds(confirmation.commit());
+    else await assertFails(confirmation.commit());
+    await assertSucceeds(updateDoc(session,{status:'closed',closedAt:serverTimestamp(),closedBy:item.id}));
+  }
+});
