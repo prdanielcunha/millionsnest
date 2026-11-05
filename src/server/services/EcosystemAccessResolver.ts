@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
-import { canAccessNestFinanceDevelopment, resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
+import { resolveEcosystemPrivilegePolicy } from '../../../src/lib/permissionService.js';
+import { mayAttemptNestFinanceTenantAccess } from './NestFinanceTenantRollout.js';
 import { isNestLocalInternalTrialActive, isNestLocalInternalTrialExpired } from './NestLocalAiEntitlement.js';
 import { trialWindow } from './HubTrialExtensionService.js';
 import { hasActiveStripeMusicScaleContract, isPendingMusicScaleHubTrial } from './MusicScaleNoCardTrialService.js';
@@ -131,7 +132,7 @@ export async function resolveEcosystemAppAccess(params: {
     return { ...defaultDenied, systemRole, denialReason: DENIAL_REASONS.ORGANIZATION_INACTIVE };
   }
 
-  if (appId === 'nestfinance' && !canAccessNestFinanceDevelopment(systemRole)) {
+  if (appId === 'nestfinance' && !mayAttemptNestFinanceTenantAccess(systemRole, process.env.NESTFINANCE_PUBLIC_ACCESS_ENABLED)) {
     return {
       ...defaultDenied,
       systemRole,
