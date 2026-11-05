@@ -858,6 +858,35 @@ service cloud.firestore {
             journeyHasPermission(orgId, 'canManagePresence');
         }
 
+        // Resolve attendance creation authority once; nested role helpers can
+        // exceed Firestore's expression budget for delegated operators.
+        function journeyCanWritePresenceSessionInScope(orgId, congregationId) {
+          let member = getMemberPermissions(orgId);
+          let active = isAuthenticated() && member != null && member.get('status', 'active') in ['active', 'ativo'];
+          let owner = journeyOwner(orgId);
+          let role = active ? member.get('organizationRole', member.get('role', '')) : (owner ? 'owner' : '');
+          let permissions = active ? member.get('permissions', {}) : {};
+          let ids = active ? member.get('congregationIds', []) : [];
+          let global = isSystemAdmin();
+          let capable = global || role in ['owner', 'admin', 'pastor', 'coordinator']
+            || (active && permissions is map && permissions.get('canManagePresence', false) == true);
+          let inScope = global || role in ['owner', 'admin', 'pastor', 'data_admin']
+            || (active && congregationId is string && ids is list && congregationId in ids);
+          return journeyProductEnabled(orgId) && capable && inScope;
+        }
+
+        function journeyCanCreatePresenceFact(orgId) {
+          let member = getMemberPermissions(orgId);
+          let active = isAuthenticated() && member != null && member.get('status', 'active') in ['active', 'ativo'];
+          let owner = journeyOwner(orgId);
+          let role = active ? member.get('organizationRole', member.get('role', '')) : (owner ? 'owner' : '');
+          let permissions = active ? member.get('permissions', {}) : {};
+          let global = isSystemAdmin();
+          return journeyProductEnabled(orgId) && (active || owner || global)
+            && (global || role in ['owner', 'admin', 'pastor', 'coordinator']
+              || (active && permissions is map && permissions.get('canManagePresence', false) == true));
+        }
+
         function journeyCanManageMesa(orgId) {
           return isSystemAdmin() ||
             journeyRoleAllowed(orgId, ['owner', 'admin', 'pastor', 'coordinator', 'mesa', 'table_host']) ||
@@ -1651,14 +1680,12 @@ service cloud.firestore {
               orgId,
               resource.data.get('congregationId', '')
             );
-          allow create: if journeyCanManagePresence(orgId) &&
-            journeyCanAccessCongregation(orgId, request.resource.data.get('congregationId', '')) &&
+          allow create: if journeyCanWritePresenceSessionInScope(orgId, request.resource.data.get('congregationId', '')) &&
             journeyValidPresenceSessionCreate(orgId);
-          allow update: if journeyCanManagePresence(orgId) &&
+          allow update: if journeyCanWritePresenceSessionInScope(orgId, resource.data.get('congregationId', '')) &&
             resource.data.get('status', '') == 'open' &&
             journeyTenantUnchanged(orgId) &&
             journeyCongregationUnchanged() &&
-            journeyCanAccessCongregation(orgId, resource.data.get('congregationId', '')) &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'closedAt', 'closedBy']) &&
             request.resource.data.get('status', '') == 'closed' &&
             request.resource.data.get('closedAt', null) == request.time &&
@@ -2068,10 +2095,13 @@ service cloud.firestore {
               ) &&
               journeyValidCanonicalFact(orgId, factId)
             ) || (
+              request.resource.data.get('eventType', '') in ['PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED'] &&
+              journeyCanCreatePresenceFact(orgId) &&
+              journeyValidCanonicalFact(orgId, factId)
+            ) || (
               journeyHasMembership(orgId) &&
               (
                 (request.resource.data.get('eventType', '') == 'VISITOR_REGISTERED' && journeyCanManagePeople(orgId)) ||
-                (request.resource.data.get('eventType', '') in ['PRESENCE_SESSION_OPENED', 'PRESENCE_CONFIRMED'] && journeyCanManagePresence(orgId)) ||
                 request.resource.data.get('eventType', '') in ['CARE_REQUESTED', 'CARE_ASSIGNED']
               ) &&
               journeyValidCanonicalFact(orgId, factId)
@@ -3430,3 +3460,4 @@ service cloud.firestore {
     }
   }
 }
+
