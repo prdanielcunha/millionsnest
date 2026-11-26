@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 12
     env:
       FIREBASE_PROJECT: millionsnest
-      HOSTING_SITE: mn-youtubeturbo-555464791734
+      HOSTING_SITE: mn-turbo-555464791734
       CUSTOM_DOMAIN: youtubeturbo.millionsnest.com
     defaults:
       run:
