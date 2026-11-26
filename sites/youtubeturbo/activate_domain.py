@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 import subprocess
 import time
 from urllib.error import HTTPError
@@ -67,17 +68,25 @@ def firebase_records(domain):
     cert_dns = ((cert.get('verification') or {}).get('dns') or {}).get('desired', [])
     normalized = set()
 
-    for record in [*pending, *cert_dns]:
-        name = record['domainName'].rstrip('.').lower()
-        kind = record['type']
-        value = record['rdata'].strip().strip('"')
-        if kind == 'CNAME':
-            value = value.rstrip('.')
-        if name != HOST and not name.endswith('.' + HOST):
-            raise SystemExit(f'Firebase requested a record outside the dedicated hostname: {name}')
-        if kind not in HOSTING_TYPES | {'TXT', 'CAA'} or not value:
-            raise SystemExit(f'Unsupported Firebase DNS record type: {kind}')
-        normalized.add((name, kind, value))
+    for record_set in [*pending, *cert_dns]:
+        for record in record_set.get('records', []):
+            name = (record.get('domainName') or record_set['domainName']).rstrip('.').lower()
+            kind = record['type']
+            action = record.get('requiredAction')
+            if action == 'REMOVE':
+                continue
+            if name != HOST and not name.endswith('.' + HOST):
+                if action == 'ADD':
+                    raise SystemExit(f'Firebase requested a record outside the dedicated hostname: {name}')
+                continue
+            value = record['rdata'].strip()
+            if kind == 'CNAME':
+                value = value.rstrip('.').lower()
+            elif kind == 'TXT':
+                value = value.removeprefix('"').removesuffix('"')
+            if kind not in HOSTING_TYPES | {'TXT', 'CAA'} or not value:
+                raise SystemExit(f'Unsupported Firebase DNS record type: {kind}')
+            normalized.add((name, kind, value))
 
     if not normalized and domain.get('hostState') == 'HOST_UNHOSTED':
         normalized.add((HOST, 'CNAME', f'{SITE}.web.app'))
@@ -100,14 +109,31 @@ def cloudflare_records(records, token):
         for name in {record[0] for record in records}
     }
     changes = []
+    desired_routes = {
+        name: {(kind, value) for record_name, kind, value in records
+               if record_name == name and kind in HOSTING_TYPES}
+        for name in existing_by_name
+    }
+
+    def current_value(entry):
+        value = entry['content'].strip()
+        if entry['type'] == 'TXT':
+            return value.removeprefix('"').removesuffix('"')
+        if entry['type'] == 'CNAME':
+            return value.rstrip('.').lower()
+        return value
 
     for name, kind, value in records:
         existing = existing_by_name[name]
         match = next((entry for entry in existing if
-                      entry['type'] == kind and entry['content'].strip('"').rstrip('.') == value.rstrip('.')), None)
+                      entry['type'] == kind and current_value(entry) == value), None)
         payload = {'type': kind, 'name': name, 'content': value, 'ttl': 1}
         if kind in HOSTING_TYPES:
             payload['proxied'] = False
+        elif kind == 'CAA':
+            flags, tag, authority = shlex.split(value)
+            payload.pop('content')
+            payload['data'] = {'flags': int(flags), 'tag': tag, 'value': authority}
         if match:
             if kind in HOSTING_TYPES and match.get('proxied'):
                 changes.append((f'{path}/{match["id"]}', 'PUT', payload))
@@ -122,7 +148,7 @@ def cloudflare_records(records, token):
             if previous_preview:
                 changes.append((f'{path}/{previous_preview["id"]}', 'PUT', payload))
                 continue
-            if any(entry['type'] in {kind, 'CNAME'} or kind == 'CNAME' for entry in routes):
+            if any((entry['type'], current_value(entry)) not in desired_routes[name] for entry in routes):
                 raise SystemExit(f'Unexpected existing DNS route at {name}. No DNS changes applied.')
         changes.append((path, 'POST', payload))
 
