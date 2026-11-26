@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 PROJECT = 'millionsnest'
 SITE = 'mn-turbo-555464791734'
 HOST = 'youtubeturbo.millionsnest.com'
+WWW_HOST = f'www.{HOST}'
 ZONE = 'millionsnest.com'
 FIREBASE = 'https://firebasehosting.googleapis.com/v1beta1'
 CLOUDFLARE = 'https://api.cloudflare.com/client/v4'
@@ -40,16 +41,19 @@ def request(url, token, method='GET', payload=None, acceptable=()):
         raise SystemExit(f'{service} returned HTTP {error.code} for {method} {detail}') from None
 
 
-def firebase_domain(token):
+def firebase_domain(token, hostname, redirect_target=None):
     base = f'{FIREBASE}/projects/{PROJECT}/sites/{SITE}/customDomains'
-    url = f'{base}/{HOST}'
+    url = f'{base}/{hostname}'
     domain = request(url, token, acceptable=(404,))
     if domain is None:
+        payload = {'certPreference': 'DEDICATED', 'annotations': {'managed-by': 'millionsnest-ci'}}
+        if redirect_target:
+            payload['redirectTarget'] = redirect_target
         request(
-            f'{base}?{urlencode({"customDomainId": HOST})}',
+            f'{base}?{urlencode({"customDomainId": hostname})}',
             token,
             method='POST',
-            payload={'certPreference': 'DEDICATED', 'annotations': {'managed-by': 'millionsnest-ci'}},
+            payload=payload,
             acceptable=(409,),
         )
         for attempt in range(12):
@@ -59,10 +63,12 @@ def firebase_domain(token):
             time.sleep(5)
     if domain is None:
         raise SystemExit('Firebase did not return the new custom domain.')
+    if (domain.get('redirectTarget') or None) != redirect_target:
+        raise SystemExit(f'Unexpected Firebase redirect configuration for {hostname}.')
     return domain
 
 
-def firebase_records(domain):
+def firebase_records(domain, hostname):
     pending = (domain.get('requiredDnsUpdates') or {}).get('desired', [])
     cert = domain.get('cert') or {}
     cert_dns = ((cert.get('verification') or {}).get('dns') or {}).get('desired', [])
@@ -75,7 +81,7 @@ def firebase_records(domain):
             action = record.get('requiredAction')
             if action == 'REMOVE':
                 continue
-            if name != HOST and not name.endswith('.' + HOST):
+            if name != hostname and not name.endswith('.' + hostname):
                 if action == 'ADD':
                     raise SystemExit(f'Firebase requested a record outside the dedicated hostname: {name}')
                 continue
@@ -89,7 +95,7 @@ def firebase_records(domain):
             normalized.add((name, kind, value))
 
     if not normalized and domain.get('hostState') == 'HOST_UNHOSTED':
-        normalized.add((HOST, 'CNAME', f'{SITE}.web.app'))
+        normalized.add((hostname, 'CNAME', f'{SITE}.web.app'))
     return sorted(normalized)
 
 
@@ -160,13 +166,19 @@ def cloudflare_records(records, token):
 def main():
     if (os.environ['FIREBASE_PROJECT'], os.environ['HOSTING_SITE'], os.environ['CUSTOM_DOMAIN']) != (PROJECT, SITE, HOST):
         raise SystemExit('Unexpected project, Firebase Hosting site or DNS hostname.')
-    domain = firebase_domain(gcloud('auth', 'print-access-token'))
-    records = firebase_records(domain)
-    if records:
-        cloudflare_records(records, gcloud('secrets', 'versions', 'access', 'latest',
-                                            '--secret=mn-cloudflare-dns-token', f'--project={PROJECT}'))
-    print(f'Firebase domain: {HOST}')
-    print(f'Hosting state: {domain.get("hostState")}; certificate state: {(domain.get("cert") or {}).get("state")}')
+    firebase_token = gcloud('auth', 'print-access-token')
+    cloudflare_token = None
+
+    for hostname, redirect_target in [(HOST, None), (WWW_HOST, HOST)]:
+        domain = firebase_domain(firebase_token, hostname, redirect_target)
+        records = firebase_records(domain, hostname)
+        if records:
+            if cloudflare_token is None:
+                cloudflare_token = gcloud('secrets', 'versions', 'access', 'latest',
+                                          '--secret=mn-cloudflare-dns-token', f'--project={PROJECT}')
+            cloudflare_records(records, cloudflare_token)
+        print(f'Firebase domain: {hostname}')
+        print(f'Hosting state: {domain.get("hostState")}; certificate state: {(domain.get("cert") or {}).get("state")}')
 
 
 if __name__ == '__main__':
