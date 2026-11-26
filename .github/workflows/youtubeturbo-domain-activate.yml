@@ -1,0 +1,92 @@
+name: Activate YouTube Turbo domain
+
+on:
+  push:
+    branches: [codex/youtubeturbo-domain-activation]
+    paths: [.github/workflows/youtubeturbo-domain-activate.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: youtubeturbo-official-domain
+  cancel-in-progress: false
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Authenticate to MillionsNest infrastructure
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Add only the records for youtubeturbo.millionsnest.com
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import subprocess
+          from urllib.error import HTTPError
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          records = json.loads('[{"type":"CNAME","name":"youtubeturbo.millionsnest.com","content":"custom-domains.chatgpt.site","proxied":false},{"type":"TXT","name":"_openai-site-verification.youtubeturbo.millionsnest.com","content":"openai-site-verification=tRIspmM-ARQvUFqnTS304IJB_wViUXH7EWgxmrHb1Mw"},{"type":"TXT","name":"_cf-custom-hostname.youtubeturbo.millionsnest.com","content":"4d084ddc-8a0f-4a49-adb2-08aecac97e4e"}]')
+          token = subprocess.check_output(
+              ['gcloud', 'secrets', 'versions', 'access', 'latest',
+               '--secret=mn-cloudflare-dns-token', '--project=millionsnest'],
+              text=True,
+          ).strip()
+
+          def cloudflare(path, payload=None):
+              data = json.dumps(payload).encode() if payload is not None else None
+              request = Request('https://api.cloudflare.com/client/v4' + path, data=data)
+              request.add_header('Authorization', 'Bearer ' + token)
+              request.add_header('Content-Type', 'application/json')
+              try:
+                  with urlopen(request, timeout=20) as response:
+                      envelope = json.load(response)
+              except HTTPError as error:
+                  raise SystemExit(f'Cloudflare DNS API returned HTTP {error.code}.')
+              if not envelope['success']:
+                  raise SystemExit('Cloudflare did not accept the DNS operation.')
+              return envelope['result']
+
+          zones = cloudflare('/zones?name=millionsnest.com&status=active')
+          if len(zones) != 1 or zones[0]['name'] != 'millionsnest.com':
+              raise SystemExit('The active MillionsNest zone could not be confirmed.')
+          endpoint = f"/zones/{zones[0]['id']}/dns_records"
+
+          pending = []
+          for record in records:
+              existing = cloudflare(endpoint + '?' + urlencode({'name': record['name']}))
+              if record['type'] == 'CNAME':
+                  conflicts = [entry for entry in existing if entry['type'] in ('A', 'AAAA', 'CNAME')]
+                  match = next((entry for entry in conflicts
+                                if entry['type'] == 'CNAME'
+                                and entry['content'].rstrip('.').lower() == record['content'].lower()
+                                and entry['proxied'] is False), None)
+              else:
+                  conflicts = [entry for entry in existing if entry['type'] == 'TXT']
+                  match = next((entry for entry in conflicts
+                                if entry['content'].strip('"') == record['content']), None)
+              if match:
+                  print(f"Already configured: {record['type']} {record['name']}")
+              elif conflicts:
+                  raise SystemExit(f"Conflicting record at {record['name']}; no updates applied.")
+              else:
+                  pending.append(record)
+
+          for record in pending:
+              cloudflare(endpoint, {**record, 'ttl': 1})
+              print(f"Added {record['type']} {record['name']}")
+          PY
