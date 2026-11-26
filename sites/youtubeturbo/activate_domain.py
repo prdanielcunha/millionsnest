@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 
 
 PROJECT = 'millionsnest'
-SITE = 'mn-youtubeturbo-555464791734'
+SITE = 'mn-turbo-555464791734'
 HOST = 'youtubeturbo.millionsnest.com'
 ZONE = 'millionsnest.com'
 FIREBASE = 'https://firebasehosting.googleapis.com/v1beta1'
