@@ -1,0 +1,185 @@
+"""Connect only the dedicated YouTube Turbo Hosting site and DNS hostname."""
+
+import json
+import os
+import shlex
+import subprocess
+import time
+from urllib.error import HTTPError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+
+PROJECT = 'millionsnest'
+SITE = 'mn-turbo-555464791734'
+HOST = 'youtubeturbo.millionsnest.com'
+WWW_HOST = f'www.{HOST}'
+ZONE = 'millionsnest.com'
+FIREBASE = 'https://firebasehosting.googleapis.com/v1beta1'
+CLOUDFLARE = 'https://api.cloudflare.com/client/v4'
+HOSTING_TYPES = {'A', 'AAAA', 'CNAME'}
+
+
+def gcloud(*arguments):
+    return subprocess.check_output(['gcloud', *arguments], text=True).strip()
+
+
+def request(url, token, method='GET', payload=None, acceptable=()):
+    data = json.dumps(payload).encode() if payload is not None else None
+    command = Request(url, data=data, method=method)
+    command.add_header('Authorization', 'Bearer ' + token)
+    command.add_header('Content-Type', 'application/json')
+    try:
+        with urlopen(command, timeout=25) as response:
+            return json.load(response)
+    except HTTPError as error:
+        if error.code in acceptable:
+            return None
+        service = 'Firebase' if url.startswith(FIREBASE) else 'Cloudflare'
+        failure = json.loads(error.read().decode('utf-8', 'replace') or '{}')
+        detail = failure.get('error', {}).get('status', '')
+        raise SystemExit(f'{service} returned HTTP {error.code} for {method} {detail}') from None
+
+
+def firebase_domain(token, hostname, redirect_target=None):
+    base = f'{FIREBASE}/projects/{PROJECT}/sites/{SITE}/customDomains'
+    url = f'{base}/{hostname}'
+    domain = request(url, token, acceptable=(404,))
+    if domain is None:
+        payload = {'certPreference': 'DEDICATED', 'annotations': {'managed-by': 'millionsnest-ci'}}
+        if redirect_target:
+            payload['redirectTarget'] = redirect_target
+        request(
+            f'{base}?{urlencode({"customDomainId": hostname})}',
+            token,
+            method='POST',
+            payload=payload,
+            acceptable=(409,),
+        )
+        for attempt in range(12):
+            domain = request(url, token, acceptable=(404,))
+            if domain is not None and (domain.get('requiredDnsUpdates') or not domain.get('reconciling')):
+                break
+            time.sleep(5)
+    if domain is None:
+        raise SystemExit('Firebase did not return the new custom domain.')
+    if (domain.get('redirectTarget') or None) != redirect_target:
+        raise SystemExit(f'Unexpected Firebase redirect configuration for {hostname}.')
+    return domain
+
+
+def firebase_records(domain, hostname):
+    pending = (domain.get('requiredDnsUpdates') or {}).get('desired', [])
+    cert = domain.get('cert') or {}
+    cert_dns = ((cert.get('verification') or {}).get('dns') or {}).get('desired', [])
+    normalized = set()
+
+    for record_set in [*pending, *cert_dns]:
+        for record in record_set.get('records', []):
+            name = (record.get('domainName') or record_set['domainName']).rstrip('.').lower()
+            kind = record['type']
+            action = record.get('requiredAction')
+            if action == 'REMOVE':
+                continue
+            if name != hostname and not name.endswith('.' + hostname):
+                if action == 'ADD':
+                    raise SystemExit(f'Firebase requested a record outside the dedicated hostname: {name}')
+                continue
+            value = record['rdata'].strip()
+            if kind == 'CNAME':
+                value = value.rstrip('.').lower()
+            elif kind == 'TXT':
+                value = value.removeprefix('"').removesuffix('"')
+            if kind not in HOSTING_TYPES | {'TXT', 'CAA'} or not value:
+                raise SystemExit(f'Unsupported Firebase DNS record type: {kind}')
+            normalized.add((name, kind, value))
+
+    if not normalized and domain.get('hostState') == 'HOST_UNHOSTED':
+        normalized.add((hostname, 'CNAME', f'{SITE}.web.app'))
+    return sorted(normalized)
+
+
+def cloudflare_records(records, token):
+    def api(path, method='GET', payload=None):
+        result = request(CLOUDFLARE + path, token, method=method, payload=payload)
+        if not result['success']:
+            raise SystemExit(f'Cloudflare did not accept the {method} DNS operation.')
+        return result['result']
+
+    zones = api('/zones?' + urlencode({'name': ZONE, 'status': 'active'}))
+    if len(zones) != 1 or zones[0]['name'] != ZONE:
+        raise SystemExit('Could not confirm the active MillionsNest zone.')
+    path = f'/zones/{zones[0]["id"]}/dns_records'
+    existing_by_name = {
+        name: api(path + '?' + urlencode({'name': name}))
+        for name in {record[0] for record in records}
+    }
+    changes = []
+    desired_routes = {
+        name: {(kind, value) for record_name, kind, value in records
+               if record_name == name and kind in HOSTING_TYPES}
+        for name in existing_by_name
+    }
+
+    def current_value(entry):
+        value = entry['content'].strip()
+        if entry['type'] == 'TXT':
+            return value.removeprefix('"').removesuffix('"')
+        if entry['type'] == 'CNAME':
+            return value.rstrip('.').lower()
+        return value
+
+    for name, kind, value in records:
+        existing = existing_by_name[name]
+        match = next((entry for entry in existing if
+                      entry['type'] == kind and current_value(entry) == value), None)
+        payload = {'type': kind, 'name': name, 'content': value, 'ttl': 1}
+        if kind in HOSTING_TYPES:
+            payload['proxied'] = False
+        elif kind == 'CAA':
+            flags, tag, authority = shlex.split(value)
+            payload.pop('content')
+            payload['data'] = {'flags': int(flags), 'tag': tag, 'value': authority}
+        if match:
+            if kind in HOSTING_TYPES and match.get('proxied'):
+                changes.append((f'{path}/{match["id"]}', 'PUT', payload))
+            else:
+                print(f'DNS already configured: {kind} {name}')
+            continue
+        if kind in HOSTING_TYPES:
+            routes = [entry for entry in existing if entry['type'] in HOSTING_TYPES]
+            previous_preview = next((entry for entry in routes if
+                                     entry['type'] == kind == 'CNAME'
+                                     and entry['content'].rstrip('.') == 'custom-domains.chatgpt.site'), None)
+            if previous_preview:
+                changes.append((f'{path}/{previous_preview["id"]}', 'PUT', payload))
+                continue
+            if any((entry['type'], current_value(entry)) not in desired_routes[name] for entry in routes):
+                raise SystemExit(f'Unexpected existing DNS route at {name}. No DNS changes applied.')
+        changes.append((path, 'POST', payload))
+
+    for endpoint, method, payload in changes:
+        api(endpoint, method=method, payload=payload)
+        print(f'Configured {payload["type"]} {payload["name"]}')
+
+
+def main():
+    if (os.environ['FIREBASE_PROJECT'], os.environ['HOSTING_SITE'], os.environ['CUSTOM_DOMAIN']) != (PROJECT, SITE, HOST):
+        raise SystemExit('Unexpected project, Firebase Hosting site or DNS hostname.')
+    firebase_token = gcloud('auth', 'print-access-token')
+    cloudflare_token = None
+
+    for hostname, redirect_target in [(HOST, None), (WWW_HOST, HOST)]:
+        domain = firebase_domain(firebase_token, hostname, redirect_target)
+        records = firebase_records(domain, hostname)
+        if records:
+            if cloudflare_token is None:
+                cloudflare_token = gcloud('secrets', 'versions', 'access', 'latest',
+                                          '--secret=mn-cloudflare-dns-token', f'--project={PROJECT}')
+            cloudflare_records(records, cloudflare_token)
+        print(f'Firebase domain: {hostname}')
+        print(f'Hosting state: {domain.get("hostState")}; certificate state: {(domain.get("cert") or {}).get("state")}')
+
+
+if __name__ == '__main__':
+    main()

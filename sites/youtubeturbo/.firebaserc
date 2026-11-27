@@ -1,0 +1,10 @@
+{
+  "projects": {"default": "millionsnest"},
+  "targets": {
+    "millionsnest": {
+      "hosting": {
+        "youtubeturbo": ["mn-turbo-555464791734"]
+      }
+    }
+  }
+}

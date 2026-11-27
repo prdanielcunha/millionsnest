@@ -1,0 +1,18 @@
+{
+  "hosting": {
+    "target": "youtubeturbo",
+    "public": "public",
+    "ignore": ["**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          }
+        ]
+      }
+    ]
+  }
+}

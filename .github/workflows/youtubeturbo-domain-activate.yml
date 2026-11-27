@@ -1,0 +1,79 @@
+name: Publish YouTube Turbo to Firebase Hosting
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - '.github/workflows/youtubeturbo-domain-activate.yml'
+      - 'sites/youtubeturbo/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: youtubeturbo-firebase-hosting-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    env:
+      FIREBASE_PROJECT: millionsnest
+      HOSTING_SITE: mn-turbo-555464791734
+      CUSTOM_DOMAIN: youtubeturbo.millionsnest.com
+    defaults:
+      run:
+        working-directory: sites/youtubeturbo
+        shell: bash
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Authenticate to Firebase Hosting
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-web-deployer@millionsnest.iam.gserviceaccount.com
+
+      - name: Create the dedicated Hosting site if needed and deploy
+        run: |
+          set -euo pipefail
+          npm install -g firebase-tools@15.30.2
+          TOKEN="$(gcloud auth print-access-token)"
+          URL="https://firebasehosting.googleapis.com/v1beta1/projects/$FIREBASE_PROJECT/sites/$HOSTING_SITE"
+          STATUS="$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$URL")"
+          case "$STATUS" in
+            200) ;;
+            404) firebase hosting:sites:create "$HOSTING_SITE" --project "$FIREBASE_PROJECT" --non-interactive ;;
+            *) echo "Firebase site lookup returned HTTP $STATUS"; exit 1 ;;
+          esac
+          node --check public/interactions.js
+          firebase deploy --only hosting:youtubeturbo --project "$FIREBASE_PROJECT" --non-interactive
+
+      - name: Verify the video, affiliate link and public resources
+        run: |
+          set -euo pipefail
+          BASE="https://$HOSTING_SITE.web.app"
+          curl -fsS --retry 6 --retry-delay 3 --retry-all-errors --max-time 20 "$BASE/" -o /tmp/youtubeturbo-home.html
+          grep -Fq 'youtube.com/embed/BPFSYVITv9E' /tmp/youtubeturbo-home.html
+          grep -Fq 'pay.cakto.com.br/dr2oqiw_1027457?affiliate=HDC9yDmd' /tmp/youtubeturbo-home.html
+          for route in /interactions.js /style.css /logos/logo-module-m.webp /testimonials/t5-m.jpg /termos-de-uso/ /politica-de-privacidade/; do
+            curl -fsSL --max-time 20 "$BASE$route" -o /dev/null
+          done
+
+      - name: Authenticate to MillionsNest infrastructure
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: projects/555464791734/locations/global/workloadIdentityPools/mn-prod-github/providers/github
+          service_account: mn-infra-admin@millionsnest.iam.gserviceaccount.com
+
+      - name: Connect the official subdomain
+        run: python3 activate_domain.py
