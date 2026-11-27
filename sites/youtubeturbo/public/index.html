@@ -14,6 +14,12 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
   <link rel="stylesheet" href="/style.css">
   <script defer src="/interactions.js"></script>
+  <script defer src="/meta-pixel.js"></script>
+  <style>
+    [data-meta-consent] { position: fixed; inset: auto 1rem 1rem; z-index: 100; max-width: 36rem; padding: 1rem; border: 1px solid #94a3b8; border-radius: .75rem; background: #0f172a; color: #f8fafc; box-shadow: 0 4px 24px #0008; }
+    [data-meta-consent] a, [data-meta-settings] { text-decoration: underline; }
+    [data-meta-consent] button { margin: .65rem .5rem 0 0; padding: .5rem .75rem; border: 1px solid #94a3b8; border-radius: .4rem; }
+  </style>
 </head>
 <body>
 <div id="root"><div class="bg-[#0A0A0A] text-slate-200">
@@ -252,9 +258,15 @@
 </div>
 <p>Este produto não garante resultados. Os depoimentos são de alunos e refletem experiências individuais — seus resultados dependem de dedicação, constância e aplicação do método. Este site não é afiliado ao YouTube, Google LLC ou Meta.</p>
 <p class="text-slate-400">Divulgação afiliada autorizada pela MillionsNest. Podemos receber comissão se você comprar pelo link desta página.</p>
-<p class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 font-semibold text-[#93C5FD]"><a class="hover:underline" href="/termos-de-uso/">Termos de uso</a><a class="hover:underline" href="/politica-de-privacidade/">Política de privacidade</a></p>
+<p class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 font-semibold text-[#93C5FD]"><a class="hover:underline" href="/termos-de-uso/">Termos de uso</a><a class="hover:underline" href="/politica-de-privacidade/">Política de privacidade</a><button type="button" data-meta-settings>Preferências de cookies</button></p>
 <p>© 2026 Projeto YouTube Turbo. Todos os direitos reservados.</p>
 </div></footer>
 </div></div>
+<aside data-meta-consent hidden aria-labelledby="meta-consent-title">
+  <strong id="meta-consent-title">Cookies de publicidade</strong>
+  <p>Com sua permissão, o Pixel da Meta mede visitas e cliques no botão de compra para avaliar anúncios. Leia a <a href="/politica-de-privacidade/">Política de Privacidade</a>.</p>
+  <button type="button" data-meta-reject>Recusar</button>
+  <button type="button" data-meta-accept>Aceitar</button>
+</aside>
 </body>
 </html>
